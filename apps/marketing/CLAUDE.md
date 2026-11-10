@@ -140,7 +140,8 @@ can drift never do:
 | `lint` | `CLASS_RULES`, every `*_MESSAGE`, `BANNED_VERB_PATTERN` and `VERB_CATALOG` from `scripts/lint-rules.ts` (the data half of `scripts/lint-conventions.ts`) |
 | `kit-stylesheet`, `web-stylesheet` | `globals.css`, and the web's `app.css` and `desktop.css`, verbatim |
 
-`serializeDesign` throws on an unknown marker or a missing one. `test/lib/design.test.ts` builds the real file and
+`serializeDesign` returns a `Result` that fails on an unknown marker or a missing one, and the page
+(`pages/design.md.ts`) turns that failure into an error, so the build stops. `test/lib/design.test.ts` builds the real file and
 fails when a token in `globals.css`, an export of a `packages/ui` component, an icon or a lint rule is missing from it,
 or when a section is missing from the contents. It also holds a few key phrases from each of the `design`, `copy`,
 `conventions` and `review` skills and the engine plugin's `evidence`, `handover` and `review` skills (`SKILL_RULES`),

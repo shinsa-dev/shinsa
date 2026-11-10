@@ -14,8 +14,11 @@ import {
   selectSpentBudget,
   type Task,
   type TaskBudget,
+  type Percent,
+  type Usd,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { formatCost, formatTokens } from '@/lib/format/money.ts';
 
@@ -46,8 +49,12 @@ interface CostFacts {
 const UNIT_ICON: Record<BudgetUnit, IconName> = { percent: 'IconGauge', usd: 'IconCoins' };
 
 export function describeBudgetRetry(state: ShinsaState, task: Task) {
-  const budget = selectSpentBudget(state, task);
-  return budget && `Allow another ${describeBudgetAmount(budget, budget.cap)}`;
+  return Option.getOrNull(
+    Option.map(
+      selectSpentBudget(state, task),
+      (budget) => `Allow another ${describeBudgetAmount(budget, 'cap')}`
+    )
+  );
 }
 
 function describeAmount(line: CostLine, unit: BudgetUnit) {
@@ -59,8 +66,8 @@ function toRow(key: string, label: string, line: CostLine, unit: BudgetUnit): Co
 }
 
 function describeBudgetHeading(budget: TaskBudget) {
-  const spent = describeBudgetAmount(budget, budget.spent);
-  const limit = describeBudgetAmount(budget, budget.limit);
+  const spent = describeBudgetAmount(budget, 'spent');
+  const limit = describeBudgetAmount(budget, 'limit');
   return budget.unit === 'usd' ? `${spent} of ${limit}` : `${spent} of the weekly limit, ${limit} allowed`;
 }
 
@@ -89,8 +96,9 @@ function describeDetail(line: CostLine, unit: BudgetUnit) {
   return `${provider}${describeShareBasis(line, unit)}`;
 }
 
-function describeEstimateAmount(usd: number, percent: number | null) {
-  return `About ${percent === null ? describeUsd(usd) : describeWeeklyPercent(percent)}`;
+function describeEstimateAmount(usd: Usd, percent: Option.Option<Percent>) {
+  const amount = Option.match(percent, { onNone: () => describeUsd(usd), onSome: describeWeeklyPercent });
+  return `About ${amount}`;
 }
 
 function describeEstimateBasis(estimate: BuildEstimate) {
@@ -100,7 +108,7 @@ function describeEstimateBasis(estimate: BuildEstimate) {
 }
 
 function listEstimateRows(state: ShinsaState, task: Task): EstimateRow[] | null {
-  const estimate = resolveBuildEstimate(state, task);
+  const estimate = Option.getOrNull(resolveBuildEstimate(state, task));
   if (!estimate || estimate.donePhases === estimate.phases) return null;
   const started = estimate.spentUsd > 0;
   return [
@@ -119,7 +127,7 @@ function listEstimateRows(state: ShinsaState, task: Task): EstimateRow[] | null 
 }
 
 export function describeBuildEstimateFact(state: ShinsaState, task: Task) {
-  const estimate = resolveBuildEstimate(state, task);
+  const estimate = Option.getOrNull(resolveBuildEstimate(state, task));
   if (!estimate || estimate.donePhases === estimate.phases) return null;
   if (estimate.spentUsd === 0) return `${describeEstimateAmount(estimate.usd, estimate.percent)} to build`;
   return `${describeEstimateAmount(estimate.remainingUsd, estimate.remainingPercent)} left to build`;
@@ -127,7 +135,7 @@ export function describeBuildEstimateFact(state: ShinsaState, task: Task) {
 
 function selectShownBudget(state: ShinsaState, task: Task, unit: BudgetUnit) {
   const spent = selectSpentBudget(state, task);
-  if (spent) return spent;
+  if (Option.isSome(spent)) return spent.value;
   return listTaskBudgets(state, task).find((budget) => budget.unit === unit) ?? null;
 }
 

@@ -28,21 +28,21 @@ description: Shinsa code conventions — load before writing or reviewing code a
 | Verb | Contract |
 |---|---|
 | `find*` | one value, **throws** `DomainError` when absent (`findTask`) |
-| `select*` | one value, returns `null` when absent (`selectTask`) |
+| `select*` | one value, returns an `Option` (`Option.none()` when absent, `selectLeadGate`) |
 | `list*` / `count*` | many values / a total |
 | `resolve*` | derive a value: a queue, a label, a fallback (`resolveQueue`, `resolveModelLabel`) |
 | `create*` / `update*` | plain writes; in core, `create*` also builds a fresh value (`createState`, `createSettings`) |
 | `upsert*` / `write*` / `replace*` | idempotent writes |
 | `remove*` | take something away |
 | `assert*` | invariant check that throws, returns `void` |
-| `serialize*` / `parse*` / `validate*` | to text or wire shape / from untrusted text / check a hand-over and return `{ ok, errors }` |
+| `serialize*` / `parse*` / `validate*` | to text or wire shape / from untrusted text into an `Option` (`parseChannelMessage`) / check a hand-over and return `{ ok, errors }` |
 | `describe*` | a sentence for a person (`describeChecks`, `describeError`) |
 | `request*` · `sync*` · `apply*` · `record*` | ask for an effect · reconcile with the outside · fold an event · store a fact reported from outside |
 | `is*` / `has*` / `needs*` | boolean predicates |
 
 Banned in `apps/engine/src`, `apps/web/src` and `packages/core` (lint-enforced): `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*`.
 
-**The `find*`/`select*` split is a contract callers rely on.** If you null-check the result it must be `select*`; if absence is an error it must be `find*`. In Effect code `find*` fails with a `*NotFound` tagged error and `select*` succeeds with an `Option` (the `effect` skill → Errors).
+**The `find*`/`select*` split is a contract callers rely on.** If absence is a case the caller handles it must be `select*`, returning an `Option` the caller unwraps with `Option.match`, `Option.map` or `Option.getOrNull` at a stored or wire field; if absence is an error it must be `find*`. In Effect code `find*` fails with a `*NotFound` tagged error and `select*` succeeds with an `Option` (the `effect` skill → Errors and Pure code). The `null-return` lint rule keeps `packages/core` from returning `null` again.
 
 **The decider has its own vocabulary**, one verb per kind of step, so a reader can tell what a function does to a task without opening it: `start*` begins a step (`startPlanning`, `startFix`), `reactTo*` decides what a fact means (`reactToPullRequest`), `answer*` handles a gate, `settle*` ends a task, `retry*` restarts the current step, `open*` / `withdraw*` gates, `request*` asks for an effect (`requestPush`).
 

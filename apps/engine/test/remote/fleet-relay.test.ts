@@ -96,6 +96,7 @@ interface FakeLink {
   closed: boolean;
   emit(data: string): void;
   drop(error: DeviceChannelError): void;
+  isWatched(): boolean;
 }
 
 type Answer = (
@@ -116,6 +117,7 @@ function createLink(answer?: Answer): FakeLink {
       fake.closed = true;
       for (const listener of closeListeners) listener(error);
     },
+    isWatched: () => closeListeners.size > 0,
     link: {
       isOpen: Effect.sync(() => !fake.closed),
       request: (input) => {
@@ -539,7 +541,7 @@ describe('a page socket to a teammate’s machine', () => {
     const relay = await startRelay(world);
     const dropped = createPeer();
     await Effect.runPromise(relay.relay.openSocket('kai-mac', dropped as ChannelPeer));
-    await until('the channel opens', () => world.links.length === 1);
+    await until('the relay watches the channel', () => world.links[0]?.isWatched() === true);
     world.links[0]?.drop(new DeviceChannelError({ message: 'Broke.', refused: false }));
     await until('the page is told', () => dropped.closes.length === 1);
     expect(dropped.closes).toEqual([[RELAY_CLOSE.broke, 'Broke.']]);

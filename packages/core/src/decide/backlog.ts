@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   BACKLOG_REFUSAL_TEXT,
@@ -18,7 +19,8 @@ export const PLAN_READY_REASON = 'plan ready for you';
 
 function assertBacklogFits(task: Task) {
   const refusal = resolveBacklogRefusal(task);
-  if (refusal) throw new DomainError({ code: refusal, message: BACKLOG_REFUSAL_TEXT[refusal] });
+  if (Option.isSome(refusal))
+    throw new DomainError({ code: refusal.value, message: BACKLOG_REFUSAL_TEXT[refusal.value] });
 }
 
 function hasOpenPlanGate(decider: Decider, taskId: string) {

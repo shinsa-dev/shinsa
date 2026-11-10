@@ -8,6 +8,7 @@ import {
   type ShinsaState,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { requestWebhook as requestScheduleWebhook, requestWebhookCopy } from '@/lib/connection/schedules.ts';
 import { formatClock, formatMoment } from '@/lib/format/time.ts';
@@ -35,8 +36,9 @@ export function describeScheduleWhen(schedule: Schedule) {
   const { trigger } = schedule;
   const described = describeScheduleTrigger(trigger);
   if (trigger.kind !== 'daily') return described;
-  const time = parseTimeOfDay(trigger.time);
-  if (!time) return described;
+  const parsed = parseTimeOfDay(trigger.time);
+  if (Option.isNone(parsed)) return described;
+  const time = parsed.value;
   const at = new Date();
   at.setHours(time.hour, time.minute, 0, 0);
   return described.replace(trigger.time, formatClock(at.getTime()));

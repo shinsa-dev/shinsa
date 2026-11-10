@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   DomainError,
   isTaskClosed,
@@ -7,6 +8,7 @@ import {
   type ScheduleSource,
   type ScheduleTarget,
   type Task,
+  type WatchSource,
 } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { resolveIntakePrompt } from '../prompts/intake.ts';
@@ -16,15 +18,17 @@ import { settleTask } from './lifecycle.ts';
 import { listSourceFiledTasks, type ReadReport } from './reads.ts';
 import { resolveRestingStage } from './shapes.ts';
 
-export function selectProjectSource(decider: Decider, source: ScheduleSource) {
+export function selectProjectSource(decider: Decider, source: ScheduleSource): Option.Option<WatchSource> {
   const project = decider.state.projects[source.projectId];
-  return (project?.watchSources ?? []).find((candidate) => candidate.server === source.server) ?? null;
+  return Option.fromNullishOr(
+    (project?.watchSources ?? []).find((candidate) => candidate.server === source.server)
+  );
 }
 
 export function findProjectSource(decider: Decider, source: ScheduleSource) {
   const project = findProject(decider.state, source.projectId);
   const found = selectProjectSource(decider, source);
-  if (found) return found;
+  if (Option.isSome(found)) return found.value;
   const known = (project.watchSources ?? []).map((candidate) => `\`${candidate.server}\``);
   const listed = known.length > 0 ? ` It uses ${known.join(', ')}.` : ' It uses none yet.';
   throw new DomainError({
@@ -97,9 +101,14 @@ export function missIntakeRead(decider: Decider, runId: string) {
   return true;
 }
 
-export function startIntake(decider: Decider, schedule: Schedule, task: Task, note: string) {
-  const source = schedule.source ? selectProjectSource(decider, schedule.source) : null;
-  if (!source) return null;
+export function startIntake(
+  decider: Decider,
+  schedule: Schedule,
+  task: Task,
+  note: string
+): Option.Option<string> {
+  const source = schedule.source ? Option.getOrNull(selectProjectSource(decider, schedule.source)) : null;
+  if (!source) return Option.none();
   if (task.recoveries > 0) decider.emit({ type: 'task.recovered', taskId: task.id, recoveries: 0 });
   decider.stage(task.id, 'watching', `reading ${source.server} for the automation “${schedule.name}”`);
   const filed = listSourceFiledTasks(decider, task.projectId ?? null, source.server);
@@ -108,12 +117,12 @@ export function startIntake(decider: Decider, schedule: Schedule, task: Task, no
     purpose: 'intake',
     resumeFrom: decider.taskSession(task.id, 'agent'),
   });
-  return run.id;
+  return Option.some(run.id);
 }
 
 export function restartIntakeRead(decider: Decider, task: Task) {
   const schedule = selectIntakeSchedule(decider, task);
-  if (schedule && startIntake(decider, schedule, task, schedule.text)) return;
+  if (schedule && Option.isSome(startIntake(decider, schedule, task, schedule.text))) return;
   settleTask(decider, task.id, resolveRestingStage(task), 'no automation reads here any more');
 }
 

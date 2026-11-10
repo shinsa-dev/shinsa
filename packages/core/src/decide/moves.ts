@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError, isLaterRound, isPausingGate, type Repo, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -14,7 +15,7 @@ function refuse(code: string, message: string): never {
 
 function assertMovable(state: ShinsaState, task: Task, repo: Repo) {
   if (repo.id === task.repoId) refuse('same_repository', 'This task already works in that repository.');
-  if (repo.projectId !== resolveTaskProject(state, task)) {
+  if (repo.projectId !== Option.getOrNull(resolveTaskProject(state, task))) {
     refuse(
       'other_project',
       `${repo.name} belongs to another project, so this task cannot move there. ${FILE_INSTEAD}`

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type Activity,
   resolveFirstName,
@@ -21,7 +22,7 @@ describe('people', () => {
 
   test('finds the guest a task names, from its hand-off or its activity', () => {
     const handedOff = { handoff: { at: 1, url: null, guest: KAI, claimedAt: 1 }, activity: [] };
-    expect(selectTaskPerson(handedOff, 'kai')).toEqual({
+    expect(Option.getOrNull(selectTaskPerson(handedOff, 'kai'))).toEqual({
       login: 'kai',
       name: 'Kai Lane',
       avatarUrl: 'kai.png',
@@ -34,8 +35,8 @@ describe('people', () => {
         entry({ login: 'kai', name: 'Kai Lane', avatarUrl: null }),
       ],
     };
-    expect(selectTaskPerson(backAgain, 'kai')?.name).toBe('Kai Lane');
-    expect(selectTaskPerson(backAgain, 'robin')).toBeNull();
+    expect(Option.getOrNull(selectTaskPerson(backAgain, 'kai'))?.name).toBe('Kai Lane');
+    expect(Option.getOrNull(selectTaskPerson(backAgain, 'robin'))).toBeNull();
   });
 
   test('a guest is named by first name when the task knows them, else by login', () => {

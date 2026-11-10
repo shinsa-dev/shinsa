@@ -6,7 +6,7 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Result } from 'effect';
 import { createManageClient } from '../../src/agents/manage/client.ts';
 import type { ScheduleToolCall } from '../../src/schedules/index.ts';
 import { readArgv, selectSpec } from '../../src/surface/index.ts';
@@ -378,7 +378,9 @@ describe('a schedule an agent writes with schedules_write', () => {
     });
     const found = selectSpec(['schedules', 'write', ...words]);
     if (!found) throw new Error('no schedules write');
-    return Effect.runPromise(found.spec.run(client, readArgv(found.spec.fields, found.rest).values));
+    return Effect.runPromise(
+      found.spec.run(client, Result.getOrThrow(readArgv(found.spec.fields, found.rest)).values)
+    );
   }
 
   test('is that task’s, so set_schedule and delete_schedule can change it', async () => {

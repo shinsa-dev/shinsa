@@ -631,7 +631,7 @@ every commit.
 - **Where they go.** `POST /api/tasks/<id>/file` (`writeFile` in the `tasks` group, `apps/engine/src/http/routes/tasks/`) takes `{ path, content, base }`
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
   task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
-  checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
+  checkout. The path passes `parseRepoPath` and must stay inside the checkout with its nearest existing
   folder's real path (`selectWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
   refused (`file_too_large`), and so is a task core will not let you edit (`edit_refused`, `resolveEditRefusal`: merged,
   cancelled or done, or no checkout). Inspect mode refuses it with every other write.
@@ -4513,7 +4513,7 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
 - **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox/`) shares the seeded `web` service of one of
-  Studio's tasks (`scripts/sandbox/service.ts`, a small dev server with live updates) on
+  Studio's tasks (`scripts/sandbox/dev-server.ts`, a small dev server with live updates) on
   `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
   own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
   preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
@@ -7247,7 +7247,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
   (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
-  running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
+  running `scripts/sandbox/dev-server.ts` in the project's seeded repository with a preview URL; the command names the
   script by its path in the checkout that seeded it. Superwall's and Basket's shared browsers have a few signed-in sites
   (`scripts/seed/browser.ts`, a cookie file under `data/browser/`) and Personal's has none. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a

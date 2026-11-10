@@ -1,9 +1,18 @@
 import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
 import { BunRuntime, BunServices } from '@effect/platform-bun';
-import { Effect, FileSystem, Schema } from 'effect';
+import { Effect, FileSystem, Layer, Schema } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
+import { Command, CommandLayer } from './kit/command/index.ts';
 import { reportFailure } from './kit/script.ts';
+import {
+  BASELINE_FILE,
+  BaselineText,
+  countViolations,
+  listBaselineProblems,
+  listBaselineRises,
+  serializeBaseline,
+} from './lint-baseline.ts';
 import { listDialogViolations } from './lint-dialog.ts';
 import { listDisclosureViolations } from './lint-disclosure.ts';
 import {
@@ -22,6 +31,8 @@ import {
   isEffectSource,
   listEffectViolations,
   listPromiseLines,
+  listBaselineRuleViolations,
+  type BaselineRule,
 } from './lint-effect.ts';
 import {
   APP,
@@ -51,6 +62,8 @@ import { RAW_SELECTION_MESSAGE, RAW_SELECTION_PATTERN } from './lint-selection.t
 import { listToastViolations } from './lint-toast.ts';
 
 type Violation = { file: string; line: number; message: string };
+
+type RuleViolation = Violation & { rule: BaselineRule };
 
 type BabelComment = { type: string; value: string; loc: { start: { line: number } } };
 
@@ -602,7 +615,8 @@ const checkFile = Effect.fn('Conventions.checkFile')(function* (
   file: string,
   source: string,
   violations: Violation[],
-  appSources: Record<string, string>
+  appSources: Record<string, string>,
+  ruleViolations: RuleViolation[]
 ) {
   const parsed = yield* Effect.try({
     try: () => parseSource(file, source),
@@ -636,13 +650,43 @@ const checkFile = Effect.fn('Conventions.checkFile')(function* (
   collectEngineRuntimeViolations(file, source, violations);
   for (const violation of listRawIoViolations(file, source)) violations.push({ file, ...violation });
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
+  for (const violation of listBaselineRuleViolations(file, source))
+    ruleViolations.push({ file, ...violation });
   if (isUnder(file, APP)) appSources[file] = source;
+});
+
+const decodeBaseline = Effect.fn('Conventions.decodeBaseline')(function* (text: string, source: string) {
+  return yield* Schema.decodeUnknownEffect(BaselineText)(text).pipe(
+    Effect.mapError(
+      (error) => new ConventionsBroken({ message: `${source} is not a valid baseline: ${error.message}` })
+    )
+  );
+});
+
+const listBaselineViolations = Effect.fn('Conventions.listBaselineViolations')(function* (
+  ruleViolations: RuleViolation[]
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const command = yield* Command;
+  const args = process.argv.slice(2);
+  const baseIndex = args.indexOf('--base');
+  const baseRef = baseIndex === -1 ? null : (args[baseIndex + 1] ?? null);
+  if (args.includes('--write-baseline'))
+    yield* fs.writeFileString(BASELINE_FILE, serializeBaseline(countViolations(ruleViolations)));
+  const baseline = yield* decodeBaseline(yield* fs.readFileString(BASELINE_FILE), BASELINE_FILE);
+  const problems = listBaselineProblems(ruleViolations, baseline);
+  if (baseRef === null) return problems;
+  const base = yield* command.run(['git', 'show', `${baseRef}:${BASELINE_FILE}`]);
+  if (base.code !== 0) return problems;
+  const before = yield* decodeBaseline(base.stdout, `${baseRef}:${BASELINE_FILE}`);
+  return [...problems, ...listBaselineRises(baseline, before, baseRef)];
 });
 
 const run = Effect.fn('Conventions.run')(function* () {
   const fs = yield* FileSystem.FileSystem;
   const violations: Violation[] = [];
   const appSources: Record<string, string> = {};
+  const ruleViolations: RuleViolation[] = [];
   const apps = [...(yield* fs.readDirectory('apps'))].sort((a, b) => a.localeCompare(b));
   const roots = [
     ...apps.flatMap((app) => APP_ROOT_FOLDERS.map((folder) => `apps/${app}/${folder}`)),
@@ -651,7 +695,7 @@ const run = Effect.fn('Conventions.run')(function* () {
   for (const root of roots) {
     if (!(yield* fs.exists(root))) continue;
     for (const file of yield* listSourceFiles(root)) {
-      yield* checkFile(file, yield* fs.readFileString(file), violations, appSources);
+      yield* checkFile(file, yield* fs.readFileString(file), violations, appSources, ruleViolations);
     }
   }
   violations.push(...listToastViolations(appSources));
@@ -659,6 +703,7 @@ const run = Effect.fn('Conventions.run')(function* () {
   for (const root of APP)
     for (const sheet of yield* listStyleSheets(root))
       collectRawSelection(sheet, yield* fs.readFileString(sheet), violations);
+  violations.push(...(yield* listBaselineViolations(ruleViolations)));
   if (violations.length === 0) return;
   const lines = violations.map(
     (violation) => `${relative(process.cwd(), violation.file)}:${violation.line} ${violation.message}`
@@ -671,6 +716,6 @@ const run = Effect.fn('Conventions.run')(function* () {
 run().pipe(
   Effect.catchTag('PlatformError', Effect.die),
   reportFailure,
-  Effect.provide(BunServices.layer),
+  Effect.provide(Layer.mergeAll(BunServices.layer, CommandLayer)),
   BunRuntime.runMain({ disableErrorReporting: true })
 );

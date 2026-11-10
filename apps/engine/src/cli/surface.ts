@@ -7,7 +7,6 @@ import {
   listGroup,
   readArgv,
   SURFACE,
-  SurfaceCallFailed,
   type SurfaceSpec,
   selectSpec,
 } from '../surface/index.ts';
@@ -30,11 +29,7 @@ function writeJson(io: SurfaceIo, value: unknown) {
 }
 
 const answerSpec = Effect.fn('Surface.answer')(function* (spec: SurfaceSpec, args: string[], io: SurfaceIo) {
-  const parsed = yield* Effect.try({
-    try: () => readArgv(spec.fields, args),
-    catch: (error) =>
-      error instanceof DomainError ? error : new SurfaceCallFailed({ message: describeError(error) }),
-  });
+  const parsed = yield* Effect.fromResult(readArgv(spec.fields, args));
   if (parsed.help) {
     io.write(describeUsage(spec, io.display));
     return 0;

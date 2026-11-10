@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type CommandOf,
   listProjectRepos,
@@ -228,10 +229,10 @@ describe('finding a task by its handle', () => {
     const projectId = writeProject(harness, 'Superwall', 'SW');
     for (let index = 0; index < 7; index += 1) create(harness, { projectId });
     const seventh = Object.values(harness.state.tasks).find((task) => task.handle === 'SW-7');
-    expect(selectTaskByHandle(harness.state, 'sw-7')?.id).toBe(seventh?.id ?? 'missing');
-    expect(selectTaskByHandle(harness.state, ' SW-07 ')?.id).toBe(seventh?.id ?? 'missing');
-    expect(selectTaskByHandle(harness.state, 'SW-8')).toBeNull();
-    expect(selectTaskByHandle(harness.state, 'Fix SW-7')).toBeNull();
+    expect(Option.getOrNull(selectTaskByHandle(harness.state, 'sw-7'))?.id).toBe(seventh?.id ?? 'missing');
+    expect(Option.getOrNull(selectTaskByHandle(harness.state, ' SW-07 '))?.id).toBe(seventh?.id ?? 'missing');
+    expect(Option.getOrNull(selectTaskByHandle(harness.state, 'SW-8'))).toBeNull();
+    expect(Option.getOrNull(selectTaskByHandle(harness.state, 'Fix SW-7'))).toBeNull();
   });
 
   test('a reference is a task id or a handle', () => {

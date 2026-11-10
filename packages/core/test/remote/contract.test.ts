@@ -72,15 +72,15 @@ describe('the remote contract', () => {
     const fragment = { instanceId: 'k3x9', machineKey: 'machine-key', secret: 'secret_1', invite: 'tok_2' };
     const url = resolveEnrollUrl(fragment);
     expect(url).toBe('https://app.shinsa.dev/enroll#k3x9.machine-key.secret_1.tok_2');
-    expect(parseEnrollFragment(new URL(url).hash)).toEqual(fragment);
+    expect(Option.getOrNull(parseEnrollFragment(new URL(url).hash))).toEqual(fragment);
   });
 
   test('refuses a broken enrollment fragment', () => {
-    expect(parseEnrollFragment('#a.b')).toBeNull();
-    expect(parseEnrollFragment('#a.b.c')).toBeNull();
-    expect(parseEnrollFragment('#a..c')).toBeNull();
-    expect(parseEnrollFragment('#a.b.c=')).toBeNull();
-    expect(parseEnrollFragment('#a.b.c.d.e')).toBeNull();
+    expect(Option.getOrNull(parseEnrollFragment('#a.b'))).toBeNull();
+    expect(Option.getOrNull(parseEnrollFragment('#a.b.c'))).toBeNull();
+    expect(Option.getOrNull(parseEnrollFragment('#a..c'))).toBeNull();
+    expect(Option.getOrNull(parseEnrollFragment('#a.b.c='))).toBeNull();
+    expect(Option.getOrNull(parseEnrollFragment('#a.b.c.d.e'))).toBeNull();
   });
 });
 

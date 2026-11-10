@@ -24,7 +24,7 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Clock, Effect, Layer } from 'effect';
+import { Clock, Effect, Layer, Option } from 'effect';
 import { resolveCloseCode, resolveForwardHeaders } from '../../src/remote/previews/forwarding.ts';
 import {
   PREVIEW_LINK_LOST,
@@ -276,7 +276,7 @@ describe('making a preview link', () => {
     expect(command).toMatchObject({ type: 'preview.record', taskId: 'task-1', serviceId: 'web' });
     const url = command?.type === 'preview.record' ? command.url : null;
     expect(url?.startsWith('https://')).toBe(true);
-    expect(parsePreviewUrl(url, ORIGIN)).toEqual({
+    expect(Option.getOrNull(parsePreviewUrl(url, ORIGIN))).toEqual({
       instanceId: 'inst1',
       previewId: serializeBase64Url(new Uint8Array(PREVIEW_ID_BYTES).fill(7)),
       key: serializeBase64Url(new Uint8Array(PREVIEW_KEY_BYTES).fill(8)),
@@ -292,7 +292,7 @@ describe('making a preview link', () => {
       const [command] = stub.dispatched;
       urls.push(command?.type === 'preview.record' ? command.url : null);
     }
-    const [first, second] = urls.map((url) => parsePreviewUrl(url, ORIGIN));
+    const [first, second] = urls.map((url) => Option.getOrNull(parsePreviewUrl(url, ORIGIN)));
     expect(first && second).toBeTruthy();
     expect(first?.previewId).not.toBe(second?.previewId);
     expect(first?.key).not.toBe(second?.key);
@@ -537,7 +537,7 @@ async function resolvePrivateUrl(previews: Previews, run: TerminalInfo) {
 }
 
 function resolvePrivateId(url: string) {
-  const address = parsePreviewHost(new URL(url).host, ORIGIN);
+  const address = Option.getOrNull(parsePreviewHost(new URL(url).host, ORIGIN));
   if (!address) throw new Error('expected a preview host');
   return address.previewId;
 }

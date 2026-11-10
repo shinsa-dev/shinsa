@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ShinsaState } from '../state/project.ts';
 
 export function resolveContinuePrompt() {
@@ -84,7 +85,11 @@ export function resolveMovedNote(cwd: string) {
   return `You now work in \`${cwd}\`, not where this conversation started. Run every command and read every file there.`;
 }
 
-export function selectSessionCwd(state: ShinsaState, sessionId: string, exceptRunId: string) {
+export function selectSessionCwd(
+  state: ShinsaState,
+  sessionId: string,
+  exceptRunId: string
+): Option.Option<string> {
   let latest: { cwd: string; startedAt: number } | null = null;
   for (const run of Object.values(state.runs)) {
     if (run.sessionId !== sessionId || run.id === exceptRunId) continue;
@@ -93,5 +98,5 @@ export function selectSessionCwd(state: ShinsaState, sessionId: string, exceptRu
         latest = { cwd: attempt.cwd, startedAt: attempt.startedAt };
     }
   }
-  return latest?.cwd ?? null;
+  return Option.fromNullishOr(latest?.cwd);
 }

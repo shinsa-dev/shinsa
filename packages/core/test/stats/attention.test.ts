@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type GateDecision,
   type GateType,
@@ -160,13 +161,15 @@ describe('tasks at once', () => {
       windowOf(30)
     );
     expect(away.tasksAtOnce).toEqual({ median: null, peak: 2 });
-    expect(resolveWeightedMedian([])).toBeNull();
+    expect(Option.getOrNull(resolveWeightedMedian([]))).toBeNull();
     expect(
-      resolveWeightedMedian([
-        { count: 3, weight: 1 },
-        { count: 1, weight: 1 },
-        { count: 2, weight: 1 },
-      ])
+      Option.getOrNull(
+        resolveWeightedMedian([
+          { count: 3, weight: 1 },
+          { count: 1, weight: 1 },
+          { count: 2, weight: 1 },
+        ])
+      )
     ).toBe(2);
   });
 });
@@ -243,6 +246,6 @@ describe('your input per round', () => {
     expect(isHandsOff([gate(1, 'sign_in', 'approve')])).toBe(false);
     expect(isHandsOff([gate(1, 'plan', 'revise')])).toBe(false);
     expect(isHandsOff([message(1)])).toBe(false);
-    expect(resolveFirstReview([message(1), gate(2, 'plan', 'revise')])).toBeNull();
+    expect(Option.getOrNull(resolveFirstReview([message(1), gate(2, 'plan', 'revise')]))).toBeNull();
   });
 });

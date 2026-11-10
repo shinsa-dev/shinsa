@@ -7,6 +7,7 @@ import {
   resolveImageType,
   type SearchMatch,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { decodeText, splitRecords } from '../text.ts';
 import {
   BINARY_SNIFF_BYTES,
@@ -92,7 +93,7 @@ export function describeBytes(ref: string, path: string, bytes: Uint8Array, size
     binary,
     tooLarge: false,
     missing: false,
-    image: binary ? resolveImageType(path) : null,
+    image: binary ? Option.getOrNull(resolveImageType(path)) : null,
   };
 }
 
@@ -105,7 +106,7 @@ export function describeAbsent(ref: string, path: string, size: number, tooLarge
     binary: false,
     tooLarge,
     missing: !tooLarge,
-    image: tooLarge ? resolveImageType(path) : null,
+    image: tooLarge ? Option.getOrNull(resolveImageType(path)) : null,
   };
 }
 

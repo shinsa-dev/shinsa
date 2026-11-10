@@ -6,13 +6,12 @@ import { resolveBuildChangelog } from '../../../scripts/changelog-history.ts';
 import { bundle } from '../../../scripts/kit/bundle.ts';
 import { Command, CommandLayer } from '../../../scripts/kit/command/index.ts';
 import { reportFailure } from '../../../scripts/kit/script.ts';
+import type { EngineTarget } from '../src/instance/schema.ts';
 import { resolveBuildFolder, resolveBuildTarget } from '../src/instance/targets.ts';
 import { resolveStateVersion } from '../src/store/snapshot/version.ts';
 import { COMMIT_PATTERN, EngineBuildFailed, SdkPackage } from './schema.ts';
 
 const engineDir = resolve(import.meta.dirname, '..');
-const target = resolveBuildTarget(Bun.env.SHINSA_ENGINE_TARGET);
-const outDir = resolve(engineDir, 'dist', resolveBuildFolder(target));
 const webDist = resolve(engineDir, '../web/dist');
 const version = Bun.env.SHINSA_VERSION?.replace(/^v/, '') || '0.0.0';
 const decodeSdkPackage = Schema.decodeUnknownEffect(Schema.fromJsonString(SdkPackage));
@@ -33,6 +32,8 @@ const readSdkPackage = Effect.fn('EngineBuild.readSdkPackage')(function* () {
 });
 
 const compile = Effect.fn('EngineBuild.compile')(function* (
+  target: EngineTarget,
+  outDir: string,
   entry: string,
   name: string,
   define: Record<string, string>
@@ -54,6 +55,10 @@ const compile = Effect.fn('EngineBuild.compile')(function* (
 
 Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
+  const target = yield* Effect.fromResult(resolveBuildTarget(Bun.env.SHINSA_ENGINE_TARGET)).pipe(
+    Effect.mapError((error) => new EngineBuildFailed({ message: error.message }))
+  );
+  const outDir = resolve(engineDir, 'dist', resolveBuildFolder(target));
   if (!(yield* fs.exists(join(webDist, 'index.html'))))
     return yield* new EngineBuildFailed({
       message: `Build the web app first (bun run --cwd apps/web build): ${webDist} has no index.html`,
@@ -67,7 +72,7 @@ Effect.gen(function* () {
   yield* fs.remove(outDir, { recursive: true, force: true });
   yield* fs.makeDirectory(join(outDir, 'bin'), { recursive: true });
 
-  yield* compile(join(engineDir, 'scripts/engine-main.ts'), 'shinsa', {
+  yield* compile(target, outDir, join(engineDir, 'scripts/engine-main.ts'), 'shinsa', {
     'process.env.SHINSA_BUILD_VERSION': JSON.stringify(version),
     'process.env.SHINSA_BUILD_COMMIT': JSON.stringify(yield* readCommit()),
     'process.env.SHINSA_BUILD_STATE_VERSION': JSON.stringify(stateVersion),

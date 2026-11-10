@@ -195,7 +195,7 @@ export class Shipping extends Context.Service<
       ) {
         const body = yield* describePullRequest(taskId, attempt);
         const created = yield* pulls
-          .create(repo, task, resolveRoundBase(task), body)
+          .create(repo, task, Option.getOrNull(resolveRoundBase(task)), body)
           .pipe(Effect.mapError(resolveEffectFailure));
         if (!created) return yield* createEffectFailed(NOT_CREATED);
         return created;

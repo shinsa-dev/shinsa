@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   linkReferences,
   listReferenceSpans,
@@ -26,30 +27,40 @@ const CATALOG: ReferenceCatalog = {
 
 describe('parseReference', () => {
   test('reads every entity', () => {
-    expect(parseReference('shinsa://task/task-chat')).toEqual({ kind: 'task', id: 'task-chat' });
-    expect(parseReference('shinsa://pr/paywall-next#4531')).toEqual({
+    expect(Option.getOrNull(parseReference('shinsa://task/task-chat'))).toEqual({
+      kind: 'task',
+      id: 'task-chat',
+    });
+    expect(Option.getOrNull(parseReference('shinsa://pr/paywall-next#4531'))).toEqual({
       kind: 'pr',
       repo: 'paywall-next',
       number: 4531,
     });
-    expect(parseReference('shinsa://pr/superwall/paywall-next/7')).toEqual({
+    expect(Option.getOrNull(parseReference('shinsa://pr/superwall/paywall-next/7'))).toEqual({
       kind: 'pr',
       repo: 'superwall/paywall-next',
       number: 7,
     });
-    expect(parseReference('shinsa://pr/88')).toEqual({ kind: 'pr', repo: null, number: 88 });
-    expect(parseReference('shinsa://repo/paywall-next')).toEqual({ kind: 'repo', name: 'paywall-next' });
-    expect(parseReference('shinsa://branch/feat/embedded-chat')).toEqual({
+    expect(Option.getOrNull(parseReference('shinsa://pr/88'))).toEqual({
+      kind: 'pr',
+      repo: null,
+      number: 88,
+    });
+    expect(Option.getOrNull(parseReference('shinsa://repo/paywall-next'))).toEqual({
+      kind: 'repo',
+      name: 'paywall-next',
+    });
+    expect(Option.getOrNull(parseReference('shinsa://branch/feat/embedded-chat'))).toEqual({
       kind: 'branch',
       name: 'feat/embedded-chat',
     });
-    expect(parseReference('shinsa://file/src/chat/session.ts#L12-L20')).toEqual({
+    expect(Option.getOrNull(parseReference('shinsa://file/src/chat/session.ts#L12-L20'))).toEqual({
       kind: 'file',
       path: 'src/chat/session.ts',
       line: 12,
       end: 20,
     });
-    expect(parseReference('SHINSA://Task/abc')).toEqual({ kind: 'task', id: 'abc' });
+    expect(Option.getOrNull(parseReference('SHINSA://Task/abc'))).toEqual({ kind: 'task', id: 'abc' });
   });
 
   test('refuses anything malformed', () => {
@@ -65,7 +76,7 @@ describe('parseReference', () => {
       'shinsa://file/src/a.ts#middle',
       'shinsa://branch/a..b',
     ]) {
-      expect(parseReference(href)).toBeNull();
+      expect(Option.getOrNull(parseReference(href))).toBeNull();
     }
   });
 
@@ -80,7 +91,7 @@ describe('parseReference', () => {
       'shinsa://file/src/a.ts#L3',
       'shinsa://file/src/a.ts#L3-L9',
     ]) {
-      const reference = parseReference(href);
+      const reference = Option.getOrNull(parseReference(href));
       expect(reference).not.toBeNull();
       if (reference) expect(serializeReference(reference)).toBe(href);
     }
@@ -208,7 +219,7 @@ describe('find_tasks with pull requests', () => {
 
 describe('parseReference edge cases', () => {
   test('keeps a part that is not valid percent-encoding as it is', () => {
-    expect(parseReference('shinsa://file/src/100%.ts')).toEqual({
+    expect(Option.getOrNull(parseReference('shinsa://file/src/100%.ts'))).toEqual({
       kind: 'file',
       path: 'src/100%.ts',
       line: null,

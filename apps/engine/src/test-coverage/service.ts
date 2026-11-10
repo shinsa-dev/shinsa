@@ -59,13 +59,14 @@ export class TaskCoverage extends Context.Service<
           const runs = listTestRuns(request.commands, worktree, dir);
           return runs.length > 0 ? { runs } : null;
         }
-        const format = resolveCustomFormat(setting);
-        if (!format) {
+        const resolved = resolveCustomFormat(setting);
+        if (Option.isNone(resolved)) {
           return {
             command: setting.command,
             refusal: `Shinsa cannot tell the format of ${setting.report} from its name.`,
           };
         }
+        const format = resolved.value;
         const report = join(worktree, setting.report);
         return { runs: [{ tool: 'custom', command: setting.command, cwd: worktree, report, format }] };
       };

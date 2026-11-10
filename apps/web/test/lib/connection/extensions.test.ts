@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, jest, type Mock, spyOn } from 'bun:test';
 import type { ExtensionsSnapshot } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
@@ -226,9 +226,6 @@ describe('changes', () => {
 describe('signing in to a server', () => {
   let opened: Mock<typeof window.open>;
   let tab: { closed: boolean; location: { href: string }; close: () => void };
-  let intervals: (() => void)[];
-  let interval: Mock<typeof setInterval>;
-  let cleared: Mock<typeof clearInterval>;
 
   beforeEach(() => {
     tab = {
@@ -239,20 +236,18 @@ describe('signing in to a server', () => {
       },
     };
     opened = spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
-    intervals = [];
-    interval = spyOn(globalThis, 'setInterval').mockImplementation(((callback: () => void) => {
-      intervals.push(callback);
-      return intervals.length as unknown as ReturnType<typeof setInterval>;
-    }) as unknown as typeof setInterval);
-    cleared = spyOn(globalThis, 'clearInterval').mockImplementation(() => {});
+    jest.useFakeTimers();
   });
 
   afterEach(() => {
     stopSignInWatch();
     opened.mockRestore();
-    interval.mockRestore();
-    cleared.mockRestore();
+    jest.useRealTimers();
   });
+
+  function poll() {
+    jest.advanceTimersByTime(SIGN_IN_POLL_MS);
+  }
 
   function startSignIn(reads: ExtensionsSnapshot[] = [SNAPSHOT, CONNECTED]) {
     let count = 0;
@@ -274,10 +269,9 @@ describe('signing in to a server', () => {
     expect(await startSignIn()).toBe(true);
     expect(opened).toHaveBeenCalledWith('about:blank', '_blank');
     expect(tab.location.href).toBe('https://auth.linear.app/x');
-    expect(interval.mock.calls[0]?.[1]).toBe(SIGN_IN_POLL_MS);
     const [channel] = FakeChannel.opened;
     expect(channel?.name).toBe(SIGN_IN_CHANNEL);
-    intervals[0]?.();
+    poll();
     await act(() => refreshExtensions());
     expect(toasts.success).not.toHaveBeenCalled();
     channel?.post({ ok: true });
@@ -292,11 +286,11 @@ describe('signing in to a server', () => {
 
   it('keeps watching until Shinsa has checked the server with its new sign-in', async () => {
     await startSignIn([SIGNED_IN, CONNECTED]);
-    intervals[0]?.();
+    poll();
     await act(() => refreshExtensions());
     expect(selectExtensions().snapshot).toEqual(SIGNED_IN);
     expect(toasts.success).not.toHaveBeenCalled();
-    intervals[0]?.();
+    poll();
     await act(() => refreshExtensions());
     expect(toasts.success).toHaveBeenCalledWith('Signed in to linear.');
     expect(selectExtensions().snapshot).toEqual(CONNECTED);
@@ -337,7 +331,7 @@ describe('signing in to a server', () => {
     const now = spyOn(Date, 'now').mockReturnValue(1_000);
     await startSignIn();
     now.mockReturnValue(1_000 + SIGN_IN_LIMIT_MS);
-    intervals[0]?.();
+    poll();
     expect(FakeChannel.opened[0]?.closed).toBe(true);
     now.mockRestore();
   });

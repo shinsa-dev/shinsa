@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { ACCESS_PRESETS, ACCESS_SCOPES, DEFAULT_TEAM_SCOPES, listActionScopes } from '../../src/index.ts';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
@@ -56,17 +56,20 @@ describe('the local relay to a teammate’s machine', () => {
   test('names the machine and the route it relays, and reads them back', () => {
     const path = `${resolveTeamRelayPath('kai-mac')}/api/tasks/SW-1/diff`;
     expect(path).toBe('/api/teams/relay/kai-mac/api/tasks/SW-1/diff');
-    expect(parseTeamRelayPath(path)).toEqual({ instanceId: 'kai-mac', path: '/api/tasks/SW-1/diff' });
+    expect(Option.getOrNull(parseTeamRelayPath(path))).toEqual({
+      instanceId: 'kai-mac',
+      path: '/api/tasks/SW-1/diff',
+    });
     expect(resolveTeamRelaySocketPath('kai-mac')).toBe('/ws/teams/relay/kai-mac');
-    expect(parseTeamRelaySocketPath('/ws/teams/relay/kai-mac')).toBe('kai-mac');
+    expect(Option.getOrNull(parseTeamRelaySocketPath('/ws/teams/relay/kai-mac'))).toBe('kai-mac');
   });
 
   test('refuses a machine out of shape and a route that is not the API', () => {
-    expect(parseTeamRelayPath('/api/teams/relay/kai-mac/ws')).toBeNull();
-    expect(parseTeamRelayPath('/api/teams/relay/kai.mac/api/tasks')).toBeNull();
-    expect(parseTeamRelayPath('/api/teams/relays')).toBeNull();
-    expect(parseTeamRelaySocketPath('/ws/teams/relay/kai.mac')).toBeNull();
-    expect(parseTeamRelaySocketPath('/ws/teams/relay/kai-mac/more')).toBeNull();
+    expect(Option.getOrNull(parseTeamRelayPath('/api/teams/relay/kai-mac/ws'))).toBeNull();
+    expect(Option.getOrNull(parseTeamRelayPath('/api/teams/relay/kai.mac/api/tasks'))).toBeNull();
+    expect(Option.getOrNull(parseTeamRelayPath('/api/teams/relays'))).toBeNull();
+    expect(Option.getOrNull(parseTeamRelaySocketPath('/ws/teams/relay/kai.mac'))).toBeNull();
+    expect(Option.getOrNull(parseTeamRelaySocketPath('/ws/teams/relay/kai-mac/more'))).toBeNull();
   });
 });
 
@@ -75,13 +78,17 @@ describe('the local view of a teammate’s task', () => {
     const target = { teamId: 'team-1', instanceId: 'inst_2', taskId: '01a1-task' };
     const path = resolveTeamViewPath(target);
     expect(path).toBe('/api/teams/view?team=team-1&machine=inst_2&task=01a1-task');
-    expect(parseTeamViewTarget(new URL(path, 'http://localhost'))).toEqual(target);
+    expect(Option.getOrNull(parseTeamViewTarget(new URL(path, 'http://localhost')))).toEqual(target);
   });
 
   test('refuses a view with a part missing or out of shape', () => {
-    expect(parseTeamViewTarget(new URL('http://localhost/api/teams/view?team=t&machine=m'))).toBeNull();
     expect(
-      parseTeamViewTarget(new URL('http://localhost/api/teams/view?team=t&machine=m&task=a%2Fb'))
+      Option.getOrNull(parseTeamViewTarget(new URL('http://localhost/api/teams/view?team=t&machine=m')))
+    ).toBeNull();
+    expect(
+      Option.getOrNull(
+        parseTeamViewTarget(new URL('http://localhost/api/teams/view?team=t&machine=m&task=a%2Fb'))
+      )
     ).toBeNull();
   });
 });
@@ -91,18 +98,20 @@ describe('the team join link', () => {
     const fragment = { teamId: 'team-1', invite: 'invite_1', key: KEY };
     const url = resolveTeamJoinUrl(fragment, 'https://app.example');
     expect(url).toBe(`https://app.example/share/team#team-1.invite_1.${KEY}`);
-    expect(parseTeamJoinUrl(url)).toEqual(fragment);
-    expect(parseTeamJoinUrl(` ${url} `)).toEqual(fragment);
-    expect(parseTeamJoinFragment(`#${serializeTeamJoinFragment(fragment)}`)).toEqual(fragment);
+    expect(Option.getOrNull(parseTeamJoinUrl(url))).toEqual(fragment);
+    expect(Option.getOrNull(parseTeamJoinUrl(` ${url} `))).toEqual(fragment);
+    expect(Option.getOrNull(parseTeamJoinFragment(`#${serializeTeamJoinFragment(fragment)}`))).toEqual(
+      fragment
+    );
     expect(resolveTeamJoinUrl(fragment)).toStartWith('https://app.shinsa.dev/share/team#');
   });
 
   test('refuses a link of another page, a broken fragment or a key of the wrong size', () => {
-    expect(parseTeamJoinUrl(`https://app.example/share/t#team-1.invite.${KEY}`)).toBeNull();
-    expect(parseTeamJoinUrl('not a url')).toBeNull();
-    expect(parseTeamJoinFragment('team-1.invite')).toBeNull();
-    expect(parseTeamJoinFragment(`team 1.invite.${KEY}`)).toBeNull();
-    expect(parseTeamJoinFragment('team-1.invite.AAAA')).toBeNull();
+    expect(Option.getOrNull(parseTeamJoinUrl(`https://app.example/share/t#team-1.invite.${KEY}`))).toBeNull();
+    expect(Option.getOrNull(parseTeamJoinUrl('not a url'))).toBeNull();
+    expect(Option.getOrNull(parseTeamJoinFragment('team-1.invite'))).toBeNull();
+    expect(Option.getOrNull(parseTeamJoinFragment(`team 1.invite.${KEY}`))).toBeNull();
+    expect(Option.getOrNull(parseTeamJoinFragment('team-1.invite.AAAA'))).toBeNull();
     expect(isTeamKey(KEY)).toBe(true);
     expect(isTeamKey('!')).toBe(false);
   });
@@ -122,7 +131,7 @@ describe('the team handshake', () => {
     const client = await createKeyPair();
     const server = await createKeyPair();
     const hello = await Effect.runPromise(createTeamHello('team-1', KEY, TASK, client.publicKey));
-    expect(parseTeamHello(JSON.stringify(hello))).toEqual(hello);
+    expect(Option.getOrNull(parseTeamHello(JSON.stringify(hello)))).toEqual(hello);
     expect(await Effect.runPromise(verifyTeamHello(KEY, hello))).toBe(true);
     expect(await Effect.runPromise(verifyTeamHello(OTHER_KEY, hello))).toBe(false);
     expect(await Effect.runPromise(verifyTeamHello(KEY, { ...hello, team: 'team-2' }))).toBe(false);
@@ -161,14 +170,18 @@ describe('the team handshake', () => {
   test('refuses hellos of the wrong shape or view', async () => {
     const client = await createKeyPair();
     const hello = await Effect.runPromise(createTeamHello('team-1', KEY, LIST, client.publicKey));
-    expect(parseTeamHello(JSON.stringify(hello))?.view).toEqual(LIST);
-    expect(parseTeamHello('{')).toBeNull();
-    expect(parseTeamHello(JSON.stringify({ ...hello, type: 'share-hello' }))).toBeNull();
-    expect(parseTeamHello(JSON.stringify({ ...hello, version: REMOTE_PROTOCOL_VERSION + 1 }))).toBeNull();
-    expect(parseTeamHello(JSON.stringify({ ...hello, view: null }))).toBeNull();
-    expect(parseTeamHello(JSON.stringify({ ...hello, view: { kind: 'chat' } }))).toBeNull();
-    expect(parseTeamHello(JSON.stringify({ ...hello, view: { kind: 'task', taskId: '../x' } }))).toBeNull();
-    expect(parseTeamHello(JSON.stringify({ ...hello, team: 1 }))).toBeNull();
+    expect(Option.getOrNull(parseTeamHello(JSON.stringify(hello)))?.view).toEqual(LIST);
+    expect(Option.getOrNull(parseTeamHello('{'))).toBeNull();
+    expect(Option.getOrNull(parseTeamHello(JSON.stringify({ ...hello, type: 'share-hello' })))).toBeNull();
+    expect(
+      Option.getOrNull(parseTeamHello(JSON.stringify({ ...hello, version: REMOTE_PROTOCOL_VERSION + 1 })))
+    ).toBeNull();
+    expect(Option.getOrNull(parseTeamHello(JSON.stringify({ ...hello, view: null })))).toBeNull();
+    expect(Option.getOrNull(parseTeamHello(JSON.stringify({ ...hello, view: { kind: 'chat' } })))).toBeNull();
+    expect(
+      Option.getOrNull(parseTeamHello(JSON.stringify({ ...hello, view: { kind: 'task', taskId: '../x' } })))
+    ).toBeNull();
+    expect(Option.getOrNull(parseTeamHello(JSON.stringify({ ...hello, team: 1 })))).toBeNull();
     await expect(Effect.runPromise(createTeamHello('team-1', '', LIST, client.publicKey))).rejects.toThrow(
       'The channel key is not valid.'
     );
@@ -193,7 +206,7 @@ describe('a signed team snapshot', () => {
     const signer = await createSigner();
     const snapshot = await Effect.runPromise(signTeamSnapshot(signer.privateKey, BODY));
     expect(await Effect.runPromise(verifyTeamSnapshot(signer.signingKey, snapshot))).toEqual(BODY);
-    expect(readTeamSnapshot(JSON.parse(JSON.stringify(snapshot)))).toEqual(snapshot);
+    expect(Option.getOrNull(readTeamSnapshot(JSON.parse(JSON.stringify(snapshot))))).toEqual(snapshot);
   });
 
   test('refuses another machine’s key, a changed body, a bad signature or a bad key', async () => {
@@ -221,11 +234,15 @@ describe('a signed team snapshot', () => {
 
   test('names the machine a snapshot says signed it, before it is verified', async () => {
     const signer = await createSigner();
-    expect(selectTeamSnapshotSigner(await Effect.runPromise(signTeamSnapshot(signer.privateKey, BODY)))).toBe(
-      BODY.instanceId
-    );
-    expect(selectTeamSnapshotSigner({ body: '{"instanceId":3}', signature: 'x' })).toBeNull();
-    expect(selectTeamSnapshotSigner({ body: 'not json', signature: 'x' })).toBeNull();
+    expect(
+      Option.getOrNull(
+        selectTeamSnapshotSigner(await Effect.runPromise(signTeamSnapshot(signer.privateKey, BODY)))
+      )
+    ).toBe(BODY.instanceId);
+    expect(
+      Option.getOrNull(selectTeamSnapshotSigner({ body: '{"instanceId":3}', signature: 'x' }))
+    ).toBeNull();
+    expect(Option.getOrNull(selectTeamSnapshotSigner({ body: 'not json', signature: 'x' }))).toBeNull();
   });
 
   test('expires 30 days after the machine last updated it', () => {
@@ -234,9 +251,12 @@ describe('a signed team snapshot', () => {
   });
 
   test('reads a snapshot only with a text body and signature', () => {
-    expect(readTeamSnapshot(null)).toBeNull();
-    expect(readTeamSnapshot({ body: 1, signature: 'x' })).toBeNull();
-    expect(readTeamSnapshot({ body: '{}', signature: 'x' })).toEqual({ body: '{}', signature: 'x' });
+    expect(Option.getOrNull(readTeamSnapshot(null))).toBeNull();
+    expect(Option.getOrNull(readTeamSnapshot({ body: 1, signature: 'x' }))).toBeNull();
+    expect(Option.getOrNull(readTeamSnapshot({ body: '{}', signature: 'x' }))).toEqual({
+      body: '{}',
+      signature: 'x',
+    });
   });
 });
 

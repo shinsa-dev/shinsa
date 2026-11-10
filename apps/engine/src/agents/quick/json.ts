@@ -1,10 +1,9 @@
+import { Option, Schema } from 'effect';
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
 function parseCandidate(candidate: string | undefined) {
-  if (!candidate) return null;
-  try {
-    return JSON.parse(candidate) as unknown;
-  } catch {
-    return null;
-  }
+  return candidate ? Option.getOrNull(decodeJson(candidate)) : null;
 }
 
 export function parseJsonObject<T>(text: string | null): T | null {

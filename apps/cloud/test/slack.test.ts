@@ -22,7 +22,7 @@ import {
   verifySlackForwardSignature,
   type RemoteUserId,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { SLACK_BOT_SCOPES } from '../src/integrations/slack/schema.ts';
 import { SLACK_DECISION_REFUSALS } from '../src/routes/slack-events/schema.ts';
 import { SLACK_USER_SCOPES } from '../src/routes/slack-link/schema.ts';
@@ -1704,12 +1704,14 @@ describe('deciding from the card', () => {
     expect(setup.slack.callsTo('views.open').map((call) => call.body)).toEqual([
       {
         trigger_id: '13345.73847.8088',
-        view: serializeSlackDecisionModal({
-          ...REVISE,
-          channelId: 'C1',
-          threadTs: '100.1',
-          messageTs: setup.ts,
-        }),
+        view: Option.getOrNull(
+          serializeSlackDecisionModal({
+            ...REVISE,
+            channelId: 'C1',
+            threadTs: '100.1',
+            messageTs: setup.ts,
+          })
+        ),
       },
     ]);
     expect(setup.slack.callsTo('views.open')[0]?.token).toBe('xoxb-bot-token');

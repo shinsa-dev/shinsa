@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -12,7 +13,7 @@ import type { Decider } from './decider.ts';
 export function recordEdit(decider: Decider, command: CommandOf<'task.record_edit'>) {
   const task = decider.task(command.taskId);
   const refusal = resolveEditRefusal(task);
-  if (refusal) throw new DomainError({ code: 'edit_refused', message: refusal });
+  if (Option.isSome(refusal)) throw new DomainError({ code: 'edit_refused', message: refusal.value });
   const edited = (task.editedPaths ?? []).includes(command.path);
   const untold = (task.untoldEdits ?? []).includes(command.path);
   if (command.changed ? edited && untold : !edited) return;

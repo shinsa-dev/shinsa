@@ -17,7 +17,7 @@ export const PlacementHandlers = HttpApiBuilder.group(
       'ask',
       Effect.fn('PlacementHandlers.ask')(function* ({ payload }) {
         if (!place) return yield* new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
-        const question = parsePlacementQuestion(payload);
+        const question = Option.getOrNull(parsePlacementQuestion(payload));
         if (!question) return yield* new RequestFailed(PLACEMENT_INVALID);
         return { answer: yield* place.place(question).pipe(Effect.mapError(resolveRequestFailure)) };
       })

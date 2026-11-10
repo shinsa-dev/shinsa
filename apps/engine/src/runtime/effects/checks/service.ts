@@ -7,7 +7,7 @@ import {
   resolveRoundBase,
   type Task,
 } from '@shinsa/core';
-import { Context, Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer, Option } from 'effect';
 import { BaseCheckouts } from '../../../checks/base/service.ts';
 import { resolveSharedCacheEnv } from '../../../checks/caches/paths.ts';
 import { serializeCheckOutput } from '../../../checks/evidence.ts';
@@ -67,7 +67,10 @@ export class CheckRuns extends Context.Service<
           (releases) =>
             Effect.flatMap(
               Effect.cached(
-                Effect.map(history.taskRefs(repo, task, resolveRoundBase(task)), (refs) => refs.base)
+                Effect.map(
+                  history.taskRefs(repo, task, Option.getOrNull(resolveRoundBase(task))),
+                  (refs) => refs.base
+                )
               ),
               (resolveBase) =>
                 runner.runAll(effect.checks, worktree, {
@@ -95,7 +98,7 @@ export class CheckRuns extends Context.Service<
             repo,
             task,
             commands: listTaskChecks(task, repo).map((check) => check.command),
-            baseBranch: resolveRoundBase(task),
+            baseBranch: Option.getOrNull(resolveRoundBase(task)),
           });
         }
         if (coverage?.status === 'unavailable') {

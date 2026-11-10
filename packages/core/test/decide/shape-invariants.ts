@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import { Option } from 'effect';
 import {
   type Gate,
   isDecisionGate,
@@ -307,7 +308,7 @@ function assertOperationInvariants(
   history: Gate[],
   context: string
 ) {
-  const timing = resolveOperationTiming(pipeline);
+  const timing = Option.getOrNull(resolveOperationTiming(pipeline));
   if (task.stage === 'operating' && timing === 'post_merge') {
     expect(task.pullRequest?.state, `${context}: operating after the merge before it merged`).toBe('merged');
     expect(isConfirmed(history), `${context}: operating after the merge without your OK`).toBe(true);
@@ -362,7 +363,7 @@ function assertProposalInvariants(
   if (task.stage === 'awaiting_proposal') {
     expect(pipeline, `${context}: waiting at a proposal without your OK in the steps`).toContain('your_ok');
   }
-  const inquiry = resolveInquiryStep(pipeline);
+  const inquiry = Option.getOrNull(resolveInquiryStep(pipeline));
   if (pipeline.includes('your_ok') && AFTER_YOUR_OK.has(task.stage)) {
     expect(task.proposal?.status, `${context}: past your OK without it`).toBe('accepted');
   }
@@ -424,7 +425,7 @@ function listCompositionMarks(task: Task) {
   const pipeline = resolveTaskPipeline(task);
   const operated = task.result?.step === 'operate';
   const built = task.phaseReports.length > 0;
-  const timing = resolveOperationTiming(pipeline);
+  const timing = Option.getOrNull(resolveOperationTiming(pipeline));
   return [
     operated && task.pullRequest?.state === 'merged' ? 'operation after merge' : null,
     operated && built && timing === 'before_build' ? 'operation before build' : null,
@@ -450,7 +451,9 @@ export function listShapeMarks(state: ShinsaState) {
     task.shapeChanges?.some((change) => change.by === 'agent') ? 'reshaped by an agent' : null,
     resolveTaskShape(task) === 'fix' && task.phaseReports.length > 0 ? 'built fix' : null,
     ...listCompositionMarks(task),
-    task.shapeChanges?.some((change) => change.by === 'agent' && resolvePresetOf(change.to) === null)
+    task.shapeChanges?.some(
+      (change) => change.by === 'agent' && Option.getOrNull(resolvePresetOf(change.to)) === null
+    )
       ? 'composed steps'
       : null,
     resolveTaskPipeline(task).includes('your_ok') && task.proposal?.status === 'accepted'

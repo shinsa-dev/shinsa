@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -124,7 +125,10 @@ function countProposals(decider: Decider) {
 
 export function rememberRule(decider: Decider, command: CommandOf<'agent.remember'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'remember');
-  const projectId = resolveScopeProject(command.scope, resolveTaskProject(decider.state, task));
+  const projectId = resolveScopeProject(
+    command.scope,
+    Option.getOrNull(resolveTaskProject(decider.state, task))
+  );
   const text = resolveMemoryText(command.text);
   assertText(text);
   if (isKnown(decider, projectId, text)) return;

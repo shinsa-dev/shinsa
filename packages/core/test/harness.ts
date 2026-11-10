@@ -1,4 +1,4 @@
-import { Result } from 'effect';
+import { Result, Option } from 'effect';
 import {
   type AgentReply,
   applyEvent,
@@ -39,7 +39,7 @@ export function decideOrThrow(...input: Parameters<typeof decide>) {
 
 export function readInstruction(run: Run) {
   const prompt = run.rolePrompt ?? run.prompt ?? '';
-  return splitHouseRules(prompt)?.instruction ?? prompt;
+  return Option.getOrNull(splitHouseRules(prompt))?.instruction ?? prompt;
 }
 
 export function createHarness() {
@@ -153,7 +153,7 @@ export const REPLY: AgentReply = {
 export function resolveOwedReply(state: ShinsaState, runId: string) {
   const run = state.runs[runId];
   const task = run ? state.tasks[run.taskId] : undefined;
-  return task && selectOpenIteration(task) ? { reply: REPLY } : {};
+  return task && Option.getOrNull(selectOpenIteration(task)) ? { reply: REPLY } : {};
 }
 
 export function resolveReply(harness: Harness, runId: string) {

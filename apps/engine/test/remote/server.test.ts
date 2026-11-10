@@ -21,7 +21,7 @@ import {
 } from '@shinsa/core';
 import { DomainError } from '@shinsa/core';
 import { GuestsFull, MembersFull, NotFound, Revoked } from '@shinsa/core/remote/errors';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, Option } from 'effect';
 import type { ModelSource } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
@@ -1120,7 +1120,7 @@ describe('links, access requests and members', () => {
   }
 
   function readLink(remote: StartedRemote) {
-    return parseEnrollFragment(new URL(remote.snapshot().link?.url ?? 'https://x').hash);
+    return Option.getOrNull(parseEnrollFragment(new URL(remote.snapshot().link?.url ?? 'https://x').hash));
   }
 
   async function waitForRequest(remote: StartedRemote) {
@@ -1554,7 +1554,9 @@ describe('handing off a task', () => {
   }
 
   function readClaim(engine: Engine, taskId: string) {
-    return parseEnrollFragment(new URL(engine.state.tasks[taskId]?.handoff?.url ?? 'https://x').hash);
+    return Option.getOrNull(
+      parseEnrollFragment(new URL(engine.state.tasks[taskId]?.handoff?.url ?? 'https://x').hash)
+    );
   }
 
   test('makes one claim link per task, only while remote access is on', async () => {
@@ -1737,7 +1739,7 @@ describe('handing off a task', () => {
     plane.answers.set(REMOTE_PATHS.machineHandoffs, () => Response.json({ token: 'handoff-token' }));
     plane.answers.set(REMOTE_PATHS.machineRequester, () => Response.json(KAI));
     const url = await remote.createHandoff('t1');
-    const secret = parseEnrollFragment(new URL(url).hash)?.secret ?? '';
+    const secret = Option.getOrNull(parseEnrollFragment(new URL(url).hash))?.secret ?? '';
     const machine = await remote.store.resolveMachineKey();
     expect(
       await settleChannel(openChannel(remote.appOrigin, port, secret, machine.publicKey, { userId: KAI.id }))

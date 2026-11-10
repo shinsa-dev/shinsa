@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   BROWSER_SIGN_IN_LIMITS,
   resolveBrowserSignInReply,
@@ -19,13 +20,15 @@ const OPEN: ReplyGate = {
 
 describe('the site a sign-in page belongs to', () => {
   test('is the host of an http or https address, port and path left out', () => {
-    expect(resolveSignInSite('https://app.superwall.com/sign-in?next=/')).toBe('app.superwall.com');
-    expect(resolveSignInSite('http://localhost:5181/login')).toBe('localhost');
+    expect(Option.getOrNull(resolveSignInSite('https://app.superwall.com/sign-in?next=/'))).toBe(
+      'app.superwall.com'
+    );
+    expect(Option.getOrNull(resolveSignInSite('http://localhost:5181/login'))).toBe('localhost');
   });
 
   test('is none for anything that is not a web page', () => {
     for (const url of ['github.com', 'file:///tmp/a.html', 'mailto:a@b.co', 'chrome://settings', '']) {
-      expect(resolveSignInSite(url), url).toBeNull();
+      expect(Option.getOrNull(resolveSignInSite(url)), url).toBeNull();
     }
   });
 });

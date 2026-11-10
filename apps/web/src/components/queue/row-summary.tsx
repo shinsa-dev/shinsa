@@ -12,6 +12,7 @@ import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import { MiniTrack } from '@/components/overview/mini-track.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { describeParkedRun } from '@/lib/chat/delegations.ts';
@@ -64,7 +65,7 @@ export function RowSummary({
   detail: boolean;
 }) {
   const postMerge = gate?.type === 'post_merge';
-  const quiet = !postMerge && (gate !== null || selectLeadGate(state, task) !== null);
+  const quiet = !postMerge && (gate !== null || Option.getOrNull(selectLeadGate(state, task)) !== null);
   const [run] = quiet ? [] : listActiveRuns(state, task.id);
   const status = resolveRowStatus(state, task, gate);
   const progress = postMerge ? POST_MERGE_PROGRESS : resolveRowProgress(task, status.label);

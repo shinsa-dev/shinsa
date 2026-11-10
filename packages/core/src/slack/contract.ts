@@ -1,4 +1,4 @@
-import { Option, Schema } from 'effect';
+import { type Option, Schema } from 'effect';
 import type { SlackThreadRef } from '../domain/slack.ts';
 import { SlackChannelMessage, SlackMention } from './schema.ts';
 
@@ -8,8 +8,8 @@ export const SLACK_ENGINE_MESSAGES_PATH = '/api/slack/messages';
 
 const decodeSlackMention = Schema.decodeUnknownOption(SlackMention);
 
-export function parseSlackMention(value: unknown): SlackMention | null {
-  return Option.getOrNull(decodeSlackMention(value));
+export function parseSlackMention(value: unknown): Option.Option<SlackMention> {
+  return decodeSlackMention(value);
 }
 
 export function resolveSlackMentionThread(mention: SlackMention): SlackThreadRef {
@@ -18,8 +18,8 @@ export function resolveSlackMentionThread(mention: SlackMention): SlackThreadRef
 
 const decodeSlackChannelMessage = Schema.decodeUnknownOption(SlackChannelMessage);
 
-export function parseSlackChannelMessage(value: unknown): SlackChannelMessage | null {
-  return Option.getOrNull(decodeSlackChannelMessage(value));
+export function parseSlackChannelMessage(value: unknown): Option.Option<SlackChannelMessage> {
+  return decodeSlackChannelMessage(value);
 }
 
 export function resolveSlackMessageKey(

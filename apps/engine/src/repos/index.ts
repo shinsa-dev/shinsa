@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { resolveTaskProject, type ShinsaState, selectFolderProject, type Task } from '@shinsa/core';
+import { Option } from 'effect';
 import { isInside } from '../files/paths.ts';
 import { resolveNewRepoParent } from './parent.ts';
 import type { LocalRepo } from './schema.ts';
@@ -10,7 +11,7 @@ export function resolveTaskRepoTarget(
   name: string,
   roots: readonly string[]
 ) {
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const parent = (projectId ? resolveNewRepoParent(state, projectId) : null) ?? roots[0] ?? null;
   if (!parent) return null;
   const folder = selectFolderProject(Object.values(state.projects), join(parent, name));

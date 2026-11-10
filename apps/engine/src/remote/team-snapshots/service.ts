@@ -23,7 +23,7 @@ export const makeTeamSnapshots = Effect.fn('TeamSnapshots.make')(function* (
       (Option.getOrUndefined(value)?.lists ?? []).map(({ tasks, snapshot, ...list }): HeldTeamList => ({
         ...list,
         tasks: tasks as TeamTask[],
-        snapshot: readTeamSnapshot(snapshot),
+        snapshot: Option.getOrNull(readTeamSnapshot(snapshot)),
       }))
     ),
     Effect.catchTag('JsonFileUnreadable', (failure) =>
