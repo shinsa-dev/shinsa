@@ -140,3 +140,50 @@ describe('Slack threads, posts and events', () => {
     expect(results).toEqual([true, false, true]);
   });
 });
+
+describe('watched Slack channels', () => {
+  const ALERTS = { workspaceId: 'T1', channelId: 'C1' };
+
+  test("a machine's watches are replaced as a whole, and a channel names every linked machine that watches it", async () => {
+    const results = await runTest(
+      Effect.gen(function* () {
+        const slack = yield* seedWorkspace;
+        yield* slack.upsertLink(LINK);
+        yield* slack.upsertLink({ ...LINK, slackUserId: 'U2', userId: KAI.id, machineId: LAPTOP });
+        yield* slack.replaceMachineWatches(STUDIO, [ALERTS, ALERTS, { ...ALERTS, channelId: 'C2' }]);
+        yield* slack.replaceMachineWatches(LAPTOP, [ALERTS]);
+        const both = yield* slack.listChannelWatchers(ALERTS);
+        const other = yield* slack.listChannelWatchers({ ...ALERTS, channelId: 'C2' });
+        yield* slack.replaceMachineWatches(STUDIO, [{ ...ALERTS, channelId: 'C3' }]);
+        return [
+          both,
+          other,
+          yield* slack.listChannelWatchers(ALERTS),
+          yield* slack.listChannelWatchers({ ...ALERTS, channelId: 'C2' }),
+          yield* slack.listChannelWatchers({ ...ALERTS, channelId: 'C3' }),
+          yield* slack.listChannelWatchers({ ...ALERTS, workspaceId: 'T2' }),
+        ] as const;
+      })
+    );
+    expect(results).toEqual([[LAPTOP, STUDIO].sort(), [STUDIO], [LAPTOP], [], [STUDIO], []]);
+  });
+
+  test('a machine with no link left in the workspace is not named, and a removed workspace forgets its watches', async () => {
+    const results = await runTest(
+      Effect.gen(function* () {
+        const slack = yield* seedWorkspace;
+        yield* slack.upsertLink(LINK);
+        yield* slack.replaceMachineWatches(STUDIO, [ALERTS]);
+        yield* slack.upsertLink({ ...LINK, machineId: LAPTOP });
+        const moved = yield* slack.listChannelWatchers(ALERTS);
+        yield* slack.upsertLink(LINK);
+        const back = yield* slack.listChannelWatchers(ALERTS);
+        yield* slack.removeWorkspace('T1');
+        yield* slack.upsertWorkspace(WORKSPACE);
+        yield* slack.upsertLink(LINK);
+        return [moved, back, yield* slack.listChannelWatchers(ALERTS)] as const;
+      })
+    );
+    expect(results).toEqual([[], [STUDIO], []]);
+  });
+});

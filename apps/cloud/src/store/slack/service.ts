@@ -7,6 +7,7 @@ import {
   LINK_COLUMNS,
   NewLink,
   SLACK_EVENT_TTL,
+  SlackChannelWatch,
   SlackLink,
   SlackMessage,
   SlackThread,
@@ -30,6 +31,11 @@ export class SlackStore extends Context.Service<
     hasPost(post: SlackMessage, instanceId: InstanceId): Effect.Effect<boolean>;
     selectPoster(post: SlackMessage): Effect.Effect<Option.Option<InstanceId>>;
     recordEvent(eventId: string): Effect.Effect<boolean>;
+    replaceMachineWatches(
+      instanceId: InstanceId,
+      watches: ReadonlyArray<SlackChannelWatch>
+    ): Effect.Effect<void>;
+    listChannelWatchers(watch: SlackChannelWatch): Effect.Effect<ReadonlyArray<InstanceId>>;
   }
 >()('shinsa/cloud/store/SlackStore') {
   static readonly layer = Layer.effect(
@@ -120,6 +126,22 @@ export class SlackStore extends Context.Service<
           sql`INSERT INTO slack_events (event_id, received_at) VALUES (${row.eventId}, ${row.at}) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
       });
 
+      const watchesRemoval = SqlSchema.void({
+        Request: InstanceId,
+        execute: (id) => sql`DELETE FROM slack_channel_watches WHERE machine_id = ${id}`,
+      });
+      const insertWatch = SqlSchema.void({
+        Request: Schema.Struct({ ...SlackChannelWatch.fields, machineId: InstanceId }),
+        execute: (row) =>
+          sql`INSERT OR IGNORE INTO slack_channel_watches (workspace_id, channel_id, machine_id) VALUES (${row.workspaceId}, ${row.channelId}, ${row.machineId})`,
+      });
+      const watchersOfChannel = SqlSchema.findAll({
+        Request: SlackChannelWatch,
+        Result: Schema.Struct({ machineId: InstanceId }),
+        execute: (row) =>
+          sql`SELECT machine_id FROM slack_channel_watches WHERE workspace_id = ${row.workspaceId} AND channel_id = ${row.channelId} AND EXISTS (SELECT 1 FROM slack_links WHERE slack_links.workspace_id = slack_channel_watches.workspace_id AND slack_links.machine_id = slack_channel_watches.machine_id) ORDER BY machine_id`,
+      });
+
       const upsertWorkspace = Effect.fn('SlackStore.upsertWorkspace')(function* (
         workspace: Omit<SlackWorkspace, 'installedAt'>
       ) {
@@ -141,6 +163,14 @@ export class SlackStore extends Context.Service<
         const now = yield* Clock.currentTimeMillis;
         yield* expiredEventsRemoval(now - Duration.toMillis(SLACK_EVENT_TTL));
         return Option.isSome(yield* insertEvent({ eventId, at: now }));
+      }, Effect.orDie);
+
+      const replaceMachineWatches = Effect.fn('SlackStore.replaceMachineWatches')(function* (
+        instanceId: InstanceId,
+        watches: ReadonlyArray<SlackChannelWatch>
+      ) {
+        yield* watchesRemoval(instanceId);
+        for (const watch of watches) yield* insertWatch({ ...watch, machineId: instanceId });
       }, Effect.orDie);
 
       return SlackStore.of({
@@ -194,6 +224,12 @@ export class SlackStore extends Context.Service<
           Effect.orDie
         ),
         recordEvent,
+        replaceMachineWatches,
+        listChannelWatchers: Effect.fn('SlackStore.listChannelWatchers')(
+          (watch: SlackChannelWatch) =>
+            Effect.map(watchersOfChannel(watch), (rows) => rows.map((row) => row.machineId)),
+          Effect.orDie
+        ),
       });
     })
   );

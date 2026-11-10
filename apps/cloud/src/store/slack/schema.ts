@@ -42,6 +42,10 @@ export const SlackMessage = Schema.Struct({
 
 export type SlackMessage = typeof SlackMessage.Type;
 
+export const SlackChannelWatch = Schema.Struct({ workspaceId: Schema.String, channelId: Schema.String });
+
+export type SlackChannelWatch = typeof SlackChannelWatch.Type;
+
 export const LINK_COLUMNS =
   'slack_links.workspace_id, slack_workspaces.name AS workspace_name, slack_links.slack_user_id, slack_links.slack_user_name, slack_links.user_id, slack_links.machine_id, slack_links.sealed_user_token, slack_links.linked_at';
 

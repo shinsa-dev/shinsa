@@ -83,6 +83,22 @@ export const ThreadMessage = Schema.Struct({
 
 export type ThreadMessage = typeof ThreadMessage.Type;
 
+export const CHANNEL_MESSAGE_SUBTYPES = ['bot_message', 'file_share'] as const;
+
+export const MessageEnvelope = Schema.Struct({
+  event_id: Id,
+  team_id: Id,
+  event: Schema.Struct({
+    ...ThreadMessage.fields,
+    type: Schema.Literal('message'),
+    subtype: Schema.optional(Schema.Literals(CHANNEL_MESSAGE_SUBTYPES)),
+    channel: Id,
+    thread_ts: Text,
+  }),
+});
+
+export type MessageEnvelope = typeof MessageEnvelope.Type;
+
 export const MessageField = Schema.Struct({ text: Schema.String });
 
 export const MessageBlock = Schema.Struct({

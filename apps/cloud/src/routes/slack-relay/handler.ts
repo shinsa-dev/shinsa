@@ -1,3 +1,4 @@
+import { SLACK_LIMITS, type SlackChannel } from '@shinsa/core';
 import { CurrentMachine, RemoteApi } from '@shinsa/core/remote/api';
 import {
   PostNotYours,
@@ -14,6 +15,8 @@ import { revokeMachineUserTokens } from '../../slack/user-tokens.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import {
+  CHANNEL_PAGE_SIZE,
+  Conversations,
   Posted,
   REFUSED_BLOCK_CODES,
   type RelayThread,
@@ -82,6 +85,57 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
       );
     });
 
+    const listWorkspaceChannels = Effect.fn('slackRelay.listWorkspaceChannels')(function* (
+      workspace: { readonly teamId: string; readonly teamName: string },
+      token: Redacted.Redacted<string>
+    ) {
+      const channels: SlackChannel[] = [];
+      let cursor = '';
+      do {
+        const page = yield* slack
+          .call(
+            'users.conversations',
+            {
+              token,
+              body: {
+                form: {
+                  types: 'public_channel,private_channel',
+                  exclude_archived: 'true',
+                  limit: String(CHANNEL_PAGE_SIZE),
+                  ...(cursor ? { cursor } : {}),
+                },
+              },
+            },
+            Conversations
+          )
+          .pipe(
+            Effect.tapError((error) =>
+              Effect.logError('[Cloud] Slack did not list the channels').pipe(
+                Effect.annotateLogs({ error, code: error.code, teamId: workspace.teamId })
+              )
+            ),
+            Effect.mapError(
+              (error) => new SlackFailed({ message: `Slack did not list the channels (${error.code}).` })
+            )
+          );
+        for (const channel of page.channels ?? [])
+          channels.push({
+            ...workspace,
+            teamName: workspace.teamName.slice(0, SLACK_LIMITS.teamName),
+            channelId: channel.id,
+            channelName: channel.name.slice(0, SLACK_LIMITS.channelName),
+            private: channel.is_private === true,
+          });
+        cursor = page.response_metadata?.next_cursor ?? '';
+      } while (cursor && channels.length < SLACK_LIMITS.channels);
+      return channels;
+    });
+
+    const listLinkedWorkspaces = Effect.fn('slackRelay.listLinkedWorkspaces')(function* () {
+      const links = yield* store.listMachineLinks((yield* CurrentMachine).instanceId);
+      return new Map(links.map((link) => [link.workspaceId, link.workspaceName]));
+    });
+
     return handlers
       .handle(
         'links',
@@ -105,6 +159,7 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
           const { instanceId } = yield* CurrentMachine;
           yield* revokeMachineUserTokens(instanceId);
           yield* store.removeMachineLinks(instanceId);
+          yield* store.replaceMachineWatches(instanceId, []);
           return { ok: true as const };
         })
       )
@@ -181,6 +236,32 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
           const removed = yield* requestReaction('reactions.remove', token, target, payload.remove);
           const added = yield* requestReaction('reactions.add', token, target, payload.add);
           return { applied: removed && added };
+        })
+      )
+      .handle(
+        'channels',
+        Effect.fn('slackRelay.channels')(function* () {
+          const channels: SlackChannel[] = [];
+          for (const [teamId, teamName] of yield* listLinkedWorkspaces()) {
+            const opened = yield* selectWorkspaceToken(teamId);
+            if (Option.isNone(opened)) continue;
+            channels.push(...(yield* listWorkspaceChannels({ teamId, teamName }, opened.value.token)));
+          }
+          return { channels: channels.slice(0, SLACK_LIMITS.channels) };
+        })
+      )
+      .handle(
+        'watches',
+        Effect.fn('slackRelay.watches')(function* ({ payload }) {
+          const { instanceId } = yield* CurrentMachine;
+          const linked = yield* listLinkedWorkspaces();
+          yield* store.replaceMachineWatches(
+            instanceId,
+            payload.watches
+              .filter((watch) => linked.has(watch.teamId))
+              .map((watch) => ({ workspaceId: watch.teamId, channelId: watch.channelId }))
+          );
+          return { ok: true as const };
         })
       );
   })

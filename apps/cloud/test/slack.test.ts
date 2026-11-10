@@ -5,6 +5,7 @@ import {
   type MachineCredentials,
   REMOTE_PATHS,
   SLACK_DECIDE_ACTION,
+  SLACK_ENGINE_MESSAGES_PATH,
   SLACK_FORWARD_HEADERS,
   SLACK_GATE_BLOCK,
   SLACK_MODAL_CALLBACK,
@@ -12,6 +13,8 @@ import {
   SLACK_RESPONSE_INPUT,
   SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
+  type SlackChannelMessage,
+  type SlackChannels,
   type SlackLinks,
   type SlackMention,
   serializeSlackDecisionModal,
@@ -295,6 +298,8 @@ describe('the Slack app’s manifest', () => {
     expect(manifest.settings.event_subscriptions.bot_events).toEqual([
       'app_mention',
       'app_uninstalled',
+      'message.channels',
+      'message.groups',
       'tokens_revoked',
     ]);
     expect(manifest.settings.interactivity).toEqual({
@@ -1806,5 +1811,299 @@ describe('deciding from the card', () => {
       ['decide', 'T1'],
       ['submit', 'T1'],
     ]);
+  });
+});
+
+interface ChannelSetup extends Setup {
+  messages: { instanceId: string; body: string; headers: Headers }[];
+  messageTunnel: { answer: () => Response };
+  watch: (watches: { teamId: string; channelId: string }[], bearer?: string) => Promise<Response>;
+}
+
+function watchedChannels(harness: Harness) {
+  return harness.db.sqlite
+    .query('SELECT workspace_id, channel_id FROM slack_channel_watches ORDER BY workspace_id, channel_id')
+    .all() as { workspace_id: string; channel_id: string }[];
+}
+
+async function setUpChannel(): Promise<ChannelSetup> {
+  const setup = await setUp();
+  const messages: ChannelSetup['messages'] = [];
+  const messageTunnel = { answer: () => Response.json({ ok: true }, { status: 202 }) };
+  setup.harness.handlers.push((call) => {
+    const url = new URL(call.url);
+    if (!url.hostname.endsWith('.shinsa.dev') || url.pathname !== SLACK_ENGINE_MESSAGES_PATH)
+      return new Response('', { status: 599 });
+    messages.push({
+      instanceId: url.hostname.slice(2, -'.shinsa.dev'.length),
+      body: call.body,
+      headers: call.headers,
+    });
+    return messageTunnel.answer();
+  });
+  const watch: ChannelSetup['watch'] = (watches, bearer = setup.machine.machineToken) =>
+    setup.harness.post(SLACK_RELAY_PATHS.watches, { watches }, { bearer, sameOrigin: false });
+  await bringOnline(setup.harness, setup.machine, ['slack-channel-triggers']);
+  await watch([{ teamId: 'T1', channelId: 'C1' }]);
+  return { ...setup, messages, messageTunnel, watch };
+}
+
+function messageEnvelope(event: Fields = {}, envelope: Fields = {}) {
+  return {
+    type: 'event_callback',
+    team_id: 'T1',
+    event_id: `Ev${++eventCount}`,
+    event: {
+      type: 'message',
+      channel: 'C1',
+      channel_type: 'channel',
+      user: 'U2',
+      ts: '200.1',
+      text: 'Checkout is down, <@U1> can you look? <https://status.acme.dev|status>',
+      ...event,
+    },
+    ...envelope,
+  };
+}
+
+describe('the channels a machine may set a trigger on', () => {
+  const readChannels = (harness: Harness, machine: MachineCredentials) =>
+    harness.call(SLACK_RELAY_PATHS.channels, {
+      headers: { authorization: `Bearer ${machine.machineToken}` },
+    });
+
+  test('are the ones the bot is in, in each workspace the machine is linked to, read page by page', async () => {
+    const { harness, slack, machine } = await setUp();
+    slack.answers['users.conversations'] = (body) =>
+      body.cursor === 'next-1'
+        ? { ok: true, channels: [{ id: 'G3', name: 'ops', is_private: true }] }
+        : {
+            ok: true,
+            channels: [
+              { id: 'C1', name: 'alerts', is_private: false },
+              { id: 'C2', name: 'feedback' },
+            ],
+            response_metadata: { next_cursor: 'next-1' },
+          };
+    const channels = await readJson<SlackChannels>(await readChannels(harness, machine));
+    const acme = { teamId: 'T1', teamName: 'Acme' };
+    expect(channels.channels).toEqual([
+      { ...acme, channelId: 'C1', channelName: 'alerts', private: false },
+      { ...acme, channelId: 'C2', channelName: 'feedback', private: false },
+      { ...acme, channelId: 'G3', channelName: 'ops', private: true },
+    ]);
+    const [first, second] = slack.callsTo('users.conversations');
+    expect(first?.token).toBe('xoxb-bot-token');
+    expect(first?.body).toEqual({
+      types: 'public_channel,private_channel',
+      exclude_archived: 'true',
+      limit: '200',
+    });
+    expect(second?.body.cursor).toBe('next-1');
+  });
+
+  test('are none when Slack lists none or the machine is not linked, and a refusal from Slack is said and logged', async () => {
+    const { harness, slack, machine, session } = await setUp();
+    slack.answers['users.conversations'] = () => ({ ok: true });
+    expect(await readJson<SlackChannels>(await readChannels(harness, machine))).toEqual({ channels: [] });
+    const laptop = await pairMachine(harness, session, 'Laptop');
+    expect(await readJson<SlackChannels>(await readChannels(harness, laptop))).toEqual({ channels: [] });
+    expect(slack.callsTo('users.conversations')).toHaveLength(1);
+    slack.answers['users.conversations'] = () => ({ ok: false, error: 'missing_scope' });
+    const refused = await readChannels(harness, machine);
+    expect(refused.status).toBe(502);
+    expect((await readJson<{ error: { message: string } }>(refused)).error.message).toBe(
+      'Slack did not list the channels (missing_scope).'
+    );
+    expect(failures).toHaveBeenCalledWith(
+      '[Cloud] Slack did not list the channels',
+      expect.objectContaining({ code: 'missing_scope', teamId: 'T1' })
+    );
+  });
+});
+
+describe('the channels a machine watches', () => {
+  test('are replaced as a whole, keep only its linked workspaces, and go when it disconnects Slack', async () => {
+    const { harness, machine, watch } = await setUpChannel();
+    const replaced = await watch([
+      { teamId: 'T1', channelId: 'C2' },
+      { teamId: 'T1', channelId: 'C2' },
+      { teamId: 'T1', channelId: 'G3' },
+      { teamId: 'T9', channelId: 'C1' },
+    ]);
+    expect([replaced.status, await replaced.json()]).toEqual([200, { ok: true }]);
+    expect(watchedChannels(harness)).toEqual([
+      { workspace_id: 'T1', channel_id: 'C2' },
+      { workspace_id: 'T1', channel_id: 'G3' },
+    ]);
+    await harness.post(SLACK_RELAY_PATHS.unlink, {}, { bearer: machine.machineToken, sameOrigin: false });
+    expect(watchedChannels(harness)).toEqual([]);
+    await watch([{ teamId: 'T1', channelId: 'C2' }]);
+    expect(watchedChannels(harness)).toEqual([]);
+  });
+
+  test('are refused without the machine token, as a list it does not understand, or past the limit', async () => {
+    const { harness, watch } = await setUpChannel();
+    expect((await watch([{ teamId: 'T1', channelId: 'C2' }], 'forged')).status).toBe(401);
+    expect((await watch([{ teamId: 'T 1', channelId: 'C2' }])).status).toBe(400);
+    const many = Array.from({ length: 101 }, (_, index) => ({ teamId: 'T1', channelId: `C${index}` }));
+    expect((await watch(many)).status).toBeGreaterThanOrEqual(400);
+    expect(watchedChannels(harness)).toEqual([{ workspace_id: 'T1', channel_id: 'C1' }]);
+  });
+
+  test('go with the app when it is removed from the workspace', async () => {
+    const { harness } = await setUpChannel();
+    await sendEvent(harness, mentionEnvelope({ type: 'app_uninstalled' }));
+    expect(watchedChannels(harness)).toEqual([]);
+  });
+});
+
+describe('a message in a watched channel', () => {
+  test('reaches the watching machine signed with its connect key, as readable text with who wrote it and its link', async () => {
+    const { harness, machine, messages, forwards, slack } = await setUpChannel();
+    expect((await sendEvent(harness, messageEnvelope({}, { event_id: 'EvChannel' }))).status).toBe(200);
+    expect(messages).toHaveLength(1);
+    const [forward] = messages;
+    expect(forward?.instanceId).toBe(machine.instanceId);
+    const signature = {
+      signature: forward?.headers.get(SLACK_FORWARD_HEADERS.signature) ?? null,
+      timestamp: forward?.headers.get(SLACK_FORWARD_HEADERS.timestamp) ?? null,
+    };
+    expect(
+      await Effect.runPromise(
+        verifySlackForwardSignature(machine.connectKey, signature, forward?.body ?? '', harness.clock.now)
+      )
+    ).toBe(true);
+    expect(JSON.parse(forward?.body ?? '') as SlackChannelMessage).toEqual({
+      eventId: 'EvChannel',
+      teamId: 'T1',
+      channelId: 'C1',
+      messageTs: '200.1',
+      userId: 'U2',
+      userName: 'Mia',
+      bot: false,
+      text: 'Checkout is down, @Christo can you look? status (https://status.acme.dev)',
+      permalink: 'https://acme.slack.com/archives/C1/p200.1',
+      channelName: 'support',
+    });
+    expect(forwards).toHaveLength(0);
+    expect(slack.callsTo('chat.postMessage')).toHaveLength(0);
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_threads').get()).toEqual({ n: 0 });
+  });
+
+  test('from a bot, such as an alert, is read from its blocks and attachments and named after the bot', async () => {
+    const { harness, messages } = await setUpChannel();
+    await sendEvent(
+      harness,
+      messageEnvelope({
+        user: undefined,
+        subtype: 'bot_message',
+        bot_id: 'B7',
+        bot_profile: { name: 'Sentry' },
+        ts: '200.2',
+        thread_ts: '200.2',
+        text: 'New issue',
+        attachments: [{ title: 'TypeError in checkout', text: 'Cannot read properties of undefined' }],
+      })
+    );
+    expect(JSON.parse(messages[0]?.body ?? '')).toMatchObject({
+      messageTs: '200.2',
+      userId: 'B7',
+      userName: 'Sentry',
+      bot: true,
+      text: 'New issue\n\nTypeError in checkout\nCannot read properties of undefined',
+    });
+  });
+
+  test('with a file, or from someone Slack will not name, still reaches the machine, named by their id', async () => {
+    const { harness, messages } = await setUpChannel();
+    await sendEvent(
+      harness,
+      messageEnvelope({ subtype: 'file_share', user: 'U9', text: 'See the screenshot' })
+    );
+    expect(JSON.parse(messages[0]?.body ?? '')).toMatchObject({ userId: 'U9', userName: 'U9', bot: false });
+  });
+
+  test('never fires for a thread reply, an edit, a join, Shinsa’s own post, a mention of Shinsa, another channel or a redelivery', async () => {
+    const { harness, messages, slack } = await setUpChannel();
+    await sendEvent(harness, messageEnvelope({ thread_ts: '150.1' }));
+    await sendEvent(harness, messageEnvelope({ subtype: 'message_changed' }));
+    await sendEvent(harness, messageEnvelope({ subtype: 'channel_join' }));
+    await sendEvent(harness, messageEnvelope({ subtype: 'thread_broadcast', thread_ts: '150.1' }));
+    await sendEvent(harness, messageEnvelope({ user: 'B0T', bot_id: 'B1', text: 'Planning' }));
+    await sendEvent(harness, messageEnvelope({ user: undefined }));
+    await sendEvent(harness, messageEnvelope({ text: '<@B0T> fix the build' }));
+    await sendEvent(harness, messageEnvelope({ channel: 'C2' }));
+    await sendEvent(harness, messageEnvelope({}, { team_id: 'T9' }));
+    expect(messages).toHaveLength(0);
+    expect(slack.callsTo('chat.getPermalink')).toHaveLength(0);
+    const envelope = messageEnvelope();
+    await sendEvent(harness, envelope);
+    await sendEvent(harness, envelope);
+    expect(messages).toHaveLength(1);
+  });
+
+  test('is not sent to a machine whose Shinsa does not take channel messages, or one that is offline', async () => {
+    const { harness, machine, messages, slack } = await setUpChannel();
+    const before = slack.calls.length;
+    await bringOnline(harness, machine, ['slack-task-owner']);
+    await sendEvent(harness, messageEnvelope());
+    expect(messages).toHaveLength(0);
+    await bringOnline(harness, machine, ['slack-channel-triggers']);
+    await harness.post(REMOTE_PATHS.offline, {}, { bearer: machine.machineToken, sameOrigin: false });
+    await sendEvent(harness, messageEnvelope());
+    expect(messages).toHaveLength(0);
+    expect(slack.calls).toHaveLength(before);
+  });
+
+  test('reaches every machine that watches the channel, and no longer one whose Slack link moved away', async () => {
+    const { harness, slack, machine, messages, watch } = await setUpChannel();
+    answerConnectAs(slack, 'U2', 'xoxp-user-2');
+    const mia = await harness.signIn('mia', 7);
+    const laptop = await pairMachine(harness, mia, 'Laptop');
+    await connectSlack(harness, mia, laptop.instanceId);
+    await bringOnline(harness, laptop, ['slack-channel-triggers']);
+    await watch([{ teamId: 'T1', channelId: 'C1' }], laptop.machineToken);
+    await sendEvent(harness, messageEnvelope());
+    expect(messages.map((message) => message.instanceId).sort()).toEqual(
+      [machine.instanceId, laptop.instanceId].sort()
+    );
+    harness.db.sqlite.exec(`UPDATE slack_links SET machine_id = '${laptop.instanceId}'`);
+    messages.length = 0;
+    await sendEvent(harness, messageEnvelope({ ts: '200.3' }));
+    expect(messages.map((message) => message.instanceId)).toEqual([laptop.instanceId]);
+  });
+
+  test('whose tunnel does not answer is a warning, one the machine refuses is logged, and nothing is said in the channel', async () => {
+    const { harness, machine, messageTunnel, slack } = await setUpChannel();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    messageTunnel.answer = () => new Response('', { status: 530 });
+    await sendEvent(harness, messageEnvelope());
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] Machine offline',
+      expect.objectContaining({ surface: 'slack', instanceId: machine.instanceId, status: 530 })
+    );
+    warnings.mockRestore();
+    expect(failures).not.toHaveBeenCalled();
+    messageTunnel.answer = () => new Response('', { status: 401 });
+    await sendEvent(harness, messageEnvelope());
+    expect(failures).toHaveBeenCalledWith('[Cloud] A machine refused a Slack channel message', {
+      instanceId: machine.instanceId,
+      status: 401,
+    });
+    expect(slack.callsTo('chat.postMessage')).toHaveLength(0);
+    expect(slack.callsTo('chat.postEphemeral')).toHaveLength(0);
+  });
+
+  test('that fails part way is logged, and Slack still gets its answer at once', async () => {
+    const { harness, messages } = await setUpChannel();
+    harness.db.sqlite.exec("UPDATE slack_workspaces SET sealed_bot_token = 'unreadable'");
+    const response = await sendEvent(harness, messageEnvelope({}, { event_id: 'EvBroken' }));
+    expect(response.status).toBe(200);
+    expect(failures).toHaveBeenCalledWith(
+      '[Cloud] A Slack channel message could not be forwarded',
+      expect.objectContaining({ teamId: 'T1', eventId: 'EvBroken' })
+    );
+    expect(messages).toHaveLength(0);
   });
 });
