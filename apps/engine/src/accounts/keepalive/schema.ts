@@ -37,8 +37,6 @@ const KeepaliveAnswer = Schema.Struct({
 
 export const KeepaliveAnswerText = Schema.fromJsonString(KeepaliveAnswer);
 
-export type KeepaliveAnswer = typeof KeepaliveAnswer.Type;
-
 export const KEEPALIVE_AUTH_STATUSES: ReadonlySet<number> = new Set([UNAUTHORIZED]);
 
 export interface KeepaliveRequest {
