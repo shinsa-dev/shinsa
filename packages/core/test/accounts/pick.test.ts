@@ -10,6 +10,7 @@ import {
   resolveCandidateSpentUntil,
   resolvePoolResetAt,
   selectNextAccount,
+  STALE_USAGE_MS,
   type UsageWindow,
 } from '../../src/index.ts';
 
@@ -88,6 +89,22 @@ describe('spent accounts', () => {
     expect(isUsableAccount(createCandidate('a', { paused: true }), null, NOW)).toBe(false);
     expect(isUsableAccount(createCandidate('a', { signIn: 'signed_out' }), null, NOW)).toBe(false);
     expect(isUsableAccount(createCandidate('a', {}, 100), null, NOW)).toBe(false);
+  });
+
+  test('a stale reading no longer keeps an account out, and a marked rejection still does', () => {
+    const later = NOW + STALE_USAGE_MS + 1;
+    const resetsAt = later + 60_000;
+    const stale = createCandidate('a', { usage: createUsage([{ usedPercent: 100, resetsAt }]) });
+    expect(isUsableAccount(stale, null, NOW)).toBe(false);
+    expect(isUsableAccount(stale, null, later)).toBe(true);
+    expect(pickAccount(createRequest([stale], { now: later }))).toEqual({
+      account: stale,
+      reason: null,
+      usable: true,
+    });
+    const rejected = { ...stale, spentUntil: resetsAt };
+    expect(resolveCandidateSpentUntil(rejected, null, later)).toBe(resetsAt);
+    expect(isUsableAccount(rejected, null, later)).toBe(false);
   });
 });
 
