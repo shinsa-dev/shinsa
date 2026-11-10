@@ -5,7 +5,7 @@ import {
   serializeRepositoryWork,
   type Task,
 } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, Option } from 'effect';
 import { History } from '../../git/history/service.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import type { Overlap } from './schema.ts';
@@ -50,7 +50,7 @@ export class RepositoryWork extends Context.Service<
         const repo = task.repoId ? state.repos[task.repoId] : undefined;
         if (!repo) return null;
         return yield* history
-          .changedFiles(repo, task, resolveRoundBase(task), signal)
+          .changedFiles(repo, task, Option.getOrNull(resolveRoundBase(task)), signal)
           .pipe(
             Effect.catch((failure) =>
               Effect.logWarning('[RepositoryWork] Could not list the files a task changed').pipe(

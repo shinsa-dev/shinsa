@@ -1,5 +1,7 @@
+import { Option } from 'effect';
 import {
   DomainError,
+  type DomainRefusal,
   type Gate,
   hasStep,
   isAgentQuestion,
@@ -105,33 +107,33 @@ export function selectStackRefusal(
   task: Task | null,
   parent: Task,
   repoId = task?.repoId ?? null
-) {
+): Option.Option<DomainRefusal> {
   if (parent.id === task?.id)
-    return new DomainError({ code: 'stack_self', message: 'A task cannot stack on itself.' });
+    return Option.some({ code: 'stack_self', message: 'A task cannot stack on itself.' });
   if (parent.stage === 'cancelled')
-    return new DomainError({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
+    return Option.some({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
   if (isTaskSettled(parent)) {
-    return new DomainError({
+    return Option.some({
       code: 'stack_parent_settled',
       message: 'That task is finished, so there is nothing to stack on.',
     });
   }
   if (!hasStep(parent, 'pull_request')) {
-    return new DomainError({
+    return Option.some({
       code: 'stack_no_pull_request',
       message: 'That task opens no pull request to stack on.',
     });
   }
   if (repoId && parent.repoId && repoId !== parent.repoId) {
-    return new DomainError({
+    return Option.some({
       code: 'stack_repository',
       message: 'The tasks of a bundle work in one repository.',
     });
   }
   if (task && isDependencyOf(state, task.id, parent.id)) {
-    return new DomainError({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
+    return Option.some({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
   }
-  return null;
+  return Option.none();
 }
 
 function isReadyToStackOn(state: ShinsaState, task: Task) {
@@ -271,18 +273,18 @@ function holdsCheckout(task: Task) {
   return task.workspace === 'main_checkout' && (task.worktreePath !== null || isSettingUpWorkspace(task));
 }
 
-export function selectCheckoutHolder(state: ShinsaState, task: Task) {
-  if (task.repoId === null) return null;
-  return (
+export function selectCheckoutHolder(state: ShinsaState, task: Task): Option.Option<Task> {
+  if (task.repoId === null) return Option.none();
+  return Option.fromNullishOr(
     Object.values(state.tasks).find(
       (other) => other.id !== task.id && other.repoId === task.repoId && holdsCheckout(other)
-    ) ?? null
+    )
   );
 }
 
 export function isWaitingForCheckout(state: ShinsaState, task: Task) {
   if (holdsCheckout(task) || resolveTaskWorkspace(state, task) !== 'main_checkout') return false;
-  return selectCheckoutHolder(state, task) !== null;
+  return Option.isSome(selectCheckoutHolder(state, task));
 }
 
 export function listDependents(state: ShinsaState, taskId: string) {
@@ -302,20 +304,20 @@ export function isDependencyOf(state: ShinsaState, taskId: string, candidateId: 
   return false;
 }
 
-export function resolveTaskProject(state: Pick<ShinsaState, 'repos'>, task: Task) {
-  if (task.projectId) return task.projectId;
-  if (!task.repoId) return null;
-  return state.repos[task.repoId]?.projectId ?? null;
+export function resolveTaskProject(state: Pick<ShinsaState, 'repos'>, task: Task): Option.Option<string> {
+  if (task.projectId) return Option.some(task.projectId);
+  if (!task.repoId) return Option.none();
+  return Option.fromNullishOr(state.repos[task.repoId]?.projectId);
 }
 
-export function selectTaskByHandle(state: ShinsaState, text: string) {
-  const handle = parseTaskHandle(text);
-  if (!handle) return null;
-  return Object.values(state.tasks).find((task) => task.handle === handle) ?? null;
+export function selectTaskByHandle(state: ShinsaState, text: string): Option.Option<Task> {
+  return Option.flatMap(parseTaskHandle(text), (handle) =>
+    Option.fromNullishOr(Object.values(state.tasks).find((task) => task.handle === handle))
+  );
 }
 
 export function selectTaskByReference(state: ShinsaState, reference: string) {
-  return state.tasks[reference] ?? selectTaskByHandle(state, reference);
+  return state.tasks[reference] ?? Option.getOrNull(selectTaskByHandle(state, reference));
 }
 
 export function listProjectRepos(state: ShinsaState, projectId: string) {

@@ -47,6 +47,38 @@ describe('Effect code is held to the house style', () => {
     expect(isEffectSource('scripts/effect-guide/domain.test.ts', source)).toBe(false);
   });
 
+  test('a core file that only uses Option, Result or Schema is pure code, one that imports Effect is not', () => {
+    const pure = "import { Option, Result, Schema } from 'effect';";
+    expect(isEffectSource('packages/core/src/state/queries.ts', pure)).toBe(false);
+    expect(isPromiseIoSource('packages/core/src/state/queries.ts', pure)).toBe(true);
+    expect(
+      isEffectSource('packages/core/src/remote/keys.ts', "import { Effect, Option } from 'effect';")
+    ).toBe(true);
+    expect(isEffectSource('apps/web/src/lib/a.ts', pure)).toBe(true);
+    expect(
+      listBaselineRuleViolations(
+        'packages/core/src/state/queries.ts',
+        `${pure}\nthrow new DomainError({ code: 'a', message: 'A.' });\nJSON.parse(t);`
+      ).map(({ rule, line }) => `${rule}:${line}`)
+    ).toEqual(['json-parse:3']);
+  });
+
+  test('outside core, a file that imports only Option, Result, Match, Predicate or Order is pure code', () => {
+    const data =
+      "import { Match, Option, type Order, Predicate, Result } from 'effect';\nconst at = Date.now();";
+    expect(isEffectSource('apps/web/src/lib/home.ts', data)).toBe(false);
+    expect(isEffectSource('apps/web/src/components/a.tsx', "import { Option } from 'effect'")).toBe(false);
+    expect(isEffectSource('apps/engine/src/a/schema.ts', "import { Option, Schema } from 'effect';")).toBe(
+      true
+    );
+    expect(
+      isEffectSource(
+        'scripts/a.ts',
+        "import { Option } from 'effect';\nimport { Stream } from 'effect/Stream';"
+      )
+    ).toBe(true);
+  });
+
   test('a .tsx file is parsed with JSX', () => {
     expect(messages('const a = 1;')).toEqual([]);
     expect(listEffectViolations('a.tsx', 'const view = () => <Row at={Date.now()} />;')).toEqual([
@@ -268,7 +300,9 @@ describe('no file or process I/O runs outside Effect', () => {
   test('Effect files are checked too, but not tests, components or the exempt transcript reader', () => {
     const effect = "import { Effect } from 'effect';";
     expect(isEffectIoSource('apps/engine/src/changelog/changelog.ts', effect)).toBe(true);
-    expect(isEffectIoSource('scripts/zz.ts', "import { Option } from 'effect';")).toBe(true);
+    expect(isEffectIoSource('scripts/zz.ts', "import { Option, Schema } from 'effect';")).toBe(true);
+    expect(isEffectIoSource('scripts/zz.ts', "import { Option } from 'effect';")).toBe(false);
+    expect(isSyncIoSource('scripts/zz.ts', "import { Option } from 'effect';")).toBe(true);
     expect(isEffectIoSource('apps/desktop/scripts/build.ts', effect)).toBe(true);
     expect(isEffectIoSource('scripts/zz.ts', 'export const a = 1;')).toBe(false);
     expect(isEffectIoSource('apps/engine/test/a.test.ts', effect)).toBe(false);
@@ -351,6 +385,16 @@ describe('the baseline rules', () => {
       { rule: 'throw', line: 2, message: PLAIN_THROW_MESSAGE },
       { rule: 'try-catch', line: 3, message: PLAIN_TRY_MESSAGE },
     ]);
+  });
+
+  test('a DomainError refusal thrown in core passes, any other throw there or one outside core fails', () => {
+    const refusal = "throw new DomainError({ code: 'no', message: 'No.' });";
+    expect(rules('packages/core/src/decide/tasks.ts', refusal)).toEqual([]);
+    expect(rules('packages/core/src/decide/tasks.ts', 'throw refusal;\nthrow new Error("no");')).toEqual([
+      'throw:1',
+      'throw:2',
+    ]);
+    expect(rules('apps/engine/src/terminals/input.ts', refusal)).toEqual(['throw:1']);
   });
 
   test('Effect files and components are left to their own rules for a throw and a try/catch', () => {

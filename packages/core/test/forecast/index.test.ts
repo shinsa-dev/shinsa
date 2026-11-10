@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type AccountSummary,
   type AccountUsage,
@@ -66,11 +67,11 @@ function summary(overrides: Partial<AccountSummary>): AccountSummary {
 
 describe('resolveUsageForecast', () => {
   test('has nothing to forecast without an account', () => {
-    expect(resolveUsageForecast([], NOW)).toBeNull();
+    expect(Option.getOrNull(resolveUsageForecast([], NOW))).toBeNull();
   });
 
   test('keeps the pace that lasts until the account resets', () => {
-    const forecast = resolveUsageForecast([account('solo', 10, 24)], NOW);
+    const forecast = Option.getOrNull(resolveUsageForecast([account('solo', 10, 24)], NOW));
     expect(forecast?.safePace).toBe(10);
     expect(forecast?.tightest).toEqual({
       accountId: 'solo',
@@ -96,7 +97,9 @@ describe('resolveUsageForecast', () => {
   });
 
   test('draws when each account runs out at the pace and where every account is out at once', () => {
-    const forecast = resolveUsageForecast([account('near', 10, 24), account('far', 20, 72)], NOW, 60);
+    const forecast = Option.getOrNull(
+      resolveUsageForecast([account('near', 10, 24), account('far', 20, 72)], NOW, 60)
+    );
     expect(forecast?.safePace).toBe(30);
     if (!forecast) throw new Error('no forecast');
     const timeline = resolveForecastTimeline(forecast, 60);
@@ -115,7 +118,9 @@ describe('resolveUsageForecast', () => {
   });
 
   test('shows every account out until the first reset when the pool is spent', () => {
-    const forecast = resolveUsageForecast([account('spent', 0, 2), account('later', 0, 30)], NOW);
+    const forecast = Option.getOrNull(
+      resolveUsageForecast([account('spent', 0, 2), account('later', 0, 30)], NOW)
+    );
     expect(forecast?.safePace).toBe(0);
     if (!forecast) throw new Error('no forecast');
     const timeline = resolveForecastTimeline(forecast, forecast.safePace);
@@ -124,9 +129,11 @@ describe('resolveUsageForecast', () => {
   });
 
   test('spends the account that resets soonest first, so a late reset sets the pace', () => {
-    const forecast = resolveUsageForecast(
-      [account('far', 20, 165), account('near', 0, 15), account('later', 20, 160), account('next', 0, 63)],
-      NOW
+    const forecast = Option.getOrNull(
+      resolveUsageForecast(
+        [account('far', 20, 165), account('near', 0, 15), account('later', 20, 160), account('next', 0, 63)],
+        NOW
+      )
     );
     expect(forecast?.accounts.map((entry) => entry.id)).toEqual(['near', 'next', 'later', 'far']);
     expect(forecast?.safePace).toBe(36);
@@ -135,21 +142,21 @@ describe('resolveUsageForecast', () => {
   });
 
   test('rounds the pace down so it stays safe', () => {
-    expect(resolveUsageForecast([account('solo', 9.96, 24)], NOW)?.safePace).toBe(9.9);
-    expect(resolveUsageForecast([account('solo', 9.94, 24)], NOW)?.safePace).toBe(9.9);
+    expect(Option.getOrNull(resolveUsageForecast([account('solo', 9.96, 24)], NOW))?.safePace).toBe(9.9);
+    expect(Option.getOrNull(resolveUsageForecast([account('solo', 9.94, 24)], NOW))?.safePace).toBe(9.9);
   });
 
   test('says when the pool runs out at the current pace', () => {
-    const forecast = resolveUsageForecast([account('solo', 10, 24)], NOW, 20);
+    const forecast = Option.getOrNull(resolveUsageForecast([account('solo', 10, 24)], NOW, 20));
     expect(forecast?.currentPace).toBe(20);
     expect(forecast?.runsOutAt).toBe(NOW + 12 * HOUR_MS);
-    expect(resolveUsageForecast([account('solo', 10, 24)], NOW, 5)?.runsOutAt).toBeNull();
-    expect(resolveUsageForecast([account('solo', 10, 24)], NOW, 0)?.runsOutAt).toBeNull();
-    expect(resolveUsageForecast([account('solo', 10, 24)], NOW)?.runsOutAt).toBeNull();
+    expect(Option.getOrNull(resolveUsageForecast([account('solo', 10, 24)], NOW, 5))?.runsOutAt).toBeNull();
+    expect(Option.getOrNull(resolveUsageForecast([account('solo', 10, 24)], NOW, 0))?.runsOutAt).toBeNull();
+    expect(Option.getOrNull(resolveUsageForecast([account('solo', 10, 24)], NOW))?.runsOutAt).toBeNull();
   });
 
   test('spreads an account with no known reset over the whole week', () => {
-    const forecast = resolveUsageForecast([account('open', 70, null)], NOW);
+    const forecast = Option.getOrNull(resolveUsageForecast([account('open', 70, null)], NOW));
     expect(forecast?.safePace).toBe(10);
     expect(forecast?.resets).toEqual([]);
     expect(forecast?.tightest).toBeNull();
@@ -160,7 +167,7 @@ describe('resolveUsageForecast', () => {
   });
 
   test('a spent pool has no safe pace until a reset', () => {
-    const forecast = resolveUsageForecast([account('spent', 0, 1)], NOW, 10);
+    const forecast = Option.getOrNull(resolveUsageForecast([account('spent', 0, 1)], NOW, 10));
     expect(forecast?.safePace).toBe(0);
     expect(forecast?.runsOutAt).toBe(NOW);
   });
@@ -168,7 +175,9 @@ describe('resolveUsageForecast', () => {
 
 describe('resolveForecastTimeline', () => {
   test('runs the week again at a pace you try, and marks where every account is out of usage', () => {
-    const forecast = resolveUsageForecast([account('work', 10, 24), account('home', 20, 72)], NOW);
+    const forecast = Option.getOrNull(
+      resolveUsageForecast([account('work', 10, 24), account('home', 20, 72)], NOW)
+    );
     if (!forecast) throw new Error('no forecast');
     const safe = resolveForecastTimeline(forecast, forecast.safePace);
     expect(safe.outages).toEqual([]);
@@ -181,7 +190,9 @@ describe('resolveForecastTimeline', () => {
 
 describe('resolveForecastAccount', () => {
   test('reads what the weekly window has left', () => {
-    expect(resolveForecastAccount('work', 'Work', weekly(60, NOW + HOUR_MS), null, NOW)).toEqual({
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'Work', weekly(60, NOW + HOUR_MS), null, NOW))
+    ).toEqual({
       id: 'work',
       label: 'Work',
       left: 40,
@@ -191,19 +202,28 @@ describe('resolveForecastAccount', () => {
 
   test('has nothing left while the account is spent until its weekly reset', () => {
     const resetsAt = NOW + HOUR_MS;
-    expect(resolveForecastAccount('work', 'Work', weekly(60, resetsAt), resetsAt, NOW)?.left).toBe(0);
-    expect(resolveForecastAccount('work', 'Work', weekly(60, null), NOW + 1, NOW)?.left).toBe(0);
-    expect(resolveForecastAccount('work', 'Work', weekly(60, resetsAt), NOW, NOW)?.left).toBe(40);
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'Work', weekly(60, resetsAt), resetsAt, NOW))?.left
+    ).toBe(0);
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'Work', weekly(60, null), NOW + 1, NOW))?.left
+    ).toBe(0);
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'Work', weekly(60, resetsAt), NOW, NOW))?.left
+    ).toBe(40);
   });
 
   test('keeps the weekly budget of an account spent only until a shorter limit resets', () => {
-    expect(resolveForecastAccount('work', 'Work', weekly(60, NOW + 2 * HOUR_MS), NOW + 1, NOW)?.left).toBe(
-      40
-    );
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'Work', weekly(60, NOW + 2 * HOUR_MS), NOW + 1, NOW))
+        ?.left
+    ).toBe(40);
   });
 
   test('a reading from before its reset counts a full week', () => {
-    expect(resolveForecastAccount('work', 'Work', weekly(100, NOW - HOUR_MS), null, NOW)).toEqual({
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'Work', weekly(100, NOW - HOUR_MS), null, NOW))
+    ).toEqual({
       id: 'work',
       label: 'Work',
       left: 100,
@@ -212,12 +232,14 @@ describe('resolveForecastAccount', () => {
   });
 
   test('never counts more than nothing left', () => {
-    expect(resolveForecastAccount('work', 'Work', weekly(120, null), null, NOW)?.left).toBe(0);
+    expect(Option.getOrNull(resolveForecastAccount('work', 'Work', weekly(120, null), null, NOW))?.left).toBe(
+      0
+    );
   });
 
   test('skips an account without a weekly window', () => {
     const usage = { ...weekly(10, null), windows: [] };
-    expect(resolveForecastAccount('work', 'Work', usage, null, NOW)).toBeNull();
+    expect(Option.getOrNull(resolveForecastAccount('work', 'Work', usage, null, NOW))).toBeNull();
   });
 });
 
@@ -254,7 +276,9 @@ describe('listForecastAccounts', () => {
         [
           summary({
             usage,
-            spentUntil: resolveCandidateSpentUntil({ spentUntil: null, usage }, 'fable', now),
+            spentUntil: Option.getOrNull(
+              resolveCandidateSpentUntil({ spentUntil: null, usage }, 'fable', now)
+            ),
           }),
         ],
         now
@@ -300,8 +324,10 @@ describe('resolveGrantRefill', () => {
 
   test('adds the refill to an account only when the forecast asks for grants', () => {
     const usage = { ...weekly(60, NOW + 10 * HOUR_MS), resetGrants: [grant({})] };
-    expect(resolveForecastAccount('work', 'work', usage, null, NOW)?.left).toBe(40);
-    expect(resolveForecastAccount('work', 'work', usage, null, NOW, { grants: true })?.left).toBe(140);
+    expect(Option.getOrNull(resolveForecastAccount('work', 'work', usage, null, NOW))?.left).toBe(40);
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'work', usage, null, NOW, { grants: true }))?.left
+    ).toBe(140);
   });
 });
 

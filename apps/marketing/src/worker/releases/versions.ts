@@ -1,5 +1,5 @@
 import { resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
-import { Schema } from 'effect';
+import { Schema, Option } from 'effect';
 import {
   type Channel,
   DMG_NAME,
@@ -18,7 +18,7 @@ function listServedVersions(tags: readonly string[], channel: Channel) {
 }
 
 function selectNewest(tags: readonly string[]) {
-  return tags.reduce((newest, tag) => (resolveVersionOrder(tag, newest) === 1 ? tag : newest));
+  return tags.reduce((newest, tag) => (Option.contains(resolveVersionOrder(tag, newest), 1) ? tag : newest));
 }
 
 export function listFeedVersions(feed: string) {

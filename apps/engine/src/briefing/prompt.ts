@@ -7,6 +7,7 @@ import {
   BRIEFING_LIMITS,
   describeFocusProjects,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import type { JsonSchema } from '../agents/providers/index.ts';
 import {
   type ChoiceQuestion,
@@ -115,7 +116,7 @@ export function describeBriefingPrompt(state: ShinsaState, queue: Queue, now: nu
   });
   const focus = describeFocusProjects(queue.focus, (projectId) => state.projects[projectId]?.name);
   return [
-    focus ? `Focus: ${focus}.` : 'No focus set.',
+    Option.match(focus, { onNone: () => 'No focus set.', onSome: (named) => `Focus: ${named}.` }),
     'Decisions that need the developer, in ranked order:',
     ...decisions.map((entry) => describeDecision(state, entry, now)),
     '',

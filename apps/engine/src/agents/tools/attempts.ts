@@ -1,12 +1,11 @@
+import type { Validation } from '@shinsa/core';
 import { Effect } from 'effect';
 import { describeError } from '../../log/index.ts';
-import { assertProtocol } from '../handover.ts';
+import { resolveHandOver } from '../handover.ts';
 import { ToolCallFailed } from './schema.ts';
 
-function failCall(error: unknown) {
-  return new ToolCallFailed({ message: describeError(error) });
-}
-
-export function assertToolInput<T>(result: { ok: true; value: T } | { ok: false; errors: string[] }) {
-  return Effect.try({ try: () => assertProtocol(result), catch: failCall });
+export function assertToolInput<T>(validation: Validation<T>) {
+  return Effect.fromResult(resolveHandOver(validation)).pipe(
+    Effect.mapError((error) => new ToolCallFailed({ message: describeError(error) }))
+  );
 }

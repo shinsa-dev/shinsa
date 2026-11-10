@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { createPercent, createUsd } from '@shinsa/core';
 import { formatCompactUsd, formatCost, formatCompactCount, formatTokens } from '@/lib/format/money.ts';
 
 const LINE = {
@@ -8,18 +9,18 @@ const LINE = {
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
   tokens: 0,
-  weeklyPercent: 0,
+  weeklyPercent: createPercent(0),
   weeklyRuns: 0,
   weeklyTasks: 0,
   learningRuns: 0,
-  estimatedPercent: 0,
+  estimatedPercent: createPercent(0),
 };
 
 describe('money', () => {
   it('formats a mix of known and unknown prices', () => {
-    expect(formatCost({ ...LINE, knownUsd: 0.3, unpricedRuns: 1 })).toBe('$0.30 + unknown');
-    expect(formatCost({ ...LINE, knownUsd: 1.5, unpricedRuns: 0 })).toBe('$1.50');
-    expect(formatCost({ ...LINE, knownUsd: 0, unpricedRuns: 2 })).toBe('Unknown');
+    expect(formatCost({ ...LINE, knownUsd: createUsd(0.3), unpricedRuns: 1 })).toBe('$0.30 + unknown');
+    expect(formatCost({ ...LINE, knownUsd: createUsd(1.5), unpricedRuns: 0 })).toBe('$1.50');
+    expect(formatCost({ ...LINE, knownUsd: createUsd(0), unpricedRuns: 2 })).toBe('Unknown');
   });
 
   it('formats every token size', () => {
@@ -50,11 +51,11 @@ describe('money', () => {
   });
 
   it('keeps a cost exact to the cent under a thousand dollars and compact above', () => {
-    expect(formatCompactUsd(0.004)).toBe('<$0.01');
-    expect(formatCompactUsd(999.99)).toBe('$999.99');
-    expect(formatCompactUsd(999.996)).toBe('$1K');
-    expect(formatCompactUsd(1_310.38)).toBe('$1.3K');
-    expect(formatCompactUsd(15_400)).toBe('$15.4K');
-    expect(formatCompactUsd(2_140_000)).toBe('$2.1M');
+    expect(formatCompactUsd(createUsd(0.004))).toBe('<$0.01');
+    expect(formatCompactUsd(createUsd(999.99))).toBe('$999.99');
+    expect(formatCompactUsd(createUsd(999.996))).toBe('$1K');
+    expect(formatCompactUsd(createUsd(1_310.38))).toBe('$1.3K');
+    expect(formatCompactUsd(createUsd(15_400))).toBe('$15.4K');
+    expect(formatCompactUsd(createUsd(2_140_000))).toBe('$2.1M');
   });
 });

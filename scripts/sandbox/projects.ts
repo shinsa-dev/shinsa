@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { Effect, FileSystem } from 'effect';
+import { Effect, FileSystem, Option } from 'effect';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import { resolveTaskProject, type Task } from '../../packages/core/src/index.ts';
 import { SandboxFailed, type SeedProject, TEAMMATE } from './schema.ts';
@@ -97,7 +97,7 @@ export const selectBusiestProject = Effect.fn('Sandbox.selectBusiestProject')(fu
   const state = yield* engine.core.state;
   const counts = new Map<string, number>();
   for (const task of Object.values(state.tasks)) {
-    const projectId = resolveTaskProject(state, task);
+    const projectId = Option.getOrNull(resolveTaskProject(state, task));
     if (projectId && !task.watchHome) counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
   }
   return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];

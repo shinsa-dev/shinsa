@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   describeHumanEdits,
   listOpenGates,
@@ -186,19 +187,21 @@ describe('your edits in the Code tab', () => {
   });
 
   test('a merged or finished task, or one with no checkout, refuses edits', () => {
-    expect(resolveEditRefusal({ stage: 'merged', closedAt: null, worktreePath: '/w' })).toBe(
-      'This task is merged, so its code is read-only.'
-    );
-    expect(resolveEditRefusal({ stage: 'cancelled', closedAt: null, worktreePath: '/w' })).toBe(
+    expect(
+      Option.getOrNull(resolveEditRefusal({ stage: 'merged', closedAt: null, worktreePath: '/w' }))
+    ).toBe('This task is merged, so its code is read-only.');
+    expect(
+      Option.getOrNull(resolveEditRefusal({ stage: 'cancelled', closedAt: null, worktreePath: '/w' }))
+    ).toBe('This task is finished, so its code is read-only.');
+    expect(Option.getOrNull(resolveEditRefusal({ stage: 'done', closedAt: 5, worktreePath: '/w' }))).toBe(
       'This task is finished, so its code is read-only.'
     );
-    expect(resolveEditRefusal({ stage: 'done', closedAt: 5, worktreePath: '/w' })).toBe(
-      'This task is finished, so its code is read-only.'
-    );
-    expect(resolveEditRefusal({ stage: 'building', closedAt: null, worktreePath: null })).toBe(
-      'This task has no checkout to edit, so its code is read-only.'
-    );
-    expect(resolveEditRefusal({ stage: 'awaiting_review', worktreePath: '/w' } as never)).toBeNull();
+    expect(
+      Option.getOrNull(resolveEditRefusal({ stage: 'building', closedAt: null, worktreePath: null }))
+    ).toBe('This task has no checkout to edit, so its code is read-only.');
+    expect(
+      Option.getOrNull(resolveEditRefusal({ stage: 'awaiting_review', worktreePath: '/w' } as never))
+    ).toBeNull();
     const harness = createHarness();
     const taskId = createTask(harness);
     reachShipping(harness, taskId);

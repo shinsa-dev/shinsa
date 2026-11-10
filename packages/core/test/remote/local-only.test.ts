@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import type { UserCommand } from '../../src/commands/index.ts';
 import {
   isOwnerOnlyCommand,
@@ -16,9 +17,9 @@ describe('owner-only commands', () => {
     ];
     for (const command of commands) {
       expect(isOwnerOnlyCommand(command)).toBe(true);
-      expect(resolveOwnerOnlyRefusal('remote', command)).toBe(OWNER_ONLY_MESSAGE);
-      expect(resolveOwnerOnlyRefusal('owner', command)).toBeNull();
-      expect(resolveOwnerOnlyRefusal('local', command)).toBeNull();
+      expect(Option.getOrNull(resolveOwnerOnlyRefusal('remote', command))).toBe(OWNER_ONLY_MESSAGE);
+      expect(Option.getOrNull(resolveOwnerOnlyRefusal('owner', command))).toBeNull();
+      expect(Option.getOrNull(resolveOwnerOnlyRefusal('local', command))).toBeNull();
     }
   });
 
@@ -29,6 +30,7 @@ describe('owner-only commands', () => {
       { type: 'task.retry', taskId: 't' },
       { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null },
     ];
-    for (const command of commands) expect(resolveOwnerOnlyRefusal('remote', command)).toBeNull();
+    for (const command of commands)
+      expect(Option.getOrNull(resolveOwnerOnlyRefusal('remote', command))).toBeNull();
   });
 });

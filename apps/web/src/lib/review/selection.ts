@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 
 export const SPOTLIGHT_HOLD_MS = 1500;
 
@@ -21,12 +22,12 @@ export function createReviewSelection(spot: string | null): ReviewSelection {
   let current = spot;
   let lit = spot;
   let requests = 0;
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timer: (() => void) | null = null;
   const notify = () => {
     for (const listener of listeners) listener();
   };
   const clearTimer = () => {
-    if (timer) clearTimeout(timer);
+    timer?.();
     timer = null;
   };
   const writeLit = (key: string | null) => {
@@ -47,7 +48,7 @@ export function createReviewSelection(spot: string | null): ReviewSelection {
     light: (key) => {
       clearTimer();
       writeLit(key);
-      if (key) timer = setTimeout(() => writeLit(null), SPOTLIGHT_HOLD_MS);
+      if (key) timer = scheduleAfter(SPOTLIGHT_HOLD_MS, () => writeLit(null));
     },
     request: () => {
       requests += 1;

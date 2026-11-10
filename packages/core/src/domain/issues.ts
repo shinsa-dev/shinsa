@@ -1,4 +1,4 @@
-import { Predicate, type SchemaIssue } from 'effect';
+import { Match, Predicate, type SchemaIssue } from 'effect';
 
 const ROOT_LABEL = 'The input';
 
@@ -30,24 +30,29 @@ function resolveLeafMessage(issue: SchemaIssue.Leaf) {
 }
 
 function listEntries(issue: SchemaIssue.Issue, path: ReadonlyArray<PropertyKey>): IssueEntry[] {
-  switch (issue._tag) {
-    case 'Pointer':
-      return listEntries(issue.issue, [...path, ...issue.path]);
-    case 'Composite':
-      return issue.issues.flatMap((child) => listEntries(child, path));
-    case 'Encoding':
-      return listEntries(issue.issue, path);
-    case 'Filter': {
-      const own = selectMessage(issue.filter.annotations);
-      if (own !== null) return [{ path, message: own }];
-      return listEntries(issue.issue, path);
-    }
-    case 'AnyOf':
-      if (issue.issues.length > 0) return issue.issues.flatMap((child) => listEntries(child, path));
-      return [{ path, message: selectMessage(issue.ast.annotations) ?? INVALID }];
-    default:
-      return [{ path, message: resolveLeafMessage(issue) }];
-  }
+  const leaf = (found: SchemaIssue.Leaf): IssueEntry[] => [{ path, message: resolveLeafMessage(found) }];
+  return Match.value(issue).pipe(
+    Match.tagsExhaustive({
+      Pointer: (pointer) => listEntries(pointer.issue, [...path, ...pointer.path]),
+      Composite: (composite) => composite.issues.flatMap((child) => listEntries(child, path)),
+      Encoding: (encoding) => listEntries(encoding.issue, path),
+      Filter: (filter) => {
+        const own = selectMessage(filter.filter.annotations);
+        if (own !== null) return [{ path, message: own }];
+        return listEntries(filter.issue, path);
+      },
+      AnyOf: (anyOf) => {
+        if (anyOf.issues.length > 0) return anyOf.issues.flatMap((child) => listEntries(child, path));
+        return [{ path, message: selectMessage(anyOf.ast.annotations) ?? INVALID }];
+      },
+      InvalidType: leaf,
+      InvalidValue: leaf,
+      MissingKey: leaf,
+      UnexpectedKey: leaf,
+      Forbidden: leaf,
+      OneOf: leaf,
+    })
+  );
 }
 
 export function resolveIssuePath(path: ReadonlyArray<PropertyKey>) {

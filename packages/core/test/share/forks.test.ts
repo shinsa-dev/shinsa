@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
-  findForkRepo,
+  selectForkRepo,
   listOwnRepos,
   resolveTeammateFork,
   serializeTeamTaskReferences,
@@ -52,11 +53,17 @@ describe('forking a teammate’s task', () => {
     const theirs = registerRepo(harness, 'kai-paywall', null);
     const state = { ...harness.state, teammateRepos: { [theirs]: true as const } };
     expect(listOwnRepos(state).map((repo) => repo.id)).toEqual([mine, other]);
-    expect(findForkRepo(state, { name: 'x', remote: 'GitHub.com/superwall/paywall-next' }, null)).toBe(mine);
-    expect(findForkRepo(state, { name: 'site', remote: null }, null)).toBe(other);
-    expect(findForkRepo(state, null, { name: 'marketing' })).toBe(other);
-    expect(findForkRepo(state, { name: 'kai-paywall', remote: null }, null)).toBeNull();
-    expect(findForkRepo(harness.state, { name: 'kai-paywall', remote: null }, null)).toBe(theirs);
+    expect(
+      Option.getOrNull(
+        selectForkRepo(state, { name: 'x', remote: 'GitHub.com/superwall/paywall-next' }, null)
+      )
+    ).toBe(mine);
+    expect(Option.getOrNull(selectForkRepo(state, { name: 'site', remote: null }, null))).toBe(other);
+    expect(Option.getOrNull(selectForkRepo(state, null, { name: 'marketing' }))).toBe(other);
+    expect(Option.getOrNull(selectForkRepo(state, { name: 'kai-paywall', remote: null }, null))).toBeNull();
+    expect(Option.getOrNull(selectForkRepo(harness.state, { name: 'kai-paywall', remote: null }, null))).toBe(
+      theirs
+    );
   });
 });
 

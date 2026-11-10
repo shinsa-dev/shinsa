@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   describeCoverage,
   describeCoverageRange,
@@ -14,19 +15,25 @@ function measured(covered: number, executable: number, files: CoverageFile[] = [
 
 describe('the coverage summary', () => {
   test('says how many changed lines are covered, with numbers that agree with their nouns', () => {
-    expect(describeCoverage(measured(42, 42))).toBe('All 42 changed lines are covered');
-    expect(describeCoverage(measured(1, 1))).toBe('The changed line is covered');
-    expect(describeCoverage(measured(0, 1))).toBe('The changed line is not covered');
-    expect(describeCoverage(measured(0, 12))).toBe('None of the 12 changed lines are covered');
-    expect(describeCoverage(measured(36, 42))).toBe('85% of changed lines are covered (36 of 42)');
+    expect(Option.getOrNull(describeCoverage(measured(42, 42)))).toBe('All 42 changed lines are covered');
+    expect(Option.getOrNull(describeCoverage(measured(1, 1)))).toBe('The changed line is covered');
+    expect(Option.getOrNull(describeCoverage(measured(0, 1)))).toBe('The changed line is not covered');
+    expect(Option.getOrNull(describeCoverage(measured(0, 12)))).toBe(
+      'None of the 12 changed lines are covered'
+    );
+    expect(Option.getOrNull(describeCoverage(measured(36, 42)))).toBe(
+      '85% of changed lines are covered (36 of 42)'
+    );
   });
 
   test('says nothing when coverage is missing, unavailable or nothing changed is executable', () => {
-    expect(describeCoverage(null)).toBeNull();
-    expect(describeCoverage(undefined)).toBeNull();
-    expect(describeCoverage({ status: 'unavailable', command: 'x', reason: 'no report' })).toBeNull();
-    expect(describeCoverage(measured(0, 0))).toBeNull();
-    expect(selectMeasuredCoverage(measured(1, 2))).toMatchObject({ covered: 1 });
+    expect(Option.getOrNull(describeCoverage(null))).toBeNull();
+    expect(Option.getOrNull(describeCoverage(undefined))).toBeNull();
+    expect(
+      Option.getOrNull(describeCoverage({ status: 'unavailable', command: 'x', reason: 'no report' }))
+    ).toBeNull();
+    expect(Option.getOrNull(describeCoverage(measured(0, 0)))).toBeNull();
+    expect(Option.getOrNull(selectMeasuredCoverage(measured(1, 2)))).toMatchObject({ covered: 1 });
   });
 
   test('a percentage never rounds to 0% or 100% unless it is exactly that', () => {

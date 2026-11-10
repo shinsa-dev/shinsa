@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { type MemoryEntry, type Run, type RunRole, TASK_SESSION_ROLES, type Task } from '../domain/index.ts';
 import { listKeptMemory } from '../state/memory.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -27,7 +28,10 @@ function resolveLastTurnStart(state: ShinsaState, resumeFrom: Run) {
 }
 
 export function resolveMemoryContext(state: ShinsaState, task: Task) {
-  return describeRules(MEMORY_HEADING, listKeptMemory(state, resolveTaskProject(state, task)));
+  return describeRules(
+    MEMORY_HEADING,
+    listKeptMemory(state, Option.getOrNull(resolveTaskProject(state, task)))
+  );
 }
 
 export function resolveBriefedMemory(state: ShinsaState, task: Task, role: RunRole) {
@@ -39,7 +43,7 @@ export function resolveMemoryTold(state: ShinsaState, task: Task, role: RunRole,
   if (!resumeFrom?.sessionId) return resolveBriefedMemory(state, task, role);
   if (!isBriefedRole(role)) return '';
   const since = resolveLastTurnStart(state, resumeFrom);
-  const fresh = listKeptMemory(state, resolveTaskProject(state, task)).filter(
+  const fresh = listKeptMemory(state, Option.getOrNull(resolveTaskProject(state, task))).filter(
     (entry) => entry.updatedAt >= since
   );
   return describeRules(NEW_MEMORY_HEADING, fresh);

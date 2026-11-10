@@ -3,6 +3,7 @@ import { toast } from '@shinsa/ui/components/sonner';
 import { Clock, Effect } from 'effect';
 import { describeSignedIn, describeSignInFailed } from '@/lib/extensions.ts';
 import { forkApp } from '@/lib/runtime/app.ts';
+import { scheduleEvery } from '@/lib/runtime/timers.ts';
 
 export const SIGN_IN_CHANNEL = 'shinsa-mcp';
 
@@ -45,7 +46,7 @@ export function watchSignIn(server: McpServerSummary, source: SignInSource) {
       const deadline = (yield* Clock.currentTimeMillis) + SIGN_IN_LIMIT_MS;
       const channel = new BroadcastChannel(SIGN_IN_CHANNEL);
       const stop = () => {
-        clearInterval(timer);
+        stopPolling();
         channel.close();
         window.removeEventListener('focus', onReturn);
         window.removeEventListener('message', onWindowMessage);
@@ -81,7 +82,7 @@ export function watchSignIn(server: McpServerSummary, source: SignInSource) {
         if ((yield* Clock.currentTimeMillis) >= deadline) stop();
         else poll();
       });
-      const timer = setInterval(() => forkApp(tick), SIGN_IN_POLL_MS);
+      const stopPolling = scheduleEvery(SIGN_IN_POLL_MS, () => forkApp(tick));
       channel.onmessage = (event: MessageEvent) => onMessage(readSignInMessage(event.data, true));
       window.addEventListener('focus', onReturn);
       window.addEventListener('message', onWindowMessage);

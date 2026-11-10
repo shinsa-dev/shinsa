@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   describeFocusProjects,
   isProjectInFocus,
@@ -28,10 +29,10 @@ describe('the projects in focus', () => {
   });
 
   test('names one project only when the focus includes exactly one', () => {
-    expect(selectSingleFocusProject({ projectIds: ['a'], except: false })).toBe('a');
-    expect(selectSingleFocusProject({ projectIds: ['a'], except: true })).toBeNull();
-    expect(selectSingleFocusProject({ projectIds: ['a', 'b'], except: false })).toBeNull();
-    expect(selectSingleFocusProject(NO_FOCUS_PROJECTS)).toBeNull();
+    expect(Option.getOrNull(selectSingleFocusProject({ projectIds: ['a'], except: false }))).toBe('a');
+    expect(Option.getOrNull(selectSingleFocusProject({ projectIds: ['a'], except: true }))).toBeNull();
+    expect(Option.getOrNull(selectSingleFocusProject({ projectIds: ['a', 'b'], except: false }))).toBeNull();
+    expect(Option.getOrNull(selectSingleFocusProject(NO_FOCUS_PROJECTS))).toBeNull();
   });
 
   test('sorts and dedupes the projects, and drops all but when none are left out', () => {
@@ -51,10 +52,16 @@ describe('the projects in focus', () => {
     expect(serializeNames([])).toBe('');
     expect(serializeNames(['Work'])).toBe('Work');
     expect(serializeNames(['Home', 'Shinsa', 'Work'])).toBe('Home, Shinsa and Work');
-    expect(describeFocusProjects({ projectIds: ['a', 'b'], except: false }, nameOf)).toBe('Home and Work');
-    expect(describeFocusProjects({ projectIds: ['a'], except: true }, nameOf)).toBe('everything but Work');
-    expect(describeFocusProjects({ projectId: 'c' }, nameOf)).toBe('Shinsa');
-    expect(describeFocusProjects({ projectIds: ['gone'], except: true }, nameOf)).toBeNull();
-    expect(describeFocusProjects(NO_FOCUS_PROJECTS, nameOf)).toBeNull();
+    expect(Option.getOrNull(describeFocusProjects({ projectIds: ['a', 'b'], except: false }, nameOf))).toBe(
+      'Home and Work'
+    );
+    expect(Option.getOrNull(describeFocusProjects({ projectIds: ['a'], except: true }, nameOf))).toBe(
+      'everything but Work'
+    );
+    expect(Option.getOrNull(describeFocusProjects({ projectId: 'c' }, nameOf))).toBe('Shinsa');
+    expect(
+      Option.getOrNull(describeFocusProjects({ projectIds: ['gone'], except: true }, nameOf))
+    ).toBeNull();
+    expect(Option.getOrNull(describeFocusProjects(NO_FOCUS_PROJECTS, nameOf))).toBeNull();
   });
 });

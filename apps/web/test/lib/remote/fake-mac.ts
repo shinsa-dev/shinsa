@@ -17,7 +17,7 @@ import {
   serializePublicKey,
   verifyEnrollProof,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 
 export async function createKeyPair() {
   return (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits'])) as CryptoKeyPair;
@@ -146,7 +146,9 @@ export class FakeMacSocket extends EventTarget {
       await this.#handshake(data);
       return;
     }
-    const message = parseChannelMessage(decodeText(await (this.#open as (f: Bytes) => Promise<Bytes>)(data)));
+    const message = Option.getOrNull(
+      parseChannelMessage(decodeText(await (this.#open as (f: Bytes) => Promise<Bytes>)(data)))
+    );
     if (!message) return;
     this.#mac.received.push(message);
     await this.#handle(message);
@@ -154,7 +156,7 @@ export class FakeMacSocket extends EventTarget {
 
   async #handshake(text: string) {
     const mac = this.#mac;
-    const hello = parseClientHello(text);
+    const hello = Option.getOrNull(parseClientHello(text));
     if (!hello) return;
     const keys = { machine: mac.machineKey, device: hello.device, clientEphemeral: hello.ephemeral };
     const secret = mac.options.enrollSecret;
@@ -186,7 +188,7 @@ export class FakeMacSocket extends EventTarget {
         serverEphemeralPrivateKey: ephemeral.privateKey,
       })
     );
-    const compression = mac.options.plainFrames ? null : resolveCompression(hello);
+    const compression = mac.options.plainFrames ? null : Option.getOrNull(resolveCompression(hello));
     const seal = createFrameSealer(session.send, compression);
     const open = createFrameOpener(session.receive, compression);
     this.#seal = (plain) => Effect.runPromise(seal(plain));
@@ -210,7 +212,7 @@ export class FakeMacSocket extends EventTarget {
         this.#requests.set(message.id, { ...message, chunks: [] });
         return;
       case 'body': {
-        const bytes = parseBodyChunk(message.chunk);
+        const bytes = Option.getOrNull(parseBodyChunk(message.chunk));
         if (bytes) this.#requests.get(message.id)?.chunks.push(bytes);
         return;
       }

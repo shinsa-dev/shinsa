@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ReportCheck, Run, ShinsaEvent, ShinsaState, Task } from '../../packages/core/src/index.ts';
 import {
   applyEvent,
@@ -89,9 +90,10 @@ export function stampRunPrompts(timeline: TimedSeedEvent[]): TimedSeedEvent[] {
 }
 
 export function resolveRunOpening(run: Pick<Run, 'prompt' | 'resume'>) {
-  if (!run.prompt) return null;
-  if (!run.resume) return run.prompt;
-  return splitHouseRules(run.prompt)?.instruction ?? run.prompt;
+  const prompt = run.prompt;
+  if (!prompt) return null;
+  if (!run.resume) return prompt;
+  return Option.getOrUndefined(splitHouseRules(prompt))?.instruction ?? prompt;
 }
 
 export function listRunOpenings(timeline: TimedSeedEvent[]) {

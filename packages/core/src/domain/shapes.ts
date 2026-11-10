@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { DomainError } from './errors.ts';
 import { isComposableStep, listComposedSteps, type PipelineStep, validatePipeline } from './steps.ts';
 import type { Task, TeammateOwner } from './types.ts';
@@ -126,11 +127,11 @@ export const SHAPE_LIMITS = {
   reason: 240,
 } as const;
 
-export function resolveOperationTiming(steps: readonly PipelineStep[]): OperationTiming | null {
+export function resolveOperationTiming(steps: readonly PipelineStep[]): Option.Option<OperationTiming> {
   const index = steps.indexOf('operate');
-  if (index === -1) return null;
-  if (!steps.includes('build')) return 'alone';
-  return steps.indexOf('build') > index ? 'before_build' : 'post_merge';
+  if (index === -1) return Option.none();
+  if (!steps.includes('build')) return Option.some('alone');
+  return Option.some(steps.indexOf('build') > index ? 'before_build' : 'post_merge');
 }
 
 const INQUIRY_NOUN: Record<InquiryStep, string> = {
@@ -158,11 +159,11 @@ export function validateComposition(
       `Shinsa adds ${handOver.map((step) => `\`${step}\``).join(' and ')} from the steps around the merge in your work report; leave them out.`
     );
   }
-  const ran = resolveInquiryStep(resolveTaskPipeline(task));
+  const ran = Option.getOrNull(resolveInquiryStep(resolveTaskPipeline(task)));
   if (ran && isInquiryDone(task, ran) && !steps.includes(ran)) {
     errors.push(`${INQUIRY_NOUN[ran]} already ran, so \`${ran}\` stays in the steps.`);
   }
-  const inquiry = resolveInquiryStep(steps);
+  const inquiry = Option.getOrNull(resolveInquiryStep(steps));
   if (inquiry && steps.includes('plan') && !steps.includes('your_ok') && !isInquiryDone(task, inquiry)) {
     errors.push(
       `${INQUIRY_NOUN[inquiry]} turns into a change or an operation only with the human's OK: put \`your_ok\` between \`${inquiry}\` and \`plan\`.`
@@ -196,23 +197,23 @@ export function isSamePipeline(a: readonly PipelineStep[], b: readonly PipelineS
   return a.length === b.length && a.every((step, index) => b[index] === step);
 }
 
-export function resolvePresetOf(steps: readonly PipelineStep[]): TaskShape | null {
+export function resolvePresetOf(steps: readonly PipelineStep[]): Option.Option<TaskShape> {
   const composed = listComposedSteps(steps);
-  return TASK_SHAPES.find((shape) => isSamePipeline(SHAPE_PIPELINES[shape], composed)) ?? null;
+  return Option.fromNullishOr(TASK_SHAPES.find((shape) => isSamePipeline(SHAPE_PIPELINES[shape], composed)));
 }
 
-export function resolveWorkStep(steps: readonly PipelineStep[]): WorkStep | null {
-  return steps.find((step): step is WorkStep => step === 'build' || step === 'operate') ?? null;
+export function resolveWorkStep(steps: readonly PipelineStep[]): Option.Option<WorkStep> {
+  return Option.fromNullishOr(steps.find((step): step is WorkStep => step === 'build' || step === 'operate'));
 }
 
 export function findWorkStep(steps: readonly PipelineStep[]): WorkStep {
   const step = resolveWorkStep(steps);
-  if (!step)
+  if (Option.isNone(step))
     throw new DomainError({
       code: 'no_work_step',
       message: 'This task has no step that builds or operates.',
     });
-  return step;
+  return step.value;
 }
 
 export function resolveShapeOf(steps: readonly PipelineStep[]): TaskShape {
@@ -240,18 +241,18 @@ export function needsRepository(steps: readonly PipelineStep[]) {
   return steps.some((step) => !REPOSITORY_FREE_STEPS.has(step));
 }
 
-export function resolveInquiryStep(steps: readonly PipelineStep[]): InquiryStep | null {
-  return INQUIRY_STEPS.find((step) => steps.includes(step)) ?? null;
+export function resolveInquiryStep(steps: readonly PipelineStep[]): Option.Option<InquiryStep> {
+  return Option.fromNullishOr(INQUIRY_STEPS.find((step) => steps.includes(step)));
 }
 
 export function findInquiryStep(steps: readonly PipelineStep[]): InquiryStep {
   const step = resolveInquiryStep(steps);
-  if (!step)
+  if (Option.isNone(step))
     throw new DomainError({
       code: 'no_inquiry_step',
       message: 'This task has no step that answers, researches or investigates.',
     });
-  return step;
+  return step.value;
 }
 
 export function resolveProposalUpgrade(steps: readonly PipelineStep[]): PipelineStep[] {

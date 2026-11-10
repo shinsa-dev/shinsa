@@ -17,6 +17,7 @@ import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
+import { useDelay } from '@/hooks/use-delay.ts';
 import { useFileSaver } from '@/hooks/use-file-saver.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { isEditedPath, resolveEditState } from '@/lib/code/edits.ts';
@@ -69,11 +70,9 @@ function CodeEditor(props: React.ComponentProps<EditorModule['default']>) {
 function useFlash(key: string | null) {
   const [flashed, setFlashed] = React.useState<string | null>(key);
   React.useEffect(() => {
-    if (!key) return;
-    setFlashed(key);
-    const timer = setTimeout(() => setFlashed(null), FOCUS_FLASH_MS);
-    return () => clearTimeout(timer);
+    if (key) setFlashed(key);
   }, [key]);
+  useDelay(() => setFlashed(null), key ? FOCUS_FLASH_MS : null, [key]);
   return key !== null && flashed === key;
 }
 

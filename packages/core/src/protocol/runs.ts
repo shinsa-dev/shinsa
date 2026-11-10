@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Run } from '../domain/index.ts';
 import { type FixFocus, resolveFixFocus } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -13,8 +14,10 @@ export function serializeRun(run: Run & { fixFocus?: FixFocus }): WireRun {
   const known = WIRE_RUNS.get(run);
   if (known) return known;
   const { prompt: _prompt, rolePrompt: _rolePrompt, told: _told, ...rest } = run;
-  const focus = resolveFixFocus(run);
-  const wire: WireRun = focus ? { ...rest, fixFocus: focus } : rest;
+  const wire: WireRun = Option.match(resolveFixFocus(run), {
+    onNone: () => rest,
+    onSome: (focus) => ({ ...rest, fixFocus: focus }),
+  });
   WIRE_RUNS.set(run, wire);
   return wire;
 }

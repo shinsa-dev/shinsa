@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -85,20 +86,16 @@ export function isServiceEnvKey(key: string) {
 
 export function isServicePreviewUrl(url: string) {
   if (!url.includes(PORT_PLACEHOLDER)) return false;
-  try {
-    const { protocol } = new URL(url.replaceAll(PORT_PLACEHOLDER, '1'));
-    return protocol === 'http:' || protocol === 'https:';
-  } catch {
-    return false;
-  }
+  const protocol = URL.parse(url.replaceAll(PORT_PLACEHOLDER, '1'))?.protocol;
+  return protocol === 'http:' || protocol === 'https:';
 }
 
 export function resolveServiceUrl(
   service: Pick<ServiceDefinition, 'previewUrl'>,
   terminal: Pick<TerminalInfo, 'port'> | null
 ) {
-  if (!(service.previewUrl && terminal?.port)) return null;
-  return service.previewUrl.replaceAll(PORT_PLACEHOLDER, String(terminal.port));
+  if (!(service.previewUrl && terminal?.port)) return Option.none<string>();
+  return Option.some(service.previewUrl.replaceAll(PORT_PLACEHOLDER, String(terminal.port)));
 }
 
 export function resolveServiceState(terminal: TerminalInfo | null, now: number): ServiceView['state'] {
@@ -126,15 +123,14 @@ export function resolveServiceView(
     state,
     exitCode: terminal?.exitCode ?? null,
     since,
-    url: resolveServiceUrl(service, terminal),
+    url: Option.getOrNull(resolveServiceUrl(service, terminal)),
     remoteUrl: terminal?.status === 'running' ? (terminal.remoteUrl ?? null) : null,
   };
 }
 
 export function selectServiceTerminal(snapshot: TerminalsSnapshot, serviceId: string, taskId: string | null) {
-  return (
-    snapshot.terminals.find((terminal) => terminal.serviceId === serviceId && terminal.taskId === taskId) ??
-    null
+  return Option.fromUndefinedOr(
+    snapshot.terminals.find((terminal) => terminal.serviceId === serviceId && terminal.taskId === taskId)
   );
 }
 
@@ -146,7 +142,9 @@ export function listProjectServices(
   if (!snapshot || !projectId) return [];
   return (snapshot.services ?? [])
     .filter((service) => service.projectId === projectId)
-    .map((service) => resolveServiceView(service, selectServiceTerminal(snapshot, service.id, null), now));
+    .map((service) =>
+      resolveServiceView(service, Option.getOrNull(selectServiceTerminal(snapshot, service.id, null)), now)
+    );
 }
 
 function isInside(path: string, folder: string) {
@@ -156,12 +154,12 @@ function isInside(path: string, folder: string) {
 
 export function resolveTaskServiceCwd(state: ShinsaState, service: ServiceDefinition, task: Task) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  if (!(repo && task.worktreePath) || isTaskSettled(task)) return null;
-  if (resolveTaskProject(state, task) !== service.projectId) return null;
+  if (!(repo && task.worktreePath) || isTaskSettled(task)) return Option.none<string>();
+  if (Option.getOrNull(resolveTaskProject(state, task)) !== service.projectId) return Option.none<string>();
   const root = repo.path.replace(/\/+$/, '');
   const worktree = task.worktreePath.replace(/\/+$/, '');
-  if (worktree === root || !isInside(service.cwd, root)) return null;
-  return `${worktree}${service.cwd.slice(root.length).replace(/\/+$/, '')}`;
+  if (worktree === root || !isInside(service.cwd, root)) return Option.none<string>();
+  return Option.some(`${worktree}${service.cwd.slice(root.length).replace(/\/+$/, '')}`);
 }
 
 export function listTaskServices(
@@ -173,9 +171,9 @@ export function listTaskServices(
   if (!snapshot) return [];
   return (snapshot.services ?? []).flatMap((service) => {
     const cwd = resolveTaskServiceCwd(state, service, task);
-    if (cwd === null) return [];
-    const terminal = selectServiceTerminal(snapshot, service.id, task.id);
-    return [{ ...resolveServiceView(service, terminal, now, task.id), taskId: task.id, cwd }];
+    if (Option.isNone(cwd)) return [];
+    const terminal = Option.getOrNull(selectServiceTerminal(snapshot, service.id, task.id));
+    return [{ ...resolveServiceView(service, terminal, now, task.id), taskId: task.id, cwd: cwd.value }];
   });
 }
 
@@ -210,9 +208,8 @@ export function selectService(snapshot: TerminalsSnapshot, reference: string, pr
   const inProject = snapshot.services.filter(
     (service) => projectId === null || service.projectId === projectId
   );
-  return (
+  return Option.fromUndefinedOr(
     inProject.find((service) => service.id === reference) ??
-    inProject.find((service) => service.name.toLowerCase() === wanted) ??
-    null
+      inProject.find((service) => service.name.toLowerCase() === wanted)
   );
 }

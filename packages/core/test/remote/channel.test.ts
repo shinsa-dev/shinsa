@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   CHANNEL_BODY_CHUNK_BYTES,
   type ChannelMessage,
@@ -24,11 +25,11 @@ describe('channel messages', () => {
       { t: 'terminal-close', id: 's1', code: 4404, reason: 'That terminal is closed.' },
     ];
     for (const message of messages)
-      expect(parseChannelMessage(serializeChannelMessage(message))).toEqual(message);
+      expect(Option.getOrNull(parseChannelMessage(serializeChannelMessage(message)))).toEqual(message);
   });
 
   test('keep only the fields a kind defines', () => {
-    expect(parseChannelMessage('{"t":"ready","extra":1}')).toEqual({ t: 'ready' });
+    expect(Option.getOrNull(parseChannelMessage('{"t":"ready","extra":1}'))).toEqual({ t: 'ready' });
   });
 
   test('refuse anything else', () => {
@@ -55,7 +56,7 @@ describe('channel messages', () => {
       '{"t":"terminal-close","id":"s","code":1000}',
       '{"t":"terminal-close","id":1,"code":1000,"reason":""}',
     ];
-    for (const text of refused) expect(parseChannelMessage(text)).toBeNull();
+    for (const text of refused) expect(Option.getOrNull(parseChannelMessage(text))).toBeNull();
   });
 
   test('split a body into chunks and an end, and read a chunk back', () => {
@@ -63,8 +64,8 @@ describe('channel messages', () => {
     const messages = listBodyMessages('r1', body);
     expect(messages.map((message) => message.t)).toEqual(['body', 'body', 'end']);
     const second = messages[1] as { chunk: string };
-    expect([...(parseBodyChunk(second.chunk) ?? [])]).toEqual([9, 9, 9]);
+    expect([...(Option.getOrNull(parseBodyChunk(second.chunk)) ?? [])]).toEqual([9, 9, 9]);
     expect(listBodyMessages('r2', new Uint8Array())).toEqual([{ t: 'end', id: 'r2' }]);
-    expect(parseBodyChunk('!')).toBeNull();
+    expect(Option.getOrNull(parseBodyChunk('!'))).toBeNull();
   });
 });

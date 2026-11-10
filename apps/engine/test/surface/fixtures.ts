@@ -1,5 +1,5 @@
 import type { UserCommand } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Result } from 'effect';
 import { createEngineCalls } from '../../src/cli/client/index.ts';
 import {
   readArgv,
@@ -84,7 +84,12 @@ export function runSurfaceSpec(
 export function runSpec(fake: FakeClient, words: string[], display?: Display) {
   const found = selectSpec(words);
   if (!found) throw new Error(`No spec for ${words.join(' ')}`);
-  return runSurfaceSpec(found.spec, fake.client, readArgv(found.spec.fields, found.rest).values, display);
+  return runSurfaceSpec(
+    found.spec,
+    fake.client,
+    Result.getOrThrow(readArgv(found.spec.fields, found.rest)).values,
+    display
+  );
 }
 
 export const COLOR_DISPLAY: Display = {

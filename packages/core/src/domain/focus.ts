@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Focus, FocusProjects } from './types.ts';
 
 export interface SingleProjectFocus {
@@ -25,9 +26,9 @@ export function isProjectInFocus(focus: FocusProjects | SingleProjectFocus, proj
   return except ? !listed : listed;
 }
 
-export function selectSingleFocusProject(focus: FocusProjects | SingleProjectFocus) {
+export function selectSingleFocusProject(focus: FocusProjects | SingleProjectFocus): Option.Option<string> {
   const { projectIds, except } = resolveFocusSelection(focus);
-  return !except && projectIds.length === 1 ? (projectIds[0] ?? null) : null;
+  return !except && projectIds.length === 1 ? Option.fromNullishOr(projectIds[0]) : Option.none();
 }
 
 export function serializeNames(names: readonly string[]) {
@@ -41,6 +42,6 @@ export function describeFocusProjects(
 ) {
   const { projectIds, except } = resolveFocusSelection(focus);
   const names = projectIds.flatMap((projectId) => nameOf(projectId) ?? []).sort((a, b) => a.localeCompare(b));
-  if (names.length === 0) return null;
-  return except ? `everything but ${serializeNames(names)}` : serializeNames(names);
+  if (names.length === 0) return Option.none<string>();
+  return Option.some(except ? `everything but ${serializeNames(names)}` : serializeNames(names));
 }

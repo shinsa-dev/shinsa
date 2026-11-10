@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { PullRequest } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import {
@@ -65,7 +66,7 @@ function applyPullRequestWatched(state: ShinsaState, event: EventOf<'pull_reques
     actor: 'shinsa',
     kind: 'pull_request',
     text: describePullRequestChanges(event.changes),
-    detail: describePullRequestRemarks(event.changes),
+    detail: Option.getOrNull(describePullRequestRemarks(event.changes)),
   });
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { CHANNEL_COMPRESSION, createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
 import {
@@ -153,8 +153,10 @@ describe('the hello messages', () => {
       name: null,
       compression: [],
     });
-    expect(parseClientHello(JSON.stringify(hello))).toEqual(hello);
-    expect(parseClientHello(JSON.stringify({ ...hello, enroll: 'proof', extra: 1 }))).toEqual({
+    expect(Option.getOrNull(parseClientHello(JSON.stringify(hello)))).toEqual(hello);
+    expect(
+      Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, enroll: 'proof', extra: 1 })))
+    ).toEqual({
       ...hello,
       enroll: 'proof',
     });
@@ -165,11 +167,11 @@ describe('the hello messages', () => {
     const hello = await Effect.runPromise(
       createClientHello(parties.device.publicKey, parties.clientEphemeral.publicKey, 'proof', 'Bob iPhone')
     );
-    expect(parseClientHello(JSON.stringify(hello))?.name).toBe('Bob iPhone');
+    expect(Option.getOrNull(parseClientHello(JSON.stringify(hello)))?.name).toBe('Bob iPhone');
     const long = { ...hello, name: ` ${'x'.repeat(DEVICE_NAME_LIMIT + 10)} ` };
-    expect(parseClientHello(JSON.stringify(long))?.name).toHaveLength(DEVICE_NAME_LIMIT);
-    expect(parseClientHello(JSON.stringify({ ...hello, name: '  ' }))?.name).toBeNull();
-    expect(parseClientHello(JSON.stringify({ ...hello, name: 3 }))?.name).toBeNull();
+    expect(Option.getOrNull(parseClientHello(JSON.stringify(long)))?.name).toHaveLength(DEVICE_NAME_LIMIT);
+    expect(Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, name: '  ' })))?.name).toBeNull();
+    expect(Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, name: 3 })))?.name).toBeNull();
   });
 
   test('offers compression and reads only the one it knows', async () => {
@@ -179,14 +181,14 @@ describe('the hello messages', () => {
         CHANNEL_COMPRESSION,
       ])
     );
-    const parsed = parseClientHello(JSON.stringify(hello));
+    const parsed = Option.getOrNull(parseClientHello(JSON.stringify(hello)));
     expect(parsed?.compression).toEqual([CHANNEL_COMPRESSION]);
-    expect(parsed && resolveCompression(parsed)).toBe(CHANNEL_COMPRESSION);
-    const unknown = parseClientHello(JSON.stringify({ ...hello, compression: ['zstd'] }));
+    expect(parsed && Option.getOrNull(resolveCompression(parsed))).toBe(CHANNEL_COMPRESSION);
+    const unknown = Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, compression: ['zstd'] })));
     expect(unknown?.compression).toEqual([]);
-    expect(unknown && resolveCompression(unknown)).toBeNull();
-    const older = parseClientHello(JSON.stringify({ ...hello, compression: undefined }));
-    expect(older && resolveCompression(older)).toBeNull();
+    expect(unknown && Option.getOrNull(resolveCompression(unknown))).toBeNull();
+    const older = Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, compression: undefined })));
+    expect(older && Option.getOrNull(resolveCompression(older))).toBeNull();
   });
 
   test('refuses a client hello of another shape or version', () => {
@@ -197,33 +199,40 @@ describe('the hello messages', () => {
       ephemeral: 'e',
       enroll: null,
     };
-    expect(parseClientHello('{')).toBeNull();
-    expect(parseClientHello('[]')).toBeNull();
-    expect(parseClientHello('null')).toBeNull();
-    expect(parseClientHello(JSON.stringify({ ...hello, version: 2 }))).toBeNull();
-    expect(parseClientHello(JSON.stringify({ ...hello, device: 1 }))).toBeNull();
-    expect(parseClientHello(JSON.stringify({ ...hello, enroll: 1 }))).toBeNull();
+    expect(Option.getOrNull(parseClientHello('{'))).toBeNull();
+    expect(Option.getOrNull(parseClientHello('[]'))).toBeNull();
+    expect(Option.getOrNull(parseClientHello('null'))).toBeNull();
+    expect(Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, version: 2 })))).toBeNull();
+    expect(Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, device: 1 })))).toBeNull();
+    expect(Option.getOrNull(parseClientHello(JSON.stringify({ ...hello, enroll: 1 })))).toBeNull();
   });
 
   test('reads a welcome or a refusal from the engine', () => {
-    expect(parseServerHello('{"type":"welcome","ephemeral":"e"}')).toEqual({
+    expect(Option.getOrNull(parseServerHello('{"type":"welcome","ephemeral":"e"}'))).toEqual({
       type: 'welcome',
       ephemeral: 'e',
       compression: null,
     });
-    expect(parseServerHello('{"type":"welcome","ephemeral":"e","compression":"deflate-raw"}')).toEqual({
+    expect(
+      Option.getOrNull(parseServerHello('{"type":"welcome","ephemeral":"e","compression":"deflate-raw"}'))
+    ).toEqual({
       type: 'welcome',
       ephemeral: 'e',
       compression: CHANNEL_COMPRESSION,
     });
-    expect(parseServerHello('{"type":"welcome","ephemeral":"e","compression":"zstd"}')).toMatchObject({
+    expect(
+      Option.getOrNull(parseServerHello('{"type":"welcome","ephemeral":"e","compression":"zstd"}'))
+    ).toMatchObject({
       compression: null,
     });
-    expect(parseServerHello('{"type":"refused","reason":"r"}')).toEqual({ type: 'refused', reason: 'r' });
-    expect(parseServerHello('{"type":"pending"}')).toEqual({ type: 'pending' });
-    expect(parseServerHello('{"type":"welcome"}')).toBeNull();
-    expect(parseServerHello('{"type":"refused"}')).toBeNull();
-    expect(parseServerHello('nope')).toBeNull();
+    expect(Option.getOrNull(parseServerHello('{"type":"refused","reason":"r"}'))).toEqual({
+      type: 'refused',
+      reason: 'r',
+    });
+    expect(Option.getOrNull(parseServerHello('{"type":"pending"}'))).toEqual({ type: 'pending' });
+    expect(Option.getOrNull(parseServerHello('{"type":"welcome"}'))).toBeNull();
+    expect(Option.getOrNull(parseServerHello('{"type":"refused"}'))).toBeNull();
+    expect(Option.getOrNull(parseServerHello('nope'))).toBeNull();
   });
 });
 

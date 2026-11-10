@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { resolveAgentProvider } from '../agent-models/index.ts';
 import {
   DAY_MS,
@@ -75,16 +76,16 @@ function resolveFromActivity(state: AwayState, from: number, now: number) {
   return shares.flatMap((share, hour) => (share < AWAY_LIMITS.activeShare ? [hour] : []));
 }
 
-export function resolveAwayHours(state: AwayState, now: number): AwayHours | null {
+export function resolveAwayHours(state: AwayState, now: number): Option.Option<AwayHours> {
   const from = now - AWAY_LIMITS.windowDays * DAY_MS;
   const away = resolveFromAway(state, from, now);
-  if (away) return { hours: away, source: 'away' };
+  if (away) return Option.some({ hours: away, source: 'away' });
   const activity = resolveFromActivity(state, from, now);
-  return activity ? { hours: activity, source: 'activity' } : null;
+  return activity ? Option.some({ hours: activity, source: 'activity' }) : Option.none();
 }
 
-export function isAwayAt(away: AwayHours | null, at: number) {
-  return away?.hours.includes(resolveHourOfDay(Math.floor(at / HOUR_MS))) === true;
+export function isAwayAt(away: Option.Option<AwayHours>, at: number) {
+  return Option.exists(away, (known) => known.hours.includes(resolveHourOfDay(Math.floor(at / HOUR_MS))));
 }
 
 function hasAdmissionQueue(state: ShinsaState, task: Task) {
@@ -100,12 +101,12 @@ export function resolveNightShift(
   role: RunRole,
   purpose: RunPurpose | null,
   now: number
-): NightShift | null {
-  if (role !== 'agent' || !resolveAutoPace(state.settings)) return null;
+): Option.Option<NightShift> {
+  if (role !== 'agent' || !resolveAutoPace(state.settings)) return Option.none();
   const away = isAwayAt(resolveAwayHours(state, now), now);
-  if (purpose === 'build' || purpose === 'fix') return away ? 'night' : null;
-  if (purpose !== 'plan') return null;
-  if (away || hasAdmissionQueue(state, task)) return 'unattended';
+  if (purpose === 'build' || purpose === 'fix') return away ? Option.some('night') : Option.none();
+  if (purpose !== 'plan') return Option.none();
+  if (away || hasAdmissionQueue(state, task)) return Option.some('unattended');
   const room = resolveAdmissionRoom(state, resolveAgentProvider(state.settings, 'agent'), now);
-  return room !== null && room <= 0 ? 'unattended' : null;
+  return Option.exists(room, (left) => left <= 0) ? Option.some('unattended') : Option.none();
 }

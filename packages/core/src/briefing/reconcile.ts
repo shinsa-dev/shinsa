@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Queue } from '../queue/types.ts';
 import { listBriefingEntries, listNamedIds, resolveFallbackBriefing } from './fallback.ts';
 import { resolveNote } from './note.ts';
@@ -16,6 +17,9 @@ export function reconcileBriefing(stored: StoredBriefing | undefined, queue: Que
     now: briefing.now,
     next,
     running: fallback.running,
-    note: resolveNote(briefing.note, queue, listNamedIds(briefing.now, next), now),
+    note:
+      briefing.note === null
+        ? null
+        : Option.getOrNull(resolveNote(briefing.note, queue, listNamedIds(briefing.now, next), now)),
   };
 }
