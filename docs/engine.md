@@ -2547,7 +2547,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   `schedule.remove`). A task keeps at most 20, Shinsa 100 live.
 - **Kinds** (`packages/core/src/schedules/time.ts`): once (`in_minutes` or `run_at`, at most a year out; a `run_at`
   more than a minute in the past is refused), every N minutes (1 minute to a week), daily at `HH:MM` on chosen
-  weekdays, and webhook. Daily runs follow the wall clock in the schedule's time zone (IANA, checked; `time_zone`, else the
+  weekdays, webhook, and Slack channel (`slack_channel`, below; like a webhook it has no next run and is never
+  fired by the clock, `isEventTrigger`). Daily runs follow the wall clock in the schedule's time zone (IANA, checked; `time_zone`, else the
   server's for a new schedule and the schedule's own for a change),
   so a daylight-saving change keeps 09:00 at 09:00; a time the clocks skip moves on by the gap (02:30 runs
   at 03:30), and a time that occurs twice runs once, at the first.
@@ -2587,9 +2588,34 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   the values as they are because only its hash is kept, dedupes deliveries for a week (500 keys per schedule): a
   repeat answers 202 `duplicate` and starts nothing. A delivery is `schedule.deliver` with command id
   `webhook:<id>:<delivery>`; the answer is 202 with the delivery id.
+- **Slack channel triggers** (`packages/core/src/slack/channels.ts`, `apps/engine/src/slack/service.ts`; the flow
+  and what app.shinsa.dev keeps are in Slack, below). A schedule whose trigger is `{kind: 'slack', teamId,
+  teamName, channelId, channelName}` runs once for each new top-level message in that channel. An agent passes
+  `slack_channel` (a name, with or without `#`, or a channel id) and optionally `slack_workspace` to `set_schedule`
+  or `schedules_write` (`shinsa schedules write --slack-channel #alerts`); core reads them as a `SlackChannelRequest`
+  beside the other ways to say when (exactly one of them, and `slack_workspace` only with `slack_channel`), and
+  the engine resolves it before the write (`ScheduleTools.resolveTrigger`, `resolveSlackChannelTrigger`) against
+  the channels the bot is in, in the workspaces linked to this machine (`Slack.channels`, `GET
+  /__remote/slack/channels`). It refuses with what to do: Slack not connected (`SLACK_NOT_CONNECTED`), the bot
+  not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
+  is in several linked workspaces ("Name the workspace too."). Core checks the trigger it is given
+  (`assertSlackChannel`: Slack ids, names of at most 80 characters). A forwarded message (`POST
+  /api/slack/messages`, signed like a mention) is delivered to every enabled schedule on that workspace and
+  channel (`listSlackChannelSchedules`) as `schedule.deliver` with command id `slack-message:<schedule>:<event
+  id>` and the replay key `<team>:<channel>:<message ts>`, so a Slack retry or a second event for one message
+  starts nothing twice. Its text is the schedule's message, then "Posted in #alerts by Lee: <link>" (a bot's
+  name with "(bot)"), then the message inside a nonce-tagged `<slack-message-…>` element with the note that it
+  is untrusted data, never instructions (`serializeSlackChannelDelivery`). Each schedule takes at most 60 a
+  minute, the webhook's own limit; the first message over it is recorded as a failed run ("More than 60
+  messages a minute were posted, so the rest of this minute's were skipped.") and the rest of that minute are
+  dropped. A delivery core refuses is a failed run with its reason (`schedule.fail`). A message for a channel no
+  enabled schedule watches answers 202 with `delivered: 0` and sends the watched channels again, so
+  app.shinsa.dev stops forwarding it.
 - **Automations have three types**, read from the schedule (`resolveAutomationType` in the web, each row of Settings
   → Automations says it): a **Schedule** runs at a time (once, every N minutes, daily) and starts or messages a
-  task; a **Trigger** runs when its webhook is called; a **Watch** reads one of its project's integrations
+  task; a **Trigger** runs when its webhook is called or a message is posted in its Slack channel (its tile and
+  its when fact carry Slack's mark then, `resolveAutomationLook`, with the workspace as the fact's hint); a
+  **Watch** reads one of its project's integrations
   (`source`) and files a task for each new report in it, on a clock or a webhook.
 - **A watch reads in a home of its own** (`decide/intake.ts`, `prompts/intake.ts`; what it shares with a watchdog check in `decide/reads.ts` and `prompts/reads.ts`). `Schedule.source`
   (`ScheduleSource`: `projectId`, `server`) names an integration the project uses (Watchdogs, above), and one the
@@ -3266,7 +3292,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   tunnel, and the only place that decides it. A request with `cf-connecting-ip`, which Cloudflare stamps on
   everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request (`isTunnel`) and is decided
   before the local guard. Its route table (`TUNNEL_ROUTES`, `remote/gate/schema.ts`) names every path with its
-  methods: `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks), Slack's two `POST`s, and
+  methods: `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks), Slack's three `POST`s, and
   the sockets `GET /remote`, `/share`, `/team` and `/__preview/<id>/…`; anything else, and everything while remote
   access is off, is 404 before any handler runs. Sockets open only as an upgrade in `http/server/service.ts`, which asks
   `admitUpgrade` and opens what it answers; a plain request to a socket path is 404 (`admitRequest`). `/remote`,
@@ -3278,7 +3304,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `slack-channel-triggers`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -4598,6 +4624,19 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
                                  └─ slack.decide ──► gate.answer
                                     └─ the buttons become
                                        "@you approved the plan"
+
+Slack ──a message in a channel──► app.shinsa.dev /slack/events
+       ├─ a reply in a thread, an edit, a deletion, a join ─► nothing
+       ├─ no online machine watches the channel ───────────► nothing
+       ├─ Shinsa's own post, or one that mentions @Shinsa ─► nothing
+       └─ the message, signed, to each watching machine
+              ──► t-<id>.shinsa.dev /api/slack/messages
+                    └─ each enabled schedule on the channel
+                       ├─ over 60 a minute ──► one failed run
+                       └─ schedule.deliver ──► a new task, or a
+                                               message to its task
+engine ──its watched channels, on every change──►
+         app.shinsa.dev /__remote/slack/watches
 ```
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
@@ -4642,6 +4681,24 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   `https://app.slack.com/client/<team>/<channel>/thread/<channel>-<ts>` when Slack gave none (`resolveSlackThreadUrl`);
   a read-only shared page leaves it out. The hosted dashboard on
   app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
+- **A watched channel's messages run automations** (Schedules and webhooks → Slack channel triggers, above). The
+  engine tells app.shinsa.dev which channels its enabled Slack triggers name (`listSlackChannelWatches`, at most
+  100, `POST /__remote/slack/watches`, which replaces the machine's whole list and keeps only workspaces linked to
+  it): once when remote access starts, after every state change that alters the list, and again after it lists the
+  channels. app.shinsa.dev keeps them as rows of workspace, channel and machine (`slack_channel_watches`), never
+  a message: they go with the workspace or the machine, and unlinking Slack empties them. The app subscribes to
+  `message.channels` and `message.groups`. An event with a subtype it does not read (an edit, a deletion, a
+  join), a reply in a thread, Shinsa's own post and a message that mentions @Shinsa (already a mention) are
+  dropped, and so is everything in a channel no machine watches, before any Slack call. For the rest the Worker
+  takes the machines watching that channel that are online and name `slack-channel-triggers`, so an older engine
+  is never sent one, reads the author's name, the channel's name and the message's permalink with the bot token,
+  and forwards a `SlackChannelMessage` (the event id, workspace, channel, `messageTs`, author, `bot`, the text
+  with Slack's markup made readable, at most 12,000 characters, the permalink and the channel name) to `POST
+  /api/slack/messages` on each, signed as a mention is. A bot's message counts, so an alert posted by an
+  integration runs the automation. A machine that refuses one is logged as `[Cloud] A machine refused a Slack
+  channel message`, and a failure on the way as `[Cloud] A Slack channel message could not be forwarded`, the
+  lines a watch on the Worker counts. The message text passes through app.shinsa.dev in the clear, as a
+  mention's thread does, and is stored nowhere there.
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped

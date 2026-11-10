@@ -62,9 +62,24 @@ export const AUTOMATION_TYPE_LOOK: Record<AutomationType, { icon: IconName; tone
   Trigger: { icon: 'IconGlobe', tone: 'orange', hint: 'Starts a task when its webhook is called' },
 };
 
+const SLACK_TRIGGER_LOOK: (typeof AUTOMATION_TYPE_LOOK)[AutomationType] = {
+  icon: 'IconSlack',
+  tone: 'orange',
+  hint: 'Starts or messages a task for each new message in its Slack channel',
+};
+
 export function resolveAutomationType(schedule: Schedule): AutomationType {
   if (schedule.source) return 'Watch';
-  return schedule.trigger.kind === 'webhook' ? 'Trigger' : 'Schedule';
+  return schedule.trigger.kind === 'webhook' || schedule.trigger.kind === 'slack' ? 'Trigger' : 'Schedule';
+}
+
+export function resolveAutomationLook(schedule: Schedule) {
+  if (schedule.trigger.kind === 'slack' && !schedule.source) return SLACK_TRIGGER_LOOK;
+  return AUTOMATION_TYPE_LOOK[resolveAutomationType(schedule)];
+}
+
+export function describeScheduleWhere(schedule: Schedule) {
+  return schedule.trigger.kind === 'slack' ? `${schedule.trigger.teamName} on Slack` : null;
 }
 
 export function describeScheduleSummary(state: ShinsaState, schedule: Schedule) {

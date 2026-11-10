@@ -329,6 +329,18 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   (`agents.sessions.setStatus`, best effort: `applied: false`, not logged, for `not_authorized` from an app not on
   Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` (each with the GitHub account that linked it, `accountId`) and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
+- **A watched channel's messages go to its machines** (`docs/engine.md` → Slack, Schedules and webhooks). An engine
+  lists the channels the bot is in for its linked workspaces (`GET /__remote/slack/channels`,
+  `users.conversations`) and replaces the channels it watches (`POST /__remote/slack/watches`,
+  `SlackStore.replaceMachineWatches`, only workspaces linked to it); the rows (`slack_channel_watches`,
+  `migrations/0003_slack_channel_watches.sql`: workspace, channel, machine) go with their workspace or machine,
+  and unlinking empties them. A `message` event (`message.channels`, `message.groups`, `MessageEnvelope`) that is
+  a new top-level message, not Shinsa's own and not a mention of it, is forwarded signed to `POST
+  /api/slack/messages` on every watching machine that is online and names `slack-channel-triggers`
+  (`handleChannelMessage`); a channel nobody watches costs one D1 read and no Slack call. No message text is
+  stored. A failure after the acknowledgement is logged as `[Cloud] A Slack channel message could not be
+  forwarded` with its `teamId` and `eventId`, and a machine's refusal as `[Cloud] A machine refused a Slack
+  channel message`.
 - **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
   cookie (`PageSession`; a bearer that does not open a session is refused, never retried as the cookie). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the
   Worker's own origin, unless it carries a bearer token (`PageSession`'s cookie half, `assertPageRequest`): a forged cross-site
@@ -401,7 +413,7 @@ model. The Worker's part of it:
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json`, with public distribution on
+  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json` (a change to its events or scopes is made again in the app's settings on api.slack.com, which no deploy does), with public distribution on
   (Manage Distribution) so other workspaces can add it, and the secrets
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
