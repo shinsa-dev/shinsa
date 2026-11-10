@@ -87,7 +87,10 @@ export const seed = Effect.fn('Seed.run')(function* () {
   ]);
   yield* writeSeedEvidence(DATA);
   const accountMove = join(transcripts, ACCOUNT_MOVE_TRANSCRIPT);
-  yield* writeSeedFile(accountMove, insertAccountNotices(yield* readSeedText(accountMove)));
+  yield* writeSeedFile(
+    accountMove,
+    yield* Effect.fromOption(insertAccountNotices(yield* readSeedText(accountMove))).pipe(Effect.orDie)
+  );
   const session = Bun.env.SHINSA_SEED_SESSION;
   if (session) {
     const converted = convertSessionTranscript(yield* readSeedText(session), runTimes);

@@ -1,6 +1,5 @@
 {
   "throw": {
-    "scripts/seed-media/shots.ts": 1,
     "scripts/seed/code/kit.ts": 4,
     "scripts/seed/code/transcripts.ts": 2,
     "scripts/seed/prompts.ts": 1,
@@ -10,15 +9,11 @@
   },
   "try-catch": {},
   "null-return": {},
-  "json-parse": {
-    "scripts/perf/bench/client.ts": 3,
-    "scripts/seed/tasks/triggers.ts": 1
-  },
+  "json-parse": {},
   "timer": {
     "packages/ui/src/components/preview-card.tsx": 3,
     "packages/ui/src/components/scroll-area.tsx": 1,
     "packages/ui/src/components/sonner.tsx": 1,
-    "packages/ui/src/components/tooltip.tsx": 2,
-    "scripts/sandbox/service.ts": 1
+    "packages/ui/src/components/tooltip.tsx": 2
   }
 }

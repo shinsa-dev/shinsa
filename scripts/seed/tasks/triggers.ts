@@ -11,6 +11,7 @@ import {
 } from '../../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../../kit/time.ts';
 import { NOW, type SeedTask } from '../kit.ts';
+import { insertNotices } from '../notices.ts';
 
 const OPS = { id: 'acct-ops', email: 'ops@superwall.dev' };
 
@@ -214,28 +215,7 @@ const MOVED_NOTICES: ChatNotice[] = [
 export const ACCOUNT_MOVE_TRANSCRIPT = 'task-account-move-run-1.jsonl';
 
 export function insertAccountNotices(transcript: string) {
-  const entries = transcript
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as { id: string; at: number });
-  const brief = entries[1] ?? entries[0];
-  const at = brief?.at ?? NOW;
-  const notices = MOVED_NOTICES.map((notice, index) => ({
-    ...(brief ?? {}),
-    id: `task-account-move-run-1-notice-${index}`,
-    at: at + index + 1,
-    type: 'notice',
-    notice,
-  }));
-  const context = {
-    ...(brief ?? {}),
-    id: 'task-account-move-run-1-context',
-    at: NOW - MINUTE,
-    type: 'notice',
-    notice: { kind: 'context', usedTokens: 132_000, maxTokens: 200_000, totalProcessedTokens: 910_000 },
-  };
-  const lines = [...entries.slice(0, 2), ...notices, ...entries.slice(2), context];
-  return `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`;
+  return insertNotices(transcript, MOVED_NOTICES, NOW);
 }
 
 export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Repo }): SeedTask[] {

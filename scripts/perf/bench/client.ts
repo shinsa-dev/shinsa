@@ -1,22 +1,32 @@
-import { Option } from 'effect';
+import { Option, Schema } from 'effect';
+import { ServerMessageText } from '../../../apps/web/src/lib/connection/engine-socket/schema.ts';
 import {
   applyStatePatch,
   type ShinsaState,
-  type StatePatch,
   serializeState,
   type WireState,
 } from '../../../packages/core/src/index.ts';
 import { summarize } from './stats.ts';
 
+const decodeMessage = Schema.decodeUnknownOption(ServerMessageText);
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
+
+function applyPush(state: Option.Option<WireState>, payload: string) {
+  const message = decodeMessage(payload);
+  if (Option.isNone(message)) return state;
+  if (message.value.type === 'state') return Option.some(message.value.state);
+  if (message.value.type !== 'state.patch') return state;
+  const { patch } = message.value;
+  return Option.flatMap(state, (current) => applyStatePatch(current, patch));
+}
+
 export function measurePushes(initial: string, payloads: readonly string[]) {
-  let state: WireState | null = (JSON.parse(initial) as { state: WireState }).state;
+  let state = applyPush(Option.none(), initial);
   const sample: number[] = [];
   for (const payload of payloads) {
     const started = performance.now();
-    const message = JSON.parse(payload) as { type: string; state?: WireState; patch?: StatePatch };
-    if (message.type === 'state' && message.state) state = message.state;
-    if (message.type === 'state.patch' && state && message.patch)
-      state = Option.getOrNull(applyStatePatch(state, message.patch));
+    state = applyPush(state, payload);
     sample.push(performance.now() - started);
   }
   return summarize(sample);
@@ -27,7 +37,7 @@ export function measureClientApply(state: ShinsaState) {
     const sample: number[] = [];
     for (let index = 0; index < 20; index += 1) {
       const started = performance.now();
-      JSON.parse(payload);
+      decodeJson(payload);
       sample.push(performance.now() - started);
     }
     return summarize(sample);
