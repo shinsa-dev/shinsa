@@ -35,6 +35,7 @@ import { isPageActive } from '@/lib/notifications/presence.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
 import { provideTransport } from '@/lib/runtime/socket/transport.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { useSharedTranscript } from '@/lib/share/transcripts.ts';
 import { createSignal } from '@/lib/signal.ts';
 import {
@@ -189,7 +190,7 @@ export const TRANSCRIPT_ENTRY_LIMIT = 10_000;
 
 function scheduleFrame(flush: () => void) {
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => flush());
-  setTimeout(flush, HIDDEN_FRAME_MS);
+  scheduleAfter(HIDDEN_FRAME_MS, flush);
 }
 
 function mergeTranscript(entries: ChatEntry[], chunk: TranscriptChunk): ChatEntry[] | null {

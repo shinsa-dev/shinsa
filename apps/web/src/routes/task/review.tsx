@@ -68,6 +68,7 @@ import {
   useSelectionRequest,
   useStopLit,
 } from '@/lib/review/selection.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { type ChecksView, resolveChecksView } from '@/lib/tasks/checks.ts';
 import { resolveMessageHint } from '@/lib/tasks/messages.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
@@ -112,16 +113,16 @@ function useHoldPointInView(
     void request;
     const find = () => viewport.current?.querySelector(`[data-review-item="${CSS.escape(selected)}"]`);
     let held = 0;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancel: (() => void) | null = null;
     const letGo = () => {
-      if (timer) clearTimeout(timer);
-      timer = null;
+      cancel?.();
+      cancel = null;
       selection.holding = false;
     };
     const hold = () => {
       find()?.scrollIntoView?.({ block: 'start' });
       held += HOLD_STEP_MS;
-      timer = setTimeout(held < HOLD_MS ? hold : letGo, HOLD_STEP_MS);
+      cancel = scheduleAfter(HOLD_STEP_MS, held < HOLD_MS ? hold : letGo);
     };
     selection.holding = true;
     hold();

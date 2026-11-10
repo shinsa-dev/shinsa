@@ -1,9 +1,6 @@
-import { Option } from 'effect';
+import { Option, Result, Schema } from 'effect';
 import { resolveVersionOrder } from '../packages/core/src/protocol/engine.ts';
-
-export type ReleaseChannel = 'stable' | 'beta' | 'canary';
-
-export type ReleaseBump = 'patch' | 'minor' | 'major';
+import { ReleaseBump, ReleaseChannel, ReleaseRefused } from './release/schema.ts';
 
 export interface ReleasePlan {
   channel: ReleaseChannel;
@@ -14,9 +11,9 @@ export interface ReleasePlan {
   notesStartTag: string | null;
 }
 
-const CHANNELS: readonly ReleaseChannel[] = ['stable', 'beta', 'canary'];
+const decodeChannel = Schema.decodeUnknownOption(ReleaseChannel);
 
-const BUMPS: readonly ReleaseBump[] = ['patch', 'minor', 'major'];
+const decodeBump = Schema.decodeUnknownOption(ReleaseBump);
 
 const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 
@@ -44,12 +41,21 @@ export type CanaryDecision =
   | { build: true; reason: 'first' | 'changed'; base: string | null; files: string[] }
   | { build: false; reason: 'unchanged'; base: string; files: string[] };
 
-export function parseReleaseOptions(channel: string | undefined, bump: string | undefined) {
-  const parsedChannel = CHANNELS.find((entry) => entry === channel);
-  const parsedBump = BUMPS.find((entry) => entry === bump);
-  if (!parsedChannel) throw new Error(`The channel must be stable, beta or canary, not "${channel ?? ''}".`);
-  if (!parsedBump) throw new Error(`The bump must be patch, minor or major, not "${bump ?? ''}".`);
-  return { channel: parsedChannel, bump: parsedBump };
+export function parseReleaseOptions(
+  channel: string | undefined,
+  bump: string | undefined
+): Result.Result<{ channel: ReleaseChannel; bump: ReleaseBump }, ReleaseRefused> {
+  return Result.all({
+    channel: Result.fromOption(
+      decodeChannel(channel),
+      () =>
+        new ReleaseRefused({ message: `The channel must be stable, beta or canary, not "${channel ?? ''}".` })
+    ),
+    bump: Result.fromOption(
+      decodeBump(bump),
+      () => new ReleaseRefused({ message: `The bump must be patch, minor or major, not "${bump ?? ''}".` })
+    ),
+  });
 }
 
 function selectNewest(tags: readonly string[], pattern: RegExp) {

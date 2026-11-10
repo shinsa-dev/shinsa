@@ -2,6 +2,7 @@ import type { ChatTodoStatus, ChatToolArgs } from '@shinsa/core';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import * as React from 'react';
 import { CodeLines, DetailBlock, HighlightedBlock, ShowMoreButton } from '@/components/chat/code-lines.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -48,7 +49,8 @@ function StructuredOutput({
 
 function OutputText({ text, failed, label }: { text: string; failed: boolean; label?: React.ReactNode }) {
   const structured = React.useMemo(() => formatStructured(text), [text]);
-  if (structured) return <StructuredOutput text={text} structured={structured} label={label} />;
+  if (Option.isSome(structured))
+    return <StructuredOutput text={text} structured={structured.value} label={label} />;
   return (
     <DetailBlock label={label} copy={text} corner={resolveCodeCorner(text)}>
       <CodeLines
