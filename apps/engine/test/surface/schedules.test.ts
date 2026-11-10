@@ -89,6 +89,15 @@ describe('writing a schedule', () => {
       channelName: 'alerts',
       threadUpdates: true,
     });
+    const quiet = await write(
+      [...words, '--slack-workspace', 'Acme', '--slack-updates=false'],
+      undefined,
+      channels
+    );
+    expect(quiet.command.trigger).toMatchObject({ teamId: 'T1', threadUpdates: false });
+    await expect(
+      write(['--message', 'x', '--new-task', '--every-minutes', '5', '--slack-updates=false'])
+    ).rejects.toThrow('slack_updates only goes with slack_channel');
     await expect(write(words, undefined, channels)).rejects.toThrow(
       '#alerts is in several Slack workspaces: Acme, Beta. Name the workspace too.'
     );

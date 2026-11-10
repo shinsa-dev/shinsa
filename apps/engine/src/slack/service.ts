@@ -7,6 +7,7 @@ import {
   parseSlackChannelMessage,
   parseSlackDecision,
   parseSlackEvaluation,
+  parseSlackFilter,
   parseSlackMention,
   resolveSlackConnectUrl,
   resolveSlackPostMessage,
@@ -21,6 +22,9 @@ import {
   SLACK_ENGINE_MESSAGES_PATH,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
+  SLACK_FILTER_SCHEMA,
+  SLACK_FILTER_SKIPPED,
+  SLACK_FILTER_SYSTEM,
   SLACK_FORWARD_HEADERS,
   SLACK_LIMITS,
   SLACK_NOT_CONNECTED,
@@ -39,6 +43,7 @@ import {
   serializeSlackChannelDelivery,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
+  serializeSlackFilterPrompt,
   serializeSlackNoAccess,
   verifySlackForwardSignature,
   type SlackLink,
@@ -261,6 +266,9 @@ export class Slack extends Context.Service<
               },
               `${id}:fail`
             );
+          const replayKey = resolveSlackMessageKey(message);
+          const now = yield* Clock.currentTimeMillis;
+          if ((schedule.replayKeys[replayKey] ?? 0) > now) return;
           const slot = yield* takeSlot(schedule.id);
           if (slot === 'skipped') return;
           if (slot === 'limited') return yield* fail(SLACK_MESSAGE_RATE_LIMITED);
@@ -271,13 +279,39 @@ export class Slack extends Context.Service<
           );
           const problem = resolvePromptProblem(prompt);
           if (problem) return yield* fail(problem);
+          const said = yield* quick.classify<unknown>(
+            SLACK_FILTER_SYSTEM,
+            serializeSlackFilterPrompt(schedule.text, message, randomBytes(FRAME_ID_BYTES).toString('hex')),
+            SLACK_FILTER_SCHEMA
+          );
+          if (Option.contains(parseSlackFilter(said), 'skip')) {
+            yield* dispatch(
+              {
+                type: 'schedule.skip',
+                scheduleId: schedule.id,
+                deliveryId: message.eventId,
+                detail: SLACK_FILTER_SKIPPED,
+                replayKey,
+              },
+              `${id}:skip`
+            );
+            return;
+          }
           yield* dispatch(
             {
               type: 'schedule.deliver',
               scheduleId: schedule.id,
               deliveryId: message.eventId,
               text: prompt,
-              replayKey: resolveSlackMessageKey(message),
+              replayKey,
+              slackMessage: {
+                teamId: message.teamId,
+                channelId: message.channelId,
+                messageTs: message.messageTs,
+                userId: message.userId,
+                permalink: message.permalink,
+                channelName: message.channelName,
+              },
             },
             id
           ).pipe(

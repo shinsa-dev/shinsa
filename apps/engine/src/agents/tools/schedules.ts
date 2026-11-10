@@ -49,7 +49,7 @@ export const SCHEDULE_TOOL_SPECS = {
       'Give exactly one of in_minutes, run_at, every_minutes, daily_at, webhook or slack_channel. Pass schedule_id to change or pause one; anything you leave out stays as it was, and a change that keeps the time keeps the next run.',
       'A run is skipped while the last one is still going, a machine that was asleep runs a missed schedule once when it wakes, and daily times follow the wall clock of time_zone.',
       'For a webhook, message is a template: {{body.path}}, {{headers.name}}, {{query.name}} and {{request}} are filled in from each request and marked as untrusted data. The reply gives the URL to hand to the sender.',
-      'For slack_channel, each new top-level message in the channel runs it once, with the author, the channel, a link and the text added to message as untrusted data. Slack must be connected and @Shinsa invited to the channel.',
+      'For slack_channel, each new top-level message in the channel that message applies to runs it once (say in message which messages to act on, such as only bugs; the rest are skipped), with the author, the channel, a link and the text added to message as untrusted data. Slack must be connected and @Shinsa invited to the channel.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -141,6 +141,11 @@ export const SCHEDULE_TOOL_SPECS = {
           type: 'string',
           maxLength: L.reference,
           description: 'With slack_channel: the Slack workspace, when several have a channel by that name.',
+        },
+        slack_updates: {
+          type: 'boolean',
+          description:
+            'With slack_channel: false files tasks without posting in Slack. Left out or true, a task it files gets Shinsa’s reaction on the message and its status card, result and “Merged” in the message’s thread.',
         },
         enabled: { type: 'boolean', description: 'false pauses it, true resumes it.' },
         max_runs: {

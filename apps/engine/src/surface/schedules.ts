@@ -83,6 +83,7 @@ const resolveTrigger = Effect.fn('Surface.scheduleTrigger')(function* (
     webhook: resolveWebhookInput(values),
     slack_channel: values.slackChannel,
     slack_workspace: values.slackWorkspace,
+    slack_updates: typeof values.slackUpdates === 'boolean' ? values.slackUpdates : undefined,
   };
   const result = validateScheduleRequest(input, now);
   if (!result.ok)
@@ -243,6 +244,12 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
         name: 'slackWorkspace',
         kind: 'text',
         description: 'With --slack-channel: the Slack workspace, when the channel is in several.',
+      },
+      {
+        name: 'slackUpdates',
+        kind: 'boolean',
+        description:
+          'With --slack-channel: false files tasks without posting in Slack. Otherwise a filed task gets its status in the message’s thread.',
       },
       { name: 'newTask', kind: 'boolean', description: 'Start a new task on each run.' },
       { name: 'repo', kind: 'text', description: 'With --new-task: the repository (name or id).' },
