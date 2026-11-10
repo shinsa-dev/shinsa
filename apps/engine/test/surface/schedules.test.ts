@@ -95,6 +95,38 @@ describe('writing a schedule', () => {
       channels
     );
     expect(quiet.command.trigger).toMatchObject({ teamId: 'T1', threadUpdates: false });
+    const negated = await write(
+      [...words, '--slack-workspace', 'Acme', '--no-slack-updates'],
+      undefined,
+      channels
+    );
+    expect(negated.command.trigger).toMatchObject({ teamId: 'T1', threadUpdates: false });
+    const stored = {
+      ...channels,
+      '/api/schedules': {
+        schedules: [
+          schedule({
+            trigger: {
+              kind: 'slack',
+              teamId: 'T1',
+              teamName: 'Acme',
+              channelId: 'C1',
+              channelName: 'alerts',
+              threadUpdates: false,
+            },
+          }),
+        ],
+      },
+    };
+    const renamed = [...words, '--slack-workspace', 'Acme', '--id', 'sch-1'];
+    expect((await write(renamed, undefined, stored)).command.trigger).toMatchObject({ threadUpdates: false });
+    expect((await write([...renamed, '--slack-updates'], undefined, stored)).command.trigger).toMatchObject({
+      threadUpdates: true,
+    });
+    expect(
+      (await write([...words, '--slack-workspace', 'Acme', '--id', 'sch-404'], undefined, stored)).command
+        .trigger
+    ).toMatchObject({ threadUpdates: true });
     await expect(
       write(['--message', 'x', '--new-task', '--every-minutes', '5', '--slack-updates=false'])
     ).rejects.toThrow('slack_updates only goes with slack_channel');

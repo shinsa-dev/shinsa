@@ -1,6 +1,7 @@
 import {
   describeScheduleTarget,
   describeScheduleTrigger,
+  type ScheduleTrigger,
   listOpenWatchSuggestions,
   listProjectRepos,
   listSchedules,
@@ -178,12 +179,14 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
         });
 
         const resolveTrigger = Effect.fn('ScheduleTools.resolveTrigger')(function* (
-          request: ScheduleRequest
+          request: ScheduleRequest,
+          stored: ScheduleTrigger | null
         ) {
           if (request.slackChannel === null) return request.trigger;
           const { trigger, problem } = resolveSlackChannelTrigger(
             yield* options.slackChannels,
-            request.slackChannel
+            request.slackChannel,
+            stored
           );
           return trigger ?? (yield* refuse(problem));
         });
@@ -207,7 +210,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
             scheduleId: request.scheduleId,
             name: request.name,
             text: request.text,
-            trigger: yield* resolveTrigger(request),
+            trigger: yield* resolveTrigger(request, existing?.trigger ?? null),
             target: yield* resolveTarget(before, task, request),
             source: request.source,
             enabled: request.enabled,

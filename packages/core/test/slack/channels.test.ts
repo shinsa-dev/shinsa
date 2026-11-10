@@ -31,38 +31,66 @@ describe('naming a Slack channel for an automation', () => {
       threadUpdates: true,
     };
     expect(
-      resolveSlackChannelTrigger([FEEDBACK, ALERTS], { channel: 'Alerts', workspace: null, updates: null })
+      resolveSlackChannelTrigger(
+        [FEEDBACK, ALERTS],
+        { channel: 'Alerts', workspace: null, updates: null },
+        null
+      )
     ).toEqual({
       trigger,
       problem: null,
     });
     expect(
-      resolveSlackChannelTrigger([FEEDBACK, ALERTS], { channel: 'c1', workspace: null, updates: null })
+      resolveSlackChannelTrigger([FEEDBACK, ALERTS], { channel: 'c1', workspace: null, updates: null }, null)
         .trigger
     ).toEqual(trigger);
   });
 
   test('posts updates in the thread unless the automation turns them off', () => {
     const choice = { channel: 'alerts', workspace: null };
-    expect(resolveSlackChannelTrigger([ALERTS], { ...choice, updates: false }).trigger).toMatchObject({
+    expect(resolveSlackChannelTrigger([ALERTS], { ...choice, updates: false }, null).trigger).toMatchObject({
       threadUpdates: false,
     });
-    expect(resolveSlackChannelTrigger([ALERTS], { ...choice, updates: true }).trigger).toMatchObject({
+    expect(resolveSlackChannelTrigger([ALERTS], { ...choice, updates: true }, null).trigger).toMatchObject({
       threadUpdates: true,
     });
   });
 
+  test('naming the channel again without the option keeps what the automation had', () => {
+    const choice = { channel: 'alerts', workspace: null, updates: null };
+    const quiet = {
+      kind: 'slack',
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+      threadUpdates: false,
+    } as const;
+    expect(resolveSlackChannelTrigger([ALERTS], choice, quiet).trigger).toMatchObject({
+      threadUpdates: false,
+    });
+    expect(resolveSlackChannelTrigger([ALERTS], { ...choice, updates: true }, quiet).trigger).toMatchObject({
+      threadUpdates: true,
+    });
+    expect(
+      resolveSlackChannelTrigger([ALERTS], choice, { kind: 'interval', everyMinutes: 5 }).trigger
+    ).toMatchObject({ threadUpdates: true });
+  });
+
   test('asks for the workspace when two have the channel, by name or id', () => {
     const both = [ALERTS, OTHER_ALERTS];
-    expect(resolveSlackChannelTrigger(both, { channel: 'alerts', workspace: null, updates: null })).toEqual({
+    expect(
+      resolveSlackChannelTrigger(both, { channel: 'alerts', workspace: null, updates: null }, null)
+    ).toEqual({
       trigger: null,
       problem: '#alerts is in several Slack workspaces: Acme, Beta Labs. Name the workspace too.',
     });
     expect(
-      resolveSlackChannelTrigger(both, { channel: 'alerts', workspace: 'beta labs', updates: null }).trigger
+      resolveSlackChannelTrigger(both, { channel: 'alerts', workspace: 'beta labs', updates: null }, null)
+        .trigger
     ).toMatchObject({ teamId: 'T2', channelId: 'C9' });
     expect(
-      resolveSlackChannelTrigger(both, { channel: 'alerts', workspace: 't1', updates: null }).trigger
+      resolveSlackChannelTrigger(both, { channel: 'alerts', workspace: 't1', updates: null }, null).trigger
     ).toMatchObject({
       teamId: 'T1',
     });
@@ -70,19 +98,23 @@ describe('naming a Slack channel for an automation', () => {
 
   test('says to invite the bot when it is not in the channel', () => {
     expect(
-      resolveSlackChannelTrigger([ALERTS], { channel: 'deploys', workspace: null, updates: null }).problem
+      resolveSlackChannelTrigger([ALERTS], { channel: 'deploys', workspace: null, updates: null }, null)
+        .problem
     ).toBe(
       'Shinsa is not in #deploys. Invite @Shinsa to the channel in Slack, then set the automation again.'
     );
     expect(
-      resolveSlackChannelTrigger([ALERTS], { channel: 'alerts', workspace: 'Gamma', updates: null }).problem
+      resolveSlackChannelTrigger([ALERTS], { channel: 'alerts', workspace: 'Gamma', updates: null }, null)
+        .problem
     ).toBe(
       'Shinsa is not in #alerts in Gamma. Invite @Shinsa to the channel in Slack, then set the automation again.'
     );
   });
 
   test('says to connect Slack or invite the bot when it is in no channel at all', () => {
-    expect(resolveSlackChannelTrigger([], { channel: 'alerts', workspace: null, updates: null })).toEqual({
+    expect(
+      resolveSlackChannelTrigger([], { channel: 'alerts', workspace: null, updates: null }, null)
+    ).toEqual({
       trigger: null,
       problem:
         'Shinsa is in no channel of a Slack workspace connected to this machine. Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa to #alerts in Slack, then set the automation again.',

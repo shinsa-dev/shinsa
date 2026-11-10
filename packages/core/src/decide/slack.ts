@@ -67,7 +67,20 @@ export function startSlackTask(decider: Decider, command: CommandOf<'slack.start
   linkSlackThread(decider, taskId, thread, mention, SLACK_REACTIONS.sizing);
 }
 
-export function linkSlackThread(
+export function linkSlackMessageThread(
+  decider: Decider,
+  taskId: string,
+  message: Pick<
+    SlackMessageRef,
+    'teamId' | 'channelId' | 'userId' | 'messageTs' | 'permalink' | 'channelName'
+  >
+) {
+  const thread = { teamId: message.teamId, channelId: message.channelId, threadTs: message.messageTs };
+  if (selectThreadTask(decider, thread)) return;
+  linkSlackThread(decider, taskId, thread, message, null);
+}
+
+function linkSlackThread(
   decider: Decider,
   taskId: string,
   thread: SlackThreadRef,

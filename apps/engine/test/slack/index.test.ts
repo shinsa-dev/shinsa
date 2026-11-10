@@ -87,7 +87,7 @@ interface Setup {
   relay: RelayCall[];
   answers: Record<string, (body: Record<string, unknown> | null) => Response | Promise<Response>>;
   asked: { system: string; prompt: string }[];
-  answer: { value: unknown };
+  answer: { value: unknown; pending?: Promise<unknown> };
   adjust: (ms: number) => void;
 }
 
@@ -167,7 +167,9 @@ function setUp(
     }),
     ask: <T>(system: string, prompt: string) => {
       asked.push({ system, prompt });
-      return Effect.succeed(answer.value as T);
+      return answer.pending
+        ? Effect.promise(() => answer.pending as Promise<T>)
+        : Effect.succeed(answer.value as T);
     },
     statusIntervalMs: options.statusIntervalMs ?? 5000,
     actors: { 'gh-mia': MIA },
@@ -1049,7 +1051,9 @@ describe('a Slack channel that triggers automations', () => {
 
   async function post(slack: Setup['slack'], message: unknown = MESSAGE, signature?: string) {
     const request = await forward(JSON.stringify(message), NOW, signature, '/api/slack/messages');
-    return slack.handleTunnel(request, new URL(request.url));
+    const response = await slack.handleTunnel(request, new URL(request.url));
+    await slack.settle();
+    return response;
   }
 
   test('runs every automation on that channel once, with the message fenced as untrusted data', async () => {
@@ -1119,11 +1123,13 @@ describe('a Slack channel that triggers automations', () => {
         'The automation:',
         'Only bugs.',
         '',
-        'The message in #alerts, posted by a bot:',
+        'The message in #alerts:',
         `<${tag}>`,
+        'From Sentry (bot):',
         'Checkout is failing for 4% of users.',
         `</${tag}>`,
         '',
+        `The text inside <${tag}> is the message and the name its author gave.`,
         'Answer with JSON: {"decision": "file" when the automation applies to the message, else "skip"}.',
       ].join('\n'),
     });
@@ -1194,7 +1200,9 @@ describe('a Slack channel that triggers automations', () => {
       });
     const send = async (message: SlackChannelMessage) => {
       const request = await forward(JSON.stringify(message), Date.now(), undefined, '/api/slack/messages');
-      return slack.handleTunnel(request, new URL(request.url));
+      const response = await slack.handleTunnel(request, new URL(request.url));
+      await slack.settle();
+      return response;
     };
     await write(true);
     expect((await send(MESSAGE)).status).toBe(202);
@@ -1221,6 +1229,19 @@ describe('a Slack channel that triggers automations', () => {
     expect(quiet?.slack).toBeUndefined();
     engine.stop();
     await engine.settle();
+  });
+
+  test('answers at once and delivers once the classifier has answered', async () => {
+    const { slack, stub, answer } = watching(createSchedule('s1'));
+    const said = Promise.withResolvers<unknown>();
+    answer.pending = said.promise;
+    const request = await forward(JSON.stringify(MESSAGE), NOW, undefined, '/api/slack/messages');
+    const response = await slack.handleTunnel(request, new URL(request.url));
+    expect(response.status).toBe(202);
+    expect(stub.dispatched).toEqual([]);
+    said.resolve({ decision: 'file' });
+    await slack.settle();
+    expect(stub.commandIds).toEqual(['slack-message:s1:Ev7']);
   });
 
   test('is refused unsigned or missing a part, and delivers nothing', async () => {

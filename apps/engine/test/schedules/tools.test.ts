@@ -159,6 +159,10 @@ describe('set_schedule', () => {
     expect(only(world).trigger).toEqual(schedule.trigger);
     await tool('set_schedule', { schedule_id: schedule.id, slack_channel: '#alerts', slack_updates: false });
     expect(only(world).trigger).toMatchObject({ kind: 'slack', channelId: 'C1', threadUpdates: false });
+    await tool('set_schedule', { schedule_id: schedule.id, slack_channel: '#alerts' });
+    expect(only(world).trigger).toMatchObject({ kind: 'slack', channelId: 'C1', threadUpdates: false });
+    await tool('set_schedule', { schedule_id: schedule.id, slack_channel: '#alerts', slack_updates: true });
+    expect(only(world).trigger).toMatchObject({ threadUpdates: true });
   });
 
   test('a Slack channel is refused while Slack is not connected', async () => {

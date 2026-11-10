@@ -33,7 +33,7 @@ import {
 import { assertNotWatchHome, messageTask } from './messages.ts';
 import { isReadBusy } from './reads.ts';
 import { findCurrentRun } from './runs.ts';
-import { linkSlackThread } from './slack.ts';
+import { linkSlackMessageThread } from './slack.ts';
 import { createTask } from './tasks.ts';
 import { findOpenWatchSuggestion, suggestWatch, type WatchSuggestionInput } from './watch-suggestions.ts';
 
@@ -649,14 +649,8 @@ function send(decider: Decider, schedule: Schedule, delivery: Delivery) {
       },
       { scheduleId: schedule.id }
     );
-    if (slackMessage && trigger.kind === 'slack' && trigger.threadUpdates) {
-      const thread = {
-        teamId: slackMessage.teamId,
-        channelId: slackMessage.channelId,
-        threadTs: slackMessage.messageTs,
-      };
-      linkSlackThread(decider, taskId, thread, slackMessage, null);
-    }
+    if (slackMessage && trigger.kind === 'slack' && trigger.threadUpdates)
+      linkSlackMessageThread(decider, taskId, slackMessage);
     return { taskId, runId: null };
   }
   if (schedule.source) {

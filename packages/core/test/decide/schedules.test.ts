@@ -719,6 +719,29 @@ describe('a Slack channel trigger', () => {
     ]);
   });
 
+  test('a second automation on the channel files its task without taking the thread from the first', () => {
+    const { harness, taskId, id } = watching();
+    schedule(harness, taskId, { target: newTaskTarget(), trigger: ALERTS, text: 'Triage it.' });
+    const other = Object.values(harness.state.schedules).find((entry) => entry.id !== id)?.id ?? '';
+    const send = (scheduleId: string) =>
+      harness.send({
+        type: 'schedule.deliver',
+        scheduleId,
+        deliveryId: 'd1',
+        text: 'Look into it.',
+        replayKey: null,
+        slackMessage: MESSAGE,
+      });
+    send(id);
+    const second = send(other);
+    const first = harness.state.schedules[id]?.lastTaskId ?? '';
+    const later = harness.state.schedules[other]?.lastTaskId ?? '';
+    expect(later).not.toBe(first);
+    expect(harness.task(first).slack?.threadTs).toBe('100.1');
+    expect(harness.task(later).slack).toBeUndefined();
+    expect(second.effects.some((effect) => effect.kind.startsWith('slack.'))).toBe(false);
+  });
+
   test('a mention in that thread messages the filed task instead of starting another', () => {
     const { harness, id } = watching();
     harness.send({

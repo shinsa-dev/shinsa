@@ -447,7 +447,8 @@ src/
 │                        /api/slack and POST /api/slack/disconnect); a watched channel's message
 │                        (handleMessages, POST /api/slack/messages) as schedule.deliver for each enabled schedule
 │                        on it, 60 a minute a schedule, after the classifier says its text applies (else
-│                        schedule.skip; no answer delivers), with the message's thread so a filed task is linked; channels, what the bot is in, for `slack_channel`; the
+│                        schedule.skip; no answer delivers), with the message's thread so a filed task is linked, answered 202 at
+│                        once with the deliveries on fibers `settle` waits for; channels, what the bot is in, for `slack_channel`; the
 │                        watched channels sent to app.shinsa.dev on start and on each change (start, stop); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)

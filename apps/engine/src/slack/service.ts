@@ -49,7 +49,19 @@ import {
   type SlackLink,
 } from '@shinsa/core';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
-import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Ref, Schema, Semaphore } from 'effect';
+import {
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  FiberSet,
+  Layer,
+  Option,
+  Redacted,
+  Ref,
+  Schema,
+  Semaphore,
+} from 'effect';
 import { QuickCalls } from '../agents/quick/service.ts';
 import { describeError } from '../log/redact.ts';
 import { RELAY_FAILED_CODE } from '../remote/client/schema.ts';
@@ -105,6 +117,7 @@ export class Slack extends Context.Service<
     readonly channels: Effect.Effect<readonly SlackChannel[], DomainError>;
     readonly start: Effect.Effect<void>;
     readonly stop: Effect.Effect<void>;
+    readonly settle: Effect.Effect<void>;
   }
 >()('shinsa/engine/slack/Slack') {
   static readonly layer = (input: SlackInput) =>
@@ -224,6 +237,7 @@ export class Slack extends Context.Service<
             })
           );
 
+        const deliveries = yield* FiberSet.make<void>();
         const runFork = Effect.runForkWith(yield* Effect.context<never>());
         yield* engine.observe(() => {
           runFork(Effect.when(syncWatches(false), Ref.get(active)));
@@ -336,9 +350,11 @@ export class Slack extends Context.Service<
             yield* Ref.set(watched, '');
             yield* syncWatches(false);
           }
-          yield* Effect.forEach(schedules, (schedule) => deliverMessage(schedule, message), {
-            discard: true,
-          });
+          yield* Effect.forEach(
+            schedules,
+            (schedule) => FiberSet.run(deliveries, deliverMessage(schedule, message)),
+            { discard: true }
+          );
           return Response.json({ ok: true, delivered: schedules.length }, { status: 202 });
         });
 
@@ -645,6 +661,7 @@ export class Slack extends Context.Service<
           channels,
           start,
           stop,
+          settle: FiberSet.awaitEmpty(deliveries),
           handleInteractions,
           handleTunnel,
           evaluate,

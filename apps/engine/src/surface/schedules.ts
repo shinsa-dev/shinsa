@@ -91,7 +91,10 @@ const resolveTrigger = Effect.fn('Surface.scheduleTrigger')(function* (
   const { slackChannel } = result.value;
   if (slackChannel === null) return result.value.trigger;
   const { channels } = yield* client.api.slack.channels();
-  const { trigger, problem } = resolveSlackChannelTrigger(channels, slackChannel);
+  const id = readValue(values, 'id');
+  const { schedules } = id ? yield* client.api.state.schedules() : { schedules: [] };
+  const stored = schedules.find((schedule) => schedule.id === id)?.trigger ?? null;
+  const { trigger, problem } = resolveSlackChannelTrigger(channels, slackChannel, stored);
   return trigger ?? (yield* new DomainError({ code: 'schedule_invalid', message: problem }));
 });
 

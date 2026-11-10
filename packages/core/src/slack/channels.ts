@@ -18,7 +18,8 @@ function isNamed(value: string, id: string, name: string) {
 
 export function resolveSlackChannelTrigger(
   channels: readonly SlackChannel[],
-  choice: SlackChannelRequest
+  choice: SlackChannelRequest,
+  stored: ScheduleTrigger | null
 ): SlackChannelResolution {
   if (channels.length === 0)
     return {
@@ -54,7 +55,7 @@ export function resolveSlackChannelTrigger(
       teamName: match.teamName.trim(),
       channelId: match.channelId,
       channelName: match.channelName.trim(),
-      threadUpdates: choice.updates ?? true,
+      threadUpdates: choice.updates ?? (stored?.kind === 'slack' ? stored.threadUpdates : true),
     },
     problem: null,
   };

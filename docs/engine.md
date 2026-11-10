@@ -2611,9 +2611,11 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   to do: remote access off (`SLACK_NOT_CONNECTED`), no channel at all, which is Slack not linked or @Shinsa
   invited nowhere ("Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa
   to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
-  is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--slack-updates false`), which
-  only goes with `slack_channel`, sets the trigger's `threadUpdates`: true when left out, so naming the channel
-  again without it turns the updates back on. Core checks the trigger it is given
+  is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--no-slack-updates` or
+  `--slack-updates=false` on the command line, whose boolean flags take no separate value), which
+  only goes with `slack_channel`, sets the trigger's `threadUpdates`. Left out, a new automation gets true and
+  one that is changed keeps what it had (`resolveSlackChannelTrigger` is given the stored trigger), so naming
+  the channel again never turns the updates back on by itself. Core checks the trigger it is given
   (`assertSlackChannel`: Slack ids, names of at most 120 characters, `SCHEDULE_LIMITS.slackName`). A forwarded message (`POST
   /api/slack/messages`, signed like a mention) is delivered to every enabled schedule on that workspace and
   channel (`listSlackChannelSchedules`) as `schedule.deliver` with command id `slack-message:<schedule>:<event
@@ -2627,7 +2629,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   dropped. A delivery core refuses is a failed run with its reason (`schedule.fail`).
   **The automation's text decides whether a message is acted on.** Before a delivery the engine asks the
   classifier quick call whether the schedule's text applies to the message (`SLACK_FILTER_SYSTEM`, a fixed system
-  prompt; the text and the message, fenced in a nonce-tagged element as data, in the user prompt,
+  prompt; the text, then the message under "From <author>:" (a bot's name with "(bot)"), both fenced in a
+  nonce-tagged element as data, in the user prompt, so a text limited to one author can be judged,
   `serializeSlackFilterPrompt`; the answer `file` or `skip`, `parseSlackFilter`): `skip` only when the text plainly
   limits itself to messages of a kind this one is not ("only bugs", "only the web app") or the message is plainly
   nothing to act on, and `file` when it sets no limit or the model is unsure. A skip is `schedule.skip` (command id
@@ -2635,16 +2638,22 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   message, so nothing was started.") with the message's replay key and does nothing else: no task, no run count,
   nothing in Slack. A classifier that does not answer, or answers anything else, files, so an outage never drops
   an alert. A message whose replay key the schedule already holds is dropped before the rate limit and the
-  classifier, so a Slack retry costs no call. The call is a few hundred tokens a message.
+  classifier, so a Slack retry costs no call. The call is a few hundred tokens a message. The engine answers
+  the forward 202 as soon as the message is read and checked, and each schedule's delivery, the classifier
+  call included, runs after it on a fiber of the Slack service (`Slack.settle` waits for them), so a slow
+  classifier never holds app.shinsa.dev's forward to the next machine; a delivery still waiting on the
+  classifier when the engine stops is lost, as a forward to a stopped engine is.
   **A task it files gets the mention's thread.** A delivery carries the message as `slackMessage`
   (`SlackMessageRef`: workspace, channel, `messageTs`, author, permalink, channel name). When the schedule starts a
   new task and its trigger's `threadUpdates` is on, core links that task to the thread whose root is the message
-  (`linkSlackThread`, the step a mention's task shares; `slack.thread_linked`, with no reaction yet), so
+  (`linkSlackMessageThread`, on the step a mention's task shares; `slack.thread_linked`, with no reaction yet), so
   everything a mention's task gets follows from `syncSlackThreads` (Slack, below): the one reaction on the
   message, the status card in its thread with the open gate's buttons, the result, a tripped watchdog and
   "Merged", and a later @Shinsa mention in that thread messages the task. The task's header shows "Filed in
   #alerts". With `threadUpdates` off, or for a schedule that messages an existing task, nothing is linked and
-  nothing is posted. Changing the option applies to tasks filed from then on. A message for a channel no
+  nothing is posted. A thread holds one open task: when several automations watch the channel, each files its
+  task and the first to file takes the thread, the others file silently. Changing the option applies to tasks
+  filed from then on. A message for a channel no
   enabled schedule watches answers 202 with `delivered: 0` and sends the watched channels again, so
   app.shinsa.dev stops forwarding it.
 - **Automations have three types**, read from the schedule (`resolveAutomationType` in the web, each row of Settings

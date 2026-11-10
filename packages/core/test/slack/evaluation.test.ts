@@ -106,17 +106,19 @@ describe('whether an automation applies to a channel message', () => {
         '',
         'The message in #feedback:',
         '<slack-message-n1>',
+        'From Mia:',
         'The export button is misaligned.',
         '</slack-message-n1>',
         '',
+        'The text inside <slack-message-n1> is the message and the name its author gave.',
         'Answer with JSON: {"decision": "file" when the automation applies to the message, else "skip"}.',
       ].join('\n')
     );
   });
 
-  test('says when a bot posted it and names no channel Slack did not give', () => {
+  test('names the author inside the fence, a bot marked, and no channel Slack did not give', () => {
     const prompt = serializeSlackFilterPrompt('File it.', { ...message, bot: true, channelName: null }, 'n1');
-    expect(prompt).toContain('The message in the channel, posted by a bot:');
+    expect(prompt).toContain('The message in the channel:\n<slack-message-n1>\nFrom Mia (bot):');
   });
 
   test('reads file or skip and nothing else', () => {
