@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { describePhaseProgress, resolveInitiativeSheet } from '@shinsa/core';
+import { Option } from 'effect';
 import { listInitiativeActivity, listInitiativeTaskSections } from '@/lib/initiatives/view.ts';
 import { createGate, createInitiative, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
@@ -49,7 +50,7 @@ function createSplitState() {
 
 describe('the sheet', () => {
   const state = createSplitState();
-  const sheet = resolveInitiativeSheet(state, 'split', NOW);
+  const sheet = Option.getOrNull(resolveInitiativeSheet(state, 'split', NOW));
   if (!sheet) throw new Error('No sheet');
 
   it('says how far each phase is, and when one is done', () => {
@@ -90,7 +91,7 @@ describe('the sheet', () => {
         createTask({ id: 'later', stage: 'waiting_on_tasks', initiativeId: 'flat' }),
       ],
     });
-    const flatSheet = resolveInitiativeSheet(flat, 'flat', NOW);
+    const flatSheet = Option.getOrNull(resolveInitiativeSheet(flat, 'flat', NOW));
     if (!flatSheet) throw new Error('No sheet');
     expect(listInitiativeTaskSections(flat, flatSheet).map((section) => section.group.title)).toEqual([
       'In progress',

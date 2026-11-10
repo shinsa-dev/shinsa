@@ -11,6 +11,7 @@ import {
   serializeNames,
   type ShinsaState,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { resolveEndOfDay } from '@/lib/format/time.ts';
 import { selectProject } from '@/lib/projects.ts';
 
@@ -57,7 +58,7 @@ export function resolveFocusLabel(state: ShinsaState, selection: FocusProjects) 
 }
 
 export function describeStatsScope(label: string, selection: FocusProjects) {
-  return selectSingleFocusProject(selection) === null
+  return Option.isNone(selectSingleFocusProject(selection))
     ? `Only what is in focus: ${label}`
     : `Only ${label}, the project in focus`;
 }
@@ -71,7 +72,7 @@ export function toggleFocusProject(selection: FocusProjects, projectId: string):
 
 export function resolveFocusTarget(selection: FocusProjects, teamId: string | null = null): FocusTarget {
   if (teamId !== null) return { projectId: null, teamId };
-  const single = selectSingleFocusProject(selection);
+  const single = Option.getOrNull(selectSingleFocusProject(selection));
   if (single !== null || selection.projectIds.length === 0) return { projectId: single, teamId: null };
   return { projectId: null, projectIds: selection.projectIds, except: selection.except, teamId: null };
 }
@@ -93,7 +94,7 @@ export function selectFocusTeam(
   teams: readonly FocusTeam[],
   now = Date.now()
 ): FocusTeam | null {
-  const teamId = resolveFocusTeam(state, now);
+  const teamId = Option.getOrNull(resolveFocusTeam(state, now));
   if (teamId === null) return null;
   return teams.find((team) => team.id === teamId) ?? { id: teamId, name: UNNAMED_TEAM };
 }
@@ -103,6 +104,6 @@ export function resolveFocusUntil(keep: 'hours' | 'tonight', now = Date.now()) {
 }
 
 export function selectFocusInitiative(state: ShinsaState, now = Date.now()) {
-  const initiativeId = resolveFocusInitiative(state, now);
+  const initiativeId = Option.getOrNull(resolveFocusInitiative(state, now));
   return initiativeId === null ? null : (state.initiatives[initiativeId] ?? null);
 }

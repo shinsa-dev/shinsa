@@ -53,7 +53,7 @@ export class TeamSocket extends Context.Service<
       const taskGone = end(TEAM_TASK_GONE, true);
 
       const readMessage = (text: string, onMessage: (message: ShareContent) => void) => {
-        const message = parseShareMessage(text);
+        const message = Option.getOrNull(parseShareMessage(text));
         if (!message) return end(UNREADABLE_MESSAGE);
         if (message.t === 'closed') return end(message.reason, true);
         return Effect.sync(() => onMessage(message));
@@ -94,7 +94,7 @@ export class TeamSocket extends Context.Service<
           let openFrame: ((frame: Bytes) => Effect.Effect<Bytes, FrameError>) | null = null;
 
           const readWelcome = Effect.fn('TeamSocket.readWelcome')(function* (text: string) {
-            const welcome = parseShareWelcome(text);
+            const welcome = Option.getOrNull(parseShareWelcome(text));
             if (welcome?.type === 'refused') return yield* end(welcome.reason, true);
             if (welcome?.type !== 'welcome' || openFrame) return yield* offline;
             const keys = {

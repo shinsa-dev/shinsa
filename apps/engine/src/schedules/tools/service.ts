@@ -12,9 +12,9 @@ import {
   validateReportFiling,
   validateScheduleRequest,
 } from '@shinsa/core';
-import { Clock, Context, DateTime, Effect, Layer } from 'effect';
-import { assertProtocol, readString } from '../../agents/handover.ts';
-import { findForkSource } from '../../agents/tools/forks.ts';
+import { Clock, Context, DateTime, Effect, Layer, type Result } from 'effect';
+import { readString, resolveHandOver } from '../../agents/handover.ts';
+import { resolveForkSource } from '../../agents/tools/forks.ts';
 import { describeError } from '../../log/redact.ts';
 import { SecretStore } from '../../secrets/index.ts';
 import { RECENT_RUNS, ScheduleTimeZone, WEBHOOK_ROUTE_PREFIX } from '../schema.ts';
@@ -37,8 +37,8 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
         const timeZone = yield* ScheduleTimeZone;
         const refuse = (message: string) => new ScheduleToolRefused({ message });
 
-        const attempt = <A>(step: () => A) =>
-          Effect.try({ try: step, catch: (error) => refuse(describeError(error)) });
+        const attempt = <A, E>(result: Result.Result<A, E>) =>
+          Effect.fromResult(result).pipe(Effect.mapError((error) => refuse(describeError(error))));
 
         const serializeTime = (at: number | null) =>
           at === null ? null : DateTime.formatIso(DateTime.makeUnsafe(at));
@@ -181,7 +181,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           run: ScheduleToolRun
         ) {
           const now = yield* Clock.currentTimeMillis;
-          const request = yield* attempt(() => assertProtocol(validateScheduleRequest(input, now)));
+          const request = yield* attempt(resolveHandOver(validateScheduleRequest(input, now)));
           const before = yield* run.state;
           const task = yield* findTaskOf(before, run.runId);
           if (request.trigger?.kind === 'webhook' && request.trigger.signature) {
@@ -272,11 +272,11 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           input: Record<string, unknown>,
           run: ScheduleToolRun
         ) {
-          const { forkFrom, repository, ...filing } = yield* attempt(() =>
-            assertProtocol(validateReportFiling(input))
+          const { forkFrom, repository, ...filing } = yield* attempt(
+            resolveHandOver(validateReportFiling(input))
           );
           const state = yield* run.state;
-          const forkOf = forkFrom === null ? null : yield* attempt(() => findForkSource(state, forkFrom));
+          const forkOf = forkFrom === null ? null : yield* attempt(resolveForkSource(state, forkFrom));
           const repoId =
             repository === null
               ? null

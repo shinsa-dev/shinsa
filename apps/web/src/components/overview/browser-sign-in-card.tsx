@@ -4,6 +4,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { toast } from '@shinsa/ui/components/sonner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { Option } from 'effect';
 import * as React from 'react';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { BrowserCopyDialog } from '@/components/settings/browser-copy-dialog.tsx';
@@ -102,7 +103,7 @@ export function BrowserSignInCard({
   onReply?: GateReplier;
 }) {
   const supported = useEngineFeature('browser');
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const local = supported && !isRemoteBuild() && projectId !== null;
   const source = useDefaultSource(actions, local);
   const [busy, setBusy] = React.useState<CardBusy>(null);

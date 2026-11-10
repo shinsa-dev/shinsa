@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -70,7 +71,7 @@ export function suggestWatch(decider: Decider, input: WatchSuggestionInput) {
 }
 
 export function isWatchSuggestible(decider: Decider, projectId: string, server: string) {
-  if (!selectProjectSource(decider, { projectId, server })) return false;
+  if (Option.isNone(selectProjectSource(decider, { projectId, server }))) return false;
   if (isWatched(decider, projectId, server) || wasSuggested(decider, projectId, server)) return false;
   return listOpenWatchSuggestions(decider.state).length < SCHEDULE_LIMITS.openSuggestions;
 }

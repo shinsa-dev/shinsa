@@ -7,6 +7,7 @@ import {
   type TerminalPlace,
   type TerminalPlaceKind,
 } from '@shinsa/core';
+import { Result } from 'effect';
 import { isInside } from '../files/paths.ts';
 import type { TerminalStart } from './schema.ts';
 
@@ -15,12 +16,19 @@ export function resolveTerminalStart(
   projectId: string,
   path: string,
   home: string
-): TerminalStart {
+): Result.Result<TerminalStart, DomainError> {
   const place = places.find((each) => each.path === path);
   const homePlace: TerminalPlaceKind | null = places.length === 0 && path === home ? 'folder' : null;
   if (!(place || homePlace))
-    throw new DomainError({ code: 'terminal_place_invalid', message: 'Pick one of the project’s folders.' });
-  return { projectId, cwd: path, place: place?.kind ?? 'folder', taskId: place?.taskId ?? null };
+    return Result.fail(
+      new DomainError({ code: 'terminal_place_invalid', message: 'Pick one of the project’s folders.' })
+    );
+  return Result.succeed({
+    projectId,
+    cwd: path,
+    place: place?.kind ?? 'folder',
+    taskId: place?.taskId ?? null,
+  });
 }
 
 export function resolveServicePlace(

@@ -1,4 +1,5 @@
 import { DomainError } from '@shinsa/core';
+import { Result, Schema } from 'effect';
 import { selectClosest } from '../terminal/index.ts';
 
 type FieldKind = 'text' | 'number' | 'integer' | 'boolean' | 'choice' | 'list' | 'json';
@@ -21,10 +22,12 @@ export interface ParsedArgs {
   idempotencyKey: string | null;
 }
 
-const GLOBAL_FLAGS = new Set(['--json', '--help', '-h']);
+const GLOBAL_FLAGS = new Set(['--json', '--help', '-h', '--idempotency-key']);
 
-function refuse(message: string): never {
-  throw new DomainError({ code: 'arguments_invalid', message });
+const decodeJsonText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown));
+
+function refuse(message: string): Result.Result<never, DomainError> {
+  return Result.fail(new DomainError({ code: 'arguments_invalid', message }));
 }
 
 export function serializeFlag(name: string) {
@@ -37,37 +40,38 @@ export function serializeToolKey(name: string) {
 
 function readNumber(field: FieldSpec, raw: string) {
   const value = Number(raw);
-  if (raw.trim() === '' || !Number.isFinite(value)) refuse(`${serializeFlag(field.name)} must be a number.`);
-  if (field.kind === 'integer' && !Number.isInteger(value)) {
-    refuse(`${serializeFlag(field.name)} must be a whole number.`);
-  }
-  return value;
+  if (raw.trim() === '' || !Number.isFinite(value))
+    return refuse(`${serializeFlag(field.name)} must be a number.`);
+  if (field.kind === 'integer' && !Number.isInteger(value))
+    return refuse(`${serializeFlag(field.name)} must be a whole number.`);
+  return Result.succeed(value);
 }
 
 function readBoolean(field: FieldSpec, raw: string) {
-  if (['true', 'yes', 'on', '1'].includes(raw)) return true;
-  if (['false', 'no', 'off', '0'].includes(raw)) return false;
+  if (['true', 'yes', 'on', '1'].includes(raw)) return Result.succeed(true);
+  if (['false', 'no', 'off', '0'].includes(raw)) return Result.succeed(false);
   return refuse(`${serializeFlag(field.name)} must be true or false.`);
 }
 
-function parseJsonField(field: FieldSpec, raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return refuse(`${serializeFlag(field.name)} must be JSON.`);
-  }
+function parseJsonField(field: FieldSpec, raw: string) {
+  return Result.mapError(
+    decodeJsonText(raw),
+    () =>
+      new DomainError({ code: 'arguments_invalid', message: `${serializeFlag(field.name)} must be JSON.` })
+  );
 }
 
 function readChoice(field: FieldSpec, raw: string) {
   const choices = field.choices ?? [];
-  if (!choices.includes(raw)) refuse(`${serializeFlag(field.name)} must be one of ${choices.join(', ')}.`);
-  return raw;
+  if (!choices.includes(raw))
+    return refuse(`${serializeFlag(field.name)} must be one of ${choices.join(', ')}.`);
+  return Result.succeed(raw);
 }
 
-export function readFieldText(field: FieldSpec, raw: string): unknown {
+export function readFieldText(field: FieldSpec, raw: string): Result.Result<unknown, DomainError> {
   switch (field.kind) {
     case 'text':
-      return raw;
+      return Result.succeed(raw);
     case 'number':
     case 'integer':
       return readNumber(field, raw);
@@ -76,22 +80,24 @@ export function readFieldText(field: FieldSpec, raw: string): unknown {
     case 'choice':
       return readChoice(field, raw);
     case 'list':
-      return raw
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
+      return Result.succeed(
+        raw
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      );
     case 'json':
       return parseJsonField(field, raw);
   }
 }
 
 function addValue(values: Values, field: FieldSpec, raw: string) {
-  const value = readFieldText(field, raw);
-  if (field.kind === 'list') {
-    values[field.name] = [...((values[field.name] as string[] | undefined) ?? []), ...(value as string[])];
-    return;
-  }
-  values[field.name] = value;
+  return Result.map(readFieldText(field, raw), (value) => {
+    values[field.name] =
+      field.kind === 'list'
+        ? [...((values[field.name] as string[] | undefined) ?? []), ...(value as string[])]
+        : value;
+  });
 }
 
 function selectFlagField(fields: FieldSpec[], flag: string) {
@@ -104,15 +110,15 @@ interface FlagRead {
   negated: boolean;
 }
 
-function readFlag(fields: FieldSpec[], arg: string): FlagRead {
+function readFlag(fields: FieldSpec[], arg: string): Result.Result<FlagRead, DomainError> {
   const [flag = '', inline = null] = arg.includes('=')
     ? [arg.slice(0, arg.indexOf('=')), arg.slice(arg.indexOf('=') + 1)]
     : [arg, null];
   const direct = selectFlagField(fields, flag);
-  if (direct) return { field: direct, raw: inline, negated: false };
+  if (direct) return Result.succeed({ field: direct, raw: inline, negated: false });
   const negated = flag.startsWith('--no-') ? selectFlagField(fields, `--${flag.slice(5)}`) : null;
-  if (negated?.kind === 'boolean' && inline !== null) refuse(`${flag} takes no value.`);
-  if (negated?.kind === 'boolean') return { field: negated, raw: null, negated: true };
+  if (negated?.kind === 'boolean' && inline !== null) return refuse(`${flag} takes no value.`);
+  if (negated?.kind === 'boolean') return Result.succeed({ field: negated, raw: null, negated: true });
   const flags = fields.filter((field) => !field.positional).map((field) => serializeFlag(field.name));
   const closest = flag.startsWith('--no-') ? null : selectClosest(flag, [...flags, '--json']);
   const hint = closest ? ` Did you mean ${closest}?` : '';
@@ -124,61 +130,79 @@ function describeArgument(field: FieldSpec) {
 }
 
 function assertRequired(fields: FieldSpec[], values: Values, describe: (field: FieldSpec) => string) {
-  for (const field of fields) {
-    if (field.required && values[field.name] === undefined) refuse(`${describe(field)} is required.`);
-  }
+  const missing = fields.find((field) => field.required && values[field.name] === undefined);
+  return missing ? refuse(`${describe(missing)} is required.`) : Result.void;
 }
 
 function readPositional(fields: FieldSpec[], words: string[], values: Values) {
-  for (const field of fields.filter((candidate) => candidate.positional)) {
-    if (words.length === 0) return;
-    if (field.positional === 'rest') {
-      const rest = words.splice(0);
-      values[field.name] = field.kind === 'list' ? rest : readFieldText(field, rest.join(' '));
-    } else {
-      addValue(values, field, words.shift() ?? '');
+  return Result.gen(function* () {
+    for (const field of fields.filter((candidate) => candidate.positional)) {
+      if (words.length === 0) return;
+      if (field.positional === 'rest') {
+        const rest = words.splice(0);
+        values[field.name] = field.kind === 'list' ? rest : yield* readFieldText(field, rest.join(' '));
+      } else {
+        yield* addValue(values, field, words.shift() ?? '');
+      }
     }
-  }
+  });
 }
 
-export function readArgv(fields: FieldSpec[], args: string[]): ParsedArgs {
-  const values: Values = {};
-  const words: string[] = [];
-  const parsed: ParsedArgs = { values, json: false, help: false, idempotencyKey: null };
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index] ?? '';
-    if (GLOBAL_FLAGS.has(arg)) {
-      if (arg === '--json') parsed.json = true;
-      else parsed.help = true;
-      continue;
-    }
-    if (arg === '--idempotency-key') {
-      parsed.idempotencyKey = args[index + 1] ?? refuse('--idempotency-key needs a value.');
-      index += 1;
-      continue;
-    }
-    if (arg === '--') {
-      words.push(...args.slice(index + 1));
-      break;
-    }
-    if (!arg.startsWith('--')) {
-      words.push(arg);
-      continue;
-    }
-    const { field, raw, negated } = readFlag(fields, arg);
+function readFlagArg(
+  fields: FieldSpec[],
+  args: string[],
+  index: number,
+  values: Values
+): Result.Result<number, DomainError> {
+  return Result.gen(function* () {
+    const { field, raw, negated } = yield* readFlag(fields, args[index] ?? '');
     if (field.kind === 'boolean' && raw === null) {
       values[field.name] = !negated;
-      continue;
+      return index;
     }
     const value = raw ?? args[index + 1];
-    if (value === undefined) refuse(`${serializeFlag(field.name)} needs a value.`);
-    if (raw === null) index += 1;
-    addValue(values, field, value);
-  }
-  readPositional(fields, words, values);
-  if (words.length > 0) refuse(`Unexpected ${words.join(' ')}. Add --help to see how to use it.`);
-  if (!parsed.help) assertRequired(fields, values, describeArgument);
-  return parsed;
+    if (value === undefined) return yield* refuse(`${serializeFlag(field.name)} needs a value.`);
+    yield* addValue(values, field, value);
+    return raw === null ? index + 1 : index;
+  });
+}
+
+function readGlobalArg(
+  parsed: ParsedArgs,
+  args: string[],
+  index: number
+): Result.Result<number, DomainError> {
+  const arg = args[index];
+  if (arg === '--json') parsed.json = true;
+  if (arg === '--help' || arg === '-h') parsed.help = true;
+  if (arg !== '--idempotency-key') return Result.succeed(index);
+  const key = args[index + 1];
+  if (key === undefined) return refuse('--idempotency-key needs a value.');
+  parsed.idempotencyKey = key;
+  return Result.succeed(index + 1);
+}
+
+export function readArgv(fields: FieldSpec[], args: string[]): Result.Result<ParsedArgs, DomainError> {
+  return Result.gen(function* () {
+    const values: Values = {};
+    const words: string[] = [];
+    const parsed: ParsedArgs = { values, json: false, help: false, idempotencyKey: null };
+    for (let index = 0; index < args.length; index += 1) {
+      const arg = args[index] ?? '';
+      if (arg === '--') {
+        words.push(...args.slice(index + 1));
+        break;
+      }
+      if (GLOBAL_FLAGS.has(arg)) index = yield* readGlobalArg(parsed, args, index);
+      else if (arg.startsWith('--')) index = yield* readFlagArg(fields, args, index, values);
+      else words.push(arg);
+    }
+    yield* readPositional(fields, words, values);
+    if (words.length > 0)
+      return yield* refuse(`Unexpected ${words.join(' ')}. Add --help to see how to use it.`);
+    if (!parsed.help) yield* assertRequired(fields, values, describeArgument);
+    return parsed;
+  });
 }
 
 function resolvePropertySchema(field: FieldSpec): Record<string, unknown> {
@@ -212,24 +236,28 @@ export function resolveInputSchema(fields: FieldSpec[]) {
   };
 }
 
-function readToolValue(field: FieldSpec, value: unknown): unknown {
+function readToolValue(field: FieldSpec, value: unknown): Result.Result<unknown, DomainError> {
   if (typeof value === 'string' && field.kind !== 'text' && field.kind !== 'choice') {
     return readFieldText(field, value);
   }
   if (field.kind === 'choice') return readChoice(field, String(value));
-  return value;
+  return Result.succeed(value);
 }
 
-export function readToolInput(fields: FieldSpec[], input: Record<string, unknown>): Values {
-  const values: Values = {};
-  const known = new Set(fields.map((field) => serializeToolKey(field.name)));
-  for (const key of Object.keys(input)) {
-    if (!known.has(key)) refuse(`Unknown field ${key}.`);
-  }
-  for (const field of fields) {
-    const value = input[serializeToolKey(field.name)];
-    if (value !== undefined && value !== null) values[field.name] = readToolValue(field, value);
-  }
-  assertRequired(fields, values, (field) => serializeToolKey(field.name));
-  return values;
+export function readToolInput(
+  fields: FieldSpec[],
+  input: Record<string, unknown>
+): Result.Result<Values, DomainError> {
+  return Result.gen(function* () {
+    const values: Values = {};
+    const known = new Set(fields.map((field) => serializeToolKey(field.name)));
+    const unknown = Object.keys(input).find((key) => !known.has(key));
+    if (unknown !== undefined) return yield* refuse(`Unknown field ${unknown}.`);
+    for (const field of fields) {
+      const value = input[serializeToolKey(field.name)];
+      if (value !== undefined && value !== null) values[field.name] = yield* readToolValue(field, value);
+    }
+    yield* assertRequired(fields, values, (field) => serializeToolKey(field.name));
+    return values;
+  });
 }

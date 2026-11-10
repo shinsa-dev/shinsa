@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   clipSpans,
   HOUR_MS,
@@ -78,9 +79,9 @@ function source(...tasks: Task[]) {
 
 describe('medians and spans', () => {
   test('takes the middle value, the mean of the two middle ones, or none', () => {
-    expect(resolveMedian([5, 1, 3])).toBe(3);
-    expect(resolveMedian([4, 1, 3, 2])).toBe(2.5);
-    expect(resolveMedian([])).toBeNull();
+    expect(Option.getOrNull(resolveMedian([5, 1, 3]))).toBe(3);
+    expect(Option.getOrNull(resolveMedian([4, 1, 3, 2]))).toBe(2.5);
+    expect(Option.getOrNull(resolveMedian([]))).toBeNull();
   });
 
   test('clips spans to a window and cuts spans out of a span', () => {

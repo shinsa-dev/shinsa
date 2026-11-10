@@ -16,7 +16,7 @@ import {
   type InitiativeView,
   RequestFailed,
 } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { resolveTaskView } from './task-views.ts';
 
 function resolveTaskRef(task: Task): InitiativeTaskRef {
@@ -24,7 +24,7 @@ function resolveTaskRef(task: Task): InitiativeTaskRef {
 }
 
 function resolveProgress(state: ShinsaState, initiative: Initiative, now: number) {
-  return resolveInitiativeSheet(state, initiative.id, now)?.progress ?? [];
+  return Option.getOrNull(resolveInitiativeSheet(state, initiative.id, now))?.progress ?? [];
 }
 
 function resolveInitiativeView(
@@ -33,7 +33,7 @@ function resolveInitiativeView(
   base: string,
   now: number
 ): InitiativeView {
-  const lead = selectInitiativeLead(state, initiative);
+  const lead = Option.getOrNull(selectInitiativeLead(state, initiative));
   const leadTask = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
   return {
     id: initiative.id,
@@ -88,8 +88,8 @@ export const findInitiativeSheet = Effect.fn('findInitiativeSheet')(function* (
   base: string,
   now: number
 ) {
-  const initiative = selectInitiativeByReference(listInitiatives(state), ref);
-  const sheet = initiative ? resolveInitiativeSheet(state, initiative.id, now) : null;
+  const initiative = Option.getOrNull(selectInitiativeByReference(listInitiatives(state), ref));
+  const sheet = initiative ? Option.getOrNull(resolveInitiativeSheet(state, initiative.id, now)) : null;
   if (!sheet) {
     return yield* new RequestFailed({
       code: 'initiative_not_found',

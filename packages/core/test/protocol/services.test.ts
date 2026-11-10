@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { Option } from 'effect';
 import {
   isServiceActive,
   isServiceEnvKey,
@@ -110,10 +111,10 @@ describe('listProjectServices', () => {
   });
 
   it('finds a service by id or by name within a project', () => {
-    expect(selectService(snapshot, 'API', 'p1')?.id).toBe('api');
-    expect(selectService(snapshot, 'web', null)?.id).toBe('web');
-    expect(selectService(snapshot, 'other', 'p1')).toBeNull();
-    expect(selectService(snapshot, 'other', null)?.id).toBe('other');
+    expect(Option.getOrNull(selectService(snapshot, 'API', 'p1'))?.id).toBe('api');
+    expect(Option.getOrNull(selectService(snapshot, 'web', null))?.id).toBe('web');
+    expect(Option.getOrNull(selectService(snapshot, 'other', 'p1'))).toBeNull();
+    expect(Option.getOrNull(selectService(snapshot, 'other', null))?.id).toBe('other');
   });
 });
 
@@ -155,20 +156,22 @@ const SIBLING = service('sibling', { cwd: '/code/website' });
 
 describe('resolveTaskServiceCwd', () => {
   it('runs a service in the same folder of the task’s worktree', () => {
-    expect(resolveTaskServiceCwd(STATE, WEB, task('a', {}))).toBe('/wt/a');
-    expect(resolveTaskServiceCwd(STATE, ADMIN, task('a', { worktreePath: '/wt/a/' }))).toBe(
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, WEB, task('a', {})))).toBe('/wt/a');
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, ADMIN, task('a', { worktreePath: '/wt/a/' })))).toBe(
       '/wt/a/apps/admin'
     );
   });
 
   it('has no folder outside the task’s repository, in another project, or for a task with no worktree of its own', () => {
-    expect(resolveTaskServiceCwd(STATE, NOTES, task('a', {}))).toBeNull();
-    expect(resolveTaskServiceCwd(STATE, SIBLING, task('a', {}))).toBeNull();
-    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { repoId: 'other' }))).toBeNull();
-    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { repoId: null }))).toBeNull();
-    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { worktreePath: null }))).toBeNull();
-    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { worktreePath: '/code/web' }))).toBeNull();
-    expect(resolveTaskServiceCwd(STATE, WEB, task('a', { stage: 'merged' }))).toBeNull();
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, NOTES, task('a', {})))).toBeNull();
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, SIBLING, task('a', {})))).toBeNull();
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, WEB, task('a', { repoId: 'other' })))).toBeNull();
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, WEB, task('a', { repoId: null })))).toBeNull();
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, WEB, task('a', { worktreePath: null })))).toBeNull();
+    expect(
+      Option.getOrNull(resolveTaskServiceCwd(STATE, WEB, task('a', { worktreePath: '/code/web' })))
+    ).toBeNull();
+    expect(Option.getOrNull(resolveTaskServiceCwd(STATE, WEB, task('a', { stage: 'merged' })))).toBeNull();
   });
 });
 
@@ -185,9 +188,9 @@ describe('task runs', () => {
   };
 
   it('keeps the main run apart from each task’s run', () => {
-    expect(selectServiceTerminal(snapshot, 'web', null)?.id).toBe('main');
-    expect(selectServiceTerminal(snapshot, 'web', 'a')?.id).toBe('a-web');
-    expect(selectServiceTerminal(snapshot, 'admin', 'a')).toBeNull();
+    expect(Option.getOrNull(selectServiceTerminal(snapshot, 'web', null))?.id).toBe('main');
+    expect(Option.getOrNull(selectServiceTerminal(snapshot, 'web', 'a'))?.id).toBe('a-web');
+    expect(Option.getOrNull(selectServiceTerminal(snapshot, 'admin', 'a'))).toBeNull();
     expect(
       listProjectServices(snapshot, 'p1', LATER).map((view) => [
         view.service.id,
@@ -239,7 +242,9 @@ describe('resolveServiceUrl', () => {
   const preview = service('web', { previewUrl: 'http://localhost:{port}/tasks/SW-17' });
 
   it('puts the run’s port into the preview URL', () => {
-    expect(resolveServiceUrl(preview, terminal({ port: 4123 }))).toBe('http://localhost:4123/tasks/SW-17');
+    expect(Option.getOrNull(resolveServiceUrl(preview, terminal({ port: 4123 })))).toBe(
+      'http://localhost:4123/tasks/SW-17'
+    );
     expect(resolveServiceView(preview, terminal({ port: 4123 }), LATER).url).toBe(
       'http://localhost:4123/tasks/SW-17'
     );
@@ -255,9 +260,9 @@ describe('resolveServiceUrl', () => {
   });
 
   it('has no URL without a preview URL, or without a port to put in it', () => {
-    expect(resolveServiceUrl(service('api'), terminal({ port: 4123 }))).toBeNull();
-    expect(resolveServiceUrl(preview, terminal({}))).toBeNull();
-    expect(resolveServiceUrl(preview, null)).toBeNull();
+    expect(Option.getOrNull(resolveServiceUrl(service('api'), terminal({ port: 4123 })))).toBeNull();
+    expect(Option.getOrNull(resolveServiceUrl(preview, terminal({})))).toBeNull();
+    expect(Option.getOrNull(resolveServiceUrl(preview, null))).toBeNull();
   });
 });
 

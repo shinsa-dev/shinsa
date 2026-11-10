@@ -1,6 +1,7 @@
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 
 const INDENT = 8;
 
@@ -17,24 +18,19 @@ export const TREE_HOVER_GROUP = 'group/tree';
 const HOVER_INTENT_MS = 40;
 
 function useHoverIntent(onPrefetch: (() => void) | undefined) {
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  React.useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    []
-  );
+  const cancel = React.useRef<(() => void) | null>(null);
+  React.useEffect(() => () => cancel.current?.(), []);
   return {
     onPointerEnter: () => {
-      if (!onPrefetch || timer.current) return;
-      timer.current = setTimeout(() => {
-        timer.current = null;
+      if (!onPrefetch || cancel.current) return;
+      cancel.current = scheduleAfter(HOVER_INTENT_MS, () => {
+        cancel.current = null;
         onPrefetch();
-      }, HOVER_INTENT_MS);
+      });
     },
     onPointerLeave: () => {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = null;
+      cancel.current?.();
+      cancel.current = null;
     },
   };
 }

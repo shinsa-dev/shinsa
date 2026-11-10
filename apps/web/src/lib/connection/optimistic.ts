@@ -1,4 +1,5 @@
 import { decide, serializeState, type UserCommand, type WireState } from '@shinsa/core';
+import { Result } from 'effect';
 
 const OPTIMISTIC_COMMANDS = new Set<UserCommand['type']>([
   'focus.change',
@@ -33,12 +34,11 @@ function createOptimisticId() {
 }
 
 function decideOrKeep(state: WireState, command: UserCommand, now: number): WireState {
-  try {
+  const decided = Result.try(() => {
     const result = decide(state, command, { now, newId: createOptimisticId });
-    return result._tag === 'Success' ? serializeState(result.success.state) : state;
-  } catch {
-    return state;
-  }
+    return Result.isSuccess(result) ? serializeState(result.success.state) : state;
+  });
+  return Result.getOrElse(decided, () => state);
 }
 
 export function applyOptimistic(state: WireState, commands: Iterable<UserCommand>, now = Date.now()) {

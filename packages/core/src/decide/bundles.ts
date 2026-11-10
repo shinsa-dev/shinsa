@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   type BundleConflict,
   type BundlePullRequest,
@@ -96,14 +97,16 @@ export function keepsBundleReady(task: Task, commit: string | null, clean: boole
   return clean && task.bundleReady.commit === commit;
 }
 
-export function describeBundleMerge(state: Decider['state'], task: Task) {
+export function describeBundleMerge(state: Decider['state'], task: Task): Option.Option<string> {
   const followers = listBundleFollowers(state, task);
-  if (followers.length === 0) return null;
+  if (followers.length === 0) return Option.none();
   const pullRequests = [task, ...followers]
     .map((member) => (member.pullRequest ? `#${member.pullRequest.number} “${member.title}”` : null))
     .filter(Boolean)
     .join(', ');
-  return `Approving merges the whole bundle as one, each pull request into its base from the top of the bundle down and this one last: ${pullRequests}.`;
+  return Option.some(
+    `Approving merges the whole bundle as one, each pull request into its base from the top of the bundle down and this one last: ${pullRequests}.`
+  );
 }
 
 export function startBundleMerge(decider: Decider, taskId: string): BundlePullRequest[] {
@@ -125,12 +128,12 @@ function isShippingAtRest(decider: Decider, task: Task) {
   );
 }
 
-export function startBundleUpdate(decider: Decider, conflict: BundleConflict) {
+export function startBundleUpdate(decider: Decider, conflict: BundleConflict): Option.Option<string> {
   const behind = conflict.behindTaskId ? decider.state.tasks[conflict.behindTaskId] : null;
-  if (!behind || !isShippingAtRest(decider, behind)) return null;
+  if (!behind || !isShippingAtRest(decider, behind)) return Option.none();
   clearBundleReady(decider, behind.id);
   decider.stage(behind.id, 'shipping', `updating the branch onto ${conflict.base}`);
-  return behind.id;
+  return Option.some(behind.id);
 }
 
 function recheck(decider: Decider, taskId: string) {

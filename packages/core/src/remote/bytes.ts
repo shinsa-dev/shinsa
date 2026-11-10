@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 export type Bytes = Uint8Array<ArrayBuffer>;
 
 const encoder = new TextEncoder();
@@ -28,18 +29,20 @@ export function serializeBase64Url(bytes: Bytes) {
   return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
 }
 
-export function parseBase64Url(text: string): Bytes | null {
-  if (!/^[A-Za-z0-9_-]*$/.test(text) || text.length % 4 === 1) return null;
+export function parseBase64Url(text: string): Option.Option<Bytes> {
+  if (!/^[A-Za-z0-9_-]*$/.test(text) || text.length % 4 === 1) return Option.none();
   const binary = atob(text.replaceAll('-', '+').replaceAll('_', '/'));
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
-  return bytes;
+  return Option.some(bytes);
 }
 
 export const URL_SAFE_SEGMENT = /^[A-Za-z0-9_-]+$/;
 
 export function hasBytes(text: string, length: number) {
-  return URL_SAFE_SEGMENT.test(text) && parseBase64Url(text)?.length === length;
+  return (
+    URL_SAFE_SEGMENT.test(text) && Option.exists(parseBase64Url(text), (bytes) => bytes.length === length)
+  );
 }
 
 const BASE32_ALPHABET = 'abcdefghijklmnopqrstuvwxyz234567';
@@ -60,8 +63,8 @@ export function serializeBase32(bytes: Bytes) {
   return text;
 }
 
-export function parseBase32(text: string): Bytes | null {
-  if (!/^[a-z2-7]*$/.test(text) || [1, 3, 6].includes(text.length % 8)) return null;
+export function parseBase32(text: string): Option.Option<Bytes> {
+  if (!/^[a-z2-7]*$/.test(text) || [1, 3, 6].includes(text.length % 8)) return Option.none();
   const bytes: number[] = [];
   let buffer = 0;
   let bits = 0;
@@ -72,8 +75,8 @@ export function parseBase32(text: string): Bytes | null {
     bits -= 8;
     bytes.push((buffer >> bits) & 255);
   }
-  if ((buffer & ((1 << bits) - 1)) !== 0) return null;
-  return Uint8Array.from(bytes);
+  if ((buffer & ((1 << bits) - 1)) !== 0) return Option.none();
+  return Option.some(Uint8Array.from(bytes));
 }
 
 export function serializeHex(bytes: Uint8Array) {

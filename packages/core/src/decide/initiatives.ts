@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -72,7 +73,8 @@ function resolvePhases(
   return phases.map((phase) => {
     const name = resolvePhaseName(phase.name, seen);
     if (phase.id === null) return { id: decider.context.newId(), name };
-    if (!selectInitiativePhase(existing, phase.id)) refuse(`No phase ${phase.id} in this initiative.`);
+    if (!Option.getOrNull(selectInitiativePhase(existing, phase.id)))
+      refuse(`No phase ${phase.id} in this initiative.`);
     return { id: phase.id, name };
   });
 }
@@ -88,14 +90,14 @@ export function changeMembership(decider: Decider, task: Task, next: Membership)
 
 function dropRemovedPhases(decider: Decider, initiative: Initiative) {
   for (const task of listInitiativeMembers(decider.state, initiative.id)) {
-    if (selectInitiativePhase(initiative, task.initiativePhaseId)) continue;
+    if (Option.getOrNull(selectInitiativePhase(initiative, task.initiativePhaseId))) continue;
     changeMembership(decider, task, { initiativeId: initiative.id, phaseId: null });
   }
 }
 
 function assertRoomForInitiative(decider: Decider) {
   const open = listInitiatives(decider.state).filter((initiative) =>
-    selectInitiativeLead(decider.state, initiative)
+    Option.getOrNull(selectInitiativeLead(decider.state, initiative))
   );
   if (open.length < INITIATIVE_LIMITS.initiatives) return;
   throw new DomainError({
@@ -146,13 +148,13 @@ export function dissolveInitiative(decider: Decider, initiative: Initiative) {
 
 function resolveMembership(decider: Decider, initiativeId: string, phaseId: string | null | undefined) {
   const initiative = findInitiative(decider, initiativeId);
-  if (!selectInitiativeLead(decider.state, initiative)) {
+  if (!Option.getOrNull(selectInitiativeLead(decider.state, initiative))) {
     throw new DomainError({
       code: 'initiative_finished',
       message: `The initiative ${initiative.name} is finished. Pick one that is still open.`,
     });
   }
-  if (phaseId && !selectInitiativePhase(initiative, phaseId)) {
+  if (phaseId && !Option.getOrNull(selectInitiativePhase(initiative, phaseId))) {
     throw new DomainError({
       code: 'initiative_phase_not_found',
       message: `No phase ${phaseId} in the initiative ${initiative.name}.`,
@@ -218,8 +220,9 @@ function resolveInheritedMembership(
   }
   const source = sourceId ? decider.state.tasks[sourceId] : undefined;
   const initiative = source?.initiativeId ? decider.state.initiatives[source.initiativeId] : undefined;
-  if (!source || !initiative || !selectInitiativeLead(decider.state, initiative)) return null;
-  const phase = selectInitiativePhase(initiative, source.initiativePhaseId);
+  if (!source || !initiative || !Option.getOrNull(selectInitiativeLead(decider.state, initiative)))
+    return null;
+  const phase = Option.getOrNull(selectInitiativePhase(initiative, source.initiativePhaseId));
   return { initiativeId: initiative.id, phaseId: phase?.id ?? null };
 }
 

@@ -66,28 +66,38 @@ export function listTerminalPlaces(state: ShinsaState, projectId: string): Termi
   for (const folder of state.projects[projectId]?.folders ?? [])
     add({ path: folder, label: resolveBaseName(folder), kind: 'folder', taskId: null });
   for (const task of Object.values(state.tasks)) {
-    if (!task.worktreePath || isTaskSettled(task) || resolveTaskProject(state, task) !== projectId) continue;
+    if (
+      !task.worktreePath ||
+      isTaskSettled(task) ||
+      Option.getOrNull(resolveTaskProject(state, task)) !== projectId
+    )
+      continue;
     add({ path: task.worktreePath, label: describeTaskPlace(task), kind: 'worktree', taskId: task.id });
   }
   return places;
 }
 
-export function resolveTaskTerminalPlace(state: ShinsaState, task: Task): TerminalPlace | null {
+export function resolveTaskTerminalPlace(state: ShinsaState, task: Task): Option.Option<TerminalPlace> {
   if (task.worktreePath)
-    return { path: task.worktreePath, label: describeTaskPlace(task), kind: 'worktree', taskId: task.id };
+    return Option.some({
+      path: task.worktreePath,
+      label: describeTaskPlace(task),
+      kind: 'worktree',
+      taskId: task.id,
+    });
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  if (!repo) return null;
-  return { path: repo.path, label: repo.name, kind: 'repository', taskId: null };
+  if (!repo) return Option.none();
+  return Option.some({ path: repo.path, label: repo.name, kind: 'repository', taskId: null });
 }
 
 export function resolveTerminalLabel(terminal: Pick<TerminalInfo, 'name' | 'title' | 'cwd'>) {
   return terminal.name ?? terminal.title ?? resolveBaseName(terminal.cwd);
 }
 
-export function parseTerminalClientFrame(text: string): TerminalClientFrame | null {
-  return Option.getOrNull(decodeTerminalClientFrame(text));
+export function parseTerminalClientFrame(text: string): Option.Option<TerminalClientFrame> {
+  return decodeTerminalClientFrame(text);
 }
 
-export function parseTerminalServerFrame(text: string): TerminalServerFrame | null {
-  return Option.getOrNull(decodeTerminalServerFrame(text));
+export function parseTerminalServerFrame(text: string): Option.Option<TerminalServerFrame> {
+  return decodeTerminalServerFrame(text);
 }

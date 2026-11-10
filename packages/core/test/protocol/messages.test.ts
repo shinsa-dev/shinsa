@@ -26,7 +26,7 @@ describe('isQuietSurface', () => {
 
 describe('parseClientMessage', () => {
   test('reads each message a page sends, without the fields it does not know', () => {
-    const read = (message: unknown): unknown => parseClientMessage(JSON.stringify(message));
+    const read = (message: unknown): unknown => Option.getOrNull(parseClientMessage(JSON.stringify(message)));
     expect(read({ type: 'hello', surface: 'desktop', extra: 1 })).toEqual({
       type: 'hello',
       surface: 'desktop',
@@ -48,13 +48,16 @@ describe('parseClientMessage', () => {
 
   test('a transcript is read from the start unless it names a whole index', () => {
     const read = (from: unknown): unknown =>
-      parseClientMessage(JSON.stringify({ type: 'transcript.subscribe', runId: 'r-1', from }));
+      Option.getOrNull(
+        parseClientMessage(JSON.stringify({ type: 'transcript.subscribe', runId: 'r-1', from }))
+      );
     expect(read(40)).toEqual({ type: 'transcript.subscribe', runId: 'r-1', from: 40 });
     for (const from of [-1, 1.5, 'x', null])
       expect(read(from)).toEqual({ type: 'transcript.subscribe', runId: 'r-1', from: 0 });
-    expect(parseClientMessage(JSON.stringify({ type: 'transcript.subscribe', runId: 'r-1' }))?.type).toBe(
-      'transcript.subscribe'
-    );
+    expect(
+      Option.getOrNull(parseClientMessage(JSON.stringify({ type: 'transcript.subscribe', runId: 'r-1' })))
+        ?.type
+    ).toBe('transcript.subscribe');
   });
 
   test('refuses what is not a Shinsa message', () => {
@@ -69,7 +72,7 @@ describe('parseClientMessage', () => {
       JSON.stringify({ type: 'shutdown' }),
       JSON.stringify({ type: 'presence' }),
     ])
-      expect(parseClientMessage(text)).toBeNull();
+      expect(Option.getOrNull(parseClientMessage(text))).toBeNull();
   });
 });
 

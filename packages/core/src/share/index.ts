@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { splitMessageAttachments } from '../chat/attachments.ts';
 import type { RunDelegation } from '../domain/delegations.ts';
 import { copyTeammateOriginal } from '../domain/duplicates.ts';
@@ -491,7 +492,7 @@ export function resolveSharedListing(
 ): SharedListing {
   const scopes = resolveShareScopes(shown);
   const grants: Grants = (group) => hasShareGroup(scopes, group);
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const project = grants('people') && projectId ? state.projects[projectId] : undefined;
   const repo = grants('people') && task.repoId ? state.repos[task.repoId] : undefined;
   const links = grants('people') ? SHARED_LINK_KINDS : new Set<string>();
@@ -507,7 +508,7 @@ export function resolveSharedTask(state: ShinsaState, task: Task, context: Share
   const scopes = resolveShareScopes(context.scopes);
   const grants: Grants = (group) => hasShareGroup(scopes, group);
   const people = grants('people');
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const project = people && projectId ? state.projects[projectId] : undefined;
   const repo = people && task.repoId ? state.repos[task.repoId] : undefined;
   const links = people ? SHARED_LINK_KINDS : new Set<string>();

@@ -7,6 +7,7 @@ import {
   selectTaskPerson,
   type Task,
 } from '@shinsa/core';
+import { Option } from 'effect';
 
 export { resolveFirstName };
 
@@ -29,7 +30,7 @@ export function resolveSharedProfile(login: string, profile: SharedPerson | null
 }
 
 export function resolveGuestProfile(task: Task | null, login: string): UserProfile {
-  return (task ? selectTaskPerson(task, login) : null) ?? resolveSharedProfile(login);
+  return (task ? Option.getOrNull(selectTaskPerson(task, login)) : null) ?? resolveSharedProfile(login);
 }
 
 function matchNameAsWord(text: string, name: string) {

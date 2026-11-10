@@ -2,6 +2,7 @@ import type { PresetShape } from '@shinsa/core';
 import { Tabs, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
 import * as React from 'react';
 import { NowCard } from '@/components/overview/now-card.tsx';
+import { useDelay } from '@/hooks/use-delay.ts';
 import { SHAPE_LABEL } from '@/lib/tasks/shapes.ts';
 import { createKindsState, KIND_ENDS, KIND_ORDER } from '../../lib/kinds-scene.ts';
 import { useFocus } from './focus.ts';
@@ -32,12 +33,9 @@ export function KindsDemo() {
 
   React.useEffect(() => centreSelectedTab(tabs.current), [kind]);
 
-  React.useEffect(() => {
-    if (picked || hovered || !focused) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const timer = setTimeout(() => setKind(nextKind), DWELL_MS);
-    return () => clearTimeout(timer);
-  }, [kind, picked, hovered, focused]);
+  const cycling =
+    focused && !picked && !hovered && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  useDelay(() => setKind(nextKind), cycling ? DWELL_MS : null, [kind]);
 
   return (
     <DemoRoot>

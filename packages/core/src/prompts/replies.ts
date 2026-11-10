@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { type ReplyingHandOver, selectOpenIteration, type Task } from '../domain/index.ts';
 
 export function describeReplyInstruction(tool: ReplyingHandOver) {
@@ -11,5 +12,5 @@ export function describeReplyInstruction(tool: ReplyingHandOver) {
 }
 
 export function describeOwedReply(task: Pick<Task, 'iterations'>, tool: ReplyingHandOver) {
-  return selectOpenIteration(task) ? describeReplyInstruction(tool) : '';
+  return Option.isSome(selectOpenIteration(task)) ? describeReplyInstruction(tool) : '';
 }

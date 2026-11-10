@@ -75,7 +75,7 @@ export const PairingHandlers = HttpApiBuilder.group(
             yield* pairings.remove(claimCode.value);
             if (hasMachineFeature(features, 'sealed-pairing'))
               return { status: 'claimed', sealedCredentials: credentials, owner } satisfies PairPollResponse;
-            const legacy = parseMachineCredentials(credentials);
+            const legacy = Option.getOrNull(parseMachineCredentials(credentials));
             return legacy
               ? ({ status: 'claimed', credentials: legacy, owner } satisfies PairPollResponse)
               : EXPIRED;

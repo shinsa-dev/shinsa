@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Run } from '../domain/index.ts';
 import { splitHouseRules } from './rules.ts';
 
@@ -13,9 +14,14 @@ const FIX_OPENINGS: readonly (readonly [string, FixFocus])[] = [
   ["The repository's pre-push hook", 'push_hook'],
 ];
 
-export function resolveFixFocus(run: Pick<Run, 'purpose' | 'prompt' | 'rolePrompt'>): FixFocus | null {
-  if (run.purpose !== 'fix') return null;
+export function resolveFixFocus(
+  run: Pick<Run, 'purpose' | 'prompt' | 'rolePrompt'>
+): Option.Option<FixFocus> {
+  if (run.purpose !== 'fix') return Option.none();
   const prompt = run.rolePrompt ?? run.prompt ?? '';
-  const instruction = splitHouseRules(prompt)?.instruction ?? prompt;
-  return FIX_OPENINGS.find(([opening]) => instruction.startsWith(opening))?.[1] ?? null;
+  const instruction = Option.match(splitHouseRules(prompt), {
+    onNone: () => prompt,
+    onSome: (split) => split.instruction,
+  });
+  return Option.fromNullishOr(FIX_OPENINGS.find(([opening]) => instruction.startsWith(opening))?.[1]);
 }

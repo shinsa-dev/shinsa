@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
+import { Result } from 'effect';
 
 export type Env = Record<string, string | undefined>;
 
@@ -75,9 +76,9 @@ export function resolveKeychainService(configDir: string | null) {
 
 export function resolveKeychainAccount(env: Env) {
   if (env.USER) return env.USER;
-  try {
-    return userInfo().username || 'claude-code-user';
-  } catch {
-    return 'claude-code-user';
-  }
+  const username = Result.getOrElse(
+    Result.try(() => userInfo().username),
+    () => ''
+  );
+  return username || 'claude-code-user';
 }

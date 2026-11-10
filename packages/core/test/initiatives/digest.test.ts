@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   describeInitiativeDigest,
   describeMilestones,
@@ -29,7 +30,7 @@ function member(harness: Harness, id: string, phaseId: string | null, request: s
 }
 
 function digestOf(harness: Harness, id: string) {
-  const sheet = resolveInitiativeSheet(harness.state, id, harness.now);
+  const sheet = Option.getOrNull(resolveInitiativeSheet(harness.state, id, harness.now));
   if (!sheet) throw new Error('no sheet');
   return describeInitiativeDigest(sheet);
 }

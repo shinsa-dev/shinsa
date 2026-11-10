@@ -161,7 +161,7 @@ export function resolveFleetTeamTaskPath(
 }
 
 export function selectTeamFeedTask(feed: TeamFeedSnapshot, reference: string) {
-  const handle = parseTaskHandle(reference);
+  const handle = Option.getOrNull(parseTaskHandle(reference));
   return feed.tasks.find((entry) => entry.task.id === reference || entry.task.handle === handle) ?? null;
 }
 
@@ -297,7 +297,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
     return Effect.gen({ self: this }, function* () {
       let adopted = false;
       for (const snapshot of held) {
-        const instanceId = selectTeamSnapshotSigner(snapshot);
+        const instanceId = Option.getOrNull(selectTeamSnapshotSigner(snapshot));
         const feed = this.#feeds.find(
           (candidate) => candidate.target.teamId === teamId && candidate.target.instanceId === instanceId
         );

@@ -7,6 +7,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { ChecksBlock } from '@/components/checks/checks-list.tsx';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
@@ -116,8 +117,9 @@ function CoverageLines({
 }) {
   const disclosure = useDisclosure(persistId, false);
   const { open } = disclosure;
-  const measured = selectMeasuredCoverage(coverage);
-  if (!measured) return null;
+  const selected = selectMeasuredCoverage(coverage);
+  if (Option.isNone(selected)) return null;
+  const measured = selected.value;
   return (
     <div className='flex flex-col gap-1.5'>
       <p className='text-xs text-fg-2'>{describeCoverageSummary(measured)}.</p>
@@ -157,7 +159,7 @@ export function TestingPanel({
 }) {
   const automated = testing?.automated ?? [];
   const manual = testing?.manual ?? [];
-  const measured = selectMeasuredCoverage(coverage) !== null;
+  const measured = Option.isSome(selectMeasuredCoverage(coverage));
   return (
     <Panel persistId={persistId} title={REVIEW_PROSE_TITLE.testing} icon={REVIEW_PROSE_ICON.testing}>
       {(automated.length > 0 || checks || measured) && (

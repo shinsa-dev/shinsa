@@ -11,6 +11,7 @@ import {
   resolveSupersededReply,
   resolveWithdrawnReply,
   type ShinsaCommand,
+  type Validation,
   validateBrowserSignInRequest,
   validateQuestion,
   validateSecretRequest,
@@ -21,7 +22,7 @@ import type { EngineStopped } from '../../runtime/engine/schema.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { awaitAbort } from '../../shell/abort.ts';
 import { LiveRuns } from '../active/service.ts';
-import { assertProtocol } from '../handover.ts';
+import { resolveHandOver } from '../handover.ts';
 import { IdleReleaseSettings } from '../idle/schema.ts';
 import { makeIdleRelease } from '../idle/service.ts';
 import type { AgentSession } from '../providers/index.ts';
@@ -101,11 +102,10 @@ export class Questions extends Context.Service<
         }
       };
 
-      const readHandOver = <T>(result: { ok: true; value: T } | { ok: false; errors: string[] }) =>
-        Effect.try({
-          try: () => assertProtocol(result),
-          catch: (error) => new ToolCallFailed({ message: describeError(error) }),
-        });
+      const readHandOver = <T>(validation: Validation<T>) =>
+        Effect.fromResult(resolveHandOver(validation)).pipe(
+          Effect.mapError((error) => new ToolCallFailed({ message: describeError(error) }))
+        );
 
       const release = Effect.fn('Questions.release')(function* (runId: string, session: AgentSession) {
         const active = live.get(runId);

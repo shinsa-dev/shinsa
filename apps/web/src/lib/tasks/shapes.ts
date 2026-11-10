@@ -20,6 +20,7 @@ import {
   type WorkStep,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 
 export const SHAPE_LABEL: Record<TaskShape, string> = {
   answer: 'Answer only',
@@ -138,8 +139,8 @@ export function isShapeChosen(task: Task) {
 export function resolveShapeLabel(task: Task) {
   if (!isShapeChosen(task)) return UNCHOSEN.label;
   const pipeline = resolveTaskPipeline(task);
-  const preset = resolvePresetOf(pipeline);
-  const inquiry = resolveInquiryStep(pipeline);
+  const preset = Option.getOrNull(resolvePresetOf(pipeline));
+  const inquiry = Option.getOrNull(resolveInquiryStep(pipeline));
   const parts = [
     ...(inquiry ? [INQUIRY_LEAD[inquiry]] : []),
     ...pipeline.filter(isWorkStep).map((step) => WORK_NOUN[step]),
@@ -178,7 +179,7 @@ export function isCodeTask(task: Task) {
 }
 
 function resolveChangeStep(task: Task) {
-  return resolveInquiryStep(resolveTaskPipeline(task)) ?? 'investigate';
+  return Option.getOrUndefined(resolveInquiryStep(resolveTaskPipeline(task))) ?? 'investigate';
 }
 
 function isAddedByProposal(task: Task) {
@@ -207,7 +208,7 @@ export function describeChangeGate(task: Task, gate: Gate): ChangeGate {
   const open = task.proposal?.status === 'open' ? task.proposal : null;
   const close = open?.recommend === 'close';
   const composed = close || (pipeline.includes('your_ok') && !isAddedByProposal(task));
-  const goOn = GO_ON[resolveWorkStep(pipeline) ?? 'build'];
+  const goOn = GO_ON[Option.getOrUndefined(resolveWorkStep(pipeline)) ?? 'build'];
   const [why = '', ...rest] = gate.body.split('\n\n');
   return {
     eyebrow: composed ? RESULT_IN[step] : CHANGE_EYEBROW[step],
@@ -226,7 +227,7 @@ const OPERATION_HEADING = {
 } as const;
 
 export function resolvePlannedOperation(task: Task) {
-  const timing = resolveOperationTiming(resolveTaskPipeline(task));
+  const timing = Option.getOrNull(resolveOperationTiming(resolveTaskPipeline(task)));
   const steps = task.plan?.document?.operation ?? [];
   if (timing === null || timing === 'alone' || steps.length === 0) return null;
   return { heading: OPERATION_HEADING[timing], steps };

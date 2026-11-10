@@ -1,4 +1,7 @@
+import { Option, Schema } from 'effect';
 import * as React from 'react';
+import { DisclosureEntry, StoredDisclosuresText } from '@/lib/preferences/schema.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const DISCLOSURE_STORE_KEY = 'shinsa.disclosures';
@@ -49,7 +52,7 @@ const signal = createSignal();
 
 let entries: Map<string, boolean> | null = null;
 
-let timer: ReturnType<typeof setTimeout> | null = null;
+let timer: (() => void) | null = null;
 
 const pending = new Map<string, boolean>();
 
@@ -89,24 +92,14 @@ export function notPersisted(reason: string): NotPersisted {
   return { notPersisted: reason };
 }
 
-function isEntry(value: unknown): value is [string, boolean] {
-  return (
-    Array.isArray(value) &&
-    value.length === 2 &&
-    typeof value[0] === 'string' &&
-    typeof value[1] === 'boolean'
-  );
-}
+const decodeStoredDisclosures = Schema.decodeUnknownOption(StoredDisclosuresText);
+
+const isDisclosureEntry = Schema.is(DisclosureEntry);
 
 export function parseDisclosures(raw: string | null): Map<string, boolean> {
-  if (raw === null) return new Map();
-  try {
-    const parsed = JSON.parse(raw) as Partial<StoredDisclosures> | null;
-    if (parsed?.version !== DISCLOSURE_STORE_VERSION || !Array.isArray(parsed.entries)) return new Map();
-    return new Map(parsed.entries.filter(isEntry).slice(-DISCLOSURE_LIMIT));
-  } catch {
-    return new Map();
-  }
+  const stored = Option.getOrUndefined(decodeStoredDisclosures(raw));
+  if (stored?.version !== DISCLOSURE_STORE_VERSION) return new Map();
+  return new Map(stored.entries.filter(isDisclosureEntry).slice(-DISCLOSURE_LIMIT));
 }
 
 export function serializeDisclosures(map: ReadonlyMap<string, boolean>): string {
@@ -162,7 +155,7 @@ export function listMarkedDisclosures(prefix: DisclosureId, marked: boolean): st
 }
 
 export function flushDisclosures() {
-  if (timer !== null) clearTimeout(timer);
+  timer?.();
   timer = null;
   pending.clear();
   if (entries === null) return;
@@ -177,12 +170,12 @@ export function writeDisclosure(id: DisclosureId, open: boolean) {
   pending.set(id, open);
   pruneDisclosures(store);
   signal.publish();
-  if (timer !== null) clearTimeout(timer);
-  timer = setTimeout(flushDisclosures, DISCLOSURE_WRITE_DELAY_MS);
+  timer?.();
+  timer = scheduleAfter(DISCLOSURE_WRITE_DELAY_MS, flushDisclosures);
 }
 
 export function resetDisclosures() {
-  if (timer !== null) clearTimeout(timer);
+  timer?.();
   timer = null;
   pending.clear();
   entries = null;

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isLaterRound } from './rounds.ts';
 import type { Project, Task } from './types.ts';
 
@@ -43,10 +44,10 @@ export function formatTaskHandle(key: string, number: number) {
   return `${key}-${number}`;
 }
 
-export function parseTaskHandle(text: string) {
+export function parseTaskHandle(text: string): Option.Option<string> {
   const match = HANDLE_PATTERN.exec(text.trim());
-  if (!match?.[1] || !match[2]) return null;
-  return `${match[1].toUpperCase()}-${Number(match[2])}`;
+  if (!match?.[1] || !match[2]) return Option.none();
+  return Option.some(`${match[1].toUpperCase()}-${Number(match[2])}`);
 }
 
 function isPathInside(folder: string, path: string) {
@@ -71,7 +72,7 @@ export function selectFolderProject(projects: Iterable<Project>, path: string) {
 export function selectProjectByReference<T extends Pick<Project, 'id' | 'key' | 'name'>>(
   projects: Iterable<T>,
   reference: string
-) {
+): Option.Option<T> {
   const lower = reference.trim().toLowerCase();
   for (const project of projects) {
     if (
@@ -79,19 +80,22 @@ export function selectProjectByReference<T extends Pick<Project, 'id' | 'key' | 
       project.key.toLowerCase() === lower ||
       project.name.toLowerCase() === lower
     ) {
-      return project;
+      return Option.some(project);
     }
   }
-  return null;
+  return Option.none();
 }
 
 export function isProjectFixed(task: Task) {
   return Boolean(task.projectId) && (!task.auto.project || isLaterRound(task));
 }
 
-export function resolveRepoMove(task: Task, repo: { projectId?: string | null } | null) {
-  if (!repo?.projectId || repo.projectId === task.projectId || isProjectFixed(task)) return null;
-  return repo.projectId;
+export function resolveRepoMove(
+  task: Task,
+  repo: { projectId?: string | null } | null
+): Option.Option<string> {
+  if (!repo?.projectId || repo.projectId === task.projectId || isProjectFixed(task)) return Option.none();
+  return Option.some(repo.projectId);
 }
 
 function resolveWords(text: string) {

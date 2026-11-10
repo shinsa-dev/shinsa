@@ -1,3 +1,5 @@
+import { Option } from 'effect';
+
 import {
   INITIATIVE_LIMITS,
   type Initiative,
@@ -29,7 +31,7 @@ function describeMembership(state: ShinsaState, task: Task, event: EventOf<'task
   const before = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
   const after = event.initiativeId ? state.initiatives[event.initiativeId] : undefined;
   if (!after) return before ? `Removed from the initiative ${before.name}` : null;
-  const phase = selectInitiativePhase(after, event.phaseId);
+  const phase = Option.getOrNull(selectInitiativePhase(after, event.phaseId));
   if (task.initiativeId === after.id) {
     return phase ? `Moved to the phase ${phase.name}` : 'Taken out of its phase';
   }
@@ -101,8 +103,11 @@ export function listInitiativeWork(state: ShinsaState, initiativeId: string): Ta
   return listInitiativeMembers(state, initiativeId).filter((task) => !isLeadTask(task));
 }
 
-export function selectInitiativeLead(state: ShinsaState, initiative: Pick<Initiative, 'leadTaskId'>) {
+export function selectInitiativeLead(
+  state: ShinsaState,
+  initiative: Pick<Initiative, 'leadTaskId'>
+): Option.Option<Task> {
   const lead = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
-  if (!lead || !isLeadTask(lead) || isTaskSettled(lead) || isTaskClosed(lead)) return null;
-  return lead;
+  if (!lead || !isLeadTask(lead) || isTaskSettled(lead) || isTaskClosed(lead)) return Option.none();
+  return Option.some(lead);
 }
