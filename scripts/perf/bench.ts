@@ -115,8 +115,9 @@ const program = Effect.gen(function* () {
     }
     const cpu = process.cpuUsage(cpuBefore);
     hub.close(socket);
+    const clientApplyMs = yield* Effect.fromResult(measurePushes(initial, payloads));
     return {
-      clientApplyMs: measurePushes(initial, payloads),
+      clientApplyMs,
       initialBytes,
       dispatchMs: summarize(latency),
       cpuMsPerCommand: round((cpu.user + cpu.system) / 1000 / CLICKS),
