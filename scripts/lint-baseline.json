@@ -1,7 +1,5 @@
 {
   "throw": {
-    "scripts/release-downloads.ts": 10,
-    "scripts/release-version.ts": 2,
     "scripts/seed-media/shots.ts": 1,
     "scripts/seed/code/kit.ts": 4,
     "scripts/seed/code/transcripts.ts": 2,
@@ -10,13 +8,10 @@
     "scripts/seed/spots.ts": 1,
     "scripts/seed/tasks/delegation.ts": 2
   },
-  "try-catch": {
-    "scripts/release-downloads.ts": 2
-  },
+  "try-catch": {},
   "null-return": {},
   "json-parse": {
     "scripts/perf/bench/client.ts": 3,
-    "scripts/release-downloads.ts": 1,
     "scripts/seed/tasks/triggers.ts": 1
   },
   "timer": {

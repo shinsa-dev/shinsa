@@ -2,7 +2,6 @@ import { join, resolve } from 'node:path';
 import { Config, Console, Duration, Effect, FileSystem, Schema } from 'effect';
 import { Command } from '../kit/command/index.ts';
 import { isOnGitHubActions, retryStep, serializeRetryWarning } from '../release-retry.ts';
-import type { ReleaseChannel } from '../release-version.ts';
 import {
   assertEngineFolder,
   PUBLISHED_ENGINE_TARGETS,
@@ -12,6 +11,7 @@ import {
 import {
   ArchiveInvalid,
   NpmPublishFailed,
+  type ReleaseChannel,
   ReleaseRefused,
   type RetryFailure,
   ScriptUsage,
