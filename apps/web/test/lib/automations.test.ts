@@ -153,7 +153,14 @@ describe('a watch’s page', () => {
       plain,
       createSchedule({
         id: 'k',
-        trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'C1',
+          channelName: 'alerts',
+          threadUpdates: true,
+        },
         nextRunAt: null,
       })
     );

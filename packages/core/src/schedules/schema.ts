@@ -126,6 +126,7 @@ export const EveryMinutes = CountUpTo(SCHEDULE_LIMITS.maxEveryMinutes);
 export const SlackChannelChoice = HandOverRecord({
   slack_channel: Required(SCHEDULE_LIMITS.reference),
   slack_workspace: OptionalText(SCHEDULE_LIMITS.reference),
+  slack_updates: OrAbsent(Flag),
 });
 
 export const TargetChoice = HandOverRecord({

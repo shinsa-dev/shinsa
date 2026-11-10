@@ -1,7 +1,7 @@
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError } from '../domain/errors.ts';
 import { isTaskClosed, resolveCurrentRound } from '../domain/rounds.ts';
-import { isSameSlackThread, type SlackThreadRef } from '../domain/slack.ts';
+import { isSameSlackThread, type SlackMessageRef, type SlackThreadRef } from '../domain/slack.ts';
 import type { Gate, Task } from '../domain/types.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
 import { resolveSlackMentionThread } from '../slack/contract.ts';
@@ -64,17 +64,29 @@ export function startSlackTask(decider: Decider, command: CommandOf<'slack.start
     request: serializeSlackRequest(mention, decider.context.newId()),
     repoId: null,
   });
+  linkSlackThread(decider, taskId, thread, mention, SLACK_REACTIONS.sizing);
+}
+
+export function linkSlackThread(
+  decider: Decider,
+  taskId: string,
+  thread: SlackThreadRef,
+  message: Pick<SlackMessageRef, 'userId' | 'messageTs' | 'permalink' | 'channelName'>,
+  reaction: string | null
+) {
   decider.emit({
     type: 'slack.thread_linked',
     taskId,
     link: {
-      ...thread,
-      userId: mention.userId,
-      messageTs: mention.messageTs,
-      permalink: mention.permalink,
-      channelName: mention.channelName,
+      teamId: thread.teamId,
+      channelId: thread.channelId,
+      threadTs: thread.threadTs,
+      userId: message.userId,
+      messageTs: message.messageTs,
+      permalink: message.permalink,
+      channelName: message.channelName,
       statusTs: null,
-      reaction: SLACK_REACTIONS.sizing,
+      reaction,
     },
   });
 }

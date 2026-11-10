@@ -18,6 +18,7 @@ import {
   type ScheduleTrigger,
   type Task,
 } from '../domain/index.ts';
+import type { SlackMessageRef } from '../domain/slack.ts';
 import { isTimeZone, parseTimeOfDay, resolveFirstRun, resolveNextRun } from '../schedules/time.ts';
 import { findRepo, listActiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -32,6 +33,7 @@ import {
 import { assertNotWatchHome, messageTask } from './messages.ts';
 import { isReadBusy } from './reads.ts';
 import { findCurrentRun } from './runs.ts';
+import { linkSlackThread } from './slack.ts';
 import { createTask } from './tasks.ts';
 import { findOpenWatchSuggestion, suggestWatch, type WatchSuggestionInput } from './watch-suggestions.ts';
 
@@ -49,6 +51,7 @@ const INTAKE_BUSY = 'The task was at work, so this read was skipped.';
 
 interface Delivery {
   text: string;
+  slackMessage: SlackMessageRef | null;
   deliveryId: string | null;
   replayKey: string | null;
   skipWhenLive: boolean;
@@ -631,8 +634,9 @@ function resolveFollowing(schedule: Schedule, now: number) {
   return Option.getOrNull(resolveNextRun(schedule.trigger, now, schedule.timeZone));
 }
 
-function send(decider: Decider, schedule: Schedule, text: string) {
-  const target = schedule.target;
+function send(decider: Decider, schedule: Schedule, delivery: Delivery) {
+  const { target, trigger } = schedule;
+  const { text, slackMessage } = delivery;
   if (target.kind === 'new_task') {
     const taskId = createTask(
       decider,
@@ -645,6 +649,14 @@ function send(decider: Decider, schedule: Schedule, text: string) {
       },
       { scheduleId: schedule.id }
     );
+    if (slackMessage && trigger.kind === 'slack' && trigger.threadUpdates) {
+      const thread = {
+        teamId: slackMessage.teamId,
+        channelId: slackMessage.channelId,
+        threadTs: slackMessage.messageTs,
+      };
+      linkSlackThread(decider, taskId, thread, slackMessage, null);
+    }
     return { taskId, runId: null };
   }
   if (schedule.source) {
@@ -679,7 +691,7 @@ function runSchedule(decider: Decider, schedule: Schedule, delivery: Delivery) {
     });
     return;
   }
-  const sent = send(decider, schedule, delivery.text);
+  const sent = send(decider, schedule, delivery);
   const runCount = schedule.runCount + 1;
   const exhausted =
     schedule.trigger.kind === 'once' || (schedule.maxRuns !== null && runCount >= schedule.maxRuns);
@@ -698,6 +710,7 @@ export function fireSchedule(decider: Decider, command: CommandOf<'schedule.fire
   if (schedule.nextRunAt !== command.dueAt || command.dueAt > decider.context.now) return;
   runSchedule(decider, schedule, {
     text: schedule.text,
+    slackMessage: null,
     deliveryId: null,
     replayKey: null,
     skipWhenLive: true,
@@ -713,10 +726,25 @@ export function deliverSchedule(decider: Decider, command: CommandOf<'schedule.d
   if (!text) throw new DomainError({ code: 'schedule_invalid', message: 'The filled-in prompt is empty.' });
   runSchedule(decider, schedule, {
     text,
+    slackMessage: command.slackMessage ?? null,
     deliveryId: command.deliveryId,
     replayKey: key,
     skipWhenLive: false,
   });
+}
+
+export function skipSchedule(decider: Decider, command: CommandOf<'schedule.skip'>) {
+  const schedule = decider.state.schedules[command.scheduleId];
+  if (!schedule?.enabled || !isEventTrigger(schedule.trigger)) return;
+  const key = command.replayKey;
+  if (key !== null && (schedule.replayKeys[key] ?? 0) > decider.context.now) return;
+  recordRun(
+    decider,
+    schedule,
+    { outcome: 'skipped', taskId: null, detail: command.detail.slice(0, SCHEDULE_LIMITS.detail) },
+    { deliveryId: command.deliveryId, replayKey: key },
+    {}
+  );
 }
 
 export function failSchedule(decider: Decider, command: CommandOf<'schedule.fail'>) {

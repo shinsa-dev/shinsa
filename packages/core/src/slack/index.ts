@@ -52,9 +52,14 @@ export {
 } from './contract.ts';
 export {
   parseSlackEvaluation,
+  parseSlackFilter,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
+  SLACK_FILTER_SCHEMA,
+  SLACK_FILTER_SKIPPED,
+  SLACK_FILTER_SYSTEM,
   serializeSlackEvaluationPrompt,
+  serializeSlackFilterPrompt,
 } from './evaluation.ts';
 export {
   createSlackForwardSignature,
@@ -138,6 +143,7 @@ export {
   SlackDecisionReply,
   SlackDecisionValue,
   type SlackEvaluation,
+  type SlackFilterDecision,
   SlackLinkedThread,
   type SlackMention,
   type SlackMessageLink,

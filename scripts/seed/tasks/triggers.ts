@@ -174,6 +174,7 @@ function listSchedules(): Schedule[] {
         teamName: 'Superwall',
         channelId: 'C07ALERTS',
         channelName: 'alerts',
+        threadUpdates: true,
       },
       runCount: 3,
       runs: [

@@ -87,6 +87,7 @@ describe('writing a schedule', () => {
       teamName: 'Beta',
       channelId: 'C9',
       channelName: 'alerts',
+      threadUpdates: true,
     });
     await expect(write(words, undefined, channels)).rejects.toThrow(
       '#alerts is in several Slack workspaces: Acme, Beta. Name the workspace too.'

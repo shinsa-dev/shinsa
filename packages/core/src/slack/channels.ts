@@ -54,6 +54,7 @@ export function resolveSlackChannelTrigger(
       teamName: match.teamName.trim(),
       channelId: match.channelId,
       channelName: match.channelName.trim(),
+      threadUpdates: choice.updates ?? true,
     },
     problem: null,
   };

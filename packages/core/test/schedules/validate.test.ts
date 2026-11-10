@@ -96,10 +96,17 @@ describe('reading set_schedule', () => {
   test('a Slack channel is named for the engine to look up, with or without its # and workspace', () => {
     expect(read({ slack_channel: ' #alerts ', new_task: true })).toMatchObject({
       ok: true,
-      value: { trigger: null, slackChannel: { channel: 'alerts', workspace: null }, secretRef: null },
+      value: {
+        trigger: null,
+        slackChannel: { channel: 'alerts', workspace: null, updates: null },
+        secretRef: null,
+      },
     });
     expect(read({ slack_channel: 'C0123', slack_workspace: ' Acme ' })).toMatchObject({
       value: { slackChannel: { channel: 'C0123', workspace: 'Acme' } },
+    });
+    expect(read({ slack_channel: 'alerts', slack_updates: false })).toMatchObject({
+      value: { slackChannel: { channel: 'alerts', updates: false } },
     });
     expect(read({ every_minutes: 5 })).toMatchObject({ value: { slackChannel: null } });
   });
@@ -141,6 +148,7 @@ describe('reading set_schedule', () => {
     ['a channel and a clock', { slack_channel: '#alerts', every_minutes: 5 }, 'not several'],
     ['a channel that is only a #', { slack_channel: '#' }, 'must name a channel, such as #alerts'],
     ['a channel that is empty', { slack_channel: '' }, 'slack_channel'],
+    ['updates without a channel', { every_minutes: 5, slack_updates: false }, 'slack_updates only goes with'],
     [
       'a workspace without a channel',
       { every_minutes: 5, slack_workspace: 'Acme' },

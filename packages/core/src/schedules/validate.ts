@@ -23,6 +23,7 @@ import { parseTimeOfDay, serializeTimeOfDay } from './time.ts';
 export interface SlackChannelRequest {
   channel: string;
   workspace: string | null;
+  updates: boolean | null;
 }
 
 export interface ScheduleRequest {
@@ -62,10 +63,14 @@ function readWebhook(reader: HandOverReader, value: unknown): TriggerRead {
 }
 
 function readSlackChannel(reader: HandOverReader, input: Record<string, unknown>): TriggerRead {
-  const { slack_channel: channel, slack_workspace: workspace } = reader.read(SlackChannelChoice, input, []);
+  const {
+    slack_channel: channel,
+    slack_workspace: workspace,
+    slack_updates: updates,
+  } = reader.read(SlackChannelChoice, input, []);
   const name = channel.replace(/^#/, '').trim();
   if (!name) reader.refuse('slack_channel must name a channel, such as #alerts.');
-  return { trigger: null, secretRef: null, slackChannel: { channel: name, workspace } };
+  return { trigger: null, secretRef: null, slackChannel: { channel: name, workspace, updates } };
 }
 
 const NO_TRIGGER: TriggerRead = { trigger: null, secretRef: null, slackChannel: null };
@@ -95,6 +100,8 @@ function readTrigger(reader: HandOverReader, input: Record<string, unknown>, now
   if (input.weekdays !== undefined && when !== 'daily_at') reader.refuse('weekdays only go with daily_at.');
   if (input.slack_workspace !== undefined && input.slack_workspace !== null && when !== 'slack_channel')
     reader.refuse('slack_workspace only goes with slack_channel.');
+  if (input.slack_updates !== undefined && input.slack_updates !== null && when !== 'slack_channel')
+    reader.refuse('slack_updates only goes with slack_channel: name the channel again to change it.');
   switch (when) {
     case 'in_minutes': {
       const minutes = reader.read(InMinutes, input.in_minutes, ['in_minutes']);

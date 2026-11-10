@@ -1021,7 +1021,14 @@ describe('a Slack channel that triggers automations', () => {
       id,
       name: 'Alerts',
       text: 'Look into this alert.',
-      trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+      trigger: {
+        kind: 'slack',
+        teamId: 'T1',
+        teamName: 'Acme',
+        channelId: 'C1',
+        channelName: 'alerts',
+        threadUpdates: true,
+      },
       target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' },
       enabled: true,
       stopped: null,
@@ -1148,7 +1155,14 @@ describe('a Slack channel that triggers automations', () => {
     stub.notify();
     stub.update((state) => {
       state.schedules.s2 = createSchedule('s2', {
-        trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'G2', channelName: 'feedback' },
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'G2',
+          channelName: 'feedback',
+          threadUpdates: true,
+        },
       });
     });
     stub.notify();

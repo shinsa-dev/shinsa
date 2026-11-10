@@ -142,6 +142,7 @@ describe('set_schedule', () => {
       teamName: 'Acme',
       channelId: 'C1',
       channelName: 'alerts',
+      threadUpdates: true,
     });
     expect(reply).toBe(
       `Saved “Look into this alert.” (schedule_id ${schedule.id}). When a message is posted in #alerts. Starts a new task.`

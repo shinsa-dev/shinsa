@@ -2,6 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   parseSlackEvaluation,
+  parseSlackFilter,
+  SLACK_FILTER_SYSTEM,
+  type SlackChannelMessage,
+  serializeSlackFilterPrompt,
   SLACK_EVALUATION_SYSTEM,
   type SlackMention,
   serializeSlackEvaluationPrompt,
@@ -76,5 +80,49 @@ describe('the evaluation answer', () => {
     expect(Option.getOrNull(parseSlackEvaluation(null))).toBeNull();
     expect(Option.getOrNull(parseSlackEvaluation({}))).toBeNull();
     expect(Option.getOrNull(parseSlackEvaluation({ decision: 'reply' }))).toBeNull();
+  });
+});
+
+describe('whether an automation applies to a channel message', () => {
+  const message: SlackChannelMessage = {
+    eventId: 'Ev9',
+    teamId: 'T1',
+    channelId: 'C1',
+    messageTs: '200.1',
+    userId: 'U7',
+    userName: 'Mia',
+    bot: false,
+    text: ' The export button is misaligned. ',
+    permalink: null,
+    channelName: 'feedback',
+  };
+
+  test('keeps the system prompt fixed and puts the automation and the fenced message in the prompt', () => {
+    expect(SLACK_FILTER_SYSTEM).not.toContain('export');
+    expect(serializeSlackFilterPrompt(' File front-end issues only. ', message, 'n1')).toBe(
+      [
+        'The automation:',
+        'File front-end issues only.',
+        '',
+        'The message in #feedback:',
+        '<slack-message-n1>',
+        'The export button is misaligned.',
+        '</slack-message-n1>',
+        '',
+        'Answer with JSON: {"decision": "file" when the automation applies to the message, else "skip"}.',
+      ].join('\n')
+    );
+  });
+
+  test('says when a bot posted it and names no channel Slack did not give', () => {
+    const prompt = serializeSlackFilterPrompt('File it.', { ...message, bot: true, channelName: null }, 'n1');
+    expect(prompt).toContain('The message in the channel, posted by a bot:');
+  });
+
+  test('reads file or skip and nothing else', () => {
+    expect(Option.getOrNull(parseSlackFilter({ decision: 'file' }))).toBe('file');
+    expect(Option.getOrNull(parseSlackFilter({ decision: 'skip' }))).toBe('skip');
+    expect(Option.isNone(parseSlackFilter({ decision: 'maybe' }))).toBe(true);
+    expect(Option.isNone(parseSlackFilter(null))).toBe(true);
   });
 });
