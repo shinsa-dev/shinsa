@@ -65,6 +65,7 @@ describe('Jump to', () => {
       ['Repository folders', 'Projects'],
       ['Worktrees', 'Projects'],
       ['Projects', 'Projects'],
+      ['Browser', 'Projects'],
       ['MCPs', 'Integrations'],
       ['Plugins', 'Integrations'],
       ['Skills', 'Integrations'],

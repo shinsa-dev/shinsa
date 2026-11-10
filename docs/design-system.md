@@ -2308,7 +2308,7 @@ Dialog (Root)
    └─ DialogCloseButton          (when showCloseButton)
 ```
 
-Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls) and `DIALOG_HEADER_STICKY` (the header that stays).
+Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls), `DIALOG_HEADER_STICKY` (the header that stays) and `DIALOG_EDGE` (the popup's edge drawn again above its content, so the sticky header's background never hides the top of the dark inset ring; `AlertDialogContent` uses it too).
 
 **Props**
 
@@ -3775,10 +3775,10 @@ A 12.5px ring at 30% of the ink with a quarter arc at full ink, 1.5px strokes (i
 
 **Classes:**
 
-- Root: `peer group/switch relative inline-flex h-4 w-6 shrink-0 items-center rounded-full border border-transparent bg-bg-3 transition-[background-color,box-shadow] duration-200 ease-out outline-none after:absolute after:-inset-x-3 after:-inset-y-2 not-data-disabled:cursor-pointer data-checked:bg-primary-4 data-disabled:cursor-not-allowed data-disabled:[&>span]:opacity-50`
-- Thumb: `pointer-events-none flex size-3 items-center justify-center rounded-full bg-background text-primary-4 ring-0 transition-transform duration-150 ease-out shadow-control-knob translate-x-px data-checked:translate-x-[calc(100%-3px)]`
+- Root: `peer group/switch relative inline-flex h-4.5 w-6.5 shrink-0 items-center rounded-full border border-transparent bg-bg-3 transition-[background-color,box-shadow] duration-200 ease-out outline-none after:absolute after:-inset-x-3 after:-inset-y-2 not-data-disabled:cursor-pointer data-checked:bg-primary-4 data-disabled:cursor-not-allowed data-disabled:[&>span]:opacity-50`
+- Thumb: `pointer-events-none flex size-3.5 items-center justify-center rounded-full bg-background text-primary-4 ring-0 transition-transform duration-150 ease-out shadow-control-knob translate-x-px data-checked:translate-x-[calc(100%-5px)]`
 
-**Geometry:** track 24 × 16px, fully round, 1px transparent border; knob 12px, 2px from every edge (1px border + 1px translate); checked, its translate becomes 9px (`100% − 3px`), 8px further right, so it sits 2px from the right edge. The invisible `::after` extends the hit area 12px left and right and 8px up and down (48 × 32px).
+**Geometry:** track 26 × 18px, fully round, 1px transparent border; knob 14px, 2px from every edge (1px border + 1px translate); checked, its translate becomes 9px (`100% − 5px`), 8px further right, so it sits 2px from the right edge. The invisible `::after` extends the hit area 12px left and right and 8px up and down (50 × 34px).
 
 | State | Track | Knob |
 | --- | --- | --- |
@@ -9627,7 +9627,7 @@ and the user's setting has to win.
   | Input, select trigger, default tab list | 26px |
   | Underline tab list | 32px |
   | Checkbox `sm` / `md` | 14 / 16px |
-  | Switch | 24 × 16px track, 12px thumb |
+  | Switch | 26 × 18px track, 14px thumb |
 
 - **Whole rows and tiles are the target**: a list row, a task row, a disclosure header is one click target end to
   end, never a small link inside a row.

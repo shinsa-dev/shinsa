@@ -24,6 +24,7 @@ export const ENGINE_FEATURES = [
   'usage.auto_pace',
   'shared-machine',
   'focus.projects',
+  'browser',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

@@ -252,7 +252,7 @@ export const PROVIDER_WINDOWS: Record<string, KeyedWindow> = {
 export const LIMIT_KINDS: Record<string, string> = { session: 'five_hour', weekly_all: 'seven_day' };
 
 export const EXPIRED_DETAIL =
-  'The login needs refreshing. It refreshes the next time an agent runs on this account.';
+  'This login expired. Shinsa refreshes it at its next check. Sign in again if this message stays.';
 
 export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 

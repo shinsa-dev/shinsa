@@ -3,6 +3,8 @@ import {
   type Gate,
   isTaskSettled,
   resolveAnsweredReply,
+  resolveBrowserSignInReply,
+  resolveBrowserSignInResumePrompt,
   resolveAnswerPrompt,
   resolveDelegationAnswerPrompt,
   resolveQuestionResumePrompt,
@@ -10,6 +12,7 @@ import {
   resolveWithdrawnReply,
   type ShinsaCommand,
   type Validation,
+  validateBrowserSignInRequest,
   validateQuestion,
   validateSecretRequest,
 } from '@shinsa/core';
@@ -42,6 +45,13 @@ export class Questions extends Context.Service<
       dispatch: QuestionDispatch
     ) => Effect.Effect<string, ToolCallFailed | DomainError>;
     readonly requestSecret: (
+      runId: string,
+      attemptId: string,
+      input: Record<string, unknown>,
+      signal: AbortSignal,
+      dispatch: QuestionDispatch
+    ) => Effect.Effect<string, ToolCallFailed | DomainError>;
+    readonly requestBrowserSignIn: (
       runId: string,
       attemptId: string,
       input: Record<string, unknown>,
@@ -201,6 +211,26 @@ export class Questions extends Context.Service<
         return describeSecretReply(reply, (yield* engine.state).gates[gateId], label);
       });
 
+      const requestBrowserSignIn = Effect.fn('Questions.requestBrowserSignIn')(function* (
+        runId: string,
+        attemptId: string,
+        input: Record<string, unknown>,
+        signal: AbortSignal,
+        dispatch: QuestionDispatch
+      ) {
+        const { url, reason } = yield* readHandOver(validateBrowserSignInRequest(input));
+        const gateId = Bun.randomUUIDv7();
+        yield* open(runId, gateId, signal, dispatch, {
+          type: 'agent.request_browser_sign_in',
+          runId,
+          attemptId,
+          gateId,
+          url,
+          reason,
+        });
+        return resolveBrowserSignInReply((yield* engine.state).gates[gateId]);
+      });
+
       const resolve = Effect.fn('Questions.resolve')(function* (gateId: string) {
         const gate = (yield* engine.state).gates[gateId];
         if (!gate) return;
@@ -212,9 +242,16 @@ export class Questions extends Context.Service<
         const task = state.tasks[gate.taskId];
         if (!task || isTaskSettled(task)) return;
         const asker = gate.runId ? state.runs[gate.runId] : undefined;
+        const browserSignIn = gate.type === 'browser_sign_in' ? resolveBrowserSignInResumePrompt(gate) : null;
         if (asker && asker.endedAt === null && !live.has(asker.id))
-          return yield* runs.execute(asker.id, resolveQuestionResumePrompt(gate.title, reply), null);
-        const text = reply.kind === 'answered' ? resolveAnswerPrompt(gate.title, reply.text) : reply.text;
+          return yield* runs.execute(
+            asker.id,
+            browserSignIn ?? resolveQuestionResumePrompt(gate.title, reply),
+            null
+          );
+        const text =
+          browserSignIn ??
+          (reply.kind === 'answered' ? resolveAnswerPrompt(gate.title, reply.text) : reply.text);
         yield* engine.dispatch(
           { type: 'message.deliver', taskId: gate.taskId, text },
           { id: `question:${gateId}:message.deliver` }
@@ -239,6 +276,7 @@ export class Questions extends Context.Service<
         releaseWaiting,
         ask,
         requestSecret,
+        requestBrowserSignIn,
         resolve,
         replyToDelegate,
       });

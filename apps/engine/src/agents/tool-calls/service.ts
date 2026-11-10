@@ -374,6 +374,8 @@ export class ToolCalls extends Context.Service<
             return yield* questions.ask(runId, attemptId, input, signal, dispatch);
           case 'request_secret':
             return yield* questions.requestSecret(runId, attemptId, input, signal, dispatch);
+          case 'request_browser_sign_in':
+            return yield* questions.requestBrowserSignIn(runId, attemptId, input, signal, dispatch);
           case 'attach_evidence':
             return yield* attachEvidence(call, dispatch);
           case 'remove_evidence':

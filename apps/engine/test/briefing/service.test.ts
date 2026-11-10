@@ -254,6 +254,15 @@ describe('process gates in the prompt', () => {
     );
     expect(prompt).toContain('- id t-dup: “Fix code-first duplicate”. an agent asks: Decide;');
   });
+
+  test('a browser sign-in says an agent waits for its project’s browser to be signed in', () => {
+    const prompt = describeBriefingPrompt(
+      state,
+      { ...queue, ready: [entry(dup, 'browser_sign_in')], working: [], waiting: [] },
+      NOW
+    );
+    expect(prompt).toContain('an agent waits for the developer to sign its project’s browser in: Decide;');
+  });
 });
 
 describe('the model answer', () => {
