@@ -1,8 +1,9 @@
 import { diff } from '@codemirror/merge';
 import { resolveEditRefusal, type Task, type TaskRefs, WORKING_REF } from '@shinsa/core';
-import { Deferred, Effect } from 'effect';
+import { Deferred, Effect, Option } from 'effect';
 import { forkApp } from '@/lib/runtime/app.ts';
 import { enterPromise } from '@/lib/runtime/promise.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 
 export type FileSave = { kind: 'saved'; changed: boolean } | { kind: 'changed'; content: string | null };
 
@@ -18,7 +19,7 @@ export function resolveEditState(input: {
   headPath: string | null;
 }): EditState {
   const refusal = resolveEditRefusal(input.task);
-  if (refusal) return { editable: false, reason: refusal };
+  if (Option.isSome(refusal)) return { editable: false, reason: refusal.value };
   if (input.gitRef !== input.refs.head && input.gitRef !== WORKING_REF)
     return {
       editable: false,
@@ -134,7 +135,7 @@ export const DELETED_NOTICE = 'This file was deleted on disk. Your next edit put
 
 export class FileSaver {
   #disk: string | null;
-  #timer: ReturnType<typeof setTimeout> | null = null;
+  #timer: (() => void) | null = null;
   #saving: Deferred.Deferred<void> | null = null;
   #again = false;
   #reloads: { previous: string | null; next: string | null }[] = [];
@@ -153,10 +154,10 @@ export class FileSaver {
   edit() {
     if (this.#state.refusal) return;
     this.#cancelTimer();
-    this.#timer = setTimeout(() => {
+    this.#timer = scheduleAfter(this.#options.delayMs ?? 600, () => {
       this.#timer = null;
       this.#start();
-    }, this.#options.delayMs ?? 600);
+    });
     if (this.#state.notice) this.#update({ notice: null });
   }
 
@@ -185,7 +186,7 @@ export class FileSaver {
   }
 
   #cancelTimer() {
-    if (this.#timer) clearTimeout(this.#timer);
+    this.#timer?.();
     this.#timer = null;
   }
 

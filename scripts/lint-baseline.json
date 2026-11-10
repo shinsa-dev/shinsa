@@ -1,0 +1,19 @@
+{
+  "throw": {
+    "scripts/seed/code/kit.ts": 4,
+    "scripts/seed/code/transcripts.ts": 2,
+    "scripts/seed/prompts.ts": 1,
+    "scripts/seed/services.ts": 1,
+    "scripts/seed/spots.ts": 1,
+    "scripts/seed/tasks/delegation.ts": 2
+  },
+  "try-catch": {},
+  "null-return": {},
+  "json-parse": {},
+  "timer": {
+    "packages/ui/src/components/preview-card.tsx": 3,
+    "packages/ui/src/components/scroll-area.tsx": 1,
+    "packages/ui/src/components/sonner.tsx": 1,
+    "packages/ui/src/components/tooltip.tsx": 2
+  }
+}

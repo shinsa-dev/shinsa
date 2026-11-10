@@ -32,8 +32,12 @@ const RESPONSES = {
   },
 };
 
-async function write(words: string[], hookSecrets?: SurfaceHookSecrets) {
-  const fake = createFakeClient(RESPONSES);
+async function write(
+  words: string[],
+  hookSecrets?: SurfaceHookSecrets,
+  responses: Record<string, unknown> = {}
+) {
+  const fake = createFakeClient({ ...RESPONSES, ...responses });
   if (hookSecrets) fake.client.hookSecrets = hookSecrets;
   setSystemTime(new Date(NOW));
   try {
@@ -66,6 +70,35 @@ describe('listing schedules', () => {
 });
 
 describe('writing a schedule', () => {
+  test('on a Slack channel names its workspace and channel, and says what to do when the bot is not in it', async () => {
+    const channels = {
+      '/api/slack/channels': {
+        channels: [
+          { teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts', private: false },
+          { teamId: 'T2', teamName: 'Beta', channelId: 'C9', channelName: 'alerts', private: false },
+        ],
+      },
+    };
+    const words = ['--message', 'Look into it', '--new-task', '--slack-channel', '#alerts'];
+    const { command } = await write([...words, '--slack-workspace', 'Beta'], undefined, channels);
+    expect(command.trigger).toEqual({
+      kind: 'slack',
+      teamId: 'T2',
+      teamName: 'Beta',
+      channelId: 'C9',
+      channelName: 'alerts',
+    });
+    await expect(write(words, undefined, channels)).rejects.toThrow(
+      '#alerts is in several Slack workspaces: Acme, Beta. Name the workspace too.'
+    );
+    await expect(
+      write(['--message', 'x', '--new-task', '--slack-channel', 'deploys'], undefined, channels)
+    ).rejects.toThrow('Shinsa is not in #deploys.');
+    await expect(
+      write(['--message', 'x', '--new-task', '--every-minutes', '5', '--slack-workspace', 'Beta'])
+    ).rejects.toThrow('slack_workspace only goes with slack_channel.');
+  });
+
   test('a one-off that starts a new task in a repository, on the machine’s time zone', async () => {
     const { result, command } = await write([
       '--name',

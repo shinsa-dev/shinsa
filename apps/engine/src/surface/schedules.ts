@@ -2,6 +2,7 @@ import {
   DomainError,
   describeScheduleTarget,
   describeScheduleTrigger,
+  resolveSlackChannelTrigger,
   type Schedule,
   type ScheduleTarget,
   TASK_PRIORITIES,
@@ -68,7 +69,11 @@ function resolveWebhookInput(values: Values) {
   };
 }
 
-function resolveTrigger(values: Values, now: number) {
+const resolveTrigger = Effect.fn('Surface.scheduleTrigger')(function* (
+  client: SurfaceClient,
+  values: Values,
+  now: number
+) {
   const input = {
     in_minutes: values.inMinutes,
     run_at: values.runAt,
@@ -76,12 +81,18 @@ function resolveTrigger(values: Values, now: number) {
     daily_at: values.dailyAt,
     ...(values.weekdays ? { weekdays: readWeekdays(values) } : {}),
     webhook: resolveWebhookInput(values),
+    slack_channel: values.slackChannel,
+    slack_workspace: values.slackWorkspace,
   };
   const result = validateScheduleRequest(input, now);
   if (!result.ok)
-    return Effect.fail(new DomainError({ code: 'schedule_invalid', message: result.errors.join(' ') }));
-  return Effect.succeed(result.value.trigger);
-}
+    return yield* new DomainError({ code: 'schedule_invalid', message: result.errors.join(' ') });
+  const { slackChannel } = result.value;
+  if (slackChannel === null) return result.value.trigger;
+  const { channels } = yield* client.api.slack.channels();
+  const { trigger, problem } = resolveSlackChannelTrigger(channels, slackChannel);
+  return trigger ?? (yield* new DomainError({ code: 'schedule_invalid', message: problem }));
+});
 
 const resolveTarget = Effect.fn('Surface.scheduleTarget')(function* (
   client: SurfaceClient,
@@ -182,7 +193,7 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
   defineCommand({
     path: ['schedules', 'write'],
     summary:
-      'Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily or when its webhook is called.',
+      'Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily, when its webhook is called or when a message is posted in a Slack channel.',
     command: 'schedule.write',
     fields: [
       { name: 'id', kind: 'text', description: 'The schedule to change. Leave out to create one.' },
@@ -222,6 +233,17 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
         kind: 'text',
         description: 'With --webhook: a template that names a delivery, so a repeat starts nothing.',
       },
+      {
+        name: 'slackChannel',
+        kind: 'text',
+        description:
+          'Run for each new message in this Slack channel, such as #alerts. Invite @Shinsa to the channel first.',
+      },
+      {
+        name: 'slackWorkspace',
+        kind: 'text',
+        description: 'With --slack-channel: the Slack workspace, when the channel is in several.',
+      },
       { name: 'newTask', kind: 'boolean', description: 'Start a new task on each run.' },
       { name: 'repo', kind: 'text', description: 'With --new-task: the repository (name or id).' },
       {
@@ -253,7 +275,7 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
     ],
     build: Effect.fn('Surface.scheduleWrite')(function* (values, client) {
       yield* assertHookSecret(client, values);
-      const trigger = yield* resolveTrigger(values, yield* Clock.currentTimeMillis);
+      const trigger = yield* resolveTrigger(client, values, yield* Clock.currentTimeMillis);
       const command: UserCommand = {
         type: 'schedule.write',
         scheduleId: readValue(values, 'id') || null,

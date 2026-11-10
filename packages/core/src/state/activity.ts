@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { capitalise, describeCount, describeList, quoteTitle } from '../chat/text.ts';
 import { isBlockingCheck } from '../domain/checks.ts';
 import { resolveTeammateMachineLabel } from '../domain/duplicates.ts';
@@ -72,9 +73,13 @@ const DECISION_TEXT: Record<GateDecision, string> = {
   reply: 'Answered',
 };
 
-export function describeStage(stage: TaskStage, reason: string, hasPullRequest: boolean) {
-  if (stage === 'shipping' && hasPullRequest) return capitalise(reason);
-  return STAGE_ACTIVITY[stage] ?? null;
+export function describeStage(
+  stage: TaskStage,
+  reason: string,
+  hasPullRequest: boolean
+): Option.Option<string> {
+  if (stage === 'shipping' && hasPullRequest) return Option.some(capitalise(reason));
+  return Option.fromNullishOr(STAGE_ACTIVITY[stage]);
 }
 
 export function describeFixRound(round: number, reason: FixReason) {
@@ -113,7 +118,7 @@ export function describeFailedChecks(results: ReportCheck[]) {
     if (check.note) return [`${check.label}: ${NOTE_TEXT[check.note]}`];
     return check.outcome === 'fail' ? [`${check.label}: \`${check.command}\` failed`] : [];
   });
-  return lines.length === 0 ? null : lines.join('\n');
+  return lines.length === 0 ? Option.none<string>() : Option.some(lines.join('\n'));
 }
 
 const CHANGE_VERB: Record<CheckChange['action'], string> = {
@@ -181,7 +186,7 @@ export function describePullRequestRemarks(changes: PullRequestWatchChange[]) {
         })
       : []
   );
-  return lines.length > 0 ? lines.join('\n') : null;
+  return lines.length > 0 ? Option.some(lines.join('\n')) : Option.none<string>();
 }
 
 export function describeUnreachedTeammates(unreached: readonly UnreachedTeammate[]) {

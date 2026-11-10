@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type {
   CiRun,
   PullRequest,
@@ -223,11 +224,14 @@ function resolveSignatureParts(pullRequest: PullRequest, watch: PullRequestWatch
   return [...checks, ...threads, conflict].filter(Boolean);
 }
 
-export function resolvePullRequestSignature(pullRequest: PullRequest, watch: PullRequestWatch) {
-  if (isUnnamed(pullRequest)) return null;
+export function resolvePullRequestSignature(
+  pullRequest: PullRequest,
+  watch: PullRequestWatch
+): Option.Option<string> {
+  if (isUnnamed(pullRequest)) return Option.none();
   const parts = resolveSignatureParts(pullRequest, watch);
-  if (parts.length === 0) return null;
-  return [...new Set(parts)].sort().join('\n');
+  if (parts.length === 0) return Option.none();
+  return Option.some([...new Set(parts)].sort().join('\n'));
 }
 
 function resolvePullRequestShape(pullRequest: PullRequest) {

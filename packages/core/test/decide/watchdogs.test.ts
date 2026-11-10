@@ -1016,6 +1016,152 @@ describe('a watchdog that starts on production', () => {
   });
 });
 
+describe('a watchdog whose change is not live', () => {
+  test('a watching check that finds the change not deployed moves it to waiting for production and keeps the check', () => {
+    const { harness, taskId } = mergeWith([LATENCY]);
+    fire(harness, taskId);
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toContain('First make sure the change is live in production now');
+    expect(prompt).toContain('call `report_read` with `live` false');
+    expect(prompt).not.toContain('How to tell:');
+    reportLive(harness, taskId, false);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'awaiting_production',
+      awaitingSince: harness.now,
+      startedAt: null,
+      endsAt: null,
+      runId: null,
+      nextCheckAt: harness.now + 30 * MINUTE_MS,
+      checks: [{ healthy: true, summary: 'Production still runs the previous release.' }],
+    });
+    const waited = harness
+      .task(taskId)
+      .activity.find(
+        (entry) =>
+          entry.text ===
+          'The change is not live in production, so the watchdog “Checkout latency” waits for it'
+      );
+    expect(waited?.detail).toBe('Production still runs the previous release.');
+  });
+
+  test('while it waits, the check asks whether it is live from what the earlier check saw', () => {
+    const { harness, taskId } = mergeWith([LATENCY]);
+    fire(harness, taskId);
+    reportLive(harness, taskId, false);
+    fire(harness, taskId);
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toContain('is live in production yet');
+    expect(prompt).toContain('How to tell: no way to tell was given when the change shipped');
+    expect(prompt).toContain('- Healthy: Production still runs the previous release.');
+    expect(refusal(() => report(harness, taskId, true)).code).toBe('live_required');
+  });
+
+  test('once live again it gets a full new window and its checks back off from the start', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, firstCheckMinutes: 30 }]);
+    fire(harness, taskId);
+    report(harness, taskId, true);
+    fire(harness, taskId);
+    report(harness, taskId, true);
+    expect(Math.round(((watchdog(harness, taskId).nextCheckAt ?? 0) - harness.now) / MINUTE_MS)).toBe(120);
+    fire(harness, taskId);
+    endCheck(harness, taskId, 'Production was rolled back to the previous release.', { live: false });
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'awaiting_production', endsAt: null });
+    expect(watchdog(harness, taskId).checks).toHaveLength(3);
+    fire(harness, taskId);
+    reportLive(harness, taskId, true);
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'watching',
+      awaitingSince: null,
+      startedAt: harness.now,
+      endsAt: harness.now + 48 * HOUR_MS,
+      nextCheckAt: harness.now + 60 * MINUTE_MS,
+    });
+    expect(watchdog(harness, taskId).checks).toHaveLength(4);
+    fire(harness, taskId);
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toContain('First make sure the change is live in production now');
+    report(harness, taskId, true);
+    expect(Math.round(((watchdog(harness, taskId).nextCheckAt ?? 0) - harness.now) / MINUTE_MS)).toBe(120);
+  });
+
+  test('a watchdog that waited for production and went live goes back to waiting after a rollback, told how to tell', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    fire(harness, taskId);
+    reportLive(harness, taskId, true);
+    fire(harness, taskId);
+    expect(readInstruction(harness.activeRun(taskId))).toContain(
+      'leaves nothing to check. How to tell: The production deployment on Vercel includes the merge commit.'
+    );
+    reportLive(harness, taskId, false);
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'awaiting_production',
+      awaitingSince: harness.now,
+      startedAt: null,
+    });
+    expect(watchdog(harness, taskId).checks).toHaveLength(2);
+  });
+
+  test('one answer moves every watching watchdog of the task, and only the one that checked keeps the check', () => {
+    const { harness, taskId } = mergeWith([LATENCY, { ...LATENCY, title: 'Checkout errors' }, EVENTS]);
+    fire(harness, taskId);
+    reportLive(harness, taskId, false);
+    expect(watchdog(harness, taskId).checks).toHaveLength(1);
+    expect(watchdog(harness, taskId, 1)).toMatchObject({
+      status: 'awaiting_production',
+      awaitingSince: harness.now,
+      endsAt: null,
+      checks: [],
+      nextCheckAt: watchdog(harness, taskId).nextCheckAt,
+    });
+    expect(watchdog(harness, taskId, 2).status).toBe('needs_source');
+    const waits = harness
+      .task(taskId)
+      .activity.filter((entry) => entry.text.startsWith('The change is not live in production'));
+    expect(waits.map((entry) => entry.detail)).toEqual(['Production still runs the previous release.', null]);
+  });
+
+  test('a watching check that says it is live, or leaves it out, is an ordinary healthy check', () => {
+    const { harness, taskId } = mergeWith([LATENCY]);
+    fire(harness, taskId);
+    reportLive(harness, taskId, true);
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'watching', checks: [{ healthy: true }] });
+    expect(watchdog(harness, taskId).endsAt).not.toBeNull();
+  });
+
+  test('a watching check that filed a report cannot say the change is not live', () => {
+    const { harness, taskId } = mergeWith([LATENCY]);
+    fire(harness, taskId);
+    fileIssue(harness, taskId);
+    expect(refusal(() => reportLive(harness, taskId, false)).code).toBe('live_filed');
+    endCheck(harness, taskId, 'p95 is 1.8 s in Safari since the merge.');
+    expect(watchdog(harness, taskId).status).toBe('tripped');
+  });
+
+  test('it stops waiting a week after it went back to waiting, not a week after the merge', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, forHours: 720 }]);
+    harness.advance(200 * HOUR_MS);
+    fire(harness, taskId);
+    reportLive(harness, taskId, false);
+    fire(harness, taskId);
+    reportLive(harness, taskId, false);
+    expect(watchdog(harness, taskId).status).toBe('awaiting_production');
+    fire(harness, taskId);
+    harness.advance(168 * HOUR_MS);
+    reportLive(harness, taskId, false);
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'stopped', nextCheckAt: null });
+  });
+
+  test('replaying the log gives the same waiting watchdog', () => {
+    const { harness, taskId } = mergeWith([LATENCY]);
+    fire(harness, taskId);
+    reportLive(harness, taskId, false);
+    const replayed = replayEventLog(harness.events).state;
+    expect(replayed.tasks[taskId]?.watchdogs).toEqual(harness.task(taskId).watchdogs);
+  });
+});
+
 describe('watchdogs on the task’s steps', () => {
   test('a Watching step follows the merge, current while one watches and done once they all end', () => {
     const { harness, taskId } = mergeWith([

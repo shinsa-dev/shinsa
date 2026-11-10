@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   createState,
   HOUR_MS,
@@ -118,18 +119,24 @@ describe('resolveRecentUsage', () => {
 describe('resolveRecentUsageFreesAt', () => {
   test('frees once enough of the oldest usage leaves the window', () => {
     const recent = resolveRecentUsage(STATE, NOW, { provider: 'claude' });
-    expect(resolveRecentUsageFreesAt(recent, 40)).toBeNull();
-    expect(resolveRecentUsageFreesAt(recent, 30)).toBe(NOW - 20 * HOUR_MS + RECENT_USAGE_MS);
-    expect(resolveRecentUsageFreesAt(recent, 10)).toBe(NOW - 10 * HOUR_MS + RECENT_USAGE_MS);
+    expect(Option.getOrNull(resolveRecentUsageFreesAt(recent, 40))).toBeNull();
+    expect(Option.getOrNull(resolveRecentUsageFreesAt(recent, 30))).toBe(
+      NOW - 20 * HOUR_MS + RECENT_USAGE_MS
+    );
+    expect(Option.getOrNull(resolveRecentUsageFreesAt(recent, 10))).toBe(
+      NOW - 10 * HOUR_MS + RECENT_USAGE_MS
+    );
   });
 
   test('frees when the last usage leaves a window that never goes under the limit', () => {
     const recent = resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-app' });
-    expect(resolveRecentUsageFreesAt(recent, 0)).toBe(NOW - 2 * HOUR_MS + RECENT_USAGE_MS);
+    expect(Option.getOrNull(resolveRecentUsageFreesAt(recent, 0))).toBe(NOW - 2 * HOUR_MS + RECENT_USAGE_MS);
     expect(
-      resolveRecentUsageFreesAt(
-        resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-none' }),
-        0
+      Option.getOrNull(
+        resolveRecentUsageFreesAt(
+          resolveRecentUsage(STATE, NOW, { provider: 'claude', projectId: 'project-none' }),
+          0
+        )
       )
     ).toBeNull();
   });

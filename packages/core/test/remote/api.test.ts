@@ -74,6 +74,8 @@ const ROUTES = [
   'POST /__remote/slack/post',
   'POST /__remote/slack/session',
   'POST /__remote/slack/react',
+  'GET /__remote/slack/channels',
+  'POST /__remote/slack/watches',
 ];
 
 function listRoutes() {

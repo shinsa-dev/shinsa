@@ -12,7 +12,7 @@ import {
   resolveDeliveryPrompt,
   type ShinsaState,
 } from '@shinsa/core';
-import { Deferred, type Duration, Effect } from 'effect';
+import { Deferred, type Duration, Effect, Option } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { awaitAbort } from '../../shell/abort.ts';
 import type { DelegationOutcome } from '../tools/orchestration/schema.ts';
@@ -30,7 +30,7 @@ export function resolveDelivery(state: ShinsaState, parent: Run): Delivery | nul
   const questions: DeliveredQuestion[] = [];
   const messages: string[] = [];
   for (const raw of claim.items) {
-    const item = parseDeliveryItem(raw);
+    const item = Option.getOrNull(parseDeliveryItem(raw));
     if (item?.kind === 'message') {
       const message = resolveCohort(parent).messages.find((candidate) => candidate.id === item.messageId);
       if (message) messages.push(message.text);

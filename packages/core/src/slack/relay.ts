@@ -19,6 +19,8 @@ export const SLACK_RELAY_PATHS = {
   react: '/__remote/slack/react',
   directory: '/__remote/slack/directory',
   notify: '/__remote/slack/notify',
+  channels: '/__remote/slack/channels',
+  watches: '/__remote/slack/watches',
 } as const;
 
 export const SLACK_RELAY_MESSAGE_LIMITS = {

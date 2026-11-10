@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   isSharedWorkspace,
   isWaitingForCheckout,
@@ -96,7 +97,7 @@ describe('where agents work', () => {
       stage: 'waiting_on_tasks',
       stageReason: 'waiting for “Fix the scroll” to finish with the checkout',
     });
-    expect(selectCheckoutHolder(harness.state, harness.task(second))?.id).toBe(first);
+    expect(Option.getOrNull(selectCheckoutHolder(harness.state, harness.task(second)))?.id).toBe(first);
     expect(isWaitingForCheckout(harness.state, harness.task(second))).toBe(true);
     expect(listWaitsOn(harness.state, harness.task(second)).map((task) => task.id)).toEqual([first]);
 
@@ -148,7 +149,7 @@ describe('where agents work', () => {
     const { first } = startInCheckout(harness);
     readyCheckout(harness, first);
     const unbound = { ...harness.task(first), id: 'other', repoId: null, worktreePath: null };
-    expect(selectCheckoutHolder(harness.state, unbound)).toBeNull();
+    expect(Option.getOrNull(selectCheckoutHolder(harness.state, unbound))).toBeNull();
     expect(resolveTaskWorkspace(harness.state, unbound)).toBe('worktrees');
   });
 

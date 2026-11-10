@@ -27,3 +27,12 @@ describe('scheduling', () => {
     }
   });
 });
+
+describe('what a task waits on', () => {
+  test('a task waiting on tasks with nothing pending and no checkout holder waits on nothing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = { ...harness.task(taskId), stage: 'waiting_on_tasks' as const };
+    expect(listWaitsOn(harness.state, task)).toEqual([]);
+  });
+});

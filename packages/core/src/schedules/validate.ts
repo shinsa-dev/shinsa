@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ScheduleTargetInput } from '../commands/schedules.ts';
 import { MINUTE_MS, type ScheduleTrigger, type TaskPriority } from '../domain/index.ts';
 import { HandOverReader, type Validation } from '../report/reading.ts';
@@ -12,17 +13,24 @@ import {
   ScheduleNaming,
   ScheduleOptions,
   SecretRequestInput,
+  SlackChannelChoice,
   TargetChoice,
   Webhook,
   WHEN_KEYS,
 } from './schema.ts';
 import { parseTimeOfDay, serializeTimeOfDay } from './time.ts';
 
+export interface SlackChannelRequest {
+  channel: string;
+  workspace: string | null;
+}
+
 export interface ScheduleRequest {
   scheduleId: string | null;
   name: string | null;
   text: string | null;
   trigger: ScheduleTrigger | null;
+  slackChannel: SlackChannelRequest | null;
   target: ScheduleTargetInput | null;
   source: string | null;
   enabled: boolean | null;
@@ -49,18 +57,29 @@ function readWebhook(reader: HandOverReader, value: unknown): TriggerRead {
       replayKey: webhook.replay_key,
     },
     secretRef: signature?.secret_ref ?? null,
+    slackChannel: null,
   };
 }
 
+function readSlackChannel(reader: HandOverReader, input: Record<string, unknown>): TriggerRead {
+  const { slack_channel: channel, slack_workspace: workspace } = reader.read(SlackChannelChoice, input, []);
+  const name = channel.replace(/^#/, '').trim();
+  if (!name) reader.refuse('slack_channel must name a channel, such as #alerts.');
+  return { trigger: null, secretRef: null, slackChannel: { channel: name, workspace } };
+}
+
+const NO_TRIGGER: TriggerRead = { trigger: null, secretRef: null, slackChannel: null };
+
 function readDaily(reader: HandOverReader, input: Record<string, unknown>): ScheduleTrigger {
   const { daily_at: raw, weekdays } = reader.read(DailyAt, input, []);
-  const time = parseTimeOfDay(raw);
-  return { kind: 'daily', time: time ? serializeTimeOfDay(time) : raw, weekdays };
+  const time = Option.match(parseTimeOfDay(raw), { onNone: () => raw, onSome: serializeTimeOfDay });
+  return { kind: 'daily', time, weekdays };
 }
 
 interface TriggerRead {
   trigger: ScheduleTrigger | null;
   secretRef: string | null;
+  slackChannel: SlackChannelRequest | null;
 }
 
 function readTrigger(reader: HandOverReader, input: Record<string, unknown>, now: number): TriggerRead {
@@ -68,29 +87,33 @@ function readTrigger(reader: HandOverReader, input: Record<string, unknown>, now
     (key) => input[key] !== undefined && input[key] !== null && input[key] !== false
   );
   const [when] = given;
-  if (when === undefined) return { trigger: null, secretRef: null };
+  if (when === undefined) return NO_TRIGGER;
   if (given.length > 1) {
     reader.refuse(`Give one of ${WHEN_KEYS.join(', ')}, not several.`);
-    return { trigger: null, secretRef: null };
+    return NO_TRIGGER;
   }
   if (input.weekdays !== undefined && when !== 'daily_at') reader.refuse('weekdays only go with daily_at.');
+  if (input.slack_workspace !== undefined && input.slack_workspace !== null && when !== 'slack_channel')
+    reader.refuse('slack_workspace only goes with slack_channel.');
   switch (when) {
     case 'in_minutes': {
       const minutes = reader.read(InMinutes, input.in_minutes, ['in_minutes']);
-      return { trigger: { kind: 'once', at: now + minutes * MINUTE_MS }, secretRef: null };
+      return { ...NO_TRIGGER, trigger: { kind: 'once', at: now + minutes * MINUTE_MS } };
     }
     case 'run_at': {
       const { run_at: text } = reader.read(RunAt, input, []);
-      return { trigger: { kind: 'once', at: Date.parse(text) }, secretRef: null };
+      return { ...NO_TRIGGER, trigger: { kind: 'once', at: Date.parse(text) } };
     }
     case 'every_minutes': {
       const everyMinutes = reader.read(EveryMinutes, input.every_minutes, ['every_minutes']);
-      return { trigger: { kind: 'interval', everyMinutes }, secretRef: null };
+      return { ...NO_TRIGGER, trigger: { kind: 'interval', everyMinutes } };
     }
     case 'daily_at':
-      return { trigger: readDaily(reader, input), secretRef: null };
+      return { ...NO_TRIGGER, trigger: readDaily(reader, input) };
     case 'webhook':
       return readWebhook(reader, input.webhook);
+    case 'slack_channel':
+      return readSlackChannel(reader, input);
   }
 }
 
@@ -114,7 +137,7 @@ export function validateScheduleRequest(
   now: number
 ): Validation<ScheduleRequest> {
   const reader = new HandOverReader();
-  const { trigger, secretRef } = readTrigger(reader, input, now);
+  const { trigger, secretRef, slackChannel } = readTrigger(reader, input, now);
   const naming = reader.read(ScheduleNaming, input, []);
   const target = readTarget(reader, input);
   const options = reader.read(ScheduleOptions, input, []);
@@ -123,6 +146,7 @@ export function validateScheduleRequest(
     name: naming.name,
     text: naming.message,
     trigger,
+    slackChannel,
     target,
     source: options.source,
     enabled: options.enabled,

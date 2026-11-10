@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   QUESTION_WITHDRAWN,
   readAnsweredReply,
@@ -117,7 +118,7 @@ describe('where a session works', () => {
         handoff: null,
         ...(cwd ? { cwd } : {}),
       });
-    expect(selectSessionCwd(harness.state, 'task-session', 'other')).toBeNull();
+    expect(Option.getOrNull(selectSessionCwd(harness.state, 'task-session', 'other'))).toBeNull();
     attempt(`${runId}:1`, '/wt/first');
     attempt(`${runId}:2`);
     attempt(`${runId}:3`, '/wt/second');
@@ -126,9 +127,9 @@ describe('where a session works', () => {
       undefined,
       '/wt/second',
     ]);
-    expect(selectSessionCwd(harness.state, 'task-session', 'other')).toBe('/wt/second');
-    expect(selectSessionCwd(harness.state, 'task-session', runId)).toBeNull();
-    expect(selectSessionCwd(harness.state, 'another-session', 'other')).toBeNull();
+    expect(Option.getOrNull(selectSessionCwd(harness.state, 'task-session', 'other'))).toBe('/wt/second');
+    expect(Option.getOrNull(selectSessionCwd(harness.state, 'task-session', runId))).toBeNull();
+    expect(Option.getOrNull(selectSessionCwd(harness.state, 'another-session', 'other'))).toBeNull();
     expect(resolveMovedNote('/wt/third')).toBe(
       'You now work in `/wt/third`, not where this conversation started. Run every command and read every file there.'
     );

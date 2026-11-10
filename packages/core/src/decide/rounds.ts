@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   canChangeRoundShipping,
@@ -50,7 +51,7 @@ function hasOpenGate(state: ShinsaState, task: Task, type: 'review' | 'merge') {
 }
 
 function isMergedBeforeNextRound(task: Task) {
-  return resolveOperationTiming(resolveTaskPipeline(task)) === 'post_merge';
+  return Option.contains(resolveOperationTiming(resolveTaskPipeline(task)), 'post_merge');
 }
 
 function isAtMergeGate(state: ShinsaState, task: Task) {
@@ -212,7 +213,7 @@ export function changeRoundShipping(decider: Decider, command: CommandOf<'round.
     decider.emit({ ...base, shipping: command.shipping });
     return;
   }
-  const target = selectShippingTarget(task, round);
+  const target = Option.getOrNull(selectShippingTarget(task, round));
   const open = resolveTaskRounds(task).find(
     (candidate) => candidate.status === 'shipped' && candidate.pullRequest?.number === target?.number
   );

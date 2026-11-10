@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   parseSlackEvaluation,
   SLACK_EVALUATION_SYSTEM,
@@ -66,14 +67,14 @@ describe('the evaluation of a mention that links to a thread', () => {
 
 describe('the evaluation answer', () => {
   test('is a task or not a task, and nothing else', () => {
-    expect(parseSlackEvaluation({ decision: 'task' })).toBe('task');
-    expect(parseSlackEvaluation({ decision: 'none' })).toBe('none');
+    expect(Option.getOrNull(parseSlackEvaluation({ decision: 'task' }))).toBe('task');
+    expect(Option.getOrNull(parseSlackEvaluation({ decision: 'none' }))).toBe('none');
     expect(SLACK_EVALUATION_SYSTEM).toContain('never chats');
   });
 
   test('is unreadable without a decision it knows', () => {
-    expect(parseSlackEvaluation(null)).toBeNull();
-    expect(parseSlackEvaluation({})).toBeNull();
-    expect(parseSlackEvaluation({ decision: 'reply' })).toBeNull();
+    expect(Option.getOrNull(parseSlackEvaluation(null))).toBeNull();
+    expect(Option.getOrNull(parseSlackEvaluation({}))).toBeNull();
+    expect(Option.getOrNull(parseSlackEvaluation({ decision: 'reply' }))).toBeNull();
   });
 });

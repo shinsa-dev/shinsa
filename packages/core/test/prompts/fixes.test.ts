@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   resolveChecksFixPrompt,
   resolveFixFocus,
@@ -26,7 +27,7 @@ const remark = {
 
 describe('fix prompts', () => {
   test('each fix prompt opens with the words its run’s focus is read from', () => {
-    const focusOf = (prompt: string) => resolveFixFocus({ purpose: 'fix', prompt });
+    const focusOf = (prompt: string) => Option.getOrNull(resolveFixFocus({ purpose: 'fix', prompt }));
     expect(
       focusOf(
         resolveChecksFixPrompt(

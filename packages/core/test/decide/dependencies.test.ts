@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { isTaskLive } from '../../src/decide/liveness.ts';
 import {
   listActiveRuns,
@@ -267,11 +268,13 @@ describe('dependencies', () => {
     reachReviewGate(harness, normal);
     const queue = resolveQueue(harness.state, 0);
     expect(queue.ready.map((entry) => entry.task.id)).toEqual([normal, low]);
-    expect(parseBriefing({ now: { task: low, why: 'It is ready.' } }, queue, 0)).toBeNull();
-    const briefing = parseBriefing(
-      { now: { task: normal, why: 'It is ready.' }, next: [{ task: low, why: 'It is ready too.' }] },
-      queue,
-      0
+    expect(Option.getOrNull(parseBriefing({ now: { task: low, why: 'It is ready.' } }, queue, 0))).toBeNull();
+    const briefing = Option.getOrNull(
+      parseBriefing(
+        { now: { task: normal, why: 'It is ready.' }, next: [{ task: low, why: 'It is ready too.' }] },
+        queue,
+        0
+      )
     );
     expect(briefing?.now?.taskId).toBe(normal);
   });

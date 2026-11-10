@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeCount, describeList, quoteTitle } from '../chat/text.ts';
 import { DAY_MS, isPausingGate, type TaskStage } from '../domain/index.ts';
 import { resolveGateWords } from '../queue/reasons.ts';
@@ -47,22 +48,24 @@ function resolveBriefingRunning(queue: Queue) {
   return `Agents are working on ${titles}.`;
 }
 
-export function resolveFallbackNote(queue: Queue, named: Set<string>, now: number) {
+export function resolveFallbackNote(queue: Queue, named: Set<string>, now: number): Option.Option<string> {
   const entries = listBriefingEntries(queue).filter((entry) => !named.has(entry.task.id));
   const paused = entries.find((entry) => isPausingGate(entry.gate));
-  if (paused) return `${quoteTitle(paused.task.title)} is paused and needs a decision.`;
+  if (paused) return Option.some(`${quoteTitle(paused.task.title)} is paused and needs a decision.`);
   const stale = entries.find(
     (entry) => entry.gate.type === 'merge' && now - entry.gate.openedAt >= STALE_MERGE_DAYS * DAY_MS
   );
   if (stale) {
     const days = Math.floor((now - stale.gate.openedAt) / DAY_MS);
-    return `${quoteTitle(stale.task.title)} has waited ${describeCount(days, 'day')} to merge.`;
+    return Option.some(`${quoteTitle(stale.task.title)} has waited ${describeCount(days, 'day')} to merge.`);
   }
   const waiting = queue.waiting.length;
   if (waiting > 0) {
-    return `${describeCount(waiting, 'task')} ${waiting === 1 ? 'is' : 'are'} waiting for another task to finish first.`;
+    return Option.some(
+      `${describeCount(waiting, 'task')} ${waiting === 1 ? 'is' : 'are'} waiting for another task to finish first.`
+    );
   }
-  return null;
+  return Option.none();
 }
 
 export function resolveFallbackBriefing(queue: Queue, now: number): Briefing {
@@ -75,6 +78,6 @@ export function resolveFallbackBriefing(queue: Queue, now: number): Briefing {
     now: nowItem,
     next,
     running: resolveBriefingRunning(queue),
-    note: resolveFallbackNote(queue, listNamedIds(nowItem, next), now),
+    note: Option.getOrNull(resolveFallbackNote(queue, listNamedIds(nowItem, next), now)),
   };
 }

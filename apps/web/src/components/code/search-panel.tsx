@@ -7,6 +7,7 @@ import { TREE_LIST, TREE_ROW_HEIGHT, TreeRow } from '@/components/code/tree-row.
 import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
+import { useDelay } from '@/hooks/use-delay.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import {
@@ -24,11 +25,7 @@ const SEARCH_DELAY_MS = 250;
 
 function useDelayedSearch(search: CodeSearch) {
   const [delayed, setDelayed] = React.useState(search);
-  const key = JSON.stringify(search);
-  React.useEffect(() => {
-    const timer = setTimeout(() => setDelayed(JSON.parse(key) as CodeSearch), SEARCH_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [key]);
+  useDelay(() => setDelayed(search), SEARCH_DELAY_MS, [JSON.stringify(search)]);
   return delayed;
 }
 

@@ -23,6 +23,7 @@ import {
   Schedule,
   Semaphore,
   SynchronizedRef,
+  Option,
 } from 'effect';
 import { Checkout } from '../../../git/checkout/service.ts';
 import type { BundleBranch } from '../../../git/remote/schema.ts';
@@ -183,7 +184,7 @@ export class PullRequestSync extends Context.Service<
         if (!task || !known) return null;
         const repo = yield* Effect.mapError(registry.syncRemote(known), resolveEffectFailure);
         const read = yield* Effect.gen(function* () {
-          const wanted = resolveRoundBase(task) ?? repo.defaultBranch;
+          const wanted = Option.getOrNull(resolveRoundBase(task)) ?? repo.defaultBranch;
           const current = task.pullRequest;
           if (current?.state === 'open' && current.base && current.base !== wanted) {
             yield* Effect.mapError(pulls.retarget(repo, current.number, wanted), resolveEffectFailure);

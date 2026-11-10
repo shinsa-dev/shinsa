@@ -1,6 +1,6 @@
 import { parseTerminalClientFrame } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import {
   SOCKET_CLOSED,
   TERMINAL_SOCKET_PATH,
@@ -17,7 +17,7 @@ export function readTerminalSocketId(pathname: string) {
 type TerminalSocket = ServerWebSocket<TerminalSocketData>;
 
 export function applyTerminalText(session: TerminalSession, raw: string) {
-  const frame = parseTerminalClientFrame(raw);
+  const frame = Option.getOrNull(parseTerminalClientFrame(raw));
   if (frame?.type === 'resize') session.resize(frame.cols, frame.rows);
   if (frame?.type === 'colors') session.replaceColors(frame.colors);
   if (frame?.type === 'clear') session.clear();

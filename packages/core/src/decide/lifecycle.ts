@@ -1,3 +1,5 @@
+import { Option } from 'effect';
+
 import {
   hasStep,
   isOfCurrentRound,
@@ -183,7 +185,7 @@ export function openReviewGate(decider: Decider, taskId: string, escalation: Rev
   const ahead = escalation === null && task.approveAfterFix === true;
   const autopilot = ahead
     ? null
-    : resolveAutopilotDecision(decider.state.settings, task, escalation !== null);
+    : Option.getOrNull(resolveAutopilotDecision(decider.state.settings, task, escalation !== null));
   const gate = decider.openGate(
     taskId,
     'review',

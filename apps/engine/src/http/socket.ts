@@ -23,7 +23,7 @@ import {
   type TeamFeedSnapshot,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Cause, Effect, type Scope } from 'effect';
+import { Cause, Effect, type Scope, Option } from 'effect';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/service.ts';
 import { describeError, log } from '../log/index.ts';
@@ -345,7 +345,7 @@ export const makeSocketHub = Effect.fn('SocketHub.make')(function* (input: Socke
       socket.data.transcripts.clear();
     },
     message(socket: Socket, raw: string | Buffer) {
-      const message = parseClientMessage(String(raw));
+      const message = Option.getOrNull(parseClientMessage(String(raw)));
       if (!message) {
         log.warn('[Socket] Ignored a message that is not a Shinsa message');
         return;

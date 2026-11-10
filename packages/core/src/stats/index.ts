@@ -1,4 +1,5 @@
-import { addUsage, resolveUsageDelta } from '../costs/index.ts';
+import { Option } from 'effect';
+import { addUsage, createUsd, resolveUsageDelta, type Usd } from '../costs/index.ts';
 import { isProjectInFocus } from '../domain/focus.ts';
 import { type Round, resolveTaskRounds } from '../domain/rounds.ts';
 import type { FocusProjects, PullRequestChanges, Run, RunRole, RunUsage, Task } from '../domain/types.ts';
@@ -12,7 +13,7 @@ export interface TokenLine {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   tokens: number;
-  knownUsd: number;
+  knownUsd: Usd;
 }
 
 export interface StatsDay {
@@ -80,7 +81,7 @@ function createTokenLine(): TokenLine {
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     tokens: 0,
-    knownUsd: 0,
+    knownUsd: createUsd(0),
   };
 }
 
@@ -105,7 +106,7 @@ function addTokens(line: TokenLine, usage: RunUsage, runs: number): TokenLine {
     cacheWriteTokens: line.cacheWriteTokens + usage.cacheWriteTokens,
     tokens:
       line.tokens + usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
-    knownUsd: line.knownUsd + (usage.costUsd ?? 0),
+    knownUsd: createUsd(line.knownUsd + (usage.costUsd ?? 0)),
   };
 }
 
@@ -118,7 +119,7 @@ export function sumTokenLines(lines: TokenLine[]) {
       cacheReadTokens: total.cacheReadTokens + line.cacheReadTokens,
       cacheWriteTokens: total.cacheWriteTokens + line.cacheWriteTokens,
       tokens: total.tokens + line.tokens,
-      knownUsd: total.knownUsd + line.knownUsd,
+      knownUsd: createUsd(total.knownUsd + line.knownUsd),
     }),
     createTokenLine()
   );
@@ -130,7 +131,7 @@ function resolvePromptTokens(line: TokenLine) {
 
 export function resolveCacheHitRate(line: TokenLine) {
   const prompt = resolvePromptTokens(line);
-  return prompt === 0 ? null : line.cacheReadTokens / prompt;
+  return prompt === 0 ? Option.none() : Option.some(line.cacheReadTokens / prompt);
 }
 
 export function listUsageSlices(run: Run): UsageSlice[] {
@@ -249,7 +250,7 @@ function listTaskTokens(state: Pick<ShinsaState, 'tasks'>, fold: UsageFold): Tas
         title: task?.title ?? taskId,
         handle: task?.handle ?? null,
         usage,
-        cacheHitRate: resolveCacheHitRate(usage),
+        cacheHitRate: Option.getOrNull(resolveCacheHitRate(usage)),
       };
     })
     .sort((a, b) => b.usage.tokens - a.usage.tokens || a.taskId.localeCompare(b.taskId));
@@ -276,7 +277,9 @@ export function resolveProjectStatsSource(
 ): StatsSource {
   if (focus.projectIds.length === 0) return { tasks: state.tasks, runs: state.runs };
   const tasks = Object.fromEntries(
-    Object.entries(state.tasks).filter(([, task]) => isProjectInFocus(focus, resolveTaskProject(state, task)))
+    Object.entries(state.tasks).filter(([, task]) =>
+      isProjectInFocus(focus, Option.getOrNull(resolveTaskProject(state, task)))
+    )
   );
   const runs = Object.fromEntries(Object.entries(state.runs).filter(([, run]) => run.taskId in tasks));
   return { tasks, runs };
@@ -299,7 +302,7 @@ export function resolveStats(state: StatsSource, window: StatsWindow): Stats {
     days: series,
     total,
     streak: resolveStreak(series),
-    cacheHitRate: resolveCacheHitRate(total.usage),
+    cacheHitRate: Option.getOrNull(resolveCacheHitRate(total.usage)),
     byRole: listBreakdown(fold.byRole),
     byWork: listBreakdown(fold.byWork),
     byModel: listBreakdown(fold.byModel),

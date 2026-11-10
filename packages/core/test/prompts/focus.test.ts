@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   resolveChecksFixPrompt,
   resolveFixFocus,
@@ -37,8 +38,8 @@ describe('resolveFixFocus', () => {
       [resolvePushHookFixPrompt('FAIL', null, null), 'push_hook'],
     ] as const;
     for (const [instruction, focus] of cases) {
-      expect(resolveFixFocus({ purpose: 'fix', prompt: briefed(instruction) })).toBe(focus);
-      expect(resolveFixFocus({ purpose: 'fix', prompt: instruction })).toBe(focus);
+      expect(Option.getOrNull(resolveFixFocus({ purpose: 'fix', prompt: briefed(instruction) }))).toBe(focus);
+      expect(Option.getOrNull(resolveFixFocus({ purpose: 'fix', prompt: instruction }))).toBe(focus);
     }
   });
 
@@ -48,14 +49,18 @@ describe('resolveFixFocus', () => {
       prompt: briefed('Your conversation may no longer hold this round.\n\nThe checks failed:'),
       rolePrompt: briefed('The human looked at the work and wrote:'),
     };
-    expect(resolveFixFocus(run)).toBe('changes');
+    expect(Option.getOrNull(resolveFixFocus(run))).toBe('changes');
   });
 
   test('names nothing for a run that is not a fix, an unknown instruction or no prompt', () => {
-    expect(resolveFixFocus({ purpose: 'build', prompt: briefed('The checks failed') })).toBeNull();
-    expect(resolveFixFocus({ prompt: 'The checks failed' })).toBeNull();
-    expect(resolveFixFocus({ purpose: 'fix', prompt: briefed('Something else') })).toBeNull();
-    expect(resolveFixFocus({ purpose: 'fix' })).toBeNull();
+    expect(
+      Option.getOrNull(resolveFixFocus({ purpose: 'build', prompt: briefed('The checks failed') }))
+    ).toBeNull();
+    expect(Option.getOrNull(resolveFixFocus({ prompt: 'The checks failed' }))).toBeNull();
+    expect(
+      Option.getOrNull(resolveFixFocus({ purpose: 'fix', prompt: briefed('Something else') }))
+    ).toBeNull();
+    expect(Option.getOrNull(resolveFixFocus({ purpose: 'fix' }))).toBeNull();
   });
 
   test('names the fix the decider starts when the checks fail', () => {
@@ -63,6 +68,6 @@ describe('resolveFixFocus', () => {
     const taskId = createTask(harness);
     buildAll(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: failing() });
-    expect(resolveFixFocus(harness.activeRun(taskId))).toBe('checks');
+    expect(Option.getOrNull(resolveFixFocus(harness.activeRun(taskId)))).toBe('checks');
   });
 });

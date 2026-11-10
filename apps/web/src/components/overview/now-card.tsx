@@ -9,6 +9,7 @@ import {
   traceStalledLeaf,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { Option } from 'effect';
 import * as React from 'react';
 import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
@@ -127,7 +128,10 @@ function PlanList({ task }: { task: Task }) {
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-col'>
-              <PlanPhaseTitle title={phase.title} change={resolvePhaseChange(changes, phase.title)} />
+              <PlanPhaseTitle
+                title={phase.title}
+                change={Option.getOrNull(resolvePhaseChange(changes, phase.title))}
+              />
               <Markdown text={phase.detail} className='text-xs text-fg-3' />
             </div>
           </li>
@@ -430,7 +434,7 @@ function WorkCard({
   const progress = resolveTaskProgress(task);
   const [run] = listActiveRuns(state, task.id);
   const current = progress.current;
-  const leaf = traceStalledLeaf(state, task);
+  const leaf = Option.getOrNull(traceStalledLeaf(state, task));
   const checks = task.stage === 'checking' ? resolveChecksView(state, task) : null;
   const request = selectWorkingRequest(task);
   const owner = useReadOnlyOwner();

@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from 'effect/http-api';
 import { Changelog } from '../changelog/schema.ts';
+import { SlackChannels } from '../slack/schema.ts';
 import {
   EditConflictWire,
   FileNotFoundWire,
@@ -629,7 +630,10 @@ class SlackGroup extends HttpApiGroup.make('slack')
     HttpApiEndpoint.post('disconnect', '/api/slack/disconnect', {
       payload: EmptyBody,
       success: SlackAnswer,
-    }).annotate(OwnerOnlyRoute, true)
+    }).annotate(OwnerOnlyRoute, true),
+    HttpApiEndpoint.get('channels', '/api/slack/channels', { success: SlackChannels })
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(EngineFeatureRoute, 'slack-channel-triggers')
   )
   .middleware(EngineGate) {}
 

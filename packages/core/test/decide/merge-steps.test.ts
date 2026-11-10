@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type DomainError,
   type Gate,
@@ -255,7 +256,7 @@ describe('the steps around the merge', () => {
     const gate = harness.openGate(taskId);
     expect(gate.title).toBe('1 post-merge step left');
     expect(gate.body).toContain('- [ ] **Run the migration**: Adds the invoices table.');
-    expect(selectLeadGate(harness.state, harness.task(taskId))?.type).toBe('post_merge');
+    expect(Option.getOrNull(selectLeadGate(harness.state, harness.task(taskId)))?.type).toBe('post_merge');
     expect(resolveQueue(harness.state, harness.now).ready.map((entry) => entry.reason)).toEqual([
       'Merged, with steps left for you to do',
     ]);
@@ -326,7 +327,7 @@ describe('the steps around the merge', () => {
       shape: 'change',
       title: 'CSV',
     });
-    expect(selectLeadGate(harness.state, harness.task(taskId))).toBeNull();
+    expect(Option.getOrNull(selectLeadGate(harness.state, harness.task(taskId)))).toBeNull();
     const queue = resolveQueue(harness.state, harness.now);
     expect(queue.ready.map((entry) => [entry.task.id, entry.gate.type])).toEqual([[taskId, 'post_merge']]);
     expect(queue.working).toHaveLength(0);
@@ -343,7 +344,7 @@ describe('the steps around the merge', () => {
       summary: null,
       findings: [],
     });
-    expect(selectLeadGate(harness.state, harness.task(taskId))?.type).toBe('review');
+    expect(Option.getOrNull(selectLeadGate(harness.state, harness.task(taskId)))?.type).toBe('review');
     approveGate(harness, taskId, 'review');
     pushed(harness, taskId);
     harness.send({
@@ -352,7 +353,7 @@ describe('the steps around the merge', () => {
       pullRequest: pullRequest({ number: 43, state: 'merged' }),
     });
     expect(harness.task(taskId).stage).toBe('merged');
-    expect(selectLeadGate(harness.state, harness.task(taskId))?.type).toBe('post_merge');
+    expect(Option.getOrNull(selectLeadGate(harness.state, harness.task(taskId)))?.type).toBe('post_merge');
   });
 
   test('only the human ticks, a step it does not have, or one of a cancelled task', () => {

@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 export interface View {
   scale: number;
   x: number;
@@ -27,11 +28,10 @@ export function resolveImageName(src: string) {
   const path = src.split(/[?#]/)[0] ?? src;
   const last = path.split('/').filter(Boolean).pop();
   if (!last) return 'Image';
-  try {
-    return decodeURIComponent(last);
-  } catch {
-    return last;
-  }
+  return Result.getOrElse(
+    Result.try(() => decodeURIComponent(last)),
+    () => last
+  );
 }
 
 export function describeOpenImage(image: { src: string; caption?: string | null }) {

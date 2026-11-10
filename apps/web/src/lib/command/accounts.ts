@@ -5,6 +5,7 @@ import {
   type ShinsaState,
   type Task,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import {
   ACCOUNT_LABEL,
   describeDefaultChanged,
@@ -69,7 +70,7 @@ export function listAccountSections(snapshot: AccountsSnapshot | null): CommandS
       options: accounts.map((account) => ({
         value: account.id,
         label: resolveAccountLabel(account),
-        keywords: ['account', resolvePlanLabel(account.plan) ?? ''],
+        keywords: ['account', Option.getOrUndefined(resolvePlanLabel(account.plan)) ?? ''],
       })),
       pick: (accountId) => {
         const account = accounts.find((candidate) => candidate.id === accountId);

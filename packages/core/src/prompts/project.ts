@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Repo, Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveTaskProject } from '../state/queries.ts';
@@ -25,7 +26,7 @@ function hasOtherRepos(repos: Repo[], own: Repo | undefined, folders: string[]) 
 }
 
 export function resolveProjectContext(state: ShinsaState, task: Task) {
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const project = projectId ? state.projects[projectId] : undefined;
   if (!project) return '';
   const repos = Object.values(state.repos)

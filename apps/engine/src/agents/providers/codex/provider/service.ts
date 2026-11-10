@@ -5,7 +5,12 @@ import { STATUS_TIMEOUT } from '../../../../accounts/schema.ts';
 import { describeError } from '../../../../log/redact.ts';
 import { NOT_STARTED_EXIT_CODE } from '../../../../shell/schema.ts';
 import { Shell } from '../../../../shell/service.ts';
-import { COMPLETION_TIMEOUT_MS, ProviderCallFailed, STRUCTURED_TIMEOUT_MS } from '../../schema.ts';
+import {
+  COMPLETION_TIMEOUT_MS,
+  MODEL_CATALOG_TTL,
+  ProviderCallFailed,
+  STRUCTURED_TIMEOUT_MS,
+} from '../../schema.ts';
 import type { AgentProvider, AgentSessionInput, CompletionRequest, JsonSchema } from '../../types.ts';
 import { CodexCli } from '../cli/service.ts';
 import { requestAnswer } from '../complete/service.ts';
@@ -39,6 +44,7 @@ export class CodexProvider extends Context.Service<CodexProvider, AgentProvider>
         env: runtime.env,
         cwd: tmpdir(),
         timeout: Duration.millis(CATALOG_TIMEOUT_MS),
+        timeToLive: MODEL_CATALOG_TTL,
       });
 
       const within = (ms: number | undefined, fallback: Duration.Duration) =>

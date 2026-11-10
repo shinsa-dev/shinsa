@@ -363,6 +363,8 @@ describe('placement over HTTP', () => {
 });
 
 describe('Slack over HTTP', () => {
+  const CHANNEL = { teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts', private: false };
+
   test('reads the links and disconnects, and is not found without Slack', async () => {
     const calls: string[] = [];
     const slack = {
@@ -375,8 +377,17 @@ describe('Slack over HTTP', () => {
         calls.push('disconnect');
         return { remote: true, links: [] };
       }),
+      channels: Effect.succeed([CHANNEL]),
     } as unknown as Slack['Service'];
     const { send, post } = startRoutes({ slack });
+    expect(await (await send('/api/slack/channels')).json()).toEqual({ channels: [CHANNEL] });
+    expect((await startRoutes().send('/api/slack/channels')).status).toBe(404);
+    const refusing = {
+      channels: Effect.fail(new DomainError({ code: 'slack_not_connected', message: 'Connect Slack.' })),
+    } as unknown as Slack['Service'];
+    expect(await (await startRoutes({ slack: refusing }).send('/api/slack/channels')).json()).toEqual({
+      error: { code: 'slack_not_connected', message: 'Connect Slack.' },
+    });
     expect(await (await send('/api/slack')).json()).toEqual({ remote: true, links: [] });
     expect((await post('/api/slack/disconnect', {})).status).toBe(200);
     expect(calls).toEqual(['snapshot null', 'disconnect']);

@@ -375,12 +375,13 @@ describe('reading an account’s usage from Claude', () => {
     expect(calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
   });
 
-  test('an expired login says it refreshes on the next run', async () => {
+  test('an expired login says Shinsa refreshes it', async () => {
     const { requestHttp } = respondWith(new Response('', { status: 401 }));
     expect(await requestUsage('t', requestHttp)).toEqual({
       ok: false,
       reason: 'expired',
-      detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
+      detail:
+        'This login expired. Shinsa refreshes it at its next check. Sign in again if this message stays.',
       retryAfterMs: null,
     });
   });

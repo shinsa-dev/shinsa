@@ -123,7 +123,7 @@ export const SHAPE_TOOL_SPECS = {
         live: {
           type: 'boolean',
           description:
-            'Only for a watchdog waiting for production: true once the change is live there (then also check it), false while it is not.',
+            'For a watchdog check. False when the change is not live in production, not deployed yet or rolled back: the watchdog then waits for production. True once it is live there, which a watchdog waiting for production needs (then also check it). Left out on a watching check, the change counts as live.',
         },
       },
       required: ['summary'],

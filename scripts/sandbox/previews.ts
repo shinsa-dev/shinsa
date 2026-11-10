@@ -1,4 +1,4 @@
-import { Clock, Effect } from 'effect';
+import { Clock, Effect, Option } from 'effect';
 import { PREVIEW_ACCESS_COOKIE, PREVIEW_COOKIE } from '../../apps/cloud/src/routes/previews/schema.ts';
 import {
   createPreviewAccessToken,
@@ -18,7 +18,7 @@ export function upgradePreview(
   machines: Machine[],
   server: Bun.Server<TunnelData>
 ) {
-  const address = parsePreviewHost(url.host, PREVIEW_ZONE);
+  const address = Option.getOrNull(parsePreviewHost(url.host, PREVIEW_ZONE));
   const machine = machines.find((entry) => entry.id === address?.instanceId);
   const key = readCookie(request, PREVIEW_COOKIE);
   const access = readCookie(request, PREVIEW_ACCESS_COOKIE);
@@ -43,7 +43,7 @@ export const respondPreviewOpen = Effect.fn('Sandbox.respondPreviewOpen')(functi
   machines: Machine[]
 ) {
   const target = URL.parse(url.searchParams.get('url') ?? '', PREVIEW_ZONE);
-  const address = target && parsePreviewHost(target.host, PREVIEW_ZONE);
+  const address = target && Option.getOrNull(parsePreviewHost(target.host, PREVIEW_ZONE));
   const machine = machines.find((entry) => entry.id === address?.instanceId);
   if (!(target && address && machine)) return new Response('Not a service of yours', { status: 404 });
   const expiresAt = (yield* Clock.currentTimeMillis) + PREVIEW_OPEN_TTL_MS;

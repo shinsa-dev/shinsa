@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isTaskSettled, resolveRoundBase, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listActiveRuns } from '../state/queries.ts';
@@ -23,8 +24,10 @@ function describeTask(task: Task) {
 }
 
 function describeRoundBase(task: Task) {
-  const round = resolveRoundBase(task);
-  return round ? `this round is stacked on branch ${round}` : '';
+  return Option.match(resolveRoundBase(task), {
+    onNone: () => '',
+    onSome: (round) => `this round is stacked on branch ${round}`,
+  });
 }
 
 function describeFiles(paths: readonly string[]) {

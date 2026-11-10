@@ -76,6 +76,7 @@ describe('shinsa logs', () => {
       runFiles(Effect.flip(printLogs(args, io))).then((error) => error.message);
     expect(await failure(['--lines', 'all'])).toBe('--lines takes a whole number, such as --lines 200.');
     expect(await failure(['--lines', '0'])).toContain('--lines takes a whole number');
+    expect(await failure(['--lines'])).toBe('--lines needs a value.');
     expect(await failure([])).toBe(
       `There is no engine log at ${join(home, 'data', 'engine.log')} yet. The engine writes it when the Shinsa app runs it; \`bun dev\` prints to its terminal instead.`
     );

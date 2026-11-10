@@ -1,4 +1,6 @@
+import type { SlackChannel } from '@shinsa/core';
 import { Schema } from 'effect';
+import type { PrivateMemberships } from '../../slack/schema.ts';
 
 export const REFUSED_BLOCK_CODES = new Set([
   'invalid_blocks',
@@ -95,3 +97,9 @@ export const NOTIFY_REFUSALS: Readonly<Record<string, string>> = {
   user_not_found: NOT_A_PERSON,
   user_disabled: PERSON_DEACTIVATED,
 };
+export interface ListedChannel {
+  readonly channel: SlackChannel;
+  readonly unsure: string | null;
+}
+
+export const NO_MEMBERSHIPS: PrivateMemberships = { member: new Set(), failed: null };

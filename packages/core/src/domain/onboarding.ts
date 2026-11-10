@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Task } from './types.ts';
 
 export const WELCOME_TASK = {
@@ -7,6 +8,6 @@ export const WELCOME_TASK = {
   branch: 'onboarding/welcome',
 } as const;
 
-export function selectWelcomeTask(tasks: Record<string, Task>): Task | null {
-  return Object.values(tasks).find((task) => task.origin === WELCOME_TASK.origin) ?? null;
+export function selectWelcomeTask(tasks: Record<string, Task>): Option.Option<Task> {
+  return Option.fromNullishOr(Object.values(tasks).find((task) => task.origin === WELCOME_TASK.origin));
 }

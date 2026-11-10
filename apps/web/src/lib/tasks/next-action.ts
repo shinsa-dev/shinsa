@@ -1,4 +1,5 @@
 import { type Gate, listRunningRuns, type ShinsaState, selectLeadGate, type Task } from '@shinsa/core';
+import { Option } from 'effect';
 import { formatSince, formatSpan } from '@/lib/format/time.ts';
 import { resolveSecretLabel } from '@/lib/secrets.ts';
 import { resolveTaskPath } from '@/router.ts';
@@ -43,7 +44,7 @@ function resolveGateAction(gate: Gate, task: Task): TaskAction {
 }
 
 export function resolveTaskAction(state: ShinsaState, task: Task): TaskAction {
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate) return resolveGateAction(gate, task);
   const [run] = listRunningRuns(state, task.id);
   if (run) return { label: 'Follow the agent', path: resolveTaskPath(task, { tab: 'chat', run: run.id }) };
@@ -51,12 +52,12 @@ export function resolveTaskAction(state: ShinsaState, task: Task): TaskAction {
 }
 
 export function resolveTaskSince(state: ShinsaState, task: Task) {
-  return selectLeadGate(state, task)?.openedAt ?? task.stageChangedAt;
+  return Option.getOrNull(selectLeadGate(state, task))?.openedAt ?? task.stageChangedAt;
 }
 
 export function describeWaited(state: ShinsaState, task: Task, now = Date.now()) {
   const since = resolveTaskSince(state, task);
-  const gated = selectLeadGate(state, task) !== null;
+  const gated = Option.getOrNull(selectLeadGate(state, task)) !== null;
   const span = formatSpan(since, now);
   if (gated && span) return `Waiting for ${span}`;
   return formatSince(gated ? 'Opened' : 'Started', since, now);

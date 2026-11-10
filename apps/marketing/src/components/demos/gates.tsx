@@ -1,7 +1,9 @@
 import type { UserCommand } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Spinner } from '@shinsa/ui/components/spinner';
+import { Effect } from 'effect';
 import * as React from 'react';
+import { useAppEffect } from '@/hooks/use-app-effect.ts';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { appendTranscript, onDemoCommand, resetTranscript } from '../../lib/demo-server/sockets.ts';
 import {
@@ -70,16 +72,14 @@ function startTranscripts() {
 function useWork(step: GateStep, onDone: () => void) {
   const done = React.useRef(onDone);
   done.current = onDone;
-  React.useEffect(() => {
+  useAppEffect(() => {
     const feed = GATE_FEEDS[step];
-    if (!feed) return;
-    const timers = feed.map((event, index) =>
-      setTimeout(() => appendTranscript(GATE_RUN_ID, [event]), (index + 1) * FEED_STEP_MS)
-    );
-    timers.push(setTimeout(() => done.current(), (feed.length + 2) * FEED_STEP_MS));
-    return () => {
-      for (const timer of timers) clearTimeout(timer);
-    };
+    if (!feed) return Effect.void;
+    return Effect.forEach(
+      feed,
+      (event) => Effect.sync(() => appendTranscript(GATE_RUN_ID, [event])).pipe(Effect.delay(FEED_STEP_MS)),
+      { discard: true }
+    ).pipe(Effect.andThen(Effect.sync(() => done.current()).pipe(Effect.delay(FEED_STEP_MS * 2))));
   }, [step]);
 }
 

@@ -93,7 +93,7 @@ export function createShareReceiver(
           receiving.set(message.id, { version: message.version, type: message.type, chunks: [] });
           break;
         case 'body': {
-          const bytes = parseBodyChunk(message.chunk);
+          const bytes = Option.getOrNull(parseBodyChunk(message.chunk));
           if (bytes) receiving.get(message.id)?.chunks.push(bytes);
           break;
         }

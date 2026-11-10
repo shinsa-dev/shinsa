@@ -1,6 +1,6 @@
 import { DomainError, type Focus, type Gate, type RunAccount, selectProjectByReference } from '@shinsa/core';
 import type { ProjectView } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { resolveTaskView } from '../http/task-views.ts';
 import type { SurfaceClient } from './schema.ts';
 
@@ -117,7 +117,7 @@ export const findRepoId = Effect.fn('Surface.findRepoId')(function* (client: Sur
 });
 
 export function selectProject(projects: readonly ProjectView[], ref: string) {
-  return selectProjectByReference(projects, ref);
+  return Option.getOrNull(selectProjectByReference(projects, ref));
 }
 
 export const findProject = Effect.fn('Surface.findProject')(function* (client: SurfaceClient, ref: string) {

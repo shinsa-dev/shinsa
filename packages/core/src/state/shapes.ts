@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeList } from '../chat/text.ts';
 import {
   type DeliveringStep,
@@ -54,8 +55,8 @@ export function describeShape(shape: TaskShape) {
 }
 
 function describePipeline(steps: readonly PipelineStep[]) {
-  const preset = resolvePresetOf(steps);
-  const inquiry = resolveInquiryStep(steps);
+  const preset = Option.getOrNull(resolvePresetOf(steps));
+  const inquiry = Option.getOrNull(resolveInquiryStep(steps));
   const work = steps.filter((step): step is WorkStep => step === 'build' || step === 'operate');
   if (preset || work.length === 0 || (!inquiry && work.length === 1)) {
     return SHAPE_PHRASE[preset ?? resolveShapeOf(steps)];
@@ -120,7 +121,8 @@ function applyTaskDelivered(state: ShinsaState, event: EventOf<'task.delivered'>
 
 function applyChangeProposed(state: ShinsaState, event: EventOf<'task.change_proposed'>) {
   const task = state.tasks[event.taskId];
-  const isOperation = task !== undefined && resolveWorkStep(resolveTaskPipeline(task)) === 'operate';
+  const isOperation =
+    task !== undefined && Option.contains(resolveWorkStep(resolveTaskPipeline(task)), 'operate');
   updateTask(state, event.taskId, event.at, {
     proposal: {
       request: event.request,

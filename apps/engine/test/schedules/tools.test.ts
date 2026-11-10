@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { listActiveRuns, type ShinsaCommand, type ShinsaEvent } from '@shinsa/core';
-import { Effect } from 'effect';
+import {
+  DomainError,
+  listActiveRuns,
+  SLACK_NOT_CONNECTED,
+  type ShinsaCommand,
+  type ShinsaEvent,
+} from '@shinsa/core';
+import { Effect, Result } from 'effect';
 import { createManageClient } from '../../src/agents/manage/client.ts';
 import type { ScheduleToolCall } from '../../src/schedules/index.ts';
 import { readArgv, selectSpec } from '../../src/surface/index.ts';
@@ -22,8 +28,8 @@ async function openTools(world: World, options: SchedulesHarnessOptions) {
   return harness;
 }
 
-async function setUp(world: World) {
-  const harness = await openTools(world, { timeZone: 'Europe/Berlin' });
+async function setUp(world: World, options: SchedulesHarnessOptions = {}) {
+  const harness = await openTools(world, { timeZone: 'Europe/Berlin', ...options });
   await harness.start();
   const call: ScheduleToolCall = {
     runId: world.runId,
@@ -112,6 +118,57 @@ describe('set_schedule', () => {
     const homeId = schedule.target.kind === 'task' ? schedule.target.taskId : '';
     expect(homeId).not.toBe(reader.taskId);
     expect(world.engine.state.tasks[homeId]?.watchHome).toBe(true);
+  });
+
+  test('a Slack channel is looked up among the channels the bot is in, and runs for each message', async () => {
+    const world = await createWorld();
+    const channel = {
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+      private: false,
+    };
+    const { tool } = await setUp(world, { slackChannels: Effect.succeed([channel]) });
+    const reply = await tool('set_schedule', {
+      message: 'Look into this alert.',
+      slack_channel: '#alerts',
+      new_task: true,
+    });
+    const schedule = only(world);
+    expect(schedule.trigger).toEqual({
+      kind: 'slack',
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+    });
+    expect(reply).toBe(
+      `Saved “Look into this alert.” (schedule_id ${schedule.id}). When a message is posted in #alerts. Starts a new task.`
+    );
+    await expect(
+      tool('set_schedule', { message: 'Deploys.', slack_channel: '#deploys', new_task: true })
+    ).rejects.toThrow(
+      'Shinsa is not in #deploys. Invite @Shinsa to the channel in Slack, then set the automation again.'
+    );
+    expect(Object.keys(world.engine.state.schedules)).toEqual([schedule.id]);
+    expect(await tool('set_schedule', { schedule_id: schedule.id, name: 'Alerts' })).toContain(
+      'Saved “Alerts”'
+    );
+    expect(only(world).trigger).toEqual(schedule.trigger);
+  });
+
+  test('a Slack channel is refused while Slack is not connected', async () => {
+    const world = await createWorld();
+    const { tool } = await setUp(world, {
+      slackChannels: Effect.fail(
+        new DomainError({ code: 'slack_not_connected', message: SLACK_NOT_CONNECTED })
+      ),
+    });
+    await expect(
+      tool('set_schedule', { message: 'Alerts.', slack_channel: 'alerts', new_task: true })
+    ).rejects.toThrow('Slack is not connected to this machine.');
+    expect(world.engine.state.schedules).toEqual({});
   });
 
   test('a message into another task names it', async () => {
@@ -321,7 +378,9 @@ describe('a schedule an agent writes with schedules_write', () => {
     });
     const found = selectSpec(['schedules', 'write', ...words]);
     if (!found) throw new Error('no schedules write');
-    return Effect.runPromise(found.spec.run(client, readArgv(found.spec.fields, found.rest).values));
+    return Effect.runPromise(
+      found.spec.run(client, Result.getOrThrow(readArgv(found.spec.fields, found.rest)).values)
+    );
   }
 
   test('is that task’s, so set_schedule and delete_schedule can change it', async () => {

@@ -1,8 +1,11 @@
+import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import type { Run, Task } from '../domain/index.ts';
 import { isOfCurrentRound } from '../domain/rounds.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { createPercent, createUsd } from './amounts.ts';
 import { resolveMeterWindow, resolveUsageRates, type UsageRate } from './rate.ts';
+import type { Percent, Usd } from './schema.ts';
 
 export const BUILD_ESTIMATE_LIMITS = {
   quantile: 0.7,
@@ -20,11 +23,11 @@ export const DEFAULT_BUILD_COSTS = {
 export interface BuildEstimate {
   phases: number;
   donePhases: number;
-  usd: number;
-  spentUsd: number;
-  remainingUsd: number;
-  percent: number | null;
-  remainingPercent: number | null;
+  usd: Usd;
+  spentUsd: Usd;
+  remainingUsd: Usd;
+  percent: Option.Option<Percent>;
+  remainingPercent: Option.Option<Percent>;
   samples: number;
   trusted: boolean;
 }
@@ -218,24 +221,25 @@ function resolveRemainingUsd(perPhase: number, shape: BuildShape, done: number, 
   return (shape.phases - done) * corrected;
 }
 
-export function resolveBuildEstimate(state: EstimateState, task: Task): BuildEstimate | null {
+export function resolveBuildEstimate(state: EstimateState, task: Task): Option.Option<BuildEstimate> {
   const shape = resolveBuildShape(state.runs, task);
-  if (!shape) return null;
+  if (!shape) return Option.none();
   const prior = resolvePriorPerPhase(resolveBuildModel(state), shape);
   const done = countDonePhases(task);
   const spentUsd = resolveSpentUsd(listBuildRuns(state.runs, task));
   const remainingUsd = resolveRemainingUsd(prior.perPhase, shape, done, spentUsd);
   const rate = resolveEstimateRate(state, task);
-  const percentOf = (usd: number) => (rate ? usd * rate.percentPerUsd : null);
-  return {
+  const percentOf = (usd: number) =>
+    Option.map(Option.fromNullishOr(rate), (found) => createPercent(usd * found.percentPerUsd));
+  return Option.some({
     phases: shape.phases,
     donePhases: done,
-    usd: spentUsd + remainingUsd,
-    spentUsd,
-    remainingUsd,
+    usd: createUsd(spentUsd + remainingUsd),
+    spentUsd: createUsd(spentUsd),
+    remainingUsd: createUsd(remainingUsd),
     percent: percentOf(spentUsd + remainingUsd),
     remainingPercent: percentOf(remainingUsd),
     samples: prior.samples,
     trusted: rate?.trusted ?? false,
-  };
+  });
 }

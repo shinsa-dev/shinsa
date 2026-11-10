@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { Option } from 'effect';
 import {
   type AccountUsage,
   type ChatNotice,
@@ -10,6 +11,7 @@ import {
 } from '../../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../../kit/time.ts';
 import { NOW, type SeedTask } from '../kit.ts';
+import { insertNotices } from '../notices.ts';
 
 const OPS = { id: 'acct-ops', email: 'ops@superwall.dev' };
 
@@ -119,7 +121,10 @@ function schedule(fields: Partial<Schedule> & Pick<Schedule, 'id' | 'name' | 'te
     stopped: null,
     replayKeys: {},
     ...fields,
-    nextRunAt: fields.enabled === false ? null : resolveNextRun(fields.trigger, NOW, 'Europe/Berlin'),
+    nextRunAt:
+      fields.enabled === false
+        ? null
+        : Option.getOrNull(resolveNextRun(fields.trigger, NOW, 'Europe/Berlin')),
   };
 }
 
@@ -157,6 +162,25 @@ function listSchedules(): Schedule[] {
       },
       runCount: 2,
       runs: [scheduleRun('sent', 26 * HOUR)],
+      createdBy: { kind: 'you' },
+    }),
+    schedule({
+      id: 'schedule-alerts',
+      name: 'Triage production alerts',
+      text: 'An alert was posted in #alerts. Find what broke, and fix it when the cause is in this repository.',
+      trigger: {
+        kind: 'slack',
+        teamId: 'T04SUPERWALL',
+        teamName: 'Superwall',
+        channelId: 'C07ALERTS',
+        channelName: 'alerts',
+      },
+      runCount: 3,
+      runs: [
+        scheduleRun('sent', 30 * HOUR),
+        scheduleRun('skipped', 9 * HOUR, 'The last task is still open.'),
+        scheduleRun('sent', 2 * HOUR),
+      ],
       createdBy: { kind: 'you' },
     }),
     schedule({
@@ -210,28 +234,7 @@ const MOVED_NOTICES: ChatNotice[] = [
 export const ACCOUNT_MOVE_TRANSCRIPT = 'task-account-move-run-1.jsonl';
 
 export function insertAccountNotices(transcript: string) {
-  const entries = transcript
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as { id: string; at: number });
-  const brief = entries[1] ?? entries[0];
-  const at = brief?.at ?? NOW;
-  const notices = MOVED_NOTICES.map((notice, index) => ({
-    ...(brief ?? {}),
-    id: `task-account-move-run-1-notice-${index}`,
-    at: at + index + 1,
-    type: 'notice',
-    notice,
-  }));
-  const context = {
-    ...(brief ?? {}),
-    id: 'task-account-move-run-1-context',
-    at: NOW - MINUTE,
-    type: 'notice',
-    notice: { kind: 'context', usedTokens: 132_000, maxTokens: 200_000, totalProcessedTokens: 910_000 },
-  };
-  const lines = [...entries.slice(0, 2), ...notices, ...entries.slice(2), context];
-  return `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`;
+  return insertNotices(transcript, MOVED_NOTICES, NOW);
 }
 
 export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Repo }): SeedTask[] {

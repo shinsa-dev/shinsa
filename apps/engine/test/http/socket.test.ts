@@ -13,7 +13,7 @@ import {
   type TerminalsSnapshot,
   type WireState,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { SocketData } from '../../src/http/socket.ts';
 import type { Terminals } from '../../src/terminals/service.ts';
 import { Engine } from '../helpers/engine.ts';
@@ -46,8 +46,10 @@ function replayState(sent: ServerMessage[]) {
   let state: WireState | null = null;
   for (const message of sent) {
     if (message.type === 'state') state = message.state;
-    if (message.type === 'state.patch' && state) state = applyStatePatch(state, message.patch);
-    if (message.type === 'task.detail' && state) state = applyTaskDetail(state, message.detail);
+    if (message.type === 'state.patch' && state)
+      state = Option.getOrNull(applyStatePatch(state, message.patch));
+    if (message.type === 'task.detail' && state)
+      state = Option.getOrNull(applyTaskDetail(state, message.detail));
   }
   return state;
 }

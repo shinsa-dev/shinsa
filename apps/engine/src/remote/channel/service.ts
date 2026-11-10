@@ -24,7 +24,7 @@ import {
   serializePublicKey,
   TERMINAL_STREAM_CLOSE,
 } from '@shinsa/core';
-import { Cause, Effect, Ref, Semaphore } from 'effect';
+import { Cause, Effect, Ref, Semaphore, Option } from 'effect';
 import type { HubSocket } from '../../http/socket.ts';
 import { describeError } from '../../log/redact.ts';
 import type { TerminalSession } from '../../terminals/schema.ts';
@@ -173,7 +173,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
       machinePrivateKey: machine.privateKey,
       serverEphemeralPrivateKey: ephemeral.privateKey,
     }).pipe(Effect.mapError(broken));
-    const compression = resolveCompression(hello);
+    const compression = Option.getOrNull(resolveCompression(hello));
     const guest = yield* definition.resolveGuest(hello.device);
     const opened = yield* Ref.modify(state, (current): [boolean, ChannelState] =>
       current.kind === 'closed'
@@ -319,7 +319,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
 
   const appendBody = Effect.fn('RemoteChannel.appendBody')(function* (id: string, chunk: string) {
     const request = (yield* Ref.get(requests)).get(id);
-    const bytes = parseBodyChunk(chunk);
+    const bytes = Option.getOrNull(parseBodyChunk(chunk));
     if (!request || request.sent || !bytes) return;
     const size = request.size + bytes.length;
     if (size > definition.maxBodyBytes) {
@@ -416,7 +416,7 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
       case 'terminal-text':
         return yield* withTerminal(message.id, (session) => applyTerminalText(session, message.data));
       case 'terminal-bytes': {
-        const bytes = parseBase64Url(message.chunk);
+        const bytes = Option.getOrNull(parseBase64Url(message.chunk));
         if (bytes) yield* withTerminal(message.id, (session) => session.input(bytes));
         return;
       }
@@ -429,14 +429,14 @@ export const makeRemoteChannel = Effect.fn('RemoteChannel.make')(function* (defi
     const current = yield* Ref.get(state);
     if (current.kind === 'closed') return;
     if (current.kind === 'hello') {
-      const hello = typeof raw === 'string' ? parseClientHello(raw) : null;
+      const hello = typeof raw === 'string' ? Option.getOrNull(parseClientHello(raw)) : null;
       if (!hello) return yield* fail('The channel expects a hello first.');
       return yield* handshake(hello);
     }
     const frame = toBytes(raw);
     if (!frame) return yield* fail('A sealed channel only carries sealed frames.');
     const plain = yield* current.open(frame).pipe(Effect.mapError(broken));
-    const message = parseChannelMessage(decodeText(plain));
+    const message = Option.getOrNull(parseChannelMessage(decodeText(plain)));
     if (!message) return yield* fail('A sealed frame held no channel message.');
     yield* handle(message);
   });

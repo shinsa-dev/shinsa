@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import {
   isDelegatedRun,
+  isEventTrigger,
   isTaskSettled,
   listActiveRuns,
   listOpenGates,
@@ -28,6 +29,7 @@ const TRIGGERS: ScheduleTrigger[] = [
   { kind: 'interval', everyMinutes: 1 },
   { kind: 'daily', time: '00:30', weekdays: [] },
   { kind: 'webhook', signature: null, replayKey: '{{body.id}}' },
+  { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
 ];
 
 const REF = `secret-ref:${'f'.repeat(32)}`;
@@ -85,7 +87,7 @@ function listClockCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         { type: 'schedule.fail', scheduleId, dueAt: schedule.nextRunAt, deliveryId: null, detail: 'No.' }
       );
     }
-    if (schedule.trigger.kind === 'webhook') {
+    if (isEventTrigger(schedule.trigger)) {
       commands.push(
         {
           type: 'schedule.deliver',
@@ -155,7 +157,7 @@ export function assertScheduleInvariants(state: ShinsaState) {
     }
     const owner = schedule.createdBy.kind === 'agent' ? schedule.createdBy.taskId : 'you';
     live.set(owner, (live.get(owner) ?? 0) + 1);
-    if (schedule.trigger.kind === 'webhook') expect(schedule.nextRunAt, context).toBeNull();
+    if (isEventTrigger(schedule.trigger)) expect(schedule.nextRunAt, context).toBeNull();
     else if (schedule.enabled) expect(schedule.nextRunAt, context).not.toBeNull();
   }
   for (const [owner, count] of live) {

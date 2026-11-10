@@ -609,6 +609,91 @@ describe('firing a schedule', () => {
   });
 });
 
+describe('a Slack channel trigger', () => {
+  const ALERTS: ScheduleTrigger = {
+    kind: 'slack',
+    teamId: 'T1',
+    teamName: 'Acme',
+    channelId: 'C1',
+    channelName: 'alerts',
+  };
+
+  function watching(input: Partial<CommandOf<'agent.set_schedule'>> = {}) {
+    const { harness, taskId } = createScheduling();
+    schedule(harness, taskId, { target: newTaskTarget(), trigger: ALERTS, text: 'Look into it.', ...input });
+    return { harness, taskId, id: only(harness).id };
+  }
+
+  function deliver(harness: Harness, id: string, deliveryId: string, replayKey: string | null) {
+    return harness.send({
+      type: 'schedule.deliver',
+      scheduleId: id,
+      deliveryId,
+      text: `Look into it.\n\n${deliveryId}`,
+      replayKey,
+    });
+  }
+
+  test('is written with its workspace and channel and never runs on a clock', () => {
+    const { harness, id } = watching();
+    expect(only(harness)).toMatchObject({ trigger: ALERTS, enabled: true, nextRunAt: null, stopped: null });
+    expect(harness.send({ type: 'schedule.fire', scheduleId: id, dueAt: 0 }).events).toHaveLength(0);
+  });
+
+  test('each message starts a task, even while the last one is open, and the same message only once', () => {
+    const { harness, id } = watching();
+    deliver(harness, id, 'd1', 'T1:C1:100.1');
+    deliver(harness, id, 'd2', 'T1:C1:100.2');
+    expect(deliver(harness, id, 'd3', 'T1:C1:100.2').events).toHaveLength(0);
+    expect(only(harness).runs.map((run) => [run.outcome, run.deliveryId])).toEqual([
+      ['sent', 'd1'],
+      ['sent', 'd2'],
+    ]);
+    expect(harness.task(only(harness).lastTaskId ?? '')).toMatchObject({
+      request: 'Look into it.\n\nd2',
+      scheduleId: id,
+    });
+    expect(only(harness).nextRunAt).toBeNull();
+  });
+
+  test('pauses and resumes without a next run, and stops after its last run', () => {
+    const { harness, id } = watching({ maxRuns: 1 });
+    harness.send({ type: 'schedule.enable', scheduleId: id, enabled: false });
+    expect(deliver(harness, id, 'd1', null).events).toHaveLength(0);
+    harness.send({ type: 'schedule.enable', scheduleId: id, enabled: true });
+    expect(only(harness)).toMatchObject({ enabled: true, nextRunAt: null });
+    deliver(harness, id, 'd2', null);
+    expect(only(harness)).toMatchObject({ stopped: 'finished', enabled: false, runCount: 1 });
+  });
+
+  test('a message that could not be delivered is recorded as a failed run', () => {
+    const { harness, id } = watching();
+    harness.send({
+      type: 'schedule.fail',
+      scheduleId: id,
+      dueAt: null,
+      deliveryId: 'd1',
+      detail: 'Too many.',
+    });
+    expect(only(harness).runs[0]).toMatchObject({ outcome: 'failed', deliveryId: 'd1', detail: 'Too many.' });
+  });
+
+  test.each<[string, Partial<Extract<ScheduleTrigger, { kind: 'slack' }>>, string]>([
+    ['a workspace id that is not Slack’s', { teamId: 'acme' }, 'by their Slack ids'],
+    ['a channel id that is not Slack’s', { channelId: '#alerts' }, 'by their Slack ids'],
+    ['a channel name with space around it', { channelName: ' alerts' }, 'no space around them'],
+    [
+      'a workspace name that is too long',
+      { teamName: 'a'.repeat(SCHEDULE_LIMITS.slackName + 1) },
+      `at most ${SCHEDULE_LIMITS.slackName} characters`,
+    ],
+  ])('refuses %s', (_name, patch, message) => {
+    const { harness, taskId } = createScheduling();
+    expect(() => schedule(harness, taskId, { trigger: { ...ALERTS, ...patch } })).toThrow(message);
+    expect(Object.values(harness.state.schedules)).toHaveLength(0);
+  });
+});
+
 describe('webhook deliveries', () => {
   function hooked(replayKey: string | null = '{{headers.x-id}}') {
     const { harness, taskId } = createScheduling();

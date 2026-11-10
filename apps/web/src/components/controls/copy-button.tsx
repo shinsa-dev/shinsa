@@ -5,23 +5,24 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { copyText } from '@/lib/connection/commands.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 
 const COPIED_MS = 1500;
 
 export function useCopyText(text: string) {
   const [copied, setCopied] = React.useState(false);
-  const timer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+  const cancel = React.useRef<(() => void) | null>(null);
 
   function copy() {
     void copyText(text).then((done) => {
       if (!done) return;
       setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), COPIED_MS);
+      cancel.current?.();
+      cancel.current = scheduleAfter(COPIED_MS, () => setCopied(false));
     });
   }
 
-  React.useEffect(() => () => clearTimeout(timer.current), []);
+  React.useEffect(() => () => cancel.current?.(), []);
   return { copied, copy };
 }
 

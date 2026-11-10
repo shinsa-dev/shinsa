@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeList, lowerFirst, quoteTitle } from '../chat/text.ts';
 import type { Gate } from '../domain/index.ts';
 import type { Queue } from '../queue/types.ts';
@@ -24,6 +25,6 @@ export function serializeBriefing(briefing: Briefing, state: ShinsaState) {
   return parts.join(' ');
 }
 
-export function selectBriefingGate(queue: Queue, taskId: string): Gate | null {
-  return queue.ready.find((entry) => entry.task.id === taskId)?.gate ?? null;
+export function selectBriefingGate(queue: Queue, taskId: string): Option.Option<Gate> {
+  return Option.fromNullishOr(queue.ready.find((entry) => entry.task.id === taskId)?.gate);
 }

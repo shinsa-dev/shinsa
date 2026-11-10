@@ -1,8 +1,11 @@
+import { Option } from 'effect';
 import { COVERAGE_LIMITS, type Coverage, type CoverageRange, type MeasuredCoverage } from './types.ts';
 
-export function selectMeasuredCoverage(coverage: Coverage | null | undefined): MeasuredCoverage | null {
-  if (coverage?.status !== 'measured' || coverage.executable === 0) return null;
-  return coverage;
+export function selectMeasuredCoverage(
+  coverage: Coverage | null | undefined
+): Option.Option<MeasuredCoverage> {
+  if (coverage?.status !== 'measured' || coverage.executable === 0) return Option.none();
+  return Option.some(coverage);
 }
 
 export function formatCoveragePercent(covered: number, executable: number) {
@@ -11,10 +14,7 @@ export function formatCoveragePercent(covered: number, executable: number) {
   return `${Math.min(99, Math.max(1, Math.floor((covered / executable) * 100)))}%`;
 }
 
-export function describeCoverage(coverage: Coverage | null | undefined) {
-  const measured = selectMeasuredCoverage(coverage);
-  if (!measured) return null;
-  const { covered, executable } = measured;
+function describeMeasuredCoverage({ covered, executable }: MeasuredCoverage) {
   if (covered === executable) {
     return executable === 1 ? 'The changed line is covered' : `All ${executable} changed lines are covered`;
   }
@@ -26,14 +26,18 @@ export function describeCoverage(coverage: Coverage | null | undefined) {
   return `${formatCoveragePercent(covered, executable)} of changed lines are covered (${covered} of ${executable})`;
 }
 
+export function describeCoverage(coverage: Coverage | null | undefined) {
+  return Option.map(selectMeasuredCoverage(coverage), describeMeasuredCoverage);
+}
+
 export function describeCoverageRange([start, end]: CoverageRange) {
   return start === end ? `${start}` : `${start}-${end}`;
 }
 
 export function listCoverageGaps(coverage: Coverage | null | undefined) {
   const measured = selectMeasuredCoverage(coverage);
-  if (!measured) return [];
-  return measured.files
+  if (Option.isNone(measured)) return [];
+  return measured.value.files
     .filter((file) => file.covered < file.executable)
     .slice(0, COVERAGE_LIMITS.reviewFiles)
     .map((file) => {

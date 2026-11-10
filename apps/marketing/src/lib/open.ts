@@ -39,7 +39,7 @@ export const readReviewFragment = Effect.fn('readReviewFragment')(
       const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
       return new Response(stream).text();
     });
-    return Option.fromNullishOr(parseReviewPayload(yield* decodeReviewText(text)));
+    return parseReviewPayload(yield* decodeReviewText(text));
   },
   Effect.orElseSucceed(() => Option.none<ReviewPayload>())
 );

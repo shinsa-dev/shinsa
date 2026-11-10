@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   findInquiryStep,
   findWorkStep,
@@ -71,7 +72,7 @@ describe('task shapes', () => {
     expect(validatePipeline(['operate'])).toContain(
       'Changing code or running an operation needs a plan first.'
     );
-    expect(resolveOperationTiming(['operate'])).toBe('alone');
+    expect(Option.getOrNull(resolveOperationTiming(['operate']))).toBe('alone');
   });
 
   test('a task can change code and run an operation, right after the plan or last, after the merge', () => {
@@ -80,12 +81,12 @@ describe('task shapes', () => {
     expect(validatePipeline(before)).toEqual([]);
     expect(validatePipeline(after)).toEqual([]);
     expect(validatePipeline(['investigate', 'your_ok', ...after])).toEqual([]);
-    expect(resolveOperationTiming(before)).toBe('before_build');
-    expect(resolveOperationTiming(after)).toBe('post_merge');
-    expect(resolveOperationTiming(SHAPE_PIPELINES.operation)).toBe('alone');
-    expect(resolveOperationTiming(CHANGE)).toBeNull();
-    expect(resolveWorkStep(before)).toBe('operate');
-    expect(resolveWorkStep(after)).toBe('build');
+    expect(Option.getOrNull(resolveOperationTiming(before))).toBe('before_build');
+    expect(Option.getOrNull(resolveOperationTiming(after))).toBe('post_merge');
+    expect(Option.getOrNull(resolveOperationTiming(SHAPE_PIPELINES.operation))).toBe('alone');
+    expect(Option.getOrNull(resolveOperationTiming(CHANGE))).toBeNull();
+    expect(Option.getOrNull(resolveWorkStep(before))).toBe('operate');
+    expect(Option.getOrNull(resolveWorkStep(after))).toBe('build');
     expect(resolveShapeOf(after)).toBe('change');
   });
 
@@ -132,8 +133,8 @@ describe('task shapes', () => {
       ...CHANGE,
     ]);
     expect(() => resolveProposalUpgrade(CHANGE)).toThrow('no step that answers');
-    expect(resolveInquiryStep(CHANGE)).toBeNull();
-    expect(resolveInquiryStep(SHAPE_PIPELINES.fix)).toBe('investigate');
+    expect(Option.getOrNull(resolveInquiryStep(CHANGE))).toBeNull();
+    expect(Option.getOrNull(resolveInquiryStep(SHAPE_PIPELINES.fix))).toBe('investigate');
   });
 
   test('a task without chosen steps reads as a change, and an Ask task as an answer', () => {
@@ -170,13 +171,13 @@ describe('composed steps', () => {
     ];
     for (const steps of compositions) {
       expect(validateComposition(FRESH, steps), steps.join(',')).toEqual([]);
-      expect(resolvePresetOf(steps)).toBeNull();
+      expect(Option.getOrNull(resolvePresetOf(steps))).toBeNull();
     }
     expect(resolveShapeOf(compositions[0] ?? [])).toBe('operation');
     expect(resolveShapeOf(compositions[1] ?? [])).toBe('change');
-    expect(resolveWorkStep(compositions[0] ?? [])).toBe('operate');
-    expect(resolveWorkStep(compositions[1] ?? [])).toBe('build');
-    expect(resolveWorkStep(SHAPE_PIPELINES.research)).toBeNull();
+    expect(Option.getOrNull(resolveWorkStep(compositions[0] ?? []))).toBe('operate');
+    expect(Option.getOrNull(resolveWorkStep(compositions[1] ?? []))).toBe('build');
+    expect(Option.getOrNull(resolveWorkStep(SHAPE_PIPELINES.research))).toBeNull();
   });
 
   test('a pull request without review, or a merge without a pull request, is refused', () => {
@@ -234,7 +235,7 @@ describe('composed steps', () => {
   test('pipelines compare step by step, and a task knows when an agent set its steps', () => {
     expect(isSamePipeline(CHANGE, [...CHANGE])).toBe(true);
     expect(isSamePipeline(CHANGE, SHAPE_PIPELINES.fix)).toBe(false);
-    expect(resolvePresetOf(SHAPE_PIPELINES.fix)).toBe('fix');
+    expect(Option.getOrNull(resolvePresetOf(SHAPE_PIPELINES.fix))).toBe('fix');
     expect(isComposedByAgent({})).toBe(false);
     expect(
       isComposedByAgent({
@@ -284,6 +285,6 @@ describe('whether a task’s steps are settled', () => {
     expect(validateComposition(FRESH, [...CHANGE.slice(0, -1), 'pre_merge', 'merge', 'post_merge'])).toEqual([
       'Shinsa adds `pre_merge` and `post_merge` from the steps around the merge in your work report; leave them out.',
     ]);
-    expect(resolvePresetOf([...CHANGE, 'post_merge'])).toBe('change');
+    expect(Option.getOrNull(resolvePresetOf([...CHANGE, 'post_merge']))).toBe('change');
   });
 });
