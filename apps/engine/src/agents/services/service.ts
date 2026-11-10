@@ -1,6 +1,5 @@
 import { isAbsolute, join, normalize } from 'node:path';
 import {
-  DomainError,
   isServiceActive,
   listTaskServices,
   listTerminalPlaces,
@@ -14,7 +13,6 @@ import {
 import { Effect, Option } from 'effect';
 import { isInside } from '../../files/paths.ts';
 import { isPresent } from '../../files/probe.ts';
-import { describeError } from '../../log/index.ts';
 import { readServiceInput } from '../../terminals/input.ts';
 import { selectServiceRunIn } from '../../terminals/runs.ts';
 import { readString } from '../handover.ts';
@@ -157,23 +155,21 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
         `${describeFolder(relative)} is not in the repository’s own checkout yet. A service runs from a folder on the default branch.`
       );
     const others = (yield* runner.snapshot).services.filter((each) => each.projectId === projectId);
-    const serviceInput = yield* Effect.try({
-      try: () =>
-        readServiceInput(
-          {
-            name: input.name ?? '',
-            path: cwd,
-            command: input.command ?? '',
-            env: input.env === undefined || input.env === null ? {} : input.env,
-            previewUrl: input.preview_url ?? null,
-            portVariable: input.port_variable ?? null,
-          },
-          others,
-          listTerminalPlaces(state, projectId),
-          runner.home
-        ),
-      catch: (error) => (error instanceof DomainError ? error : refuse(describeError(error))),
-    });
+    const serviceInput = yield* Effect.fromResult(
+      readServiceInput(
+        {
+          name: input.name ?? '',
+          path: cwd,
+          command: input.command ?? '',
+          env: input.env === undefined || input.env === null ? {} : input.env,
+          previewUrl: input.preview_url ?? null,
+          portVariable: input.port_variable ?? null,
+        },
+        others,
+        listTerminalPlaces(state, projectId),
+        runner.home
+      )
+    );
     const added = yield* runner.addService(projectId, serviceInput).pipe(
       Effect.catchIf(
         (error) => error.code === 'service_limit',

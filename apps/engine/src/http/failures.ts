@@ -1,6 +1,6 @@
 import { DomainError } from '@shinsa/core';
 import { RequestFailed } from '@shinsa/core/engine-api/schema';
-import { Effect, Schema } from 'effect';
+import { Effect, type Result, Schema } from 'effect';
 import { describeError } from '../log/index.ts';
 import { REQUEST_FAILED } from './schema.ts';
 
@@ -13,6 +13,6 @@ export function resolveRequestFailure(error: unknown) {
   });
 }
 
-export function requestSync<A>(run: () => A) {
-  return Effect.try({ try: run, catch: resolveRequestFailure });
+export function requestResult<A, E>(result: Result.Result<A, E>) {
+  return Effect.mapError(Effect.fromResult(result), resolveRequestFailure);
 }

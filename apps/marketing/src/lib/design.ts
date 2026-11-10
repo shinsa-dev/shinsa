@@ -1,3 +1,5 @@
+import { Result } from 'effect';
+
 interface DesignLintRule {
   pattern: RegExp;
   message: string;
@@ -74,7 +76,7 @@ const TOKEN_GROUPS: readonly [string, RegExp][] = [
   ['Selection', /^--selection/],
 ];
 
-export function serializeDesign(sources: DesignSources): string {
+export function serializeDesign(sources: DesignSources): Result.Result<string, string> {
   const kit = listCssBlocks(sources.kitStylesheet);
   const sections: Record<string, () => string> = {
     tokens: () => describeTokens(kit),
@@ -89,22 +91,23 @@ export function serializeDesign(sources: DesignSources): string {
         .map((sheet) => `\`${sheet.name}\`\n\n${fence('css', sheet.css.trim())}`)
         .join('\n\n'),
   };
-  const used = new Set<string>();
-  const body = sources.source
-    .split('\n')
+  const lines = sources.source.split('\n');
+  const markers = lines.flatMap((line) => {
+    const name = MARKER.exec(line.trim())?.[1];
+    return name === undefined || name === 'toc' ? [] : [name];
+  });
+  const unknown = markers.find((name) => !sections[name]);
+  if (unknown !== undefined) return Result.fail(`Unknown design marker "${unknown}"`);
+  const missing = Object.keys(sections).filter((name) => !markers.includes(name));
+  if (missing.length > 0) return Result.fail(`Missing design markers: ${missing.join(', ')}`);
+  const body = lines
     .map((line) => {
-      const name = MARKER.exec(line.trim())?.[1];
-      if (name === undefined || name === 'toc') return line;
-      const section = sections[name];
-      if (!section) throw new Error(`Unknown design marker "${name}"`);
-      used.add(name);
-      return section();
+      const section = sections[MARKER.exec(line.trim())?.[1] ?? 'toc'];
+      return section ? section() : line;
     })
     .join('\n');
-  const missing = Object.keys(sections).filter((name) => !used.has(name));
-  if (missing.length > 0) throw new Error(`Missing design markers: ${missing.join(', ')}`);
   const contents = describeContents(body);
-  return `${body.replace(/^<!-- design:toc -->$/m, contents).trim()}\n`;
+  return Result.succeed(`${body.replace(/^<!-- design:toc -->$/m, contents).trim()}\n`);
 }
 
 function listCssBlocks(css: string): CssBlock[] {

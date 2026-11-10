@@ -19,11 +19,11 @@ import {
   validateDelegationRequest,
   validateSplit,
 } from '@shinsa/core';
-import { Duration, Effect, Option } from 'effect';
+import { Duration, Effect, Option, Result } from 'effect';
 import { describeError } from '../../../log/index.ts';
 import { HANDED_OVER } from '../../handover.ts';
 import { assertToolInput } from '../attempts.ts';
-import { type ForkReference, findStackParent, resolveForkReference } from '../forks.ts';
+import { type ForkReference, resolveForkReference, resolveStackParent } from '../forks.ts';
 import { ToolCallFailed } from '../schema.ts';
 import { DEFAULT_ROLE, type OrchestrationCall } from './schema.ts';
 
@@ -248,20 +248,18 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
   const resolveFork = Effect.fn('OrchestrationTool.resolveFork')(function* (reference: string | null) {
     const state = yield* call.state;
     const teamTasks = yield* call.teamTasks;
-    return yield* Effect.try({
-      try: () => resolveForkReference(state, teamTasks, reference),
-      catch: (error) => refuse(describeError(error)),
-    });
+    return yield* Effect.fromResult(resolveForkReference(state, teamTasks, reference)).pipe(
+      Effect.mapError((error) => refuse(describeError(error)))
+    );
   });
 
   const resolveStackOn = Effect.fn('OrchestrationTool.resolveStackOn')(function* (
     references: readonly string[]
   ) {
     const state = yield* call.state;
-    return yield* Effect.try({
-      try: () => references.map((reference) => findStackParent(state, reference)),
-      catch: (error) => refuse(describeError(error)),
-    });
+    return yield* Effect.fromResult(
+      Result.all(references.map((reference) => resolveStackParent(state, reference)))
+    ).pipe(Effect.mapError((error) => refuse(describeError(error))));
   });
 
   const createCourier = Effect.fn('OrchestrationTool.createCourier')(function* () {

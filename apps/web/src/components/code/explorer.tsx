@@ -15,6 +15,7 @@ import type { CodeFileRef, CodeLocation, CodeMode } from '@/lib/code/location.ts
 import { listRefChoices } from '@/lib/code/refs.ts';
 import type { CodeSearch, Loaded } from '@/lib/connection/code.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { CODE_MODE, type ExplorerMode } from '@/lib/tasks/tabs.ts';
 
 export interface ExplorerProps {
@@ -159,7 +160,7 @@ export function Explorer(props: ExplorerProps) {
           label='Show the code at'
           items={listRefChoices(refs)}
           value={props.gitRef}
-          onValueChange={(value) => setTimeout(() => props.onRef(value), 0)}
+          onValueChange={(value) => scheduleAfter(0, () => props.onRef(value))}
           size='sm'
           align='start'
           className='w-full'

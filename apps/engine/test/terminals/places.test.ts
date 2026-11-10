@@ -1,17 +1,24 @@
 import { describe, expect, test } from 'bun:test';
+import { Result } from 'effect';
 import { resolveServicePlace, resolveTerminalStart } from '../../src/terminals/places.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 describe('resolveTerminalStart', () => {
   test('opens in your home folder only for a project with no folders at all', () => {
     const home = createTempDir();
-    expect(resolveTerminalStart([], 'p1', home, home)).toEqual({
+    expect(Result.getOrThrow(resolveTerminalStart([], 'p1', home, home))).toEqual({
       projectId: 'p1',
       cwd: home,
       place: 'folder',
       taskId: null,
     });
-    expect(() => resolveTerminalStart([], 'p1', '/tmp', home)).toThrow('one of the project’s folders');
+    expect(Result.flip(resolveTerminalStart([], 'p1', '/tmp', home))).toMatchObject({
+      success: {
+        _tag: 'DomainError',
+        code: 'terminal_place_invalid',
+        message: 'Pick one of the project’s folders.',
+      },
+    });
   });
 });
 

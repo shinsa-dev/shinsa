@@ -1,4 +1,5 @@
 import { DomainError } from '@shinsa/core';
+import { Result } from 'effect';
 import {
   listAgentSpecs,
   readToolInput,
@@ -34,8 +35,11 @@ interface SurfaceToolCall {
   values: Values;
 }
 
-export function readSurfaceToolCall(name: string, input: Record<string, unknown>): SurfaceToolCall {
+export function readSurfaceToolCall(
+  name: string,
+  input: Record<string, unknown>
+): Result.Result<SurfaceToolCall, DomainError> {
   const spec = listAgentSpecs().find((candidate) => resolveToolName(candidate) === name);
-  if (!spec) throw new DomainError({ code: 'tool_unknown', message: `No tool ${name}.` });
-  return { spec, values: readToolInput(spec.fields, input) };
+  if (!spec) return Result.fail(new DomainError({ code: 'tool_unknown', message: `No tool ${name}.` }));
+  return Result.map(readToolInput(spec.fields, input), (values) => ({ spec, values }));
 }

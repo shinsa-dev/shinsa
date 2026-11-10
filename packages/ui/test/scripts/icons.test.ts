@@ -3,14 +3,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
-import { Effect, type FileSystem } from 'effect';
+import { Effect, type FileSystem, Option, Result } from 'effect';
 import {
   DEFAULT_RADIUS,
   discoverIcons,
   INDEX,
   isKnownIcon,
   OUT,
-  renderIconMarkup,
+  renderIconMarkup as selectIconMarkup,
   renderIconsModule,
   resolveKnownIcons,
   SCAN_ROOTS,
@@ -35,6 +35,10 @@ function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
 
 function fail<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
   return run(Effect.flip(effect));
+}
+
+function renderIconMarkup(name: string, radius: '0' | '1' | '2' | '3') {
+  return Option.getOrThrow(selectIconMarkup(name, radius));
 }
 
 const known = resolveKnownIcons(JSON.parse(readFileSync(INDEX, 'utf8')));
@@ -186,10 +190,11 @@ describe('renderIconMarkup', () => {
     );
   });
 
-  it('fails loudly for a name Central does not have', () => {
+  it('renders nothing for a name Central does not have', () => {
     const warn = spyOn(console, 'warn').mockImplementation(() => undefined);
-    expect(() => renderIconMarkup('IconNotARealIcon', '3')).toThrow(
-      'Failed to extract SVG for IconNotARealIcon@r3'
+    expect(selectIconMarkup('IconNotARealIcon', '3')).toEqual(Option.none());
+    expect(selectIconMarkup('IconFileTypeTypescript', '3')).toEqual(
+      Option.some(renderIconMarkup('IconFileTypeTypescript', '3'))
     );
     warn.mockRestore();
   });
@@ -197,15 +202,29 @@ describe('renderIconMarkup', () => {
 
 describe('renderIconsModule', () => {
   it('writes sorted names and radii, so the output is stable', () => {
-    const module = renderIconsModule(
-      new Map([
-        ['IconClock', new Set(['3'] as const)],
-        ['IconBell', new Set(['3', '0'] as const)],
-      ])
+    const module = Result.getOrThrow(
+      renderIconsModule(
+        new Map([
+          ['IconClock', new Set(['3'] as const)],
+          ['IconBell', new Set(['3', '0'] as const)],
+        ])
+      )
     );
     expect(module.indexOf("'IconBell',")).toBeLessThan(module.indexOf("'IconClock',"));
     expect(module).toContain(`IconBell: {\n    '0': '${renderIconMarkup('IconBell', '0')}',\n    '3': `);
     expect(module).toContain("export const DEFAULT_ICON_RADIUS: IconRadius = '3';");
+  });
+
+  it('names every icon it could not render', () => {
+    const warn = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const module = renderIconsModule(
+      new Map([
+        ['IconBell', new Set(['3'] as const)],
+        ['IconNotARealIcon', new Set(['0', '3'] as const)],
+      ])
+    );
+    expect(module).toEqual(Result.fail(['IconNotARealIcon@r0', 'IconNotARealIcon@r3']));
+    warn.mockRestore();
   });
 });
 
@@ -223,6 +242,20 @@ describe('generateIcons', () => {
     const root = tree(join(scratch, 'empty'), { 'page.tsx': 'export {};' });
     const error = await fail(generateIcons({ roots: [root], out: OUT, index: INDEX }));
     expect(error._tag).toBe('IconsNotFound');
+  });
+
+  it('refuses an icon set it cannot render', async () => {
+    const warn = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const root = tree(join(scratch, 'unrendered'), {
+      'page.tsx': "<Icon name='IconNotARealIcon' />",
+      'index.json': JSON.stringify({ categories: { made: { icons: ['IconNotARealIcon'] } } }),
+    });
+    const error = await fail(generateIcons({ roots: [root], out: OUT, index: join(root, 'index.json') }));
+    expect(error).toMatchObject({
+      _tag: 'IconsUnrendered',
+      message: 'Failed to extract SVG for IconNotARealIcon@r3',
+    });
+    warn.mockRestore();
   });
 
   it('matches the committed paths.ts, so the bundle carries exactly the icons the workspace uses', async () => {

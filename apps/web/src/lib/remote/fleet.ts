@@ -37,6 +37,7 @@ import { describeOutdatedMachine } from '@/lib/remote/mode.ts';
 import { NO_MACHINE_CONNECTED, NoMachineConnected } from '@/lib/remote/schema.ts';
 import { runApp } from '@/lib/runtime/app.ts';
 import type { SocketTransport } from '@/lib/runtime/socket/schema.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { mergeTeamFeeds, type TeamFeedSource } from '@/lib/teams/feeds.ts';
 import { replaceSharedHandles } from '@/router.ts';
@@ -271,8 +272,7 @@ const NO_SHARED_HANDLES: ReadonlySet<string> = new Set();
 export const FLEET_WAIT_MS = 10_000;
 
 function waitForMachines(settle: () => void) {
-  const timer = setTimeout(settle, FLEET_WAIT_MS);
-  return () => clearTimeout(timer);
+  return scheduleAfter(FLEET_WAIT_MS, settle);
 }
 
 function isSettled(input: Snapshot, reachable: boolean | undefined, online: boolean | undefined) {
