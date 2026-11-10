@@ -226,6 +226,7 @@ describe('changes', () => {
 describe('signing in to a server', () => {
   let opened: Mock<typeof window.open>;
   let tab: { closed: boolean; location: { href: string }; close: () => void };
+  let engine: ExtensionsSnapshot = SNAPSHOT;
 
   beforeEach(() => {
     tab = {
@@ -245,22 +246,38 @@ describe('signing in to a server', () => {
     jest.useRealTimers();
   });
 
-  function poll() {
-    jest.advanceTimersByTime(SIGN_IN_POLL_MS);
+  function turn() {
+    return new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
   }
 
-  function startSignIn(reads: ExtensionsSnapshot[] = [SNAPSHOT, CONNECTED]) {
-    let count = 0;
+  async function until(check: () => boolean) {
+    for (let turns = 0; turns < 500 && !check(); turns += 1) await act(turn);
+  }
+
+  function countReads() {
+    return (fake?.requests ?? []).filter((request) => request.path === '/api/extensions').length;
+  }
+
+  async function readAfter(trigger: () => void) {
+    const before = countReads();
+    trigger();
+    await until(() => countReads() > before);
+    await act(() => refreshExtensions());
+  }
+
+  function poll() {
+    return readAfter(() => jest.advanceTimersByTime(SIGN_IN_POLL_MS));
+  }
+
+  function startSignIn(served: ExtensionsSnapshot = SNAPSHOT) {
+    engine = served;
     serve({
       'POST /api/extensions/servers/sign-in': {
         answer: { authorizationUrl: 'https://auth.linear.app/x', snapshot: SNAPSHOT },
       },
-      'GET /api/extensions': {
-        answer: () => {
-          count += 1;
-          return reads[Math.min(count, reads.length) - 1];
-        },
-      },
+      'GET /api/extensions': { answer: () => engine },
     });
     return signInServer(LINEAR);
   }
@@ -271,37 +288,36 @@ describe('signing in to a server', () => {
     expect(tab.location.href).toBe('https://auth.linear.app/x');
     const [channel] = FakeChannel.opened;
     expect(channel?.name).toBe(SIGN_IN_CHANNEL);
-    poll();
-    await act(() => refreshExtensions());
+    await poll();
+    expect(selectExtensions().snapshot).toEqual(SNAPSHOT);
     expect(toasts.success).not.toHaveBeenCalled();
+    engine = CONNECTED;
     channel?.post({ ok: true });
-    await act(() => refreshExtensions());
+    await until(() => channel?.closed === true);
     expect(selectExtensions().snapshot).toEqual(CONNECTED);
     expect(toasts.success).toHaveBeenCalledWith('Signed in to linear.');
-    expect(channel?.closed).toBe(true);
-    channel?.post({ ok: true });
-    await act(() => refreshExtensions());
+    await readAfter(() => channel?.post({ ok: true }));
     expect(toasts.success).toHaveBeenCalledTimes(1);
   });
 
   it('keeps watching until Shinsa has checked the server with its new sign-in', async () => {
-    await startSignIn([SIGNED_IN, CONNECTED]);
-    poll();
-    await act(() => refreshExtensions());
+    await startSignIn(SIGNED_IN);
+    await poll();
     expect(selectExtensions().snapshot).toEqual(SIGNED_IN);
     expect(toasts.success).not.toHaveBeenCalled();
-    poll();
-    await act(() => refreshExtensions());
+    expect(FakeChannel.opened[0]?.closed).toBe(false);
+    engine = CONNECTED;
+    await poll();
+    await until(() => FakeChannel.opened[0]?.closed === true);
     expect(toasts.success).toHaveBeenCalledWith('Signed in to linear.');
     expect(selectExtensions().snapshot).toEqual(CONNECTED);
   });
 
   it('reads the server again the moment you come back to Shinsa', async () => {
-    await startSignIn([CONNECTED]);
+    await startSignIn(CONNECTED);
     window.dispatchEvent(new Event('focus'));
-    await act(() => refreshExtensions());
+    await until(() => FakeChannel.opened[0]?.closed === true);
     expect(toasts.success).toHaveBeenCalledWith('Signed in to linear.');
-    expect(FakeChannel.opened[0]?.closed).toBe(true);
   });
 
   it('hears the sign-in page through its opener, on Shinsa’s channel only', async () => {
@@ -311,12 +327,12 @@ describe('signing in to a server', () => {
     expect(toasts.success).not.toHaveBeenCalled();
     window.dispatchEvent(new MessageEvent('message', { data: { channel: SIGN_IN_CHANNEL, ok: false } }));
     expect(toasts.error).toHaveBeenCalledWith('Couldn’t sign in to linear.');
-    await startSignIn([CONNECTED]);
+    await startSignIn(CONNECTED);
     showPage('hidden');
     document.dispatchEvent(new Event('visibilitychange'));
     showPage('visible');
     FakeChannel.opened[1]?.post(null);
-    await act(() => refreshExtensions());
+    await until(() => FakeChannel.opened[1]?.closed === true);
     expect(toasts.success).toHaveBeenCalledWith('Signed in to linear.');
   });
 
@@ -331,8 +347,10 @@ describe('signing in to a server', () => {
     const now = spyOn(Date, 'now').mockReturnValue(1_000);
     await startSignIn();
     now.mockReturnValue(1_000 + SIGN_IN_LIMIT_MS);
-    poll();
+    jest.advanceTimersByTime(SIGN_IN_POLL_MS);
+    await until(() => FakeChannel.opened[0]?.closed === true);
     expect(FakeChannel.opened[0]?.closed).toBe(true);
+    expect(toasts.success).not.toHaveBeenCalled();
     now.mockRestore();
   });
 
