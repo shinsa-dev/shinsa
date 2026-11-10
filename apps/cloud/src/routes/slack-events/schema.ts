@@ -83,7 +83,7 @@ export const ThreadMessage = Schema.Struct({
 
 export type ThreadMessage = typeof ThreadMessage.Type;
 
-export const CHANNEL_MESSAGE_SUBTYPES = ['bot_message', 'file_share'] as const;
+const CHANNEL_MESSAGE_SUBTYPES = ['bot_message', 'file_share'] as const;
 
 export const MessageEnvelope = Schema.Struct({
   event_id: Id,

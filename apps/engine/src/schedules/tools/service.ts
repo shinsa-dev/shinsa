@@ -4,6 +4,7 @@ import {
   listOpenWatchSuggestions,
   listProjectRepos,
   listSchedules,
+  resolveSlackChannelTrigger,
   type Schedule,
   type ScheduleRequest,
   type ShinsaEvent,
@@ -17,7 +18,7 @@ import { assertProtocol, readString } from '../../agents/handover.ts';
 import { findForkSource } from '../../agents/tools/forks.ts';
 import { describeError } from '../../log/redact.ts';
 import { SecretStore } from '../../secrets/index.ts';
-import { RECENT_RUNS, ScheduleTimeZone, WEBHOOK_ROUTE_PREFIX } from '../schema.ts';
+import { RECENT_RUNS, ScheduleTimeZone, SlackChannelLookup, WEBHOOK_ROUTE_PREFIX } from '../schema.ts';
 import {
   ScheduleSecretFailed,
   type ScheduleToolRun,
@@ -35,6 +36,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
       Effect.gen(function* () {
         const secrets = yield* SecretStore;
         const timeZone = yield* ScheduleTimeZone;
+        const slackChannels = yield* SlackChannelLookup;
         const refuse = (message: string) => new ScheduleToolRefused({ message });
 
         const attempt = <A>(step: () => A) =>
@@ -176,6 +178,14 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           return { ...target, repoId: yield* resolveNamedRepo(state, task, repository) };
         });
 
+        const resolveTrigger = Effect.fn('ScheduleTools.resolveTrigger')(function* (
+          request: ScheduleRequest
+        ) {
+          if (request.slackChannel === null) return request.trigger;
+          const { trigger, problem } = resolveSlackChannelTrigger(yield* slackChannels, request.slackChannel);
+          return trigger ?? (yield* refuse(problem));
+        });
+
         const writeSchedule = Effect.fn('ScheduleTools.writeSchedule')(function* (
           input: Record<string, unknown>,
           run: ScheduleToolRun
@@ -195,7 +205,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
             scheduleId: request.scheduleId,
             name: request.name,
             text: request.text,
-            trigger: request.trigger,
+            trigger: yield* resolveTrigger(request),
             target: yield* resolveTarget(before, task, request),
             source: request.source,
             enabled: request.enabled,

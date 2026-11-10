@@ -36,6 +36,13 @@ export {
   type SlackMrkdwn,
 } from './blocks.ts';
 export {
+  listSlackChannelSchedules,
+  listSlackChannelWatches,
+  resolveSlackChannelTrigger,
+  SLACK_NOT_CONNECTED,
+  type SlackChannelTrigger,
+} from './channels.ts';
+export {
   parseSlackChannelMessage,
   parseSlackMention,
   resolveSlackMentionThread,

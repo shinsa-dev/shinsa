@@ -12,6 +12,8 @@ import {
   type RemoteMember,
   type RemoteUser,
   type RemoteUserId,
+  type SlackChannels,
+  type SlackChannelWatches,
   type SlackLinks,
   type SlackRelayPost,
   type SlackRelayPosted,
@@ -152,4 +154,6 @@ export interface SlackRelayCalls {
     session: SlackRelaySession
   ): MachineCall<SlackRelaySessionSet, ThreadFailure | SlackFailed>;
   react(token: Token, reaction: SlackRelayReaction): MachineCall<SlackRelayReacted, ThreadFailure>;
+  channels(token: Token): MachineCall<SlackChannels, SlackFailed>;
+  watches(token: Token, watches: SlackChannelWatches): MachineCall<void>;
 }

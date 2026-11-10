@@ -1,12 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { SCHEDULE_LIMITS, type Schedule } from '@shinsa/core';
+import type { Schedule } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { SecretStore } from '../../secrets/index.ts';
+import { resolvePromptProblem } from '../prompt.ts';
 import {
   FRAME_ID_BYTES,
-  PROMPT_EMPTY,
-  PROMPT_TOO_LONG,
   RATE_WINDOW_MS,
   WEBHOOK_MAX_BODY_BYTES,
   WEBHOOK_PATH,
@@ -46,12 +45,6 @@ export class WebhookReceiver extends Context.Service<
       };
 
       const hashKey = (key: string) => createHash('sha256').update(key).digest('hex');
-
-      const resolvePromptProblem = (prompt: string) => {
-        const length = prompt.trim().length;
-        if (length === 0) return PROMPT_EMPTY;
-        return length > SCHEDULE_LIMITS.prompt ? PROMPT_TOO_LONG : null;
-      };
 
       const decodeSegment = (segment: string | undefined) =>
         segment === undefined
