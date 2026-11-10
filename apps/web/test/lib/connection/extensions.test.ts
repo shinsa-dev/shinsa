@@ -249,7 +249,7 @@ describe('signing in to a server', () => {
     jest.advanceTimersByTime(SIGN_IN_POLL_MS);
   }
 
-  function startSignIn(reads: ExtensionsSnapshot[] = [SNAPSHOT, CONNECTED]) {
+  function startSignIn(reads: ExtensionsSnapshot[] | (() => ExtensionsSnapshot) = [SNAPSHOT, CONNECTED]) {
     let count = 0;
     serve({
       'POST /api/extensions/servers/sign-in': {
@@ -257,6 +257,7 @@ describe('signing in to a server', () => {
       },
       'GET /api/extensions': {
         answer: () => {
+          if (typeof reads === 'function') return reads();
           count += 1;
           return reads[Math.min(count, reads.length) - 1];
         },
@@ -285,11 +286,13 @@ describe('signing in to a server', () => {
   });
 
   it('keeps watching until Shinsa has checked the server with its new sign-in', async () => {
-    await startSignIn([SIGNED_IN, CONNECTED]);
+    let served = SIGNED_IN;
+    await startSignIn(() => served);
     poll();
     await act(() => refreshExtensions());
     expect(selectExtensions().snapshot).toEqual(SIGNED_IN);
     expect(toasts.success).not.toHaveBeenCalled();
+    served = CONNECTED;
     poll();
     await act(() => refreshExtensions());
     expect(toasts.success).toHaveBeenCalledWith('Signed in to linear.');
