@@ -145,7 +145,7 @@ function readSyntheticText(message: SDKAssistantMessage) {
     .join('\n');
 }
 
-function isLoginText(text: string) {
+export function isLoginText(text: string) {
   return LOGIN_PROMPT.test(text) || TOKEN_FAILURE.test(text);
 }
 
