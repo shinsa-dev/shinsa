@@ -46,6 +46,17 @@ export const SlackChannelWatch = Schema.Struct({ workspaceId: Schema.String, cha
 
 export type SlackChannelWatch = typeof SlackChannelWatch.Type;
 
+export const NewChannelWatch = Schema.Struct({ ...SlackChannelWatch.fields, private: Schema.Boolean });
+
+export type NewChannelWatch = typeof NewChannelWatch.Type;
+
+export const SlackChannelWatcher = Schema.Struct({
+  machineId: InstanceId,
+  memberCheckedAt: Schema.NullOr(Schema.Number),
+});
+
+export type SlackChannelWatcher = typeof SlackChannelWatcher.Type;
+
 export const LINK_COLUMNS =
   'slack_links.workspace_id, slack_workspaces.name AS workspace_name, slack_links.slack_user_id, slack_links.slack_user_name, slack_links.user_id, slack_links.machine_id, slack_links.sealed_user_token, slack_links.linked_at';
 

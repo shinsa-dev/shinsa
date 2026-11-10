@@ -333,17 +333,26 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   lists the channels it may set a trigger on (`GET /__remote/slack/channels`): the ones the bot is in, in its
   linked workspaces (`users.conversations` with the bot token), a private one only when a Slack user linked to
   that machine is a member of it, asked with that person's own token (`users.conversations`,
-  `private_channel`; a person whose token is gone or refused opens none, logged as `[Cloud] Slack did not list
-  a linked person’s private channels`). The bot's access alone never opens a private channel, as with linked
+  `private_channel`; a person whose token is gone, revoked or lacks the scope opens none, logged as `[Cloud] Slack did not list
+  a linked person’s private channels`; any other failure, such as `ratelimited`, is unknown, never "not a
+  member": the listing, and a `watches` call that names such a channel, answer 502 `SlackFailed` and change
+  nothing, so the engine sends its list again). The bot's access alone never opens a private channel, as with linked
   threads, so a teammate who links their machine gets no channel they could not read themselves. It replaces
   the channels it watches (`POST /__remote/slack/watches`, `SlackStore.replaceMachineWatches`), which keeps
   only channels of that same list, checked again on every call (502 `SlackFailed`, the rows as they were,
   when Slack does not list them); the rows (`slack_channel_watches`,
-  `migrations/0003_slack_channel_watches.sql`: workspace, channel, machine) go with their workspace or machine,
+  `migrations/0003_slack_channel_watches.sql`: workspace, channel, machine, and for a private channel
+  `member_checked_at`, when a linked person was last confirmed a member) go with their workspace or machine,
   and unlinking empties them. A `message` event (`message.channels`, `message.groups`, `MessageEnvelope`) that is
   a new top-level message, not Shinsa's own and not a mention of it, is forwarded signed to `POST
   /api/slack/messages` on every watching machine that is online and names `slack-channel-triggers`
-  (`handleChannelMessage`); a channel nobody watches costs one D1 read and no Slack call. No message text is
+  (`handleChannelMessage`); a channel nobody watches costs one D1 read and no Slack call. A private channel's message goes to
+  a machine only while its membership was confirmed in the last five minutes (`MEMBERSHIP_WINDOW`,
+  `slack/membership.ts`); past that the Worker asks `conversations.info` as each linked person: a member is
+  confirmed again, one who is not loses the watch (`[Cloud] A private Slack channel is no longer watched`), and
+  an answer Slack does not give holds that message back and keeps the watch (`[Cloud] A private Slack channel
+  message was held back`). `member_left_channel` clears the confirmation of that channel's watches, so the next
+  message is checked at once. No message text is
   stored. A failure after the acknowledgement is logged as `[Cloud] A Slack channel message could not be
   forwarded` with its `teamId` and `eventId`, and a machine's refusal as `[Cloud] A machine refused a Slack
   channel message`.

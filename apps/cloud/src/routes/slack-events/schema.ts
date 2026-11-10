@@ -93,11 +93,19 @@ export const MessageEnvelope = Schema.Struct({
     type: Schema.Literal('message'),
     subtype: Schema.optional(Schema.Literals(CHANNEL_MESSAGE_SUBTYPES)),
     channel: Id,
+    channel_type: Schema.optional(Schema.String),
     thread_ts: Text,
   }),
 });
 
 export type MessageEnvelope = typeof MessageEnvelope.Type;
+
+export const PUBLIC_CHANNEL_TYPE = 'channel';
+
+export const MemberLeftEvent = Schema.Struct({
+  team_id: Id,
+  event: Schema.Struct({ type: Schema.Literal('member_left_channel'), channel: Id }),
+});
 
 export const MessageField = Schema.Struct({ text: Schema.String });
 

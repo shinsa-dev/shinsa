@@ -142,7 +142,11 @@ describe('Slack threads, posts and events', () => {
 });
 
 describe('watched Slack channels', () => {
-  const ALERTS = { workspaceId: 'T1', channelId: 'C1' };
+  const ALERTS = { workspaceId: 'T1', channelId: 'C1', private: false };
+  const OPS = { workspaceId: 'T1', channelId: 'G3', private: true };
+
+  const watchersOf = (slack: typeof SlackStore.Service, watch: { workspaceId: string; channelId: string }) =>
+    Effect.map(slack.listChannelWatchers(watch), (watchers) => watchers.map((watcher) => watcher.machineId));
 
   test("a machine's watches are replaced as a whole, and a channel names every linked machine that watches it", async () => {
     const results = await runTest(
@@ -152,16 +156,16 @@ describe('watched Slack channels', () => {
         yield* slack.upsertLink({ ...LINK, slackUserId: 'U2', userId: KAI.id, machineId: LAPTOP });
         yield* slack.replaceMachineWatches(STUDIO, [ALERTS, ALERTS, { ...ALERTS, channelId: 'C2' }]);
         yield* slack.replaceMachineWatches(LAPTOP, [ALERTS]);
-        const both = yield* slack.listChannelWatchers(ALERTS);
-        const other = yield* slack.listChannelWatchers({ ...ALERTS, channelId: 'C2' });
+        const both = yield* watchersOf(slack, ALERTS);
+        const other = yield* watchersOf(slack, { ...ALERTS, channelId: 'C2' });
         yield* slack.replaceMachineWatches(STUDIO, [{ ...ALERTS, channelId: 'C3' }]);
         return [
           both,
           other,
-          yield* slack.listChannelWatchers(ALERTS),
-          yield* slack.listChannelWatchers({ ...ALERTS, channelId: 'C2' }),
-          yield* slack.listChannelWatchers({ ...ALERTS, channelId: 'C3' }),
-          yield* slack.listChannelWatchers({ ...ALERTS, workspaceId: 'T2' }),
+          yield* watchersOf(slack, ALERTS),
+          yield* watchersOf(slack, { ...ALERTS, channelId: 'C2' }),
+          yield* watchersOf(slack, { ...ALERTS, channelId: 'C3' }),
+          yield* watchersOf(slack, { ...ALERTS, workspaceId: 'T2' }),
         ] as const;
       })
     );
@@ -175,15 +179,46 @@ describe('watched Slack channels', () => {
         yield* slack.upsertLink(LINK);
         yield* slack.replaceMachineWatches(STUDIO, [ALERTS]);
         yield* slack.upsertLink({ ...LINK, machineId: LAPTOP });
-        const moved = yield* slack.listChannelWatchers(ALERTS);
+        const moved = yield* watchersOf(slack, ALERTS);
         yield* slack.upsertLink(LINK);
-        const back = yield* slack.listChannelWatchers(ALERTS);
+        const back = yield* watchersOf(slack, ALERTS);
         yield* slack.removeWorkspace('T1');
         yield* slack.upsertWorkspace(WORKSPACE);
         yield* slack.upsertLink(LINK);
-        return [moved, back, yield* slack.listChannelWatchers(ALERTS)] as const;
+        return [moved, back, yield* watchersOf(slack, ALERTS)] as const;
       })
     );
     expect(results).toEqual([[], [STUDIO], []]);
+  });
+
+  test('a private channel keeps when its membership was last confirmed, until someone leaves it or the watch is removed', async () => {
+    const results = await runTest(
+      Effect.gen(function* () {
+        const slack = yield* seedWorkspace;
+        yield* slack.upsertLink(LINK);
+        yield* slack.replaceMachineWatches(STUDIO, [ALERTS, OPS]);
+        const written = [yield* slack.listChannelWatchers(ALERTS), yield* slack.listChannelWatchers(OPS)];
+        yield* slack.expireWatchMembers(OPS);
+        const expired = yield* slack.listChannelWatchers(OPS);
+        yield* TestClock.adjust('1 minute');
+        yield* slack.recordWatchMember(OPS, STUDIO);
+        const confirmed = yield* slack.listChannelWatchers(OPS);
+        yield* slack.removeWatch(OPS, STUDIO);
+        return [
+          written,
+          expired,
+          confirmed,
+          yield* slack.listChannelWatchers(OPS),
+          yield* watchersOf(slack, ALERTS),
+        ];
+      })
+    );
+    expect(results).toEqual([
+      [[{ machineId: STUDIO, memberCheckedAt: null }], [{ machineId: STUDIO, memberCheckedAt: TEST_NOW }]],
+      [{ machineId: STUDIO, memberCheckedAt: null }],
+      [{ machineId: STUDIO, memberCheckedAt: TEST_NOW + 60_000 }],
+      [],
+      [STUDIO],
+    ]);
   });
 });

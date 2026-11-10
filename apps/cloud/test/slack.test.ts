@@ -310,6 +310,7 @@ describe('the Slack app’s manifest', () => {
     expect(manifest.settings.event_subscriptions.bot_events).toEqual([
       'app_mention',
       'app_uninstalled',
+      'member_left_channel',
       'message.channels',
       'message.groups',
       'tokens_revoked',
@@ -1947,6 +1948,24 @@ describe('the channels a machine may set a trigger on', () => {
     expect(slack.callsTo('users.conversations').map((call) => call.token)).toEqual(['xoxb-bot-token']);
   });
 
+  test('are not listed while Slack does not say which private channels a linked person is in', async () => {
+    const { harness, slack, machine } = await setUp();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const listed = slack.answers['users.conversations'];
+    slack.answers['users.conversations'] = (body) =>
+      body.types === 'private_channel' ? { ok: false, error: 'ratelimited' } : (listed?.(body) ?? {});
+    const refused = await readChannels(harness, machine);
+    expect(refused.status).toBe(502);
+    expect((await readJson<{ error: { message: string } }>(refused)).error.message).toBe(
+      'Slack did not say who is in the private channels (ratelimited).'
+    );
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] Slack did not list a linked person’s private channels',
+      expect.objectContaining({ code: 'ratelimited', teamId: 'T1' })
+    );
+    warnings.mockRestore();
+  });
+
   test('ask as no person when the bot is in public channels only', async () => {
     const { harness, slack, machine } = await setUp();
     slack.answers['users.conversations'] = () => ({ ok: true, channels: [{ id: 'C1', name: 'alerts' }] });
@@ -2004,6 +2023,28 @@ describe('the channels a machine watches', () => {
     slack.answers['users.conversations'] = () => ({ ok: false, error: 'ratelimited' });
     expect((await watch([{ teamId: 'T1', channelId: 'C2' }])).status).toBe(502);
     expect(watchedChannels(harness)).toEqual([{ workspace_id: 'T1', channel_id: 'C1' }]);
+  });
+
+  test('stay as they were, private ones included, when Slack does not say who is in a private channel asked for', async () => {
+    const { harness, watch, slack } = await setUpChannel();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const both = [
+      { teamId: 'T1', channelId: 'C1' },
+      { teamId: 'T1', channelId: 'G3' },
+    ];
+    await watch(both);
+    const listed = slack.answers['users.conversations'];
+    slack.answers['users.conversations'] = (body) =>
+      body.types === 'private_channel' ? { ok: false, error: 'ratelimited' } : (listed?.(body) ?? {});
+    const refused = await watch(both);
+    expect(refused.status).toBe(502);
+    expect((await readJson<{ error: { message: string } }>(refused)).error.message).toBe(
+      'Slack did not say who is in the private channels (ratelimited).'
+    );
+    expect(watchedChannels(harness).map((row) => row.channel_id)).toEqual(['C1', 'G3']);
+    expect((await watch([{ teamId: 'T1', channelId: 'C2' }])).status).toBe(200);
+    expect(watchedChannels(harness).map((row) => row.channel_id)).toEqual(['C2']);
+    warnings.mockRestore();
   });
 
   test('are refused without the machine token, as a list it does not understand, or past the limit', async () => {
@@ -2136,6 +2177,107 @@ describe('a message in a watched channel', () => {
     messages.length = 0;
     await sendEvent(harness, messageEnvelope({ ts: '200.3' }));
     expect(messages.map((message) => message.instanceId)).toEqual([laptop.instanceId]);
+  });
+
+  const setUpPrivateChannel = async () => {
+    const setup = await setUpChannel();
+    await setup.watch([{ teamId: 'T1', channelId: 'G3' }]);
+    setup.slack.calls.length = 0;
+    const post = (ts: string) =>
+      sendEvent(setup.harness, messageEnvelope({ channel: 'G3', channel_type: 'group', ts }));
+    const membershipChecks = () =>
+      setup.slack.callsTo('conversations.info').filter((call) => call.token === 'xoxp-user-1');
+    const passFiveMinutes = async () => {
+      setup.harness.clock.now += 5 * 60_000;
+      await bringOnline(setup.harness, setup.machine, ['slack-channel-triggers']);
+    };
+    return { ...setup, post, membershipChecks, passFiveMinutes };
+  };
+
+  test('in a private channel is sent without asking Slack while membership was confirmed in the last five minutes, then asked again as the linked person', async () => {
+    const { slack, messages, post, membershipChecks, passFiveMinutes } = await setUpPrivateChannel();
+    slack.answers['conversations.info'] = () => ({ ok: true, channel: { name: 'ops', is_member: true } });
+    await post('200.1');
+    expect(messages).toHaveLength(1);
+    expect(membershipChecks()).toHaveLength(0);
+    await passFiveMinutes();
+    await post('200.2');
+    expect(messages).toHaveLength(2);
+    expect(membershipChecks().map((call) => call.body.channel)).toEqual(['G3']);
+    await post('200.3');
+    expect(messages).toHaveLength(3);
+    expect(membershipChecks()).toHaveLength(1);
+  });
+
+  test('in a private channel the linked person left is not sent, and the machine stops watching it', async () => {
+    const { harness, slack, messages, post } = await setUpPrivateChannel();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    slack.answers['conversations.info'] = () => ({ ok: false, error: 'channel_not_found' });
+    await sendEvent(harness, {
+      type: 'event_callback',
+      team_id: 'T1',
+      event_id: 'EvLeft',
+      event: { type: 'member_left_channel', channel: 'G3', user: 'U1', channel_type: 'G' },
+    });
+    await post('200.1');
+    expect(messages).toHaveLength(0);
+    expect(watchedChannels(harness)).toEqual([]);
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] A private Slack channel is no longer watched',
+      expect.objectContaining({ teamId: 'T1' })
+    );
+    warnings.mockRestore();
+    slack.calls.length = 0;
+    await post('200.2');
+    expect(slack.calls).toHaveLength(0);
+  });
+
+  test('in a private channel is held back, with the watch kept, while Slack does not say whether the linked person is still in it', async () => {
+    const { harness, slack, messages, post, machine, passFiveMinutes } = await setUpPrivateChannel();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    await passFiveMinutes();
+    slack.answers['conversations.info'] = () => ({ ok: false, error: 'ratelimited' });
+    await post('200.1');
+    expect(messages).toHaveLength(0);
+    expect(watchedChannels(harness)).toEqual([{ workspace_id: 'T1', channel_id: 'G3' }]);
+    expect(failures).toHaveBeenCalledWith('[Cloud] A private Slack channel message was held back', {
+      instanceId: machine.instanceId,
+      teamId: 'T1',
+    });
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] Slack did not say whether a linked person is in a private channel',
+      expect.objectContaining({ code: 'ratelimited', teamId: 'T1', channelId: 'G3' })
+    );
+    warnings.mockRestore();
+    slack.answers['conversations.info'] = () => ({ ok: true, channel: { name: 'ops', is_member: true } });
+    await post('200.2');
+    expect(messages).toHaveLength(1);
+  });
+
+  test('in a private channel is not sent to a machine whose linked person has no readable Slack token, or is no member of it', async () => {
+    const { harness, slack, messages, post, passFiveMinutes } = await setUpPrivateChannel();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    await passFiveMinutes();
+    slack.answers['conversations.info'] = () => ({ ok: true, channel: { name: 'ops', is_member: false } });
+    await post('200.1');
+    expect(messages).toHaveLength(0);
+    expect(watchedChannels(harness)).toEqual([]);
+    harness.db.sqlite.run(
+      "INSERT INTO slack_channel_watches (workspace_id, channel_id, machine_id) SELECT 'T1', 'G3', machine_id FROM slack_links"
+    );
+    harness.db.sqlite.run('UPDATE slack_links SET sealed_user_token = NULL');
+    slack.calls.length = 0;
+    await post('200.2');
+    expect(messages).toHaveLength(0);
+    expect(slack.calls).toHaveLength(0);
+    harness.db.sqlite.run(
+      "INSERT INTO slack_channel_watches (workspace_id, channel_id, machine_id) SELECT 'T1', 'G3', machine_id FROM slack_links"
+    );
+    harness.db.sqlite.run("UPDATE slack_links SET sealed_user_token = 'unreadable'");
+    await post('200.3');
+    expect(messages).toHaveLength(0);
+    expect(watchedChannels(harness)).toEqual([]);
+    warnings.mockRestore();
   });
 
   test('whose tunnel does not answer is a warning, one the machine refuses is logged, and nothing is said in the channel', async () => {

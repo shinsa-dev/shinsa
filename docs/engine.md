@@ -4691,7 +4691,7 @@ engine ──its watched channels, on every change──►
   machine as a member, asked with that person's own token, never the bot's): once when remote access starts, after every state change that alters the list, and again after it lists the
   channels. app.shinsa.dev keeps them as rows of workspace, channel and machine (`slack_channel_watches`), never
   a message: they go with the workspace or the machine, and unlinking Slack empties them. The app subscribes to
-  `message.channels` and `message.groups`. An event with a subtype it does not read (an edit, a deletion, a
+  `message.channels`, `message.groups` and `member_left_channel`. An event with a subtype it does not read (an edit, a deletion, a
   join), a reply in a thread, Shinsa's own post and a message that mentions @Shinsa (already a mention) are
   dropped, and so is everything in a channel no machine watches, before any Slack call. For the rest the Worker
   takes the machines watching that channel that are online and name `slack-channel-triggers`, so an older engine
@@ -4703,6 +4703,22 @@ engine ──its watched channels, on every change──►
   channel message`, and a failure on the way as `[Cloud] A Slack channel message could not be forwarded`, the
   lines a watch on the Worker counts. The message text passes through app.shinsa.dev in the clear, as a
   mention's thread does, and is stored nowhere there.
+- **A private channel stays its members'.** Whether a person linked to the machine is in a private channel has
+  three answers (`apps/cloud/src/slack/membership.ts`): a member, not a member (the channel is not in their list,
+  `channel_not_found`, or their token is gone, revoked, expired or lacks the scope, `MEMBERSHIP_DENIED_CODES`), or
+  unknown, when Slack fails any other way, such as `ratelimited`. Unknown is never read as not a member. Listing
+  the channels, or sending the watches with a private channel Slack would not vouch for, answers 502 `SlackFailed`
+  ("Slack did not say who is in the private channels (<code>).") and leaves the rows as they were, so the engine,
+  which marks its list sent only on a 200, sends it again on its next state change. Each private watch keeps when
+  its membership was last confirmed (`slack_channel_watches.member_checked_at`, set when the watches are sent).
+  A message in a private channel (any `channel_type` but `channel`) is forwarded to a machine only while that is
+  under five minutes old (`MEMBERSHIP_WINDOW`); past it the Worker asks `conversations.info` as each linked person
+  first: a member confirms it again, not a member removes that machine's watch (`[Cloud] A private Slack channel
+  is no longer watched`, a warning) and unknown holds that one message back with the watch kept (`[Cloud] A
+  private Slack channel message was held back`, an error). The app also subscribes to `member_left_channel`,
+  which clears the confirmation for that channel's watches, so the first message after anyone leaves is checked
+  whatever its age. A machine whose watch was removed is told nothing: its trigger stays listed and gets no
+  messages until a linked person is in the channel again and the watches are sent.
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped

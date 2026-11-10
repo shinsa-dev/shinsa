@@ -33,7 +33,14 @@
   "settings": {
     "event_subscriptions": {
       "request_url": "https://app.shinsa.dev/slack/events",
-      "bot_events": ["app_mention", "app_uninstalled", "message.channels", "message.groups", "tokens_revoked"]
+      "bot_events": [
+        "app_mention",
+        "app_uninstalled",
+        "member_left_channel",
+        "message.channels",
+        "message.groups",
+        "tokens_revoked"
+      ]
     },
     "interactivity": {
       "is_enabled": true,

@@ -34,7 +34,7 @@ import {
   serializeSlackUnreadLinks,
 } from '@shinsa/core';
 import { BodyInvalid } from '@shinsa/core/remote/errors';
-import { Cause, Clock, Effect, Layer, Option, type Redacted, Schema } from 'effect';
+import { Cause, Clock, Duration, Effect, Layer, Option, type Redacted, Schema } from 'effect';
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from 'effect/http';
 import { selectMachineRole } from '../../auth/access.ts';
 import { CloudConfig } from '../../config/service.ts';
@@ -42,12 +42,19 @@ import { isMachineOnline } from '../../domain/machines.ts';
 import { requestOnlineMachine } from '../../http/forward.ts';
 import { deferWork } from '../../http/worker.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
+import { resolveChannelAccess } from '../../slack/membership.ts';
+import { MEMBERSHIP_WINDOW } from '../../slack/schema.ts';
 import { readSignedBody } from '../../slack/signed-body.ts';
 import { selectUserToken } from '../../slack/user-tokens.ts';
 import { requestSignedMachine, selectWorkspaceToken } from '../../slack/workspace.ts';
 import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
-import type { SlackLink, SlackWorkspace } from '../../store/slack/schema.ts';
+import type {
+  SlackChannelWatch,
+  SlackChannelWatcher,
+  SlackLink,
+  SlackWorkspace,
+} from '../../store/slack/schema.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import { resolveSlackMessageText } from './message.ts';
 import {
@@ -62,6 +69,7 @@ import {
   InteractionForm,
   JsonObject,
   MentionEnvelope,
+  MemberLeftEvent,
   MessageEnvelope,
   type MentionEvent,
   ChannelInfo,
@@ -75,6 +83,7 @@ import {
   type SlackCard,
   type ThreadEntry,
   ThreadMessage,
+  PUBLIC_CHANNEL_TYPE,
   UninstallEvent,
   UserTokensRevokedEvent,
   type ViewSubmission,
@@ -95,6 +104,7 @@ export const SlackEventRoutes = Layer.unwrap(
     const decodeUserRevoke = Schema.decodeUnknownOption(UserTokensRevokedEvent);
     const decodeMention = Schema.decodeUnknownOption(MentionEnvelope);
     const decodeMessage = Schema.decodeUnknownOption(MessageEnvelope);
+    const decodeMemberLeft = Schema.decodeUnknownOption(MemberLeftEvent);
     const decodeThreadMessage = Schema.decodeUnknownOption(ThreadMessage);
     const decodeForm = Schema.decodeUnknownOption(InteractionForm);
     const decodeBlockActions = Schema.decodeUnknownOption(BlockActionsSchema);
@@ -462,17 +472,48 @@ export const SlackEventRoutes = Layer.unwrap(
       if (linked.unread > 0) yield* postPrivately({ text: serializeSlackUnreadLinks(linked.unread) });
     });
 
+    const hasChannelAccess = Effect.fn('slackEvents.hasChannelAccess')(function* (
+      watch: SlackChannelWatch,
+      watcher: SlackChannelWatcher,
+      now: number
+    ) {
+      if (
+        watcher.memberCheckedAt !== null &&
+        now - watcher.memberCheckedAt < Duration.toMillis(MEMBERSHIP_WINDOW)
+      )
+        return true;
+      const links = (yield* store.listMachineLinks(watcher.machineId)).filter(
+        (link) => link.workspaceId === watch.workspaceId
+      );
+      const access = yield* resolveChannelAccess(links, watch.channelId);
+      if (access === 'member') {
+        yield* store.recordWatchMember(watch, watcher.machineId);
+        return true;
+      }
+      if (access === 'denied') {
+        yield* store.removeWatch(watch, watcher.machineId);
+        yield* Effect.logWarning('[Cloud] A private Slack channel is no longer watched').pipe(
+          Effect.annotateLogs({ instanceId: watcher.machineId, teamId: watch.workspaceId })
+        );
+        return false;
+      }
+      yield* Effect.logError('[Cloud] A private Slack channel message was held back').pipe(
+        Effect.annotateLogs({ instanceId: watcher.machineId, teamId: watch.workspaceId })
+      );
+      return false;
+    });
+
     const listTriggeredMachines = Effect.fn('slackEvents.listTriggeredMachines')(function* (
-      teamId: string,
-      channelId: string
+      watch: SlackChannelWatch,
+      open: boolean
     ) {
       const now = yield* Clock.currentTimeMillis;
       const triggered: Machine[] = [];
-      for (const instanceId of yield* store.listChannelWatchers({ workspaceId: teamId, channelId })) {
-        const machine = yield* machines.select(instanceId);
+      for (const watcher of yield* store.listChannelWatchers(watch)) {
+        const machine = yield* machines.select(watcher.machineId);
         if (Option.isNone(machine) || !isMachineOnline(machine.value, now)) continue;
-        if (hasMachineFeature(machine.value.features, 'slack-channel-triggers'))
-          triggered.push(machine.value);
+        if (!hasMachineFeature(machine.value.features, 'slack-channel-triggers')) continue;
+        if (open || (yield* hasChannelAccess(watch, watcher, now))) triggered.push(machine.value);
       }
       return triggered;
     });
@@ -483,7 +524,10 @@ export const SlackEventRoutes = Layer.unwrap(
       event,
     }: MessageEnvelope) {
       if (event.thread_ts && event.thread_ts !== event.ts) return;
-      const triggered = yield* listTriggeredMachines(teamId, event.channel);
+      const triggered = yield* listTriggeredMachines(
+        { workspaceId: teamId, channelId: event.channel },
+        event.channel_type === PUBLIC_CHANNEL_TYPE
+      );
       if (triggered.length === 0) return;
       const opened = yield* selectWorkspaceToken(teamId);
       if (Option.isNone(opened)) return;
@@ -672,6 +716,14 @@ export const SlackEventRoutes = Layer.unwrap(
       if (Option.isSome(userRevoke)) {
         for (const slackUserId of userRevoke.value.event.tokens.oauth)
           yield* store.clearUserToken(userRevoke.value.team_id, slackUserId);
+        return ok();
+      }
+      const left = decodeMemberLeft(fields.value);
+      if (Option.isSome(left)) {
+        yield* store.expireWatchMembers({
+          workspaceId: left.value.team_id,
+          channelId: left.value.event.channel,
+        });
         return ok();
       }
       const mention = Option.map(decodeMention(fields.value), resolveMention);
