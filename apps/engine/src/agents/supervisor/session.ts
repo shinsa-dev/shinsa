@@ -103,7 +103,9 @@ const issueBrowser = Effect.fn('RunSupervisor.issueBrowser')(function* (run: Run
   if (!browser) return null;
   const state = yield* (yield* RunWorld).state;
   const task = state.tasks[run.taskId];
-  const profile = Option.getOrNull(decodeProfile(task ? Option.getOrNull(resolveTaskProject(state, task)) : null));
+  const profile = Option.getOrNull(
+    decodeProfile(task ? Option.getOrNull(resolveTaskProject(state, task)) : null)
+  );
   if (!profile) return null;
   return yield* browser.issue(profile);
 });
