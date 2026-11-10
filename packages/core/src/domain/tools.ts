@@ -39,6 +39,7 @@ export const SHINSA_TOOL_NAMES = [
   'list_schedules',
   'delete_schedule',
   'request_secret',
+  'request_browser_sign_in',
 ] as const;
 
 export type ShinsaToolName = (typeof SHINSA_TOOL_NAMES)[number];
@@ -82,6 +83,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'run_service',
     'add_service',
     'remove_service',
+    'request_browser_sign_in',
   ],
   reviewer: [
     'report_review',
@@ -110,6 +112,7 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'run_service',
     'add_service',
     'remove_service',
+    'request_browser_sign_in',
   ],
   researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember', 'report_feedback'],
 };

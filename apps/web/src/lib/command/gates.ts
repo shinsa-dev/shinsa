@@ -186,6 +186,30 @@ function listSecretCommands(task: Task, gate: Gate): Command[] {
   ];
 }
 
+function listBrowserSignInCommands(gate: Gate): Command[] {
+  const id = resolveGateId(gate);
+  return [
+    {
+      kind: 'run',
+      id: `${id}.signed-in`,
+      label: 'I signed in',
+      hint: gate.title,
+      icon: 'IconGlobe',
+      keywords: ['sign in', 'browser', 'done', 'signed in', 'login'],
+      run: () => void replyToGate(gate, 'signedIn'),
+    },
+    {
+      kind: 'run',
+      id: `${id}.skip-sign-in`,
+      label: 'Skip signing in',
+      hint: gate.title,
+      icon: 'IconCircleX',
+      keywords: ['skip', 'sign in', 'browser'],
+      run: () => void replyToGate(gate, 'skipSignIn'),
+    },
+  ];
+}
+
 function listQuestionCommands(gate: Gate): Command[] {
   return [
     ...listAnswerCommands(gate),
@@ -251,7 +275,7 @@ function listPlanCommands(task: Task, gate: Gate): Command[] {
       id: `${id}.approve`,
       label: task.backlog || splits ? describePlanCard(task).approve : 'Approve the plan',
       icon: splits ? 'IconSplit' : 'IconCheckmark1',
-      keywords: ['spec', 'go ahead', 'build', 'accept', ...(splits ? ['split', 'tasks'] : [])],
+      keywords: ['spec', 'go ahead', 'build', 'accept', ...(splits ? ['split', 'tasks', 'bundle'] : [])],
       run: () => void replyToGate(gate, resolvePlanReply(task), null, { planVersion: task.plan?.version }),
     },
     ...createKeepOneTaskCommand(task, gate),
@@ -528,6 +552,8 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
       return listSignInCommands(gate);
     case 'secret':
       return listSecretCommands(task, gate);
+    case 'browser_sign_in':
+      return listBrowserSignInCommands(gate);
     case 'failure':
       return listFailureCommands(state, gate);
     case 'proposal':

@@ -96,6 +96,7 @@ type GateDetails = Partial<
     | 'provider'
     | 'account'
     | 'secret'
+    | 'browserSignIn'
     | 'commit'
     | 'notes'
   >

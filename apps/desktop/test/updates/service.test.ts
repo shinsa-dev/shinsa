@@ -170,7 +170,7 @@ describe('the updater', () => {
       })
     );
     expect(world.installs).toBe(1);
-    expect(await closeWindow(world)).toBe(true);
+    expect(closeWindow(world)).toBe(true);
     expect(states).toEqual([
       { status: 'installing', version: '1.3.0' },
       { status: 'ready', version: '1.3.0' },

@@ -16,7 +16,11 @@ import {
   BodyTooLarge,
   BROWSER_ONLY_INSTALL,
   BROWSER_ONLY_TERMINALS,
+  BrowserCopyAnswer,
   BrowserOnlyRoute,
+  BrowserProjectAnswer,
+  BrowserSourceSitesAnswer,
+  BrowserSourcesAnswer,
   Bytes,
   ChatAnswer,
   ChatQuery,
@@ -726,6 +730,49 @@ class ServicesGroup extends HttpApiGroup.make('services')
   )
   .middleware(EngineGate) {}
 
+const BrowserProjectParams = { projectId: Schema.String };
+
+class BrowserGroup extends HttpApiGroup.make('browser')
+  .add(
+    HttpApiEndpoint.get('project', '/api/browser/projects/:projectId', {
+      params: BrowserProjectParams,
+      success: BrowserProjectAnswer,
+    }),
+    HttpApiEndpoint.get('sources', '/api/browser/sources', { success: BrowserSourcesAnswer }),
+    HttpApiEndpoint.get('sourceSites', '/api/browser/sources/:sourceId/sites', {
+      params: { sourceId: Schema.String },
+      success: BrowserSourceSitesAnswer,
+    }),
+    HttpApiEndpoint.post('copy', '/api/browser/projects/:projectId/copy', {
+      params: BrowserProjectParams,
+      payload: Schema.Struct({ source: Field, sites: Field }),
+      success: BrowserCopyAnswer,
+    }),
+    HttpApiEndpoint.post('openWindow', '/api/browser/projects/:projectId/window', {
+      params: BrowserProjectParams,
+      payload: Schema.Struct({ url: Field }),
+      success: BrowserProjectAnswer,
+    }),
+    HttpApiEndpoint.post('closeWindow', '/api/browser/projects/:projectId/window/close', {
+      params: BrowserProjectParams,
+      payload: EmptyBody,
+      success: BrowserProjectAnswer,
+    }),
+    HttpApiEndpoint.post('removeSite', '/api/browser/projects/:projectId/sites/remove', {
+      params: BrowserProjectParams,
+      payload: Schema.Struct({ site: Field }),
+      success: BrowserProjectAnswer,
+    }),
+    HttpApiEndpoint.post('signOut', '/api/browser/projects/:projectId/sign-out', {
+      params: BrowserProjectParams,
+      payload: EmptyBody,
+      success: BrowserProjectAnswer,
+    })
+  )
+  .annotateEndpoints(OwnerOnlyRoute, true)
+  .annotateEndpoints(EngineFeatureRoute, 'browser')
+  .middleware(EngineGate) {}
+
 export class EngineApi extends HttpApi.make('engine').add(
   TasksGroup,
   CodeGroup,
@@ -745,5 +792,6 @@ export class EngineApi extends HttpApi.make('engine').add(
   SlackGroup,
   ProjectsGroup,
   TerminalsGroup,
-  ServicesGroup
+  ServicesGroup,
+  BrowserGroup
 ) {}

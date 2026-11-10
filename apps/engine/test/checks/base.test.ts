@@ -108,6 +108,10 @@ function readCount(file: string) {
   return existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n').length : 0;
 }
 
+async function waitForCount(file: string, count: number) {
+  while (readCount(file) < count) await Bun.sleep(20);
+}
+
 describe('running a failing check on the base commit', () => {
   test('a command that fails on the base too is compared error by error, run once per base and command', async () => {
     const setup = await createBase({ 'flag.txt': 'old' });
@@ -202,7 +206,8 @@ describe('running a failing check on the base commit', () => {
     expect(await bases.compareWithBase({ ...requestOf(setup, slow), timeoutMs: 100 })).toBeNull();
     const controller = new AbortController();
     const cancelled = bases.compareWithBase({ ...requestOf(setup, slow), signal: controller.signal });
-    setTimeout(() => controller.abort(), 200);
+    await waitForCount(counter, 2);
+    controller.abort();
     expect(await cancelled).toBeNull();
     expect(readCount(counter)).toBe(2);
   });

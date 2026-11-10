@@ -42,7 +42,7 @@ src/
 │   updates/        state.ts (states, menu item, notices, the go-back dialog), channel.ts (the channels, their
 │                   options, when a version ahead is offered the latest there); Updater (start, every four hours,
 │                   download, install with a 15 s timeout, channel switches)
-│   window/         bounds.ts, close.ts (close or hide), context-menu.ts (the right-click text menu); AppWindow
+│   window/         bounds.ts (saved on move or resize), close.ts (close or hide), context-menu.ts (the right-click text menu); AppWindow
 │                   (the page, navigation, Back and Forward, the waiting page)
 │   dialogs/ files/ host/ launchctl/ login-items/ login-shell/ native-notices/ native-tray/ native-window/
 │   power-monitor/ shell/ update-client/
@@ -118,6 +118,12 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   first, so the first health check goes out before Electron is ready, the native window, tray and IPC layers wait
   for `app.whenReady()`, and `will-quit` disposes the runtime, which closes every listener, the watch and the update
   schedule. The engine keeps running. The main bundle imports from `@shinsa/core` only the engine API and the app's identity.
+- **Electron's guards run synchronously.** `close`, `will-navigate`, the window-open handler, `before-quit` and the
+  page's start request ask for an answer on the spot, so `main/` runs their guards with `Effect.runSync`. A guard only
+  reads `Ref`s and decides; anything that waits (a file write, IPC, the shell) is forked with `later` or happens on an
+  event instead, or `runSync` throws `AsyncFiberError` and Electron shows its main-process error dialog, which keeps the
+  app open and stops Restart to Update from installing. So the window bounds are saved on `BoundsChanged` (macOS's
+  `resized` and `moved`, once a drag ends), never on close: a write forked on close would be cut off by `will-quit`.
 - **The engine is the app's to run.** Packaged, the app first boots out and deletes a standalone engine's LaunchAgent
   (`~/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` running a program other than its own, written by a
   `shinsa start` from npm or the install script, `isStandaloneAgent`), since it holds the label the app's job needs. It removes the old `shinsa service` LaunchAgent once

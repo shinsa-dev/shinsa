@@ -322,6 +322,26 @@ describe('the card for each gate', () => {
     expect(valuesOf(message)).toEqual([]);
   });
 
+  test('a browser sign-in is done on the machine, so Slack only links to it', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({
+      type: 'agent.request_browser_sign_in',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'b1',
+      url: 'https://vercel.com/login',
+      reason: 'The deploy page asks me to sign in.',
+    });
+    const gate = harness.state.gates.b1;
+    const message = gateCardOf(harness, taskId, gate);
+    expect(readText(message)).toBe(
+      `Sign-in needed\n*vercel.com*\nSign in from Shinsa on the machine that runs the task.\n<${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
+    );
+    expect(valuesOf(message)).toEqual([]);
+    const bare = gateCardOf(harness, taskId, { ...(gate ?? never()), browserSignIn: null });
+    expect(readText(bare)).toContain('*Sign in to vercel.com*');
+  });
+
   test('a plan is its goal, its phases, Approve with the version it shows and Request changes…', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });

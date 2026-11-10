@@ -258,6 +258,8 @@ function describeShinsaMessage(
       return plain('IconBubbleText', 'Answered a delegated agent:', readString(args, 'answer'));
     case 'request_secret':
       return plain('IconShieldCheck', 'Asked you for a secret:', readString(args, 'label'));
+    case 'request_browser_sign_in':
+      return plain('IconGlobe', 'Asked you to sign its browser in:', readString(args, 'url'));
     case 'run_service':
       return plain(
         'IconServer',
@@ -395,6 +397,7 @@ const PRESENT_VERB: Record<string, string> = {
   'Listed the schedules': 'Listing the schedules',
   'Deleted a schedule': 'Deleting a schedule',
   'Asked you for a secret:': 'Asking you for a secret:',
+  'Asked you to sign its browser in:': 'Asking you to sign its browser in:',
 };
 
 export function resolvePresentVerb(verb: string) {
@@ -462,6 +465,7 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   list_schedules: () => 'listed the schedules',
   delete_schedule: (count) => `deleted ${describeCount(count, 'schedule', 'schedules')}`,
   request_secret: () => 'asked you for a secret',
+  request_browser_sign_in: () => 'asked you to sign its browser in',
 };
 
 export function resolveGroupPhrase(keys: ToolGroupKey[]) {

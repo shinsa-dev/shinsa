@@ -72,9 +72,6 @@ export class AppWindow extends Context.Service<
         return false;
       });
       const close = Effect.gen(function* () {
-        yield* Effect.ignore(
-          Effect.flatMap(native.normalBounds, (windowBounds) => prefs.write({ windowBounds }))
-        );
         const action = resolveCloseAction({
           quitting: yield* Ref.get(quitting),
           fullScreen: yield* native.fullScreen,
@@ -98,6 +95,8 @@ export class AppWindow extends Context.Service<
             return yield* actions.request('retry');
           case 'RendererGone':
             return yield* reload;
+          case 'BoundsChanged':
+            return yield* prefs.write({ windowBounds: yield* native.normalBounds });
         }
       });
       yield* native.guard({
