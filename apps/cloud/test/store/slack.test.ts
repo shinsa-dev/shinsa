@@ -191,6 +191,24 @@ describe('watched Slack channels', () => {
     expect(results).toEqual([[], [STUDIO], []]);
   });
 
+  test('a machine has a watch only on a channel it watches, while it still has a link in that workspace', async () => {
+    const results = await runTest(
+      Effect.gen(function* () {
+        const slack = yield* seedWorkspace;
+        yield* slack.upsertLink(LINK);
+        yield* slack.replaceMachineWatches(STUDIO, [ALERTS]);
+        const watched = [
+          yield* slack.hasWatch(ALERTS, STUDIO),
+          yield* slack.hasWatch(ALERTS, LAPTOP),
+          yield* slack.hasWatch({ ...ALERTS, channelId: 'C2' }, STUDIO),
+        ];
+        yield* slack.upsertLink({ ...LINK, machineId: LAPTOP });
+        return [...watched, yield* slack.hasWatch(ALERTS, STUDIO)] as const;
+      })
+    );
+    expect(results).toEqual([true, false, false, false]);
+  });
+
   test('a private channel keeps when its membership was last confirmed, until someone leaves it or the watch is removed', async () => {
     const results = await runTest(
       Effect.gen(function* () {

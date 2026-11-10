@@ -53,13 +53,12 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
 
     const findThreadToken = Effect.fn('slackRelay.findThreadToken')(function* (thread: RelayThread) {
       const { instanceId } = yield* CurrentMachine;
-      if (
-        !(yield* store.hasThread(
-          { workspaceId: thread.teamId, channelId: thread.channelId, threadTs: thread.threadTs },
-          instanceId
-        ))
-      )
-        return yield* new ThreadNotForwarded({ message: 'This machine was never sent that Slack thread.' });
+      const sent = { workspaceId: thread.teamId, channelId: thread.channelId, threadTs: thread.threadTs };
+      if (!(yield* store.hasThread(sent, instanceId))) {
+        if (!(yield* store.hasWatch(sent, instanceId)))
+          return yield* new ThreadNotForwarded({ message: 'This machine was never sent that Slack thread.' });
+        yield* store.recordThread(sent, instanceId);
+      }
       const opened = yield* selectWorkspaceToken(thread.teamId);
       if (Option.isNone(opened))
         return yield* new SlackNotInstalled({ message: 'Shinsa is no longer in that Slack workspace.' });
