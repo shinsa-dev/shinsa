@@ -5,6 +5,7 @@ import { Slack } from '../../../slack/service.ts';
 import {
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_ENGINE_INTERACTIONS_PATH,
+  SLACK_ENGINE_MESSAGES_PATH,
   TUNNEL_HEALTH,
   TUNNEL_HEALTH_PATH,
 } from './schema.ts';
@@ -27,6 +28,7 @@ export const TunnelRoutes = Layer.unwrap(
       HttpRouter.route('GET', TUNNEL_HEALTH_PATH, respondHealth),
       HttpRouter.route('POST', SLACK_ENGINE_EVENTS_PATH, respondSlack),
       HttpRouter.route('POST', SLACK_ENGINE_INTERACTIONS_PATH, respondSlack),
+      HttpRouter.route('POST', SLACK_ENGINE_MESSAGES_PATH, respondSlack),
     ]);
   })
 );

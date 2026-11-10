@@ -10,6 +10,7 @@ import {
   SlackRelaySession,
   SlackRelaySessionSet,
 } from '../slack/relay.ts';
+import { SlackChannels, SlackChannelWatches } from '../slack/schema.ts';
 import {
   ClaimCode,
   ConnectResponse,
@@ -392,6 +393,15 @@ class SlackRelayGroup extends HttpApiGroup.make('slackRelay')
       payload: SlackRelayReaction,
       success: SlackRelayReacted,
       error: [...THREAD_FAILURES],
+    }),
+    HttpApiEndpoint.get('channels', SLACK_RELAY_PATHS.channels, {
+      success: SlackChannels,
+      error: [wire(SlackFailed)],
+    }),
+    HttpApiEndpoint.post('watches', SLACK_RELAY_PATHS.watches, {
+      payload: SlackChannelWatches,
+      success: RemoteOk,
+      error: [wire(SlackFailed)],
     })
   )
   .middleware(RequestGate)

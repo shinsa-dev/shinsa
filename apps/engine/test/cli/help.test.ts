@@ -80,7 +80,7 @@ describe('shinsa help', () => {
     expect(listUncatalogedGroups([{ path: ['later'] } as never])).toEqual(['later']);
     const all = describeHelpAll().split('\n');
     expect(all).toContain(
-      `  ${'shinsa schedules write'.padEnd(32)}Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily or when its webhook is called.`
+      `  ${'shinsa schedules write'.padEnd(32)}Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily, when its webhook is called or when a message is posted in a Slack channel.`
     );
     expect(all.at(-1)).toBe('Add --help to any command for its arguments, --json for JSON.');
   });

@@ -8,8 +8,10 @@ import {
   describeScheduleSummary,
   describeScheduleWhat,
   describeScheduleWhen,
+  describeScheduleWhere,
   removeSchedule,
   requestWebhook,
+  resolveAutomationLook,
   resolveScheduleIcon,
   resolveScheduleStatus,
   resolveScheduleTaskId,
@@ -57,6 +59,20 @@ describe('describing a schedule', () => {
         createSchedule({ id: 'w', trigger: { kind: 'webhook', signature: null, replayKey: null } })
       )
     ).toBe('Trigger · Starts a new task · when its webhook is called');
+    const slack = createSchedule({
+      id: 'k',
+      trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+    });
+    expect(describeScheduleSummary(state, slack)).toBe(
+      'Trigger · Starts a new task · when a message is posted in #alerts'
+    );
+    expect(resolveAutomationLook(slack).icon).toBe('IconSlack');
+    expect(resolveAutomationLook({ ...slack, source: { projectId: 'p', server: 'slack' } }).icon).toBe(
+      'IconRadar'
+    );
+    expect(resolveAutomationLook(message).icon).toBe('IconCalendarClock');
+    expect(describeScheduleWhere(slack)).toBe('Acme on Slack');
+    expect(describeScheduleWhere(message)).toBeNull();
     expect(describeOpenTask(message)).toBe('Open the task');
     expect(describeOpenTask({ ...message, source: { projectId: 'p', server: 'slack' } })).toBe(
       'Open the watch'

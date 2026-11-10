@@ -290,9 +290,11 @@ function createClocksLayer(options: ShinsaOptions) {
     Effect.gen(function* () {
       const address = yield* ServerAddress;
       const remote = yield* Remote;
+      const slack = yield* Slack;
       return SchedulesLayer({
         baseUrl: address.url,
         hookUrl: (scheduleId, token) => remote.resolveHookUrl(scheduleId, token),
+        slackChannels: slack.channels,
       });
     })
   );
@@ -459,13 +461,9 @@ function createServeLayer(
     Layer.provideMerge(createRunsLayer(options)),
     Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer)),
     Layer.provideMerge(
-      Layer.mergeAll(
-        createTriageLayer(),
-        createSlackLayer(config),
-        createClocksLayer(options),
-        createTerminalsLayer(instance)
-      )
+      Layer.mergeAll(createTriageLayer(), createClocksLayer(options), createTerminalsLayer(instance))
     ),
+    Layer.provideMerge(createSlackLayer(config)),
     Layer.provideMerge(
       Layer.mergeAll(
         createRemoteLayer(config, options, instance),

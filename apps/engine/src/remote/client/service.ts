@@ -216,6 +216,9 @@ export class RemoteClient extends Context.Service<
             call('slackRelay.session', slack.session({ payload }).pipe(asMachine(token))),
           react: (token, payload) =>
             call('slackRelay.react', slack.react({ payload }).pipe(asMachine(token))),
+          channels: (token) => call('slackRelay.channels', slack.channels({}).pipe(asMachine(token))),
+          watches: (token, payload) =>
+            call('slackRelay.watches', slack.watches({ payload }).pipe(asMachine(token), Effect.asVoid)),
         },
       });
     })

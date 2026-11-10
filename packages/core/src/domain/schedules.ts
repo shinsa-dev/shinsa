@@ -6,7 +6,7 @@ export const WEBHOOK_ENCODINGS = ['hex', 'base64'] as const;
 
 export type WebhookEncoding = (typeof WEBHOOK_ENCODINGS)[number];
 
-export const SCHEDULE_TRIGGER_KINDS = ['once', 'interval', 'daily', 'webhook'] as const;
+export const SCHEDULE_TRIGGER_KINDS = ['once', 'interval', 'daily', 'webhook', 'slack'] as const;
 
 export interface SourceReport {
   scheduleId: string | null;
@@ -120,9 +120,14 @@ export const SCHEDULE_LIMITS = {
   weekdays: 7,
   suggestedEveryMinutes: 60,
   openSuggestions: 10,
+  slackName: 120,
 } as const;
 
 export const SECRET_REF_PATTERN = /^secret-ref:[0-9a-f]{32}$/;
+
+export function isEventTrigger(trigger: ScheduleTrigger) {
+  return trigger.kind === 'webhook' || trigger.kind === 'slack';
+}
 
 export function isScheduleLive(schedule: Schedule) {
   return schedule.stopped === null;

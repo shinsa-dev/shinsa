@@ -12,6 +12,7 @@ type WatchdogEvent = Extract<
       | 'watchdog.armed'
       | 'watchdog.started'
       | 'watchdog.live'
+      | 'watchdog.not_live'
       | 'watchdog.checking'
       | 'watchdog.deferred'
       | 'watchdog.missed'
@@ -159,6 +160,26 @@ function applyLive(state: ShinsaState, event: EventOf<'watchdog.live'>) {
   });
 }
 
+function applyNotLive(state: ShinsaState, event: EventOf<'watchdog.not_live'>) {
+  const check = event.check;
+  const next = updateWatchdog(state, event, (watchdog) => ({
+    status: 'awaiting_production',
+    awaitingSince: event.at,
+    startedAt: null,
+    endsAt: null,
+    nextCheckAt: event.nextCheckAt,
+    runId: null,
+    checks: check ? [...watchdog.checks, check].slice(-WATCHDOG_LIMITS.checksKept) : watchdog.checks,
+  }));
+  if (!next) return;
+  record(state, event.taskId, event.at, {
+    actor: 'agent',
+    kind: 'watchdog',
+    text: `The change is not live in production, so the watchdog “${next.title}” waits for it`,
+    detail: check?.summary ?? null,
+  });
+}
+
 function applyStarted(state: ShinsaState, event: EventOf<'watchdog.started'>) {
   const next = updateWatchdog(state, event, () => ({
     status: event.status,
@@ -186,6 +207,9 @@ export function applyWatchdogEvent(state: ShinsaState, event: WatchdogEvent) {
       return;
     case 'watchdog.live':
       applyLive(state, event);
+      return;
+    case 'watchdog.not_live':
+      applyNotLive(state, event);
       return;
     case 'watchdog.checking':
       updateWatchdog(state, event, () => ({ runId: event.runId }));

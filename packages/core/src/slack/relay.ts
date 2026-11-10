@@ -17,6 +17,8 @@ export const SLACK_RELAY_PATHS = {
   post: '/__remote/slack/post',
   session: '/__remote/slack/session',
   react: '/__remote/slack/react',
+  channels: '/__remote/slack/channels',
+  watches: '/__remote/slack/watches',
 } as const;
 
 export const SLACK_RELAY_MESSAGE_LIMITS = {
