@@ -1,8 +1,15 @@
 import { resolveModelFamily } from '../agent-models/index.ts';
 import type { WeeklyReading } from '../domain/index.ts';
+import { HOUR_MS } from '../domain/time.ts';
 import type { AccountUsage, UsageWindow } from '../protocol/accounts.ts';
 
 const SPENT_PERCENT = 100;
+
+export const STALE_USAGE_MS = 6 * HOUR_MS;
+
+export function isStaleUsage(usage: AccountUsage, now: number) {
+  return usage.checkedAt !== null && now - usage.checkedAt > STALE_USAGE_MS;
+}
 
 function isModelWindowFor(window: UsageWindow, model: string | null) {
   if (window.kind !== 'model') return true;
@@ -26,6 +33,7 @@ export function resolveHeadroom(usage: AccountUsage, model: string | null) {
 }
 
 export function resolveSpentUntil(usage: AccountUsage, model: string | null, now: number) {
+  if (isStaleUsage(usage, now)) return null;
   const spent = listRelevantWindows(usage, model).filter(
     (window) => window.usedPercent >= SPENT_PERCENT && window.resetsAt !== null && window.resetsAt > now
   );
