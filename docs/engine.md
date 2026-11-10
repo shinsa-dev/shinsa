@@ -110,8 +110,14 @@ another provider drops the model it had, unless the same change names one (switc
 `defaultModel` the same way). Model names come from `KNOWN_AGENT_PROVIDERS` (Claude's `KNOWN_AGENT_MODELS`, "opus"
 is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the right names from the first paint;
 `GET /api/providers` then replaces them with each provider's live catalog (`listModels`: the Claude SDK's
-`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
-serves the default provider's list, the one setup's Model step offers.
+`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). Each provider keeps its
+catalog in an Effect `Cache` keyed by the program's path and version, for `MODEL_CATALOG_TTL` (5 minutes): an
+update to Claude Code or Codex is a new key, so the next read asks the new program straight away, and a failed or
+empty answer is not kept, so the next read asks again; meanwhile the read serves the last list the provider gave
+(the built-in list until it gave one), so a failed ask never swaps a live list for older built-in names. The web asks
+`GET /api/providers` on every mount of `useAgentProviders()` (Settings and its Agents section), showing the last
+list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
+default provider's list, the one setup's Model step offers.
 
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
@@ -232,9 +238,11 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   proves its change with a test or a check links that check by its id instead of pasting its output (Evidence,
   below).
 - **Headless.** Checks run with `CI=1`, which test runners and Playwright read as headless, and every browser Shinsa
-  or its agents start is headless (`resolveBrowserEnv`), so nothing a check runs opens a window on your screen. The
-  same environment gives the Playwright MCP a device scale factor of 2 (`Desktop Chrome HiDPI`), so evidence an agent
-  captures stays sharp on a Retina screen (Evidence, below).
+  or its agents start is headless (`resolveBrowserEnv`), so nothing a check runs opens a window on your screen; the
+  one window is the sign-in window you open yourself (The shared browser, below). An agent's Playwright MCP drives its
+  project's shared browser, which Chrome renders at a device scale factor of 2; without one, the same environment gives
+  the MCP's own browser that scale (`Desktop Chrome HiDPI`), so evidence an agent captures stays sharp on a Retina
+  screen either way (Evidence, below).
 
 ### Test coverage of the change
 
@@ -1083,12 +1091,12 @@ folds in `state/shapes.ts`).
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
   of planning a fix.
-- **Suggested replies.** Any hand-over but the reviewer's can carry up to three `actions` (`label`, `message`).
+- **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
   that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
-  plan, proposal, review, merge and result cards show them as outline buttons before the main one, ⌘K lists them as
-  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent. A
-  click sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
+  plan, proposal, review, merge and result cards list them in one outline Replies menu before the main button, each label with its message under it, ⌘K lists them as
+  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent.
+  Choosing one sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
   changes in this round, at your OK it declines the proposal and resumes the inquiry.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
   characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
@@ -1352,6 +1360,14 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
 `stacked` (Delegation, below). Triage stacks a new task on an open change when it is that change's next piece
 (`stacks_on`, Task shapes, above). Stacking on a task it already waits on moves that wait into the stack.
 
+- **No wait inside a bundle.** A bundle merges as one, so a task that waits for another task of its own bundle to
+  merge would hold the bundle while the bundle holds it. A wait on any member, below, above or beside it, is dropped:
+  `changeStack` drops it from every member of the bundle a stack change leaves (joining two bundles drops the waits
+  between them), and `task.wait_on`, `task.create` and triage never add one (`isBundleMember`, `state/queries.ts`). A
+  wait already in the log on a member holds nothing (`listDependencies` skips it), so the task starts and the lead's
+  merge gate opens as if it were gone. A task stacked on a bundle that opens no pull request of its own is not a member,
+  and keeps its waits.
+
 - **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
   and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
   by stacks, either way (`resolveBundleMembers`, `state/queries.ts`), in topological order: each task after every task
@@ -1515,8 +1531,9 @@ stops here.
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
-`question` is an agent waiting for an answer and `secret` an agent waiting for a secret (`request_secret`); both are an
-agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
+`question` is an agent waiting for an answer, `secret` an agent waiting for a secret (`request_secret`) and
+`browser_sign_in` an agent waiting for its project's shared browser to be signed in to a site
+(`request_browser_sign_in`, The shared browser, below); all three are an agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
 above), `operation` an operation after the merge waiting for your OK on the merged commit, and `result` a finished
 answer, report or diagnosis waiting for you to read and close it (Task shapes → Answered, not done). `failure` means the
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
@@ -1538,9 +1555,12 @@ says so in its plan instead of an agent splitting the request before anyone read
 lists the other parts (a title, a request that stands on its own, and when each starts: now, waiting on this task or
 an earlier part, or stacked on one), and the phases cover only the work that stays (`docs/protocol.md` → Plan
 parameters). The planning prompt says when (`describePlanSplit`, `prompts/roles.ts`): only for a task that opens a
-pull request, parts in parallel by default, waiting only on code on an unmerged branch, stacked only for pieces of one
-rewrite, and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
-Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both.
+pull request; parts that serve one goal (pieces of one feature, a change and its follow-ups, work on the same code)
+stacked as a bundle, which is how most splits end; in parallel only for a part with a different goal worth merging
+alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
+Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
+every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
@@ -1913,8 +1933,8 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 ### Evidence
 
 The review opens with proof, not the diff: screenshots before and after, a recording of an interaction, the checks
-that prove the logic (`docs/spec.md` 6). Shinsa does not run a browser of its own; the agents capture evidence with
-the tools they have and hand it over with `attach_evidence` (since 2026-10-26), and Shinsa keeps the output of the
+that prove the logic (`docs/spec.md` 6). The agents capture evidence with the tools they have, in their project's
+shared browser when the screen needs a sign-in (The shared browser, below), and hand it over with `attach_evidence` (since 2026-10-26), and Shinsa keeps the output of the
 checks it ran.
 
 - **Who captures it.** The Agent proves its own work. Every phase instruction (`resolvePhaseInstruction`,
@@ -2763,8 +2783,8 @@ and the run supervisor.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
   parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
-  merging together, Scheduling → Bundles), for a rewrite whose pieces ship at once; it is refused next to
-  `this_task_waits`. Without it each part starts at once and ships on its own. These are the only
+  merging together, Scheduling → Bundles), the usual choice whenever the parts serve one goal; it is refused next to
+  `this_task_waits`. Without it each part starts at once and ships on its own, only for parts with different goals. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
   line.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own
@@ -2962,8 +2982,9 @@ running when the window closes or the app quits, and a page that comes back find
   would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
   its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
   one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
-- **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
-  does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
+- **When the engine stops.** `stop()` hangs up every shell and its process group (`SIGHUP` and the PTY closed, as
+  closing a terminal window does, then `SIGKILL` after 3 s) and waits until each group is empty, so nothing it started
+  outlives the engine, and saves each screen. A restarted
   engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
   again, which starts a new shell in the same folder below the old output. Closing a terminal hangs it up and deletes
   its screen.
@@ -3032,8 +3053,12 @@ beside your run (Runs for a task, below).
   adds how long it has been so, `resolveServicesSummary` the counts the header shows.
 - **Start, stop, restart.** `POST /api/services/<id>/start` opens the service's terminal the first time and starts its
   command again in the same tab after that, below the old output (a start of a running one does nothing). `/stop`
-  hangs it up as closing a terminal window does (`SIGHUP` and the PTY closed, `SIGKILL` 3 s later): the whole
-  process group, so a dev server and the watchers it started end together, and the tab stays with its last screen.
+  hangs it up as closing a terminal window does, but to the whole process group the shell leads, not the shell alone
+  (`SIGHUP` to `-pid` and the PTY closed, `SIGKILL` to the group 3 s later), so a dev server and the watchers it
+  started end together, and the tab stays with its last screen. The stop counts as done only once no process in the
+  group is alive (`TerminalPty`'s `hangUpGroup` polls signal 0 on `GROUP_POLL_SCHEDULE`, 3 s after each signal), so a
+  server that takes a moment to let go of its port has let go by the time a start runs. A shell that exits on its own
+  has whatever it left in its group stopped the same way, so no server outlives its run as an orphan.
   `/restart` stops and starts. `POST /api/services/start-all { projectId }` starts every service of a project that is
   not running. Closing a service's tab stops it and forgets the tab; the service stays.
 - **Runs for a task.** A run is a service's terminal with its `taskId`: `null` for yours, in the service's own
@@ -3049,8 +3074,10 @@ beside your run (Runs for a task, below).
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
-  `pickFreePort` in `pty.ts`: the run's last port while it is still free, else a port the system hands out for
-  `Bun.listen` on port 0, never one another running service holds; `service_port_unavailable` when none is), kept on
+  `TerminalPty.pickPort`: the run's last port, tried again every 100 ms for up to 5 s while something still holds it
+  (`PORT_RELEASE_SCHEDULE`), so a restart comes back on the same port and every link to it keeps working; only after
+  that a port the system hands out for `Bun.listen` on port 0, never one another running service holds;
+  `service_port_unavailable` when none is), kept on
   `TerminalInfo.port` and put in the service's port variable over its own variables, so a task's run never meets
   yours or another task's. Your run is unchanged unless the service has a preview URL; with one it uses the port its
   own variables set, else a free port it keeps across restarts. The command must listen on that variable: Next and
@@ -6019,6 +6046,92 @@ what it costs at the start of every run, so you can turn off what you do not use
 | `POST /api/extensions/skills/choose {skillId, enabled}`, `/plugins/choose {pluginId, enabled}` | A skill or a plugin on or off (Shinsa's own skills are refused) |
 | `POST /api/extensions/optimizer {enabled?, days?, skills?}` | The context optimizer's settings |
 
+## The shared browser
+
+Each project has one Chrome its agents share, kept by the engine rather than by an agent, so it outlives every run and
+task and keeps its sign-ins (since 2026-11-09). You sign it in once per site, by copying the sign-in from your everyday
+browser or by hand in a plain window, and every later task of that project starts signed in. Before it, each agent's
+Playwright MCP made a fresh profile per worktree, headless, that closed with the run, and Google refuses to sign in to
+a browser a program drives. The module is `apps/engine/src/browser/`: `host/`, `proxy/`, `cookies/` and `cdp/`.
+
+```
+agent's Playwright MCP ──ws──► engine /browser/cdp/<run key>   BrowserProxy
+                                 │ loopback only, key of a live run
+                                 ▼
+                        BrowserHost.acquire(project) ──► Chrome, headless
+                                 ▲                ~/.config/shinsa/data/browser/<project id>/
+you: Settings → Browser ─────────┤
+  Copy sign-ins ── BrowserCookies: your browser's cookie file ──► Storage.setCookies
+  Open sign-in window ── the same profile, a normal window, nothing attached
+```
+
+- **The host** (`BrowserHost`) runs installed Google Chrome (`CHROME_EXECUTABLES`: Chrome, Chrome Beta, Chromium) on
+  one profile per project at `~/.config/shinsa/data/browser/<project id>/` (`browserDir`, in the data directory so a
+  seeded or inspected copy carries its own), never Playwright's Chromium. It starts it
+  headless the first time an agent connects (`--headless=new`, `--force-device-scale-factor=2`, a debugging port on
+  127.0.0.1 only), shares it between every agent of the project, and stops it after 10 idle minutes with no
+  connection (`BrowserHostSettings`). Stopping asks Chrome to close and waits for it to exit, so it writes its cookies
+  first; a kill would lose the sign-ins made since the last write. Both modes run with `--use-mock-keychain`, so the
+  profile encrypts the same way in each and Chrome never asks for your Keychain. Browser state lives in these folders,
+  never in the event log.
+- **Agents reach it through the engine** (`BrowserProxy`). Each run of a task in a project is issued a key
+  (`RunSupervisor.issueBrowser`) that the run's scope revokes when it ends, closing its connections; the endpoint,
+  `ws://127.0.0.1:<port>/browser/cdp/<key>`, goes into the run's environment as `PLAYWRIGHT_MCP_CDP_ENDPOINT`
+  (`resolveBrowserEnv`), for Claude's process and Codex's app server alike, never into the prompt (Caching, below).
+  The route refuses a connection from outside this machine, from another site's Origin, or with a key that is not a
+  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start or the sign-in
+  window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
+  agent cannot take every other agent's pages down. Every agent shares the default context, so the cookies are one
+  jar, but each connection sees only its own pages (`createTargetFilter`): a page counts as its own when it opened it
+  (`Target.createTarget`) or a page of its own opened it (a popup, by `openerId`). Every other page is hidden from its
+  `Target.attachedToTarget`, events and `Target.getTargets`, resumed if it waits for this connection and detached, and
+  closing or attaching to it is refused; otherwise the Playwright MCP would adopt the pages already open, so two tasks
+  would drive the same tab. A page that appears while the agent's own new page is on the way is held until Chrome says
+  which page it opened. A key names its project, so one project's agents never reach
+  another's browser. Since Playwright will not start with both a device and an endpoint, Shinsa's default
+  `Desktop Chrome HiDPI` is left out on the shared browser; a device or endpoint you set on the server yourself wins.
+  A task with no project gets no key, and its MCP starts a headless browser of its own as before.
+- **Copying sign-ins** (`BrowserCookies`). It finds your Chromium browsers (Dia, Chrome, Arc, Brave, Edge;
+  `SOURCE_BROWSERS`), your default one first (Launch Services), and lists the sites each is signed in to from its
+  Default profile's cookie file, copied to a temporary folder first so the browser is never locked or written to.
+  Listing reads only host names, so it asks for nothing; a site counts as signed in only by an HttpOnly cookie that is
+  not cross-site (`SameSite=None`, which ad and tracking cookies need) and not an analytics, bot or load-balancer one
+  (`NOT_SIGN_IN_COOKIES`), and sites group by registrable domain with a short list
+  of shared hosting suffixes (`MULTI_PART_SUFFIXES`), not the full public suffix list. Copying the sites you tick reads
+  that browser's key from your Keychain (`security find-generic-password`, the `<Browser> Safe Storage` item; macOS
+  asks you once), decrypts their cookies and writes them into the project's Chrome with `Storage.setCookies`. Expired
+  and partitioned cookies are skipped, and a session cookie gets 14 days (`SESSION_COOKIE_LIFETIME`), since it would
+  otherwise go each time the shared Chrome stops. Google refuses a copied session (tried when this was built), so
+  Google sites are signed in in the window instead. Safari and Firefox are not read, and all of this is macOS only.
+- **The sign-in window.** Open sign-in window stops the headless Chrome and opens the same profile as a normal Chrome
+  window, with no debugging port and nothing attached, so Google lets you sign in. While it is open, agents are
+  refused with `signing_in`; Done, or quitting that Chrome (⌘Q), hands the profile back, and the next agent starts it
+  headless again with your sign-in in it. Closing its last window does not, since Chrome on macOS keeps running
+  without one; Open sign-in window then opens a new window in that Chrome (`BrowserHost.reveal`, a second launch on the
+  profile that Chrome hands to the one running).
+- **Agents ask with `request_browser_sign_in {url, reason}`** (`agent.request_browser_sign_in`), the building Agent and
+  the investigator only. It opens a `browser_sign_in` gate naming the site (`browserSignIn: {url, site}`) and the run
+  waits on it like a question (Gates, above); a task with no project is refused (`browser_no_project`). The task
+  overview shows it as a card (`BrowserSignInCard`): Copy from your default browser copies that site and answers the
+  gate in one click when that browser is signed in to it (not offered for Google sites), Open sign-in window then Done answers it the same way, Choose
+  sites… opens the copy dialog, and Skip rejects it. Approve tells the agent the browser is signed in and to open the
+  page again; reject to carry on without it (`resolveBrowserSignInReply`). Only you answer it, and copying and the
+  window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip, and a guest or a
+  teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page first, to use the
+  repository's own test users where it has them, and never to launch a browser of their own to sign in.
+- **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
+  started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
+  never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
+  button that signs the browser out of that one site (`sites/remove {site}`: every cookie on the site set to expire
+  through `Storage.setCookies`, since Chrome's browser connection has no delete), Copy sign-ins, Open sign-in window
+  (Done while it is open) and Sign out of everything, which stops the browser and removes the profile. The routes are
+  owner-only, behind the `browser` engine feature (`docs/protocol.md` → The socket): `GET
+  /api/browser/projects/:projectId`, `GET /api/browser/sources`, `GET /api/browser/sources/:sourceId/sites`, and
+  `POST` `copy`, `window`, `window/close`, `sites/remove` and `sign-out` under `/api/browser/projects/:projectId/`. The section is hidden on app.shinsa.dev.
+- **Limits.** Agents of one project share one cookie jar, so two tasks that need different users of the same site
+  collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage does not carry
+  across a task's ports.
+
 ## The agent loop
 
 How one run executes, from the supervisor (`agents/supervisor/`, `agents/turns/plan.ts`) down to the Claude adapter
@@ -6222,8 +6335,8 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
-- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the built-in list
-  when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
+- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the last list it gave, or
+  the built-in one, when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
 
 **Resume fallback** (`agents/turns/plan.ts`). Before resuming, the supervisor checks the session: a session owned by another
 provider is handed over; one marked lost (`run.session_lost`, recorded for every run that used it, so no retry or
@@ -6649,8 +6762,24 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
-  token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`
-  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Readings are cached for 60 s and kept
+  token keeps the last reading and says the login refreshes at the next check, and a stored token whose `expiresAt`
+  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Only a Claude Code
+  request refreshes a login (`claude auth status` does not), and an account that is out of usage or idle gets no
+  run, so Shinsa keeps each login alive (`accounts/keepalive/`, `LoginKeepalive.keep`): at start, on the 5-minute
+  tick and on both refreshes, before the usage read, every distinct own-login account that is not signed out and
+  has no active run, and whose stored token expires within 10 minutes or whose last read came
+  back expired, gets one Claude Code turn in its folder with `resolveAccountEnv`: `claude -p` on Haiku, with no
+  tools, MCP servers, settings, slash commands or saved session, 60 s at most. Claude Code
+  refreshes the token before it sends the request, so the turn works on an account that is out of usage too, where
+  it costs nothing; otherwise it costs a few tokens (about $0.0002), about three times a day per idle account,
+  since a token lasts about 8 hours. The read after it is forced. An attempt that leaves the login expired (offline, a timeout) is tried again after 30
+  minutes, at once on Refresh usage, and one turn runs per account at a time. A turn Claude
+  refuses for the login (a 401, or text `isLoginText` knows) marks the account signed out with why ("Claude could
+  not refresh this account’s login. Sign in again to keep its usage current."), so Settings shows Needs sign-in;
+  signing in or removing the account clears the back-off. A reading that goes stale anyway stops counting: `resolveSpentUntil` (core) ignores
+  a reading whose `checkedAt` is over 6 hours old (`STALE_USAGE_MS`, `isStaleUsage`), so the picker, the
+  snapshot's `spentUntil` and the forecast no longer treat a frozen 100% window as out of usage; a rejection a run
+  hit still holds the account until its reset. Readings are cached for 60 s and kept
   in `data/usage-limits.json` (read back marked `source: 'cache'`); a failed read never erases a reading, only
   replaces its detail; a 429 backs off at least 5 minutes, or as long as its `retry-after` asks, even when forced:
   the reading carries the end of the back-off as `retryAt` (kept on disk, so a restart honours it, and cleared by
@@ -6841,8 +6970,9 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   scope, a report it cannot place or read the typed `CoverageReportUnreadable`, answered as unavailable with its
   reason. `TerminalFiles` keeps data/terminals/ on `JsonFile`, every saved terminal and service decoded by a schema
   (`StoredTerminal`, `StoredService`) and one that breaks it dropped; `TerminalPty` spawns your shell in Bun's PTY as
-  a scoped resource whose release hangs it up and kills it after `HANG_UP_GRACE` (3 s), reads the program in front
-  through `Shell`, and picks a free port with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
+  a scoped resource whose release hangs up its process group and kills it after `HANG_UP_GRACE` (3 s), waiting until
+  the group is empty, reads the program in front through `Shell`, and picks a port: the run's last one on
+  `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
 - **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
@@ -6971,6 +7101,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
     ├── caches/        Build caches a repository's checkouts share (`<repo id>/turbo`; Where agents work, above)
     ├── transcripts/   One JSONL chat transcript per run
+    ├── browser/       Each project's shared Chrome profile (`<project id>/`), its sign-ins included; Sign out of
+    │                  everything removes it (The shared browser, above)
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
     ├── attachments/   The files and images you attached to a request or a message, one folder per upload
@@ -7031,7 +7163,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
   schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
   `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
-  above). It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
+  above). It reads each project's signed-in sites from its saved cookie file without starting its Chrome. It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
   a Shinsa that is running, on another port; it shows the log as it was when it started.
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
@@ -7039,7 +7171,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
   (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
   running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
-  script by its path in the checkout that seeded it. The evidence (`scripts/seed/evidence.ts`) is real files in
+  script by its path in the checkout that seeded it. Superwall's and Basket's shared browsers have a few signed-in sites
+  (`scripts/seed/browser.ts`, a cookie file under `data/browser/`) and Personal's has none. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of

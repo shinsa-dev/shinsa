@@ -55,6 +55,7 @@ export interface AgentSessionInput {
   usageBaseline?: UsageBaseline;
   extensions?: SessionExtensions;
   announceExtensions?: boolean;
+  browserEndpoint?: string | null;
 }
 
 interface SessionAccount {

@@ -113,7 +113,7 @@ describe('the Codex provider', () => {
     expect(await runProvider(provider.readUsage!)).toMatchObject({
       read: { ok: false, reason: 'failed', detail: outdated.message },
     });
-    expect(resolved).toBe(7);
+    expect(resolved).toBe(8);
   });
 
   test('a session without a model leaves the choice to Codex', async () => {

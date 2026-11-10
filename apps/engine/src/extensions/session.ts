@@ -1,7 +1,7 @@
 import type { ExtensionPlace, LoadedExtensions, SkillSource } from '@shinsa/core';
 import type { Effect } from 'effect';
 import type { Catalog, CatalogSkill } from './catalog.ts';
-import type { McpDefinition } from './definitions.ts';
+import { type McpDefinition, resolveBrowserEnv } from './definitions.ts';
 import { describeServerChoice } from './loader/names.ts';
 import type { DeferredServer, DeferredSkill, LoadableExtensions, SessionLoader } from './loader/schema.ts';
 
@@ -91,6 +91,26 @@ export function serializeSession(parts: SessionParts): SessionExtensions {
         ...skippedSkills.map((skill) => ({ name: resolveSkillName(skill), tokens: skill.tokens })),
       ],
     },
+  };
+}
+
+function applyServerBrowser<T extends { definition: McpDefinition }>(server: T, endpoint: string | null): T {
+  const { definition } = server;
+  if (definition.transport !== 'stdio') return server;
+  return {
+    ...server,
+    definition: { ...definition, env: resolveBrowserEnv(definition.env, definition.args, endpoint) },
+  };
+}
+
+export function resolveSessionBrowser(
+  extensions: SessionExtensions,
+  endpoint: string | null
+): SessionExtensions {
+  return {
+    ...extensions,
+    servers: extensions.servers.map((server) => applyServerBrowser(server, endpoint)),
+    deferred: extensions.deferred.map((server) => applyServerBrowser(server, endpoint)),
   };
 }
 

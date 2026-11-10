@@ -146,6 +146,16 @@ const FEATURE_ROUTES = {
   'suggestion.bundle': [],
   'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
   'focus.projects': [],
+  browser: [
+    'GET /api/browser/projects/([^/]+)',
+    'GET /api/browser/sources',
+    'GET /api/browser/sources/([^/]+)/sites',
+    'POST /api/browser/projects/([^/]+)/copy',
+    'POST /api/browser/projects/([^/]+)/window',
+    'POST /api/browser/projects/([^/]+)/window/close',
+    'POST /api/browser/projects/([^/]+)/sites/remove',
+    'POST /api/browser/projects/([^/]+)/sign-out',
+  ],
 };
 
 const LOCAL_ONLY = [
@@ -157,6 +167,14 @@ const LOCAL_ONLY = [
 ];
 
 const OWNER_ONLY = [
+  'GET /api/browser/projects/([^/]+)',
+  'GET /api/browser/sources',
+  'GET /api/browser/sources/([^/]+)/sites',
+  'POST /api/browser/projects/([^/]+)/copy',
+  'POST /api/browser/projects/([^/]+)/window',
+  'POST /api/browser/projects/([^/]+)/window/close',
+  'POST /api/browser/projects/([^/]+)/sites/remove',
+  'POST /api/browser/projects/([^/]+)/sign-out',
   'GET /api/github-token',
   'POST /api/github-token',
   'POST /api/remote/link/create',
@@ -275,7 +293,7 @@ describe('EngineApi routes', () => {
       expect([route.key, route.guest]).toEqual([route.key, resolveOldGuest(route.method, route.path)]);
   });
 
-  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices, a service’s command and terminals are for the owner, and only an attachment upload takes a larger body', () => {
+  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices, a service’s command, terminals and the shared browser are for the owner, and only an attachment upload takes a larger body', () => {
     const routes = listEngineRoutes();
     expect(sorted(routes.filter((route) => route.ownerOnly).map((route) => route.key))).toEqual(
       sorted(OWNER_ONLY)

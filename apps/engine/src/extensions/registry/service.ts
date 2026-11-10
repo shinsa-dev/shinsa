@@ -545,10 +545,7 @@ export class Extensions extends Context.Service<
           member: CatalogServer = group.lead
         ) {
           const expanded = expandDefinition(member.definition, env);
-          if (expanded.transport === 'stdio') {
-            return { ...expanded, env: resolveBrowserEnv(expanded.env, expanded.args) };
-          }
-          if (!expanded.url) return expanded;
+          if (expanded.transport === 'stdio' || !expanded.url) return expanded;
           const signedIn = (yield* selectSignedIn(group)) ?? member;
           const token = yield* oauth.resolveAccessToken(signedIn.id, expanded.url);
           if (!token) return expanded;
@@ -556,7 +553,12 @@ export class Extensions extends Context.Service<
         });
 
         const checkGroup = Effect.fn('Extensions.checkGroup')(function* (group: ServerGroup) {
-          const status = yield* clients.check(yield* resolveDefinition(group), MCP_CHECK_TIMEOUT);
+          const definition = yield* resolveDefinition(group);
+          const checked =
+            definition.transport === 'stdio'
+              ? { ...definition, env: resolveBrowserEnv(definition.env, definition.args) }
+              : definition;
+          const status = yield* clients.check(checked, MCP_CHECK_TIMEOUT);
           yield* store.writeStatus(group.lead.id, { ...status, checkedAt: yield* Clock.currentTimeMillis });
         });
 

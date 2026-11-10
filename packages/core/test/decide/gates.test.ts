@@ -670,6 +670,15 @@ describe('decisions only the human makes', () => {
       reason: 'To call the API.',
     });
     remember(secret);
+    const browser = createTask(harness, { request: 'Browser sign-in' });
+    harness.send({
+      type: 'agent.request_browser_sign_in',
+      runId: harness.activeRun(browser).id,
+      gateId: 'bs1',
+      url: 'https://vercel.com/login',
+      reason: 'The deploy page asks me to sign in.',
+    });
+    remember(browser);
     const failure = createTask(harness, { request: 'Failure' });
     harness.send({ type: 'effect.fail', taskId: failure, title: 'Broke', detail: 'x' });
     remember(failure);
@@ -735,6 +744,7 @@ describe('decisions only the human makes', () => {
   test('core refuses every gate answered on an agent’s behalf, whatever the decision, and records nothing', () => {
     const { harness, gates } = openEveryGate();
     const types: GateType[] = [
+      'browser_sign_in',
       'configuration',
       'failure',
       'merge',

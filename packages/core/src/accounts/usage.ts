@@ -1,9 +1,16 @@
 import { Option } from 'effect';
 import { resolveModelFamily } from '../agent-models/index.ts';
 import type { WeeklyReading } from '../domain/index.ts';
+import { HOUR_MS } from '../domain/time.ts';
 import type { AccountUsage, UsageWindow } from '../protocol/accounts.ts';
 
 const SPENT_PERCENT = 100;
+
+export const STALE_USAGE_MS = 6 * HOUR_MS;
+
+export function isStaleUsage(usage: AccountUsage, now: number) {
+  return usage.checkedAt !== null && now - usage.checkedAt > STALE_USAGE_MS;
+}
 
 function isModelWindowFor(window: UsageWindow, model: string | null) {
   if (window.kind !== 'model') return true;
@@ -30,6 +37,7 @@ export function resolveSpentUntil(
   model: string | null,
   now: number
 ): Option.Option<number> {
+  if (isStaleUsage(usage, now)) return Option.none();
   const resets = listRelevantWindows(usage, model).flatMap((window) =>
     window.usedPercent >= SPENT_PERCENT && window.resetsAt !== null && window.resetsAt > now
       ? [window.resetsAt]

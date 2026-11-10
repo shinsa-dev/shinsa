@@ -41,6 +41,7 @@ const GATE_RANK: Record<GateType, number> = {
   plan: 2,
   question: 3,
   secret: 3,
+  browser_sign_in: 3,
   proposal: 3,
   operation: 3,
   failure: 4,
