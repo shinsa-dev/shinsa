@@ -1,10 +1,4 @@
-import {
-  DomainError,
-  SLACK_NOT_CONNECTED,
-  type ShinsaCommand,
-  type ShinsaEvent,
-  type SlackChannel,
-} from '@shinsa/core';
+import type { DomainError, ShinsaCommand, ShinsaEvent } from '@shinsa/core';
 import { Context, Duration, Effect, Schema } from 'effect';
 import type { JsonSchema } from '../agents/providers/index.ts';
 
@@ -42,14 +36,6 @@ export interface ScheduleToolCall {
 export const ScheduleTimeZone = Context.Reference<string>('shinsa/engine/schedules/ScheduleTimeZone', {
   defaultValue: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
 });
-
-export const SlackChannelLookup = Context.Reference<Effect.Effect<readonly SlackChannel[], DomainError>>(
-  'shinsa/engine/schedules/SlackChannelLookup',
-  {
-    defaultValue: () =>
-      Effect.fail(new DomainError({ code: 'slack_not_connected', message: SLACK_NOT_CONNECTED })),
-  }
-);
 
 const WatchLine = Schema.optionalKey(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeedNone)));
 

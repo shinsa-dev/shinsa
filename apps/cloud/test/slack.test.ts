@@ -80,6 +80,18 @@ function createFakeSlack(harness: Harness): FakeSlack {
         : { ok: false, error: 'user_not_found' };
     },
     'conversations.replies': () => ({ ok: true, messages: [] }),
+    'users.conversations': (body) =>
+      body.types === 'private_channel'
+        ? { ok: true, channels: [{ id: 'G3', name: 'ops', is_private: true }] }
+        : {
+            ok: true,
+            channels: [
+              { id: 'C1', name: 'alerts', is_private: false },
+              { id: 'C2', name: 'feedback' },
+              { id: 'G3', name: 'ops', is_private: true },
+              { id: 'G4', name: 'leadership', is_private: true },
+            ],
+          },
     'chat.getPermalink': (body) => ({
       ok: true,
       permalink: `https://acme.slack.com/archives/C1/p${body.message_ts}`,
@@ -1874,17 +1886,20 @@ describe('the channels a machine may set a trigger on', () => {
 
   test('are the ones the bot is in, in each workspace the machine is linked to, read page by page', async () => {
     const { harness, slack, machine } = await setUp();
-    slack.answers['users.conversations'] = (body) =>
-      body.cursor === 'next-1'
-        ? { ok: true, channels: [{ id: 'G3', name: 'ops', is_private: true }] }
-        : {
-            ok: true,
-            channels: [
-              { id: 'C1', name: 'alerts', is_private: false },
-              { id: 'C2', name: 'feedback' },
-            ],
-            response_metadata: { next_cursor: 'next-1' },
-          };
+    slack.answers['users.conversations'] = (body) => {
+      if (body.types === 'private_channel')
+        return { ok: true, channels: [{ id: 'G3', name: 'ops', is_private: true }] };
+      if (body.cursor === 'next-1')
+        return { ok: true, channels: [{ id: 'G3', name: 'ops', is_private: true }] };
+      return {
+        ok: true,
+        channels: [
+          { id: 'C1', name: 'alerts', is_private: false },
+          { id: 'C2', name: 'feedback' },
+        ],
+        response_metadata: { next_cursor: 'next-1' },
+      };
+    };
     const channels = await readJson<SlackChannels>(await readChannels(harness, machine));
     const acme = { teamId: 'T1', teamName: 'Acme' };
     expect(channels.channels).toEqual([
@@ -1892,7 +1907,8 @@ describe('the channels a machine may set a trigger on', () => {
       { ...acme, channelId: 'C2', channelName: 'feedback', private: false },
       { ...acme, channelId: 'G3', channelName: 'ops', private: true },
     ]);
-    const [first, second] = slack.callsTo('users.conversations');
+    const [first, second, asPerson] = slack.callsTo('users.conversations');
+    expect([asPerson?.token, asPerson?.body.types]).toEqual(['xoxp-user-1', 'private_channel']);
     expect(first?.token).toBe('xoxb-bot-token');
     expect(first?.body).toEqual({
       types: 'public_channel,private_channel',
@@ -1900,6 +1916,42 @@ describe('the channels a machine may set a trigger on', () => {
       limit: '200',
     });
     expect(second?.body.cursor).toBe('next-1');
+  });
+
+  test('leave out a private channel no person linked to the machine is a member of', async () => {
+    const { harness, slack, machine } = await setUp();
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const listed = await readJson<SlackChannels>(await readChannels(harness, machine));
+    expect(listed.channels.map((channel) => channel.channelId)).toEqual(['C1', 'C2', 'G3']);
+    slack.answers['users.conversations'] = (body) =>
+      body.types === 'private_channel'
+        ? { ok: false, error: 'token_revoked' }
+        : {
+            ok: true,
+            channels: [
+              { id: 'C1', name: 'alerts' },
+              { id: 'G3', name: 'ops', is_private: true },
+            ],
+          };
+    const withoutAccess = await readJson<SlackChannels>(await readChannels(harness, machine));
+    expect(withoutAccess.channels.map((channel) => channel.channelId)).toEqual(['C1']);
+    expect(warnings).toHaveBeenCalledWith(
+      '[Cloud] Slack did not list a linked person’s private channels',
+      expect.objectContaining({ code: 'token_revoked', teamId: 'T1' })
+    );
+    warnings.mockRestore();
+    harness.db.sqlite.run('UPDATE slack_links SET sealed_user_token = NULL');
+    slack.calls.length = 0;
+    const withoutToken = await readJson<SlackChannels>(await readChannels(harness, machine));
+    expect(withoutToken.channels.map((channel) => channel.channelId)).toEqual(['C1']);
+    expect(slack.callsTo('users.conversations').map((call) => call.token)).toEqual(['xoxb-bot-token']);
+  });
+
+  test('ask as no person when the bot is in public channels only', async () => {
+    const { harness, slack, machine } = await setUp();
+    slack.answers['users.conversations'] = () => ({ ok: true, channels: [{ id: 'C1', name: 'alerts' }] });
+    await readChannels(harness, machine);
+    expect(slack.callsTo('users.conversations').map((call) => call.token)).toEqual(['xoxb-bot-token']);
   });
 
   test('are none when Slack lists none or the machine is not linked, and a refusal from Slack is said and logged', async () => {
@@ -1923,12 +1975,14 @@ describe('the channels a machine may set a trigger on', () => {
 });
 
 describe('the channels a machine watches', () => {
-  test('are replaced as a whole, keep only its linked workspaces, and go when it disconnects Slack', async () => {
-    const { harness, machine, watch } = await setUpChannel();
+  test('are replaced as a whole, keep only channels it may set a trigger on, and go when it disconnects Slack', async () => {
+    const { harness, machine, watch, slack } = await setUpChannel();
     const replaced = await watch([
       { teamId: 'T1', channelId: 'C2' },
       { teamId: 'T1', channelId: 'C2' },
       { teamId: 'T1', channelId: 'G3' },
+      { teamId: 'T1', channelId: 'G4' },
+      { teamId: 'T1', channelId: 'C404' },
       { teamId: 'T9', channelId: 'C1' },
     ]);
     expect([replaced.status, await replaced.json()]).toEqual([200, { ok: true }]);
@@ -1940,6 +1994,16 @@ describe('the channels a machine watches', () => {
     expect(watchedChannels(harness)).toEqual([]);
     await watch([{ teamId: 'T1', channelId: 'C2' }]);
     expect(watchedChannels(harness)).toEqual([]);
+    slack.calls.length = 0;
+    await watch([]);
+    expect(slack.callsTo('users.conversations')).toHaveLength(0);
+  });
+
+  test('stay as they were when Slack does not list the channels', async () => {
+    const { harness, watch, slack } = await setUpChannel();
+    slack.answers['users.conversations'] = () => ({ ok: false, error: 'ratelimited' });
+    expect((await watch([{ teamId: 'T1', channelId: 'C2' }])).status).toBe(502);
+    expect(watchedChannels(harness)).toEqual([{ workspace_id: 'T1', channel_id: 'C1' }]);
   });
 
   test('are refused without the machine token, as a list it does not understand, or past the limit', async () => {

@@ -401,6 +401,7 @@ class SlackRelayGroup extends HttpApiGroup.make('slackRelay')
     HttpApiEndpoint.post('watches', SLACK_RELAY_PATHS.watches, {
       payload: SlackChannelWatches,
       success: RemoteOk,
+      error: [wire(SlackFailed)],
     })
   )
   .middleware(RequestGate)

@@ -11,11 +11,13 @@ import { Effect, Option, type Redacted, Schema } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import type { SlackCallFailed } from '../../integrations/slack/schema.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
-import { revokeMachineUserTokens } from '../../slack/user-tokens.ts';
+import { revokeMachineUserTokens, selectUserToken } from '../../slack/user-tokens.ts';
 import { selectWorkspaceToken } from '../../slack/workspace.ts';
+import type { SlackLink } from '../../store/slack/schema.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import {
   CHANNEL_PAGE_SIZE,
+  type Conversation,
   Conversations,
   Posted,
   REFUSED_BLOCK_CODES,
@@ -85,55 +87,101 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
       );
     });
 
-    const listWorkspaceChannels = Effect.fn('slackRelay.listWorkspaceChannels')(function* (
-      workspace: { readonly teamId: string; readonly teamName: string },
-      token: Redacted.Redacted<string>
+    const listConversations = Effect.fn('slackRelay.listConversations')(function* (
+      token: Redacted.Redacted<string>,
+      types: string
     ) {
-      const channels: SlackChannel[] = [];
+      const conversations: Conversation[] = [];
       let cursor = '';
       do {
-        const page = yield* slack
-          .call(
-            'users.conversations',
-            {
-              token,
-              body: {
-                form: {
-                  types: 'public_channel,private_channel',
-                  exclude_archived: 'true',
-                  limit: String(CHANNEL_PAGE_SIZE),
-                  ...(cursor ? { cursor } : {}),
-                },
+        const page = yield* slack.call(
+          'users.conversations',
+          {
+            token,
+            body: {
+              form: {
+                types,
+                exclude_archived: 'true',
+                limit: String(CHANNEL_PAGE_SIZE),
+                ...(cursor ? { cursor } : {}),
               },
             },
-            Conversations
-          )
-          .pipe(
-            Effect.tapError((error) =>
-              Effect.logError('[Cloud] Slack did not list the channels').pipe(
-                Effect.annotateLogs({ error, code: error.code, teamId: workspace.teamId })
-              )
-            ),
-            Effect.mapError(
-              (error) => new SlackFailed({ message: `Slack did not list the channels (${error.code}).` })
-            )
-          );
-        for (const channel of page.channels ?? [])
-          channels.push({
-            ...workspace,
-            teamName: workspace.teamName.slice(0, SLACK_LIMITS.teamName),
-            channelId: channel.id,
-            channelName: channel.name.slice(0, SLACK_LIMITS.channelName),
-            private: channel.is_private === true,
-          });
+          },
+          Conversations
+        );
+        conversations.push(...(page.channels ?? []));
         cursor = page.response_metadata?.next_cursor ?? '';
-      } while (cursor && channels.length < SLACK_LIMITS.channels);
-      return channels;
+      } while (cursor && conversations.length < SLACK_LIMITS.channels);
+      return conversations;
     });
 
-    const listLinkedWorkspaces = Effect.fn('slackRelay.listLinkedWorkspaces')(function* () {
+    const listMemberPrivateChannels = Effect.fn('slackRelay.listMemberPrivateChannels')(function* (
+      links: readonly SlackLink[]
+    ) {
+      const member = new Set<string>();
+      for (const link of links) {
+        if (link.sealedUserToken === null) continue;
+        const token = yield* selectUserToken(link.sealedUserToken);
+        if (Option.isNone(token)) continue;
+        const joined = yield* listConversations(token.value, 'private_channel').pipe(
+          Effect.catchTag('SlackCallFailed', (error) =>
+            Effect.as(
+              Effect.logWarning('[Cloud] Slack did not list a linked person’s private channels').pipe(
+                Effect.annotateLogs({ error, code: error.code, teamId: link.workspaceId })
+              ),
+              []
+            )
+          )
+        );
+        for (const channel of joined) member.add(channel.id);
+      }
+      return member;
+    });
+
+    const listWorkspaceChannels = Effect.fn('slackRelay.listWorkspaceChannels')(function* (
+      links: readonly SlackLink[],
+      token: Redacted.Redacted<string>
+    ) {
+      const [link] = links;
+      if (!link) return [];
+      const joined = yield* listConversations(token, 'public_channel,private_channel').pipe(
+        Effect.tapError((error) =>
+          Effect.logError('[Cloud] Slack did not list the channels').pipe(
+            Effect.annotateLogs({ error, code: error.code, teamId: link.workspaceId })
+          )
+        ),
+        Effect.mapError(
+          (error) => new SlackFailed({ message: `Slack did not list the channels (${error.code}).` })
+        )
+      );
+      const member = joined.some((channel) => channel.is_private === true)
+        ? yield* listMemberPrivateChannels(links)
+        : new Set<string>();
+      return joined
+        .filter((channel) => channel.is_private !== true || member.has(channel.id))
+        .map((channel): SlackChannel => ({
+          teamId: link.workspaceId,
+          teamName: link.workspaceName.slice(0, SLACK_LIMITS.teamName),
+          channelId: channel.id,
+          channelName: channel.name.slice(0, SLACK_LIMITS.channelName),
+          private: channel.is_private === true,
+        }));
+    });
+
+    const listMachineChannels = Effect.fn('slackRelay.listMachineChannels')(function* (
+      only: ReadonlySet<string> | null
+    ) {
       const links = yield* store.listMachineLinks((yield* CurrentMachine).instanceId);
-      return new Map(links.map((link) => [link.workspaceId, link.workspaceName]));
+      const channels: SlackChannel[] = [];
+      const workspaces = new Set(links.map((link) => link.workspaceId));
+      for (const teamId of workspaces) {
+        const linked = links.filter((link) => link.workspaceId === teamId);
+        if (only && !only.has(teamId)) continue;
+        const opened = yield* selectWorkspaceToken(teamId);
+        if (Option.isNone(opened)) continue;
+        channels.push(...(yield* listWorkspaceChannels(linked, opened.value.token)));
+      }
+      return channels;
     });
 
     return handlers
@@ -241,24 +289,22 @@ export const SlackRelayHandlers = HttpApiBuilder.group(
       .handle(
         'channels',
         Effect.fn('slackRelay.channels')(function* () {
-          const channels: SlackChannel[] = [];
-          for (const [teamId, teamName] of yield* listLinkedWorkspaces()) {
-            const opened = yield* selectWorkspaceToken(teamId);
-            if (Option.isNone(opened)) continue;
-            channels.push(...(yield* listWorkspaceChannels({ teamId, teamName }, opened.value.token)));
-          }
-          return { channels: channels.slice(0, SLACK_LIMITS.channels) };
+          return { channels: (yield* listMachineChannels(null)).slice(0, SLACK_LIMITS.channels) };
         })
       )
       .handle(
         'watches',
         Effect.fn('slackRelay.watches')(function* ({ payload }) {
           const { instanceId } = yield* CurrentMachine;
-          const linked = yield* listLinkedWorkspaces();
+          const allowed =
+            payload.watches.length === 0
+              ? []
+              : yield* listMachineChannels(new Set(payload.watches.map((watch) => watch.teamId)));
+          const open = new Set(allowed.map((channel) => `${channel.teamId}:${channel.channelId}`));
           yield* store.replaceMachineWatches(
             instanceId,
             payload.watches
-              .filter((watch) => linked.has(watch.teamId))
+              .filter((watch) => open.has(`${watch.teamId}:${watch.channelId}`))
               .map((watch) => ({ workspaceId: watch.teamId, channelId: watch.channelId }))
           );
           return { ok: true as const };

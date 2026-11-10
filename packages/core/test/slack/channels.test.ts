@@ -3,7 +3,6 @@ import {
   listSlackChannelSchedules,
   listSlackChannelWatches,
   resolveSlackChannelTrigger,
-  SLACK_NOT_CONNECTED,
   type ScheduleTrigger,
   type SlackChannel,
 } from '../../src/index.ts';
@@ -62,10 +61,11 @@ describe('naming a Slack channel for an automation', () => {
     );
   });
 
-  test('says to connect Slack when the bot is in no channel at all', () => {
+  test('says to connect Slack or invite the bot when it is in no channel at all', () => {
     expect(resolveSlackChannelTrigger([], { channel: 'alerts', workspace: null })).toEqual({
       trigger: null,
-      problem: SLACK_NOT_CONNECTED,
+      problem:
+        'Shinsa is in no channel of a Slack workspace connected to this machine. Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa to #alerts in Slack, then set the automation again.',
     });
   });
 });

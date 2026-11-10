@@ -2595,17 +2595,20 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   or `schedules_write` (`shinsa schedules write --slack-channel #alerts`); core reads them as a `SlackChannelRequest`
   beside the other ways to say when (exactly one of them, and `slack_workspace` only with `slack_channel`), and
   the engine resolves it before the write (`ScheduleTools.resolveTrigger`, `resolveSlackChannelTrigger`) against
-  the channels the bot is in, in the workspaces linked to this machine (`Slack.channels`, `GET
-  /__remote/slack/channels`). It refuses with what to do: Slack not connected (`SLACK_NOT_CONNECTED`), the bot
-  not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
+  the channels the bot is in, in the workspaces linked to this machine, a private one only when a person linked
+  to this machine is a member of it (`Slack.channels`, `GET /__remote/slack/channels`). It refuses with what
+  to do: remote access off (`SLACK_NOT_CONNECTED`), no channel at all, which is Slack not linked or @Shinsa
+  invited nowhere ("Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa
+  to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
   is in several linked workspaces ("Name the workspace too."). Core checks the trigger it is given
-  (`assertSlackChannel`: Slack ids, names of at most 80 characters). A forwarded message (`POST
+  (`assertSlackChannel`: Slack ids, names of at most 120 characters, `SCHEDULE_LIMITS.slackName`). A forwarded message (`POST
   /api/slack/messages`, signed like a mention) is delivered to every enabled schedule on that workspace and
   channel (`listSlackChannelSchedules`) as `schedule.deliver` with command id `slack-message:<schedule>:<event
   id>` and the replay key `<team>:<channel>:<message ts>`, so a Slack retry or a second event for one message
-  starts nothing twice. Its text is the schedule's message, then "Posted in #alerts by Lee: <link>" (a bot's
-  name with "(bot)"), then the message inside a nonce-tagged `<slack-message-…>` element with the note that it
-  is untrusted data, never instructions (`serializeSlackChannelDelivery`). Each schedule takes at most 60 a
+  starts nothing twice. Its text is the schedule's message, then "Posted in #alerts: <link>", then, inside a
+  nonce-tagged `<slack-message-…>` element, "From Lee:" (a bot's name with "(bot)") and the message, with the
+  note that both are untrusted data, never instructions (`serializeSlackChannelDelivery`): the author's name
+  is fenced too, since a bot's is free text set by whoever posts to an incoming webhook. Each schedule takes at most 60 a
   minute, the webhook's own limit; the first message over it is recorded as a failed run ("More than 60
   messages a minute were posted, so the rest of this minute's were skipped.") and the rest of that minute are
   dropped. A delivery core refuses is a failed run with its reason (`schedule.fail`). A message for a channel no
@@ -4683,8 +4686,9 @@ engine ──its watched channels, on every change──►
   app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
 - **A watched channel's messages run automations** (Schedules and webhooks → Slack channel triggers, above). The
   engine tells app.shinsa.dev which channels its enabled Slack triggers name (`listSlackChannelWatches`, at most
-  100, `POST /__remote/slack/watches`, which replaces the machine's whole list and keeps only workspaces linked to
-  it): once when remote access starts, after every state change that alters the list, and again after it lists the
+  100, `POST /__remote/slack/watches`, which replaces the machine's whole list and keeps only channels it may set a trigger
+  on, checked again on each call: the bot is in it, and a private channel also has a Slack user linked to this
+  machine as a member, asked with that person's own token, never the bot's): once when remote access starts, after every state change that alters the list, and again after it lists the
   channels. app.shinsa.dev keeps them as rows of workspace, channel and machine (`slack_channel_watches`), never
   a message: they go with the workspace or the machine, and unlinking Slack empties them. The app subscribes to
   `message.channels` and `message.groups`. An event with a subtype it does not read (an edit, a deletion, a

@@ -70,7 +70,7 @@ import { MonitorClock } from '../runtime/monitors/service.ts';
 import { WatchdogClock } from '../runtime/watchdogs/service.ts';
 import { ScheduleClockTimings } from '../schedules/clock/schema.ts';
 import { SchedulesLayer } from '../schedules/layers.ts';
-import { ScheduleTimeZone, SlackChannelLookup } from '../schedules/schema.ts';
+import { ScheduleTimeZone } from '../schedules/schema.ts';
 import { Schedules } from '../schedules/service.ts';
 import { createWatchWriter } from '../schedules/suggest.ts';
 import { SecretFiles } from '../secrets/files/service.ts';
@@ -292,7 +292,8 @@ function createClocksLayer(options: ShinsaOptions) {
       return SchedulesLayer({
         baseUrl: address.url,
         hookUrl: (scheduleId, token) => remote.resolveHookUrl(scheduleId, token),
-      }).pipe(Layer.provide(Layer.succeed(SlackChannelLookup, slack.channels)));
+        slackChannels: slack.channels,
+      });
     })
   );
   return Layer.mergeAll(schedules, MonitorClock.layer, WatchdogClock.layer, ShareClock.layer).pipe(

@@ -14,16 +14,16 @@ export const Posted = Schema.Struct({ ts: Schema.optional(Schema.String) });
 
 export const CHANNEL_PAGE_SIZE = 200;
 
+export const Conversation = Schema.Struct({
+  id: Schema.NonEmptyString,
+  name: Schema.NonEmptyString,
+  is_private: Schema.optional(Schema.Boolean),
+});
+
+export type Conversation = typeof Conversation.Type;
+
 export const Conversations = Schema.Struct({
-  channels: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        id: Schema.NonEmptyString,
-        name: Schema.NonEmptyString,
-        is_private: Schema.optional(Schema.Boolean),
-      })
-    )
-  ),
+  channels: Schema.optional(Schema.Array(Conversation)),
   response_metadata: Schema.optional(Schema.Struct({ next_cursor: Schema.optional(Schema.String) })),
 });
 

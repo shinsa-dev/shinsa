@@ -18,25 +18,24 @@ import { assertProtocol, readString } from '../../agents/handover.ts';
 import { findForkSource } from '../../agents/tools/forks.ts';
 import { describeError } from '../../log/redact.ts';
 import { SecretStore } from '../../secrets/index.ts';
-import { RECENT_RUNS, ScheduleTimeZone, SlackChannelLookup, WEBHOOK_ROUTE_PREFIX } from '../schema.ts';
+import { RECENT_RUNS, ScheduleTimeZone, WEBHOOK_ROUTE_PREFIX } from '../schema.ts';
 import {
   ScheduleSecretFailed,
   type ScheduleToolRun,
   type ScheduleToolsShape,
   ScheduleToolRefused,
-  type ScheduleUrls,
+  type ScheduleToolsInput,
 } from './schema.ts';
 
 export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsShape>()(
   'shinsa/engine/schedules/tools/ScheduleTools'
 ) {
-  static readonly layer = (urls: ScheduleUrls) =>
+  static readonly layer = (options: ScheduleToolsInput) =>
     Layer.effect(
       ScheduleTools,
       Effect.gen(function* () {
         const secrets = yield* SecretStore;
         const timeZone = yield* ScheduleTimeZone;
-        const slackChannels = yield* SlackChannelLookup;
         const refuse = (message: string) => new ScheduleToolRefused({ message });
 
         const attempt = <A>(step: () => A) =>
@@ -59,9 +58,9 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           scheduleId: string,
           token: string
         ) {
-          const remote = yield* urls.hookUrl(scheduleId, token);
+          const remote = yield* options.hookUrl(scheduleId, token);
           if (remote) return remote;
-          return `${yield* urls.baseUrl}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${token}`;
+          return `${yield* options.baseUrl}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${token}`;
         });
 
         const upsertHookUrl = Effect.fn('ScheduleTools.upsertHookUrl')(function* (scheduleId: string) {
@@ -182,7 +181,10 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           request: ScheduleRequest
         ) {
           if (request.slackChannel === null) return request.trigger;
-          const { trigger, problem } = resolveSlackChannelTrigger(yield* slackChannels, request.slackChannel);
+          const { trigger, problem } = resolveSlackChannelTrigger(
+            yield* options.slackChannels,
+            request.slackChannel
+          );
           return trigger ?? (yield* refuse(problem));
         });
 

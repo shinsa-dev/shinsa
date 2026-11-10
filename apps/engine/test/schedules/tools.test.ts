@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { listActiveRuns, type ShinsaCommand, type ShinsaEvent } from '@shinsa/core';
+import {
+  DomainError,
+  listActiveRuns,
+  SLACK_NOT_CONNECTED,
+  type ShinsaCommand,
+  type ShinsaEvent,
+} from '@shinsa/core';
 import { Effect } from 'effect';
 import { createManageClient } from '../../src/agents/manage/client.ts';
 import type { ScheduleToolCall } from '../../src/schedules/index.ts';
@@ -154,7 +160,11 @@ describe('set_schedule', () => {
 
   test('a Slack channel is refused while Slack is not connected', async () => {
     const world = await createWorld();
-    const { tool } = await setUp(world);
+    const { tool } = await setUp(world, {
+      slackChannels: Effect.fail(
+        new DomainError({ code: 'slack_not_connected', message: SLACK_NOT_CONNECTED })
+      ),
+    });
     await expect(
       tool('set_schedule', { message: 'Alerts.', slack_channel: 'alerts', new_task: true })
     ).rejects.toThrow('Slack is not connected to this machine.');

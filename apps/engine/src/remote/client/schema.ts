@@ -155,5 +155,5 @@ export interface SlackRelayCalls {
   ): MachineCall<SlackRelaySessionSet, ThreadFailure | SlackFailed>;
   react(token: Token, reaction: SlackRelayReaction): MachineCall<SlackRelayReacted, ThreadFailure>;
   channels(token: Token): MachineCall<SlackChannels, SlackFailed>;
-  watches(token: Token, watches: SlackChannelWatches): MachineCall<void>;
+  watches(token: Token, watches: SlackChannelWatches): MachineCall<void, SlackFailed>;
 }

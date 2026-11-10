@@ -20,7 +20,11 @@ export function resolveSlackChannelTrigger(
   channels: readonly SlackChannel[],
   choice: SlackChannelRequest
 ): SlackChannelResolution {
-  if (channels.length === 0) return { trigger: null, problem: SLACK_NOT_CONNECTED };
+  if (channels.length === 0)
+    return {
+      trigger: null,
+      problem: `Shinsa is in no channel of a Slack workspace connected to this machine. Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa to #${choice.channel} in Slack, then set the automation again.`,
+    };
   const channel = choice.channel.toLowerCase();
   const workspace = choice.workspace?.toLowerCase() ?? null;
   const matches = channels.filter(

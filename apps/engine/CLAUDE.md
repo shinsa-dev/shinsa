@@ -350,11 +350,12 @@ src/
 │                        wording of a suggested watch (suggest.ts: createWatchWriter, an Effect over a QuickJson, its
 │                        answer decoded by WatchAnswer in answer.ts), the Schedules service (service.ts: start, stop,
 │                        the webhook, the hook URL, the agent tools and the surface's hook secrets, the hooks kept in
-│                        step with the schedules on each change; layers.ts SchedulesLayer(urls), built in
-│                        serve/layers.ts on EngineCore and SecretStore; its routes are http/routes/secrets and
-│                        webhooks), schema.ts (the shapes, ScheduleTimeZone, WebhookOutcome, the limits,
-│                        RATE_WINDOW and SlackChannelLookup, the channels a `slack_channel` is resolved
-│                        against, provided from Slack in serve/layers.ts), prompt.ts (resolvePromptProblem, shared
+│                        step with the schedules on each change; layers.ts SchedulesLayer(options), built in
+│                        serve/layers.ts on EngineCore and SecretStore, its options (ScheduleToolsInput) the base
+│                        and hook URLs and `slackChannels`, the channels a `slack_channel` is resolved against,
+│                        which is Slack's `channels` there; its routes are http/routes/secrets and
+│                        webhooks), schema.ts (the shapes, ScheduleTimeZone, WebhookOutcome, the limits and
+│                        RATE_WINDOW), prompt.ts (resolvePromptProblem, shared
 │                        by the webhook and a Slack channel message)
 ├── remote/              Remote access (docs/engine.md → Remote access), every module a Context.Service in its folder's
 │                        service.ts, composed by layers.ts (RemoteClientLayer: RemoteClient and Pairings on
