@@ -388,9 +388,19 @@ model. The Worker's part of it:
 - The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
   `apps/web`): Cloudflare's Workers Builds runs it in `apps/cloud` before every deploy and preview.
 - The schema is `migrations/0001_schema.sql`, which production D1 runs and records as applied. A change to it is a
-  new numbered file beside it, applied with `bun run migrate` before the Worker that needs it deploys. `bun run
-  deploy` builds first (`bun run build && wrangler deploy`), so a checkout without `../web/dist-remote` never fails
-  halfway and leaves the Worker before it serving a schema it cannot read.
+  new numbered file beside it. Every deploy applies the pending ones first: `bun run release` is `bun run migrate &&
+  wrangler deploy`, so a migration that fails stops there and the Worker before it keeps serving. Without a terminal
+  wrangler answers its own confirmation with yes, so it never waits in a build. `bun run deploy`, the deploy by hand,
+  builds first (`bun run build && bun run release`), so a checkout without `../web/dist-remote` never migrates and
+  then fails halfway, leaving the Worker before it on a schema it cannot read.
+- Workers Builds deploys `main` and nothing else (one trigger, root `/apps/cloud`): build command `bun run --cwd
+  ../web build:remote`, deploy command `bun run release`. Its build token needs D1 Edit on the account beside what
+  Workers Builds gives it, or `migrate` fails with an authentication error and nothing deploys. A preview never runs
+  `release`, so it never touches production D1.
+- A migration runs while the Worker before it still serves, for the seconds until the new one is live, and stays
+  applied when the deploy after it fails. So a migration only adds (a table, an index, a column with a default or
+  that may be null); a rename or a removal ships in two changes: first the Worker that no longer reads the old name,
+  then the migration that drops it.
 - A Worker and the schema it reads roll back together. Every Worker built from code before #184 (the change that
   brought `0001_schema.sql` and renamed `instances` to `machines`) reads the old table names (`instances`,
   `pair_sessions`). In `wrangler deployments list` those are the Worker versions deployed before 2026-11-04 21:44 UTC,
