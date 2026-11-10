@@ -38,15 +38,18 @@ function resolveWatchOpening(task: Task, watchdog: Watchdog, now: number) {
   if (watchdog.status === 'awaiting_production') {
     return [
       `Shinsa woke you to see whether the change you shipped${merged} is live in production yet, so the watchdog “${watchdog.title}” can start watching.`,
-      `How to tell: ${watchdog.productionCheck ?? ''}`,
+      `How to tell: ${watchdog.productionCheck ?? 'no way to tell was given when the change shipped, so read the deploy state the way the earlier check did (its summary is below, when there is one) or from the repository’s deploy setup.'}`,
       `While it is not live, call \`report_read\` with \`live\` false and a \`summary\` of what you saw, and file nothing. Your answer counts for every watchdog of this task that waits for production. Shinsa asks again later, less often the longer it waits (from every ${WATCHDOG_LIMITS.productionPollMinutes} minutes to every ${WATCHDOG_LIMITS.productionPollMaxMinutes / 60} hours), for up to ${WATCHDOG_LIMITS.productionWaitHours} hours.`,
       'Once it is live, do the watchdog’s first check in the same turn, as below, and end it with `live` true.',
     ];
   }
   const since = describeHours(now - (watchdog.startedAt ?? now));
   const left = describeHours((watchdog.endsAt ?? now) - now);
+  const how = watchdog.productionCheck ? ` How to tell: ${watchdog.productionCheck}` : '';
   return [
     `Shinsa woke you for a check of the watchdog “${watchdog.title}” on the change you shipped${merged}. It has watched for ${since}, and ${left} are left.`,
+    `First make sure the change is live in production now: a merge that has not deployed yet, or a release that was rolled back, leaves nothing to check.${how}`,
+    'If it is not live there, or no longer is, file nothing and call `report_read` with `live` false and a `summary` of what you saw. Every watchdog of this task then waits for production, and each starts a fresh window once the change is live again.',
   ];
 }
 
