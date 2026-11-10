@@ -372,7 +372,12 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['proposal-recommend', 'task-auto-project', 'focus-projects', 'slack-thread-updates']);
+    expect(log.migrate()).toEqual([
+      'proposal-recommend',
+      'task-auto-project',
+      'focus-projects',
+      'slack-thread-updates',
+    ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'task.change_proposed',

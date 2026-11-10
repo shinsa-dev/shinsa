@@ -222,6 +222,8 @@ src/
 │   ├── couriers.ts  create_task and split_task
 │   ├── orchestration.ts  Routing the delegation commands
 │   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook and Slack channel deliveries
+│   │                (a new task from a channel message linked to its thread when the trigger's `threadUpdates` is
+│   │                on; `schedule.skip` for a message the automation's text did not apply to)
 │   ├── intake.ts    A watch (a schedule that reads an integration): its hidden home (createWatchHome, closeWatchHome),
 │   │                a read as a read-only `intake` turn, ending one (endIntakeRead), a read that gives up
 │   ├── reads.ts     What a watch and a watchdog share: file_report (dedupe by the project's filed reports, a watch's
@@ -373,7 +375,9 @@ src/
 │                    listSlackChannelWatches and listSlackChannelSchedules over the state), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
-│                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
+│                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation; and
+│                    whether an automation's text applies to a channel message, SLACK_FILTER_SYSTEM,
+│                    serializeSlackFilterPrompt, parseSlackFilter), and
 │                    what is posted as a new message (posts.ts: SlackPost, only tripped); deciding a gate
 │                    from Slack (decisions.ts: SLACK_DECIDABLE, the action ids, the button value, the form
 │                    (serializeSlackDecisionModal) and the decided line; schema.ts: SlackDecisionValue,
