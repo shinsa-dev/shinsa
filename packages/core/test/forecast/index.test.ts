@@ -11,7 +11,9 @@ import {
   listForecastProviders,
   listProviderForecastAccounts,
   listProviderPaces,
+  resolveCandidateSpentUntil,
   resolveGrantRefill,
+  STALE_USAGE_MS,
   type UsageResetGrant,
   resolveForecastAccount,
   resolveForecastTimeline,
@@ -257,6 +259,32 @@ describe('listForecastAccounts', () => {
       ['work', 'work@example.com'],
       ['nameless', 'nameless'],
     ]);
+  });
+
+  test('an account spent only by a stale reading keeps its weekly budget', () => {
+    const resetsAt = NOW + 100 * HOUR_MS;
+    const reading = weekly(56, resetsAt);
+    const usage: AccountUsage = {
+      ...reading,
+      windows: [
+        ...reading.windows,
+        { id: 'weekly:fable', kind: 'model', label: 'Fable', model: 'Fable', usedPercent: 100, resetsAt },
+      ],
+    };
+    const left = (now: number) =>
+      listForecastAccounts(
+        [
+          summary({
+            usage,
+            spentUntil: Option.getOrNull(
+              resolveCandidateSpentUntil({ spentUntil: null, usage }, 'fable', now)
+            ),
+          }),
+        ],
+        now
+      ).map((entry) => entry.left);
+    expect(left(NOW + STALE_USAGE_MS)).toEqual([0]);
+    expect(left(NOW + STALE_USAGE_MS + 1)).toEqual([44]);
   });
 });
 

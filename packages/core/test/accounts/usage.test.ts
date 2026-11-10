@@ -5,6 +5,8 @@ import {
   listRelevantWindows,
   resolveHeadroom,
   resolveSpentUntil,
+  STALE_USAGE_MS,
+  isStaleUsage,
   resolveUsedPercent,
   resolveWeeklyPercent,
   resolveWeeklyReading,
@@ -82,6 +84,22 @@ describe('usage headroom', () => {
       )
     ).toBeNull();
     expect(Option.getOrNull(resolveSpentUntil(usage([SESSION]), 'opus', 1_000))).toBeNull();
+  });
+
+  test('a reading older than the stale limit no longer counts as spent', () => {
+    const resetsAt = 1_000 + 10 * STALE_USAGE_MS;
+    const full = usage([window({ id: 'seven_day', kind: 'weekly', usedPercent: 100, resetsAt })]);
+    expect(Option.getOrNull(resolveSpentUntil(full, 'opus', 1_000 + STALE_USAGE_MS))).toBe(resetsAt);
+    expect(Option.getOrNull(resolveSpentUntil(full, 'opus', 1_001 + STALE_USAGE_MS))).toBeNull();
+    expect(isStaleUsage(full, 1_000 + STALE_USAGE_MS)).toBe(false);
+    expect(isStaleUsage(full, 1_001 + STALE_USAGE_MS)).toBe(true);
+  });
+
+  test('a reading with no time is never stale', () => {
+    const resetsAt = 1_000 + 10 * STALE_USAGE_MS;
+    const untimed = { ...usage([window({ usedPercent: 100, resetsAt })]), checkedAt: null };
+    expect(isStaleUsage(untimed, resetsAt - 1)).toBe(false);
+    expect(Option.getOrNull(resolveSpentUntil(untimed, 'opus', resetsAt - 1))).toBe(resetsAt);
   });
 });
 
