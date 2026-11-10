@@ -6762,8 +6762,24 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
-  token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`
-  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Readings are cached for 60 s and kept
+  token keeps the last reading and says the login refreshes at the next check, and a stored token whose `expiresAt`
+  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Only a Claude Code
+  request refreshes a login (`claude auth status` does not), and an account that is out of usage or idle gets no
+  run, so Shinsa keeps each login alive (`accounts/keepalive/`, `LoginKeepalive.keep`): at start, on the 5-minute
+  tick and on both refreshes, before the usage read, every distinct own-login account that is not signed out and
+  has no active run, and whose stored token expires within 10 minutes or whose last read came
+  back expired, gets one Claude Code turn in its folder with `resolveAccountEnv`: `claude -p` on Haiku, with no
+  tools, MCP servers, settings, slash commands or saved session, 60 s at most. Claude Code
+  refreshes the token before it sends the request, so the turn works on an account that is out of usage too, where
+  it costs nothing; otherwise it costs a few tokens (about $0.0002), about three times a day per idle account,
+  since a token lasts about 8 hours. The read after it is forced. An attempt that leaves the login expired (offline, a timeout) is tried again after 30
+  minutes, at once on Refresh usage, and one turn runs per account at a time. A turn Claude
+  refuses for the login (a 401, or text `isLoginText` knows) marks the account signed out with why ("Claude could
+  not refresh this account’s login. Sign in again to keep its usage current."), so Settings shows Needs sign-in;
+  signing in or removing the account clears the back-off. A reading that goes stale anyway stops counting: `resolveSpentUntil` (core) ignores
+  a reading whose `checkedAt` is over 6 hours old (`STALE_USAGE_MS`, `isStaleUsage`), so the picker, the
+  snapshot's `spentUntil` and the forecast no longer treat a frozen 100% window as out of usage; a rejection a run
+  hit still holds the account until its reset. Readings are cached for 60 s and kept
   in `data/usage-limits.json` (read back marked `source: 'cache'`); a failed read never erases a reading, only
   replaces its detail; a 429 backs off at least 5 minutes, or as long as its `retry-after` asks, even when forced:
   the reading carries the end of the back-off as `retryAt` (kept on disk, so a restart honours it, and cleared by
