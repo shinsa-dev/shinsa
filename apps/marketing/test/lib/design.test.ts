@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Option, Result } from 'effect';
 import { CUSTOM_ICON_PATHS } from '../../../../packages/ui/src/components/icon/custom.ts';
 import { ICON_NAMES } from '../../../../packages/ui/src/components/icon/paths.ts';
 import * as lintRules from '../../../../scripts/lint-rules.ts';
@@ -131,7 +132,7 @@ function listComponentExports() {
 }
 
 describe('the design system file', () => {
-  const design = serializeDesign(createSources());
+  const design = Result.getOrThrow(serializeDesign(createSources()));
 
   it('names every token the kit declares', () => {
     const tokens = listTokenNames(readText('packages/ui/src/styles/globals.css'));
@@ -172,8 +173,12 @@ describe('the design system file', () => {
   });
 
   it('refuses a source with an unknown or a missing section', () => {
-    expect(() => serializeDesign(createSources('<!-- design:tokenz -->'))).toThrow('Unknown design marker');
-    expect(() => serializeDesign(createSources('# Shinsa'))).toThrow('Missing design markers');
+    expect(serializeDesign(createSources('<!-- design:tokenz -->'))).toEqual(
+      Result.fail('Unknown design marker "tokenz"')
+    );
+    expect(Option.getOrThrow(Result.getFailure(serializeDesign(createSources('# Shinsa'))))).toStartWith(
+      'Missing design markers: tokens'
+    );
   });
 });
 

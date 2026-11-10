@@ -1,5 +1,7 @@
 import type { FindingVerdictKind, ReviewComment } from '@shinsa/core';
+import { Option, Schema } from 'effect';
 import * as React from 'react';
+import { StoredComment, StoredComments } from '@/lib/review/schema.ts';
 
 export interface LineComment extends ReviewComment {
   id: string;
@@ -81,23 +83,18 @@ export function describeCommentsWithMessage(count: number) {
   return `${count === 1 ? '1 line comment goes' : `${count} line comments go`} with this message`;
 }
 
+const decodeStoredComments = Schema.decodeUnknownOption(StoredComments);
+
+const isStoredComment = Schema.is(StoredComment);
+
 function isComment(value: unknown): value is LineComment {
-  const comment = value as Partial<LineComment> | null;
-  return (
-    typeof comment?.id === 'string' &&
-    typeof comment.path === 'string' &&
-    typeof comment.line === 'number' &&
-    typeof comment.text === 'string'
-  );
+  return isStoredComment(value);
 }
 
 export function readStoredComments(key: string): LineComment[] {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}${key}`) ?? '[]');
-    return Array.isArray(stored) ? stored.filter(isComment) : [];
-  } catch {
-    return [];
-  }
+  const stored =
+    Option.getOrUndefined(decodeStoredComments(localStorage.getItem(`${STORAGE_PREFIX}${key}`))) ?? [];
+  return stored.filter(isComment);
 }
 
 export function writeStoredComments(key: string, comments: LineComment[]) {

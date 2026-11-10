@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { decodeText, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { createFrameOpener, createFrameSealer } from '../../src/remote/frames.ts';
 import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
@@ -27,7 +27,7 @@ describe('the share handshake', () => {
     const client = await createKeyPair();
     const server = await createKeyPair();
     const hello = await Effect.runPromise(createShareHello('share-1', KEY, client.publicKey));
-    expect(parseShareHello(JSON.stringify(hello))).toEqual(hello);
+    expect(Option.getOrNull(parseShareHello(JSON.stringify(hello)))).toEqual(hello);
     expect(await Effect.runPromise(verifyShareHello(KEY, hello))).toBe(true);
     expect(await Effect.runPromise(verifyShareHello(OTHER_KEY, hello))).toBe(false);
     expect(await Effect.runPromise(verifyShareHello(KEY, { ...hello, share: 'share-2' }))).toBe(false);
@@ -37,7 +37,7 @@ describe('the share handshake', () => {
       serverEphemeral: await Effect.runPromise(serializePublicKey(server.publicKey)),
     };
     const welcome = await Effect.runPromise(createShareWelcome(KEY, keys));
-    const parsed = parseShareWelcome(JSON.stringify(welcome));
+    const parsed = Option.getOrNull(parseShareWelcome(JSON.stringify(welcome)));
     if (parsed?.type !== 'welcome') throw new Error('no welcome');
     expect(await Effect.runPromise(verifyShareWelcome(KEY, keys, parsed.proof))).toBe(true);
     expect(await Effect.runPromise(verifyShareWelcome(OTHER_KEY, keys, parsed.proof))).toBe(false);
@@ -59,17 +59,23 @@ describe('the share handshake', () => {
 
   test('refuses hellos and welcomes of the wrong shape, and keys that are not keys', async () => {
     const client = await createKeyPair();
-    expect(parseShareHello('{')).toBeNull();
-    expect(parseShareHello('[]')).toBeNull();
-    expect(parseShareHello(JSON.stringify({ type: 'hello', version: REMOTE_PROTOCOL_VERSION }))).toBeNull();
+    expect(Option.getOrNull(parseShareHello('{'))).toBeNull();
+    expect(Option.getOrNull(parseShareHello('[]'))).toBeNull();
     expect(
-      parseShareHello(JSON.stringify({ type: 'share-hello', version: REMOTE_PROTOCOL_VERSION, share: 1 }))
+      Option.getOrNull(parseShareHello(JSON.stringify({ type: 'hello', version: REMOTE_PROTOCOL_VERSION })))
     ).toBeNull();
-    expect(parseShareWelcome(JSON.stringify({ type: 'refused', reason: 'Gone.' }))).toEqual({
-      type: 'refused',
-      reason: 'Gone.',
-    });
-    expect(parseShareWelcome(JSON.stringify({ type: 'welcome' }))).toBeNull();
+    expect(
+      Option.getOrNull(
+        parseShareHello(JSON.stringify({ type: 'share-hello', version: REMOTE_PROTOCOL_VERSION, share: 1 }))
+      )
+    ).toBeNull();
+    expect(Option.getOrNull(parseShareWelcome(JSON.stringify({ type: 'refused', reason: 'Gone.' })))).toEqual(
+      {
+        type: 'refused',
+        reason: 'Gone.',
+      }
+    );
+    expect(Option.getOrNull(parseShareWelcome(JSON.stringify({ type: 'welcome' })))).toBeNull();
     const hello = await Effect.runPromise(createShareHello('s', KEY, client.publicKey));
     expect(await Effect.runPromise(verifyShareHello('!', hello))).toBe(false);
     expect(await Effect.runPromise(verifyShareHello(KEY, { ...hello, proof: '!' }))).toBe(false);
@@ -93,16 +99,18 @@ describe('the share messages', () => {
       { t: 'closed', reason: 'This task is no longer shared.' },
     ];
     for (const message of messages)
-      expect(parseShareMessage(serializeShareMessage(message))).toEqual(message);
-    expect(parseShareMessage('nope')).toBeNull();
-    expect(parseShareMessage(JSON.stringify({ t: 'request', id: '1' }))).toBeNull();
+      expect(Option.getOrNull(parseShareMessage(serializeShareMessage(message)))).toEqual(message);
+    expect(Option.getOrNull(parseShareMessage('nope'))).toBeNull();
+    expect(Option.getOrNull(parseShareMessage(JSON.stringify({ t: 'request', id: '1' })))).toBeNull();
     expect(
-      parseShareMessage(JSON.stringify({ t: 'file', id: 'e1', version: 'v', type: 'text/html' }))
+      Option.getOrNull(
+        parseShareMessage(JSON.stringify({ t: 'file', id: 'e1', version: 'v', type: 'text/html' }))
+      )
     ).toBeNull();
-    expect(parseShareMessage(JSON.stringify({ t: 'file', id: 'e1' }))).toBeNull();
-    expect(parseShareMessage(JSON.stringify({ t: 'view' }))).toBeNull();
-    expect(parseShareMessage(JSON.stringify({ t: 'body', id: 'e1' }))).toBeNull();
-    expect(parseShareMessage(JSON.stringify({ t: 'end' }))).toBeNull();
-    expect(parseShareMessage(JSON.stringify({ t: 'closed' }))).toBeNull();
+    expect(Option.getOrNull(parseShareMessage(JSON.stringify({ t: 'file', id: 'e1' })))).toBeNull();
+    expect(Option.getOrNull(parseShareMessage(JSON.stringify({ t: 'view' })))).toBeNull();
+    expect(Option.getOrNull(parseShareMessage(JSON.stringify({ t: 'body', id: 'e1' })))).toBeNull();
+    expect(Option.getOrNull(parseShareMessage(JSON.stringify({ t: 'end' })))).toBeNull();
+    expect(Option.getOrNull(parseShareMessage(JSON.stringify({ t: 'closed' })))).toBeNull();
   });
 });

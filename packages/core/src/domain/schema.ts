@@ -257,6 +257,13 @@ export const ScheduleTrigger = Tagged('kind', SCHEDULE_TRIGGER_KINDS, [
     signature: NullByDefault(WebhookSignature, FIELD_MESSAGES.object),
     replayKey: NullByDefault(Text(ID_LIMIT), FIELD_MESSAGES.text),
   }),
+  Schema.Struct({
+    kind: Schema.Literal('slack'),
+    teamId: Id(),
+    teamName: Id(),
+    channelId: Id(),
+    channelName: Id(),
+  }),
 ]);
 
 export type ScheduleTrigger = typeof ScheduleTrigger.Type;

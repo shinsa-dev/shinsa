@@ -1,6 +1,7 @@
 import { type ActiveDay, MINUTE_MS, resolveActiveHours, type ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { useMinute } from '@/hooks/use-minute.ts';
@@ -70,7 +71,10 @@ function OverrideFields({
 export function ActiveHoursSettings({ state }: { state: ShinsaState }) {
   const available = useEngineFeature('active-hours');
   const minute = useMinute();
-  const hours = React.useMemo(() => resolveActiveHours(state, minute * MINUTE_MS), [state, minute]);
+  const hours = React.useMemo(
+    () => Option.getOrNull(resolveActiveHours(state, minute * MINUTE_MS)),
+    [state, minute]
+  );
   if (!available) return null;
   const override = state.settings.activeHours ?? null;
   const saveOverride = (activeHours: ActiveDay[]) => void updateSettings({ activeHours });

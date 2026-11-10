@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   applyEvent,
   type CommandOf,
@@ -96,7 +97,7 @@ describe('your requests and their replies', () => {
     completeFix(harness, taskId);
     const [iteration] = harness.task(taskId).iterations ?? [];
     expect(iteration).toMatchObject({ reply: REPLY, runId: run.id, repliedAt: expect.any(Number) });
-    expect(selectOpenIteration(harness.task(taskId))).toBeNull();
+    expect(Option.getOrNull(selectOpenIteration(harness.task(taskId)))).toBeNull();
   });
 
   test('a fix nobody asked for refuses a reply', () => {
@@ -190,7 +191,7 @@ describe('your requests and their replies', () => {
   test('asking for a new plan at the plan gate opens a request the revision answers', () => {
     const { harness, taskId } = atPlanGate();
     askForChanges(harness, taskId, 'Split the last phase.');
-    expect(selectOpenIteration(harness.task(taskId))?.requests).toEqual([
+    expect(Option.getOrNull(selectOpenIteration(harness.task(taskId)))?.requests).toEqual([
       { text: 'Split the last phase.', comments: 0, at: expect.any(Number) },
     ]);
     proposePlan(harness, taskId);
@@ -200,9 +201,11 @@ describe('your requests and their replies', () => {
   test('a message while the plan waits for you opens a request the revision answers', () => {
     const { harness, taskId } = atPlanGate();
     harness.send({ type: 'task.message', taskId, text: 'Drop the second phase.' });
-    expect(selectOpenIteration(harness.task(taskId))?.requests[0]?.text).toBe('Drop the second phase.');
+    expect(Option.getOrNull(selectOpenIteration(harness.task(taskId)))?.requests[0]?.text).toBe(
+      'Drop the second phase.'
+    );
     proposePlan(harness, taskId);
-    expect(selectOpenIteration(harness.task(taskId))).toBeNull();
+    expect(Option.getOrNull(selectOpenIteration(harness.task(taskId)))).toBeNull();
   });
 
   test('a message that steers a build phase opens a request that phase must answer', () => {
@@ -245,7 +248,9 @@ describe('your requests and their replies', () => {
     harness.send({ type: 'run.end', runId: parent.id, outcome: 'completed', summary: 'Waiting.' });
     expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('wake');
     harness.send({ type: 'task.message', taskId, text: 'Skip the copy check.' });
-    expect(selectOpenIteration(harness.task(taskId))?.requests[0]?.text).toBe('Skip the copy check.');
+    expect(Option.getOrNull(selectOpenIteration(harness.task(taskId)))?.requests[0]?.text).toBe(
+      'Skip the copy check.'
+    );
   });
 
   test('a message to the reviewer opens no request', () => {

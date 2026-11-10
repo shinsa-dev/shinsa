@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { needsWorktree, resolveTaskPipeline, WORKSPACE_SETUP_REASON } from '../domain/index.ts';
 import { resolveTaskWorkspace, selectCheckoutHolder } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
@@ -7,11 +8,11 @@ export function holdForCheckout(decider: Decider, taskId: string) {
   if (!needsWorktree(resolveTaskPipeline(task)) || task.worktreePath !== null) return false;
   if (resolveTaskWorkspace(decider.state, task) !== 'main_checkout') return false;
   const holder = selectCheckoutHolder(decider.state, task);
-  if (!holder) return false;
+  if (Option.isNone(holder)) return false;
   decider.stage(
     taskId,
     'waiting_on_tasks',
-    `waiting for ${quoteTitles([holder])} to finish with the checkout`
+    `waiting for ${quoteTitles([holder.value])} to finish with the checkout`
   );
   return true;
 }

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { resolveTaskRounds, type Round } from '../domain/rounds.ts';
 import type { Task, TimingSpan } from '../domain/types.ts';
 import { resolveTaskTiming } from '../state/timing.ts';
@@ -43,16 +44,16 @@ export interface RoundTime {
 
 const FINISHED_ROUNDS: readonly Round['status'][] = ['merged', 'finished'];
 
-export function resolveMedian(values: readonly number[]): number | null {
-  if (values.length === 0) return null;
+export function resolveMedian(values: readonly number[]): Option.Option<number> {
+  if (values.length === 0) return Option.none();
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[middle] ?? null;
-  return ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+  if (sorted.length % 2 === 1) return Option.fromNullishOr(sorted[middle]);
+  return Option.some(((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2);
 }
 
 export function toMedian(values: readonly number[]): TurnaroundMedian {
-  return { median: resolveMedian(values), count: values.length };
+  return { median: Option.getOrNull(resolveMedian(values)), count: values.length };
 }
 
 export function listPaused(task: Task, now: number): TimingSpan[] {

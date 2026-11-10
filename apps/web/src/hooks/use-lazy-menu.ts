@@ -11,10 +11,11 @@ import {
   resolveKeyReplay,
   resolvePointReplay,
 } from '@/lib/lazy-menu.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 
 interface LongPress {
   point: MenuPoint;
-  timer: ReturnType<typeof setTimeout>;
+  cancel: () => void;
 }
 
 function isFocused(event: React.SyntheticEvent<HTMLElement>) {
@@ -40,7 +41,7 @@ export function useLazyMenu(kind: LazyMenuKind) {
     replayMenuOpen(element, replay);
   }, [mounted]);
 
-  React.useEffect(() => () => clearTimeout(longPress.current?.timer), []);
+  React.useEffect(() => () => longPress.current?.cancel(), []);
 
   const triggerProps = React.useMemo(() => {
     function mount(replay: MenuReplay) {
@@ -49,7 +50,7 @@ export function useLazyMenu(kind: LazyMenuKind) {
       setMounted(true);
     }
     function cancelLongPress() {
-      clearTimeout(longPress.current?.timer);
+      longPress.current?.cancel();
       longPress.current = null;
     }
     if (kind === 'context') {
@@ -66,11 +67,11 @@ export function useLazyMenu(kind: LazyMenuKind) {
           if (event.touches.length !== 1 || !touch) return;
           const point = readTouchPoint(touch);
           const focused = isFocused(event);
-          const timer = setTimeout(() => {
+          const cancel = scheduleAfter(LONG_PRESS_MS, () => {
             longPress.current = null;
             mount(resolvePointReplay(point, focused));
-          }, LONG_PRESS_MS);
-          longPress.current = { point, timer };
+          });
+          longPress.current = { point, cancel };
         },
         onTouchMove(event: React.TouchEvent<HTMLElement>) {
           const press = longPress.current;

@@ -20,7 +20,7 @@ import {
   type ShinsaCommand,
   type WeeklyReading,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Exit, Fiber, FileSystem, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, Exit, Fiber, FileSystem, Layer, Option, Ref } from 'effect';
 import type {
   AccountLease,
   AccountLeaseRequest,
@@ -36,6 +36,7 @@ import { EngineCore } from '../../runtime/engine/service.ts';
 import { AccountChanges } from '../changes/service.ts';
 import { AccountCommands } from '../command/service.ts';
 import { AccountImports } from '../imports/service.ts';
+import { LoginKeepalive } from '../keepalive/service.ts';
 import { UsageLimits } from '../limits/service.ts';
 import { LoginFinishFailed, type LoginOutcome } from '../login/schema.ts';
 import { AccountLogins } from '../login/service.ts';
@@ -51,6 +52,7 @@ import {
   type AccountsFailure,
   AccountsRefreshInterval,
   ClaudeCommandPath,
+  EXPIRED_DETAIL,
   STATUS_TIMEOUT,
   type StoredAccount,
 } from '../schema.ts';
@@ -109,6 +111,7 @@ export class Accounts extends Context.Service<
       const logins = yield* AccountLogins;
       const rotation = yield* AccountRotation;
       const renewal = yield* LoginRenewal;
+      const keepalive = yield* LoginKeepalive;
       const imports = yield* AccountImports;
       const signIns = yield* AccountSignIns;
       const accountChanges = yield* AccountChanges;
@@ -218,7 +221,9 @@ export class Accounts extends Context.Service<
             signIn: signIn?.signIn ?? 'unknown',
             signInDetail: signIn?.detail ?? null,
             usage: accountUsage,
-            spentUntil: resolveCandidateSpentUntil({ spentUntil: marked, usage: accountUsage }, model, now),
+            spentUntil: Option.getOrNull(
+              resolveCandidateSpentUntil({ spentUntil: marked, usage: accountUsage }, model, now)
+            ),
             runs: runs.get(account.id) ?? 0,
           });
         }
@@ -251,7 +256,7 @@ export class Accounts extends Context.Service<
       });
 
       const recordPlan = Effect.fn('Accounts.recordPlan')(function* (account: AccountSummary, seq: number) {
-        const plan = resolvePlanKey(account.plan);
+        const plan = Option.getOrNull(resolvePlanKey(account.plan));
         yield* dispatch(
           { type: 'account.plan_recorded', accountId: account.id, provider: CLAUDE_PROVIDER, plan },
           `account-plan:${account.id}:${plan ?? 'none'}:${seq}`
@@ -268,7 +273,8 @@ export class Accounts extends Context.Service<
         if (inspect) return;
         const state = yield* engine.state;
         const changedPlans = accounts.filter(
-          (account) => (state.accountPlans[account.id]?.plan ?? null) !== resolvePlanKey(account.plan)
+          (account) =>
+            (state.accountPlans[account.id]?.plan ?? null) !== Option.getOrNull(resolvePlanKey(account.plan))
         );
         for (const account of changedPlans) yield* recordPlan(account, state.seq);
       });
@@ -414,8 +420,57 @@ export class Accounts extends Context.Service<
         if (renewed.length > 0) yield* changed;
       });
 
+      const keepLogin = Effect.fn('Accounts.keepLogin')(function* (
+        account: StoredAccount,
+        claude: string,
+        force: boolean
+      ) {
+        const readExpired = (yield* limits.snapshot(account.id)).detail === EXPIRED_DETAIL;
+        const outcome = yield* keepalive.keep({ account, claude, readExpired, force });
+        if (outcome.kind !== 'signed_out') return outcome.kind;
+        yield* signIns.record(account.id, { signIn: 'signed_out', detail: outcome.detail });
+        yield* renewal.recordFailed(account);
+        yield* Effect.logWarning('[Accounts] Claude could not refresh an idle login').pipe(
+          Effect.annotateLogs({ accountId: account.id, email: account.email })
+        );
+        return outcome.kind;
+      });
+
+      const listIdle = Effect.gen(function* () {
+        const busy = new Set(
+          listActiveRuns(yield* engine.state).map((run) => run.attempts?.at(-1)?.account?.id)
+        );
+        const idle: StoredAccount[] = [];
+        for (const account of yield* store.listDistinct) {
+          if (busy.has(account.id)) continue;
+          if ((yield* signIns.select(account.id))?.signIn !== 'signed_out') idle.push(account);
+        }
+        return idle;
+      });
+
+      const keepLogins = Effect.fn('Accounts.keepLogins')(function* (force: boolean) {
+        const claude = yield* resolveClaude.pipe(Effect.catch(() => Effect.succeed(null)));
+        if (claude === null) return;
+        const idle = yield* listIdle;
+        const kinds = yield* Effect.forEach(idle, (account) => keepLogin(account, claude, force), {
+          concurrency: 'unbounded',
+        });
+        const refreshed = idle.filter((_, index) => kinds[index] === 'refreshed');
+        if (refreshed.length > 0)
+          yield* limits.refresh(
+            refreshed.map((account) => account.id),
+            true
+          );
+        if (kinds.some((kind) => kind !== 'idle')) yield* changed;
+      });
+
       const tick = Effect.all(
-        [refreshLimits(false), refreshProviderUsage(false), syncProviderLogins, resumeRenewed],
+        [
+          Effect.andThen(keepLogins(false), refreshLimits(false)),
+          refreshProviderUsage(false),
+          syncProviderLogins,
+          resumeRenewed,
+        ],
         {
           concurrency: 'unbounded',
           discard: true,
@@ -433,6 +488,7 @@ export class Accounts extends Context.Service<
       const start = Effect.gen(function* () {
         if (inspect) return yield* changed;
         yield* settleAll([syncSignIns, syncImports, syncProviderLogins]);
+        yield* keepLogins(false);
         yield* settleAll([refreshLimits(false), refreshProviderUsage(false)]);
         if (yield* Ref.get(stopped)) return;
         const fiber = yield* Effect.forkIn(Effect.forever(Effect.delay(tick, refreshInterval)), scope);
@@ -453,7 +509,7 @@ export class Accounts extends Context.Service<
       ) {
         const pushed = (yield* limits.snapshot(accountId)).source === 'push';
         yield* limits.refresh([accountId], force || pushed);
-        return resolveWeeklyReading(yield* limits.snapshot(accountId));
+        return Option.getOrNull(resolveWeeklyReading(yield* limits.snapshot(accountId)));
       });
 
       const readProviderWeeklyReading = Effect.fn('Accounts.readProviderWeeklyReading')(function* (
@@ -463,7 +519,7 @@ export class Accounts extends Context.Service<
         if (!providerIds.has(provider)) return null;
         const pushed = (yield* providerLimits.snapshot(provider)).source === 'push';
         yield* providerLimits.refresh([provider], force || pushed);
-        return resolveWeeklyReading(yield* providerLimits.snapshot(provider));
+        return Option.getOrNull(resolveWeeklyReading(yield* providerLimits.snapshot(provider)));
       });
 
       const readFastMode = Effect.fn('Accounts.readFastMode')(function* (
@@ -517,8 +573,8 @@ export class Accounts extends Context.Service<
           model,
           yield* Clock.currentTimeMillis
         );
-        if (pushed !== null) {
-          const verdict: RejectionVerdict = { retry: false, failure: { ...failure, resetAt: pushed } };
+        if (Option.isSome(pushed)) {
+          const verdict: RejectionVerdict = { retry: false, failure: { ...failure, resetAt: pushed.value } };
           return verdict;
         }
         yield* refreshProviderUsage(true);
@@ -527,7 +583,10 @@ export class Accounts extends Context.Service<
           model,
           yield* Clock.currentTimeMillis
         );
-        const verdict: RejectionVerdict = { retry: false, failure: { ...failure, resetAt } };
+        const verdict: RejectionVerdict = {
+          retry: false,
+          failure: { ...failure, resetAt: Option.getOrNull(resetAt) },
+        };
         return verdict;
       });
 
@@ -562,6 +621,7 @@ export class Accounts extends Context.Service<
       const refresh = Effect.gen(function* () {
         yield* assertChangeable;
         yield* settleAll([syncSignIns, syncImports, syncProviderLogins]);
+        yield* keepLogins(true);
         yield* resumeRenewed;
         yield* settleAll([refreshLimits(true), refreshProviderUsage(true)]);
         return yield* snapshot;
@@ -569,6 +629,7 @@ export class Accounts extends Context.Service<
 
       const refreshUsage = Effect.gen(function* () {
         yield* assertChangeable;
+        yield* keepLogins(false);
         yield* settleAll([refreshLimits(false), refreshProviderUsage(false)]);
         return yield* snapshot;
       });
@@ -614,6 +675,7 @@ export class Accounts extends Context.Service<
         yield* signIns.record(accountId, { signIn: 'signed_in', detail: null });
         yield* rotation.clear(accountId);
         yield* renewal.clear(accountId);
+        yield* keepalive.clear(accountId);
         yield* forgetNew(accountId);
         yield* dispatch(
           { type: 'account.signed_in', account: { id: accountId, email: status.email ?? account.email } },
@@ -632,6 +694,7 @@ export class Accounts extends Context.Service<
         yield* signIns.remove(accountId);
         yield* rotation.clear(accountId);
         yield* renewal.clear(accountId);
+        yield* keepalive.clear(accountId);
         yield* forgetNew(accountId);
       });
 

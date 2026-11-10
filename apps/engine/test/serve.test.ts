@@ -438,7 +438,7 @@ describe('one Shinsa per data directory', () => {
         pid: crashed.pid,
         port: 5180,
         url: 'http://127.0.0.1:5180',
-        bootedAt: resolveBootedAt(),
+        bootedAt: resolveBootedAt(Date.now()),
       })
     );
     const logs = captureLogs();

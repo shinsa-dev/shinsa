@@ -12,6 +12,10 @@ export const SLACK_LIMITS = {
   threadChars: 12_000,
   linkedThreads: 3,
   linkedThreadChars: 6_000,
+  channelMessage: 12_000,
+  teamName: 120,
+  channels: 1000,
+  watches: 100,
 } as const;
 
 export const SLACK_VIEW_LIMITS = {
@@ -75,6 +79,47 @@ export const SlackMention = Schema.Struct({
 });
 
 export type SlackMention = typeof SlackMention.Type;
+
+export const SlackChannelMessage = Schema.Struct({
+  eventId: SlackId,
+  teamId: SlackId,
+  channelId: SlackId,
+  messageTs: SlackId,
+  userId: SlackId,
+  userName: Truncated(SLACK_LIMITS.userName),
+  bot: Salvaged(Schema.Boolean, () => false),
+  text: Truncated(SLACK_LIMITS.channelMessage),
+  permalink: SalvagedOrNull(SlackPermalink),
+  channelName: SalvagedOrNull(SlackChannelName),
+});
+
+export type SlackChannelMessage = typeof SlackChannelMessage.Type;
+
+export const SlackChannel = Schema.Struct({
+  teamId: SlackId,
+  teamName: Truncated(SLACK_LIMITS.teamName),
+  channelId: SlackId,
+  channelName: SlackChannelName,
+  private: Schema.Boolean,
+});
+
+export type SlackChannel = typeof SlackChannel.Type;
+
+export const SlackChannels = Schema.Struct({
+  channels: Schema.Array(SlackChannel).check(Schema.isMaxLength(SLACK_LIMITS.channels)),
+});
+
+export type SlackChannels = typeof SlackChannels.Type;
+
+export const SlackChannelWatch = Schema.Struct({ teamId: SlackId, channelId: SlackId });
+
+export type SlackChannelWatch = typeof SlackChannelWatch.Type;
+
+export const SlackChannelWatches = Schema.Struct({
+  watches: Schema.Array(SlackChannelWatch).check(Schema.isMaxLength(SLACK_LIMITS.watches)),
+});
+
+export type SlackChannelWatches = typeof SlackChannelWatches.Type;
 
 export const SlackEvaluationReply = Schema.Struct({ decision: Schema.Literals(['task', 'none']) });
 

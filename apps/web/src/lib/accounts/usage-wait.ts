@@ -8,6 +8,7 @@ import {
   type UsagePace,
   type UsageWait,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { describeResetsIn } from '@/lib/accounts/usage.ts';
 import { formatMoment, formatUntil } from '@/lib/format/time.ts';
@@ -41,12 +42,16 @@ export function describeUsageWaitCountdown(wait: UsageWait, now: number) {
   return wait.resetAt <= now ? 'Starts now' : formatUntil('Starts', wait.resetAt, now);
 }
 
-function describeAdmissionTitle(wait: UsageWait, now: number, hours: ActiveHours | null) {
+function describeAdmissionTitle(wait: UsageWait, now: number, hours: Option.Option<ActiveHours>) {
   if (!isActiveAt(hours, wait.resetAt) && isActiveAt(hours, now)) return 'Builds tonight';
   return `Builds after ${formatMoment(wait.resetAt, now)}`;
 }
 
-export function describeUsageWaitTitle(wait: UsageWait, now = Date.now(), hours: ActiveHours | null = null) {
+export function describeUsageWaitTitle(
+  wait: UsageWait,
+  now = Date.now(),
+  hours: Option.Option<ActiveHours> = Option.none()
+) {
   if (isAdmissionWait(wait)) return describeAdmissionTitle(wait, now, hours);
   if (isPaceWait(wait)) return `Held at a usage limit: starts at ${formatMoment(wait.resetAt, now)}`;
   const next = wait.autoResume ? 'continues' : 'pauses for you';

@@ -8,6 +8,7 @@ import {
   type Settings,
   type UsageResetGrant,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import {
   describeAccountStatus,
   describeResetsAvailable,
@@ -142,14 +143,16 @@ describe('usage rows', () => {
 
 describe('the usage glance follows the server’s pick', () => {
   function pickedByServer(accounts: AccountSummary[], settings: Settings) {
-    return pickAccount({
-      accounts: accounts.map((account) => resolveAccountCandidate(account, settings)),
-      bound: null,
-      previous: null,
-      model: resolveUsageModel(settings),
-      exclude: new Set(),
-      now: NOW,
-    })?.account.id;
+    return Option.getOrNull(
+      pickAccount({
+        accounts: accounts.map((account) => resolveAccountCandidate(account, settings)),
+        bound: null,
+        previous: null,
+        model: resolveUsageModel(settings),
+        exclude: new Set(),
+        now: NOW,
+      })
+    )?.account.id;
   }
 
   it('glances at the account the server picks when the default is over its own threshold', () => {

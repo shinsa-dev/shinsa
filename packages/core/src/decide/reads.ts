@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -149,7 +150,7 @@ function fileForIntake(decider: Decider, task: Task, run: Run, command: CommandO
 }
 
 function fileForWatchdog(decider: Decider, task: Task, run: Run, command: CommandOf<'agent.file_report'>) {
-  const watchdog = selectWatchingRun(task, run.id);
+  const watchdog = Option.getOrNull(selectWatchingRun(task, run.id));
   if (!watchdog?.source) {
     throw new DomainError({
       code: 'watchdog_not_found',

@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import { CHECK_TRIGGERS } from './schema.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -10,13 +11,14 @@ function listTriggerNames(on: unknown): string[] {
   return isRecord(on) ? Object.keys(on) : [];
 }
 
-export function isCheckWorkflow(text: string) {
-  let parsed: unknown;
-  try {
-    parsed = Bun.YAML.parse(text);
-  } catch {
-    return true;
-  }
+function isCheckTrigger(parsed: unknown) {
   if (!isRecord(parsed)) return true;
   return listTriggerNames(parsed.on).some((name) => CHECK_TRIGGERS.has(name));
+}
+
+export function isCheckWorkflow(text: string) {
+  return Result.match(
+    Result.try(() => Bun.YAML.parse(text) as unknown),
+    { onFailure: () => true, onSuccess: isCheckTrigger }
+  );
 }

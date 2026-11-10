@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import {
   createTeamKeyRequest,
   openTeamKey,
@@ -14,6 +14,7 @@ import {
   type TeamKeyDelivery,
   verifyTeamKeyRequest,
 } from '../../src/index.ts';
+import { REMOTE_PROTOCOL_VERSION } from '../../src/remote/handshake.ts';
 
 const SUBJECT = { teamId: 'team00000001', instanceId: 'laptop000001' };
 
@@ -61,11 +62,15 @@ describe('team key requests', () => {
   test('a refusal carries the request, and anything else carries none', async () => {
     const { request } = await createRequest();
     const text = JSON.stringify({ type: 'refused', reason: 'No key.', keyRequest: request });
-    expect(parseTeamKeyRefusal(text)).toEqual(request);
-    expect(parseTeamKeyRefusal(JSON.stringify({ type: 'refused', reason: 'No key.' }))).toBeNull();
-    expect(parseTeamKeyRefusal(JSON.stringify({ type: 'welcome', keyRequest: request }))).toBeNull();
-    expect(readTeamKeyRequest({ ephemeral: 'e', signature: 's' })).toBeNull();
-    expect(readTeamKeyRequest('text')).toBeNull();
+    expect(Option.getOrNull(parseTeamKeyRefusal(text))).toEqual(request);
+    expect(
+      Option.getOrNull(parseTeamKeyRefusal(JSON.stringify({ type: 'refused', reason: 'No key.' })))
+    ).toBeNull();
+    expect(
+      Option.getOrNull(parseTeamKeyRefusal(JSON.stringify({ type: 'welcome', keyRequest: request })))
+    ).toBeNull();
+    expect(Option.getOrNull(readTeamKeyRequest({ ephemeral: 'e', signature: 's' }))).toBeNull();
+    expect(Option.getOrNull(readTeamKeyRequest('text'))).toBeNull();
   });
 });
 
@@ -73,7 +78,7 @@ describe('team key seals', () => {
   test('only the machine that asked opens the key, for the team it asked about', async () => {
     const { request, exchange } = await createRequest();
     const delivery = await seal(request.ephemeral);
-    expect(parseTeamKeyDelivery(JSON.stringify(delivery))).toEqual(delivery);
+    expect(Option.getOrNull(parseTeamKeyDelivery(JSON.stringify(delivery)))).toEqual(delivery);
     expect(await run(openTeamKey(exchange.privateKey, delivery))).toBe(TEAM_KEY);
     expect(await run(openTeamKey((await createExchange()).privateKey, delivery))).toBeNull();
     const moved: TeamKeyDelivery = { ...delivery, team: 'team00000002' };
@@ -94,8 +99,18 @@ describe('team key seals', () => {
   });
 
   test('reads only a whole delivery of this protocol', () => {
-    expect(parseTeamKeyDelivery(JSON.stringify({ type: 'team-key', version: 0 }))).toBeNull();
-    expect(parseTeamKeyDelivery(JSON.stringify({ type: 'team-hello' }))).toBeNull();
-    expect(parseTeamKeyDelivery('not json')).toBeNull();
+    expect(
+      Option.getOrNull(parseTeamKeyDelivery(JSON.stringify({ type: 'team-key', version: 0 })))
+    ).toBeNull();
+    expect(Option.getOrNull(parseTeamKeyDelivery(JSON.stringify({ type: 'team-hello' })))).toBeNull();
+    expect(Option.getOrNull(parseTeamKeyDelivery('not json'))).toBeNull();
+    const delivery = {
+      type: 'team-key',
+      version: REMOTE_PROTOCOL_VERSION,
+      team: 7,
+      recipient: 'r',
+      sealed: 's',
+    };
+    expect(Option.isNone(parseTeamKeyDelivery(JSON.stringify(delivery)))).toBe(true);
   });
 });

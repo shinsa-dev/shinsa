@@ -63,7 +63,7 @@ export const SignInRoutes = Layer.unwrap(
     };
 
     const readOAuthState = (request: HttpServerRequest.HttpServerRequest) => {
-      const bytes = parseBase64Url(readCookie(request, OAUTH_COOKIE) ?? '');
+      const bytes = Option.getOrNull(parseBase64Url(readCookie(request, OAUTH_COOKIE) ?? ''));
       return Option.map(decodeOAuthCookie(bytes ? decodeText(bytes) : ''), (fields) => ({
         state: fields.state,
         verifier: fields.verifier,

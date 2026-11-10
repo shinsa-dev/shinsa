@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeUnblocks } from '../briefing/text.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import {
@@ -74,18 +75,21 @@ export function resolveFocusProjects(state: ShinsaState, now: number): FocusProj
 }
 
 export function resolveFocusProject(state: ShinsaState, now: number) {
-  return selectSingleFocusProject(resolveFocusProjects(state, now));
+  return Option.getOrNull(selectSingleFocusProject(resolveFocusProjects(state, now)));
 }
 
-export function resolveFocusTeam(state: ShinsaState, now: number) {
-  return isFocusOver(state, now) ? null : state.focus.teamId;
+export function resolveFocusTeam(state: ShinsaState, now: number): Option.Option<string> {
+  return isFocusOver(state, now) ? Option.none() : Option.fromNullishOr(state.focus.teamId);
 }
 
 export function isInFocus(state: ShinsaState, task: Task, now: number) {
   if (state.teammateTasks?.[task.id]) return false;
   const teamId = resolveFocusTeam(state, now);
-  if (teamId !== null) return isTeamTask(state, task, teamId);
-  return isProjectInFocus(resolveFocusProjects(state, now), resolveTaskProject(state, task));
+  if (Option.isSome(teamId)) return isTeamTask(state, task, teamId.value);
+  return isProjectInFocus(
+    resolveFocusProjects(state, now),
+    Option.getOrNull(resolveTaskProject(state, task))
+  );
 }
 
 export function isListedInFocus(state: ShinsaState, task: Task, now: number) {
@@ -111,8 +115,11 @@ export function isGateHeld(state: ShinsaState, gate: Gate) {
 export function listWaitsOn(state: ShinsaState, task: Task): Task[] {
   if (task.stage === 'waiting_on_tasks') {
     const pending = listPendingDependencies(state, task);
-    const holder = pending.length === 0 ? selectCheckoutHolder(state, task) : null;
-    return holder ? [holder] : pending;
+    if (pending.length > 0) return pending;
+    return Option.match(selectCheckoutHolder(state, task), {
+      onNone: () => pending,
+      onSome: (holder) => [holder],
+    });
   }
   if (task.stage === 'shipping' || task.stage === 'awaiting_merge' || HELD_DECISIONS[task.stage]) {
     return listOpenBlockers(state, task);
@@ -165,7 +172,7 @@ function listQueuedGates(state: ShinsaState): QueuedGate[] {
     const base = {
       gate,
       task,
-      projectId: resolveTaskProject(state, task),
+      projectId: Option.getOrNull(resolveTaskProject(state, task)),
       unblocks: dependents.get(task.id) ?? 0,
     };
     return [{ ...base, reason: describeReason(base) }];
@@ -201,7 +208,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const limit = resolveAttentionLimit(state.settings);
   return {
     focus: resolveFocusProjects(state, now),
-    focusTeamId: resolveFocusTeam(state, now),
+    focusTeamId: Option.getOrNull(resolveFocusTeam(state, now)),
     ready,
     upNow: ready.slice(0, limit),
     later: ready.slice(limit),

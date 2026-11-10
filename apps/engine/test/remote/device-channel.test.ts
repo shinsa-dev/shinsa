@@ -11,7 +11,7 @@ import {
   serializePublicKey,
   verifyEnrollProof,
 } from '@shinsa/core';
-import { Effect, Exit, Layer } from 'effect';
+import { Effect, Exit, Layer, Option } from 'effect';
 import type { HubSocket } from '../../src/http/socket.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import type { AccessAnswer, RemoteChannelHandle } from '../../src/remote/channel/schema.ts';
@@ -205,7 +205,7 @@ async function startScripted(script: Script, handshake = true) {
     const sendRaw = (data: string | Bytes) => socket.send(data);
     const close = () => socket.close();
     if (!handshake) return script({ sendRaw, close, sendSealed: () => Promise.resolve() });
-    const hello = typeof raw === 'string' ? parseClientHello(raw) : null;
+    const hello = typeof raw === 'string' ? Option.getOrNull(parseClientHello(raw)) : null;
     if (!hello) return;
     const ephemeral = (await createKeyPair()) as CryptoKeyPair;
     const serverEphemeral = await Effect.runPromise(serializePublicKey(ephemeral.publicKey));

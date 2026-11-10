@@ -1,3 +1,5 @@
+import { Option } from 'effect';
+
 import type { CommandOf } from '../commands/index.ts';
 import {
   type AutopilotDue,
@@ -78,18 +80,21 @@ export function resolveAutopilotDecision(
   settings: Settings,
   task: Task,
   escalated: boolean
-): AutopilotDecision | null {
+): Option.Option<AutopilotDecision> {
   const ratings = task.reviewRatings;
-  if (!resolveAutopilotPolicy(settings).enabled) return null;
-  if (escalated) return { approve: false, reason: 'The agents could not settle the review.' };
-  if (!ratings) return { approve: false, reason: 'The reviewer did not rate the change.' };
+  if (!resolveAutopilotPolicy(settings).enabled) return Option.none();
+  if (escalated) return Option.some({ approve: false, reason: 'The agents could not settle the review.' });
+  if (!ratings) return Option.some({ approve: false, reason: 'The reviewer did not rate the change.' });
   if (ratings.confidence !== 'high') {
-    return { approve: false, reason: `The reviewer’s confidence is ${ratings.confidence}.` };
+    return Option.some({ approve: false, reason: `The reviewer’s confidence is ${ratings.confidence}.` });
   }
   if (!isRiskAllowed(settings, task, ratings.risk)) {
-    return { approve: false, reason: `The risk is ${ratings.risk}, above what Autopilot approves.` };
+    return Option.some({
+      approve: false,
+      reason: `The risk is ${ratings.risk}, above what Autopilot approves.`,
+    });
   }
-  return { approve: true, reason: describeApproval(task, ratings.risk) };
+  return Option.some({ approve: true, reason: describeApproval(task, ratings.risk) });
 }
 
 const MERGE_BLOCK_TEXT: Record<MergeBlock, string> = {
@@ -148,9 +153,13 @@ function resolveWait(state: ShinsaState, now: number, policy: AutopilotPolicy) {
     if (quiet < configured) return { wait: 'outside_hours' as const, at: quiet };
     return { wait: 'configured' as const, at: configured };
   }
-  const ended = resolveNextActiveChange(hours, now);
-  const quiet = ended === null ? null : ended + policy.quietWaitMinutes * MINUTE_MS;
-  if (quiet !== null && quiet < configured) return { wait: 'hours_ended' as const, at: quiet };
+  const quiet = Option.map(
+    resolveNextActiveChange(hours, now),
+    (ended) => ended + policy.quietWaitMinutes * MINUTE_MS
+  );
+  if (Option.exists(quiet, (at) => at < configured)) {
+    return { wait: 'hours_ended' as const, at: Option.getOrThrow(quiet) };
+  }
   return { wait: 'configured' as const, at: configured };
 }
 

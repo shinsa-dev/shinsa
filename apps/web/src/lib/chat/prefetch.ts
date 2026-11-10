@@ -1,6 +1,7 @@
 import type { ChatEntry, ShinsaState } from '@shinsa/core';
 import { listChatRuns } from '@/lib/chat/delegations.ts';
 import { listTaskRuns } from '@/lib/chat/runs.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 
 export const TRANSCRIPT_PREFETCH_RUNS = 2;
 
@@ -20,14 +21,14 @@ export function prefetchTranscript(source: TranscriptSource, runId: string) {
   const release = source.watchTranscript(runId);
   const stop = () => {
     unsubscribe();
-    clearTimeout(timer);
+    cancel();
     release();
     held.delete(runId);
   };
   const unsubscribe = source.subscribeTranscripts(() => {
     if (source.selectTranscript(runId).length > 0) stop();
   });
-  const timer = setTimeout(stop, TRANSCRIPT_PREFETCH_MS);
+  const cancel = scheduleAfter(TRANSCRIPT_PREFETCH_MS, stop);
 }
 
 export function listPrefetchRuns(state: ShinsaState, taskId: string) {

@@ -45,6 +45,7 @@ async function merged() {
       const layer = SchedulesLayer({
         baseUrl: Effect.succeed('http://localhost'),
         hookUrl: () => Effect.succeed(null),
+        slackChannels: Effect.succeed([]),
       }).pipe(
         Layer.provide(
           Layer.mergeAll(

@@ -1,5 +1,6 @@
 import { isWebUrl, type ManualTestTarget, parseTestFile } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 
 export type TestTargetView =
   | { kind: 'link'; href: string }
@@ -25,8 +26,10 @@ export function resolveTestTarget(target: ManualTestTarget | null): TestTargetVi
     case 'url':
       return isWebUrl(value) ? { kind: 'link', href: value } : resolveTextTarget(target, value);
     case 'file': {
-      const file = parseTestFile(value);
-      return file ? { kind: 'file', ...file } : resolveTextTarget(target, value);
+      return Option.match(parseTestFile(value), {
+        onNone: () => resolveTextTarget(target, value),
+        onSome: (file) => ({ kind: 'file', ...file }),
+      });
     }
     case 'command':
       return { kind: 'command', command: value };

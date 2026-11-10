@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import type { EventOf } from '../../src/events/index.ts';
 import {
   AUTOPILOT_DEFAULTS,
@@ -249,7 +250,7 @@ describe('acting for the human', () => {
     harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
     const fix = harness.activeRun(taskId);
     expect(fix).toMatchObject({ purpose: 'fix', resume: true });
-    const instruction = splitHouseRules(fix.prompt ?? '')?.instruction ?? fix.prompt ?? '';
+    const instruction = Option.getOrNull(splitHouseRules(fix.prompt ?? ''))?.instruction ?? fix.prompt ?? '';
     expect(instruction).toContain('hello');
     expect(instruction).toContain(KEPT_NOTE);
     expect(instruction.indexOf('hello')).toBeLessThan(instruction.indexOf(KEPT_NOTE));

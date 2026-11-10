@@ -40,7 +40,7 @@ describe('the shinsa binary', () => {
         pid: process.pid,
         port: 5180,
         url: 'http://127.0.0.1:5180',
-        bootedAt: resolveBootedAt(),
+        bootedAt: resolveBootedAt(Date.now()),
       };
       writeFileSync(join(dataDir, LOCK_FILE), JSON.stringify(holder));
       const env = { ...process.env, SHINSA_HOME: home, HOME: home, SHINSA_PORT: '0' };

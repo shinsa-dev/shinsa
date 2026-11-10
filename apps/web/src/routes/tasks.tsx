@@ -2,6 +2,7 @@ import { resolveFocusTeam, type ShinsaState } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import * as React from 'react';
 import { PAGE_BOTTOM, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
@@ -32,7 +33,12 @@ export function TasksPage({ state }: { state: ShinsaState }) {
     () => listTaskRows(state, team.entries, team.teams, Date.now(), ownership),
     [state, team.entries, team.teams, ownership]
   );
-  const fields = listTaskFilterFields(rows, team.teams, filters, resolveFocusTeam(state, Date.now()));
+  const fields = listTaskFilterFields(
+    rows,
+    team.teams,
+    filters,
+    Option.getOrNull(resolveFocusTeam(state, Date.now()))
+  );
   const sections = listTaskGroupSections(state, filterTaskRows(rows, filters), filters.status);
   const owners = ownership.shared || rows.some((row) => row.team);
   const columns = owners ? TEAM_TASK_LIST_COLUMNS : TASK_LIST_COLUMNS;

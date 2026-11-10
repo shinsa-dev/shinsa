@@ -5,7 +5,7 @@ import {
   listUnseenReleases,
   resolveVersionOrder,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import * as React from 'react';
 import { describeFailure } from '@/lib/connection/commands.ts';
 import { connection, useEngineFeature } from '@/lib/connection/socket.ts';
@@ -104,7 +104,8 @@ export function resolveWhatsNew(
 ): ChangelogRelease[] {
   if (!changelog || !isReleasedVersion(version) || seen === null) return [];
   return listUnseenReleases(changelog, seen).filter(
-    (release) => release.version !== null && resolveVersionOrder(release.version, version) !== 1
+    (release) =>
+      release.version !== null && !Option.contains(resolveVersionOrder(release.version, version), 1)
   );
 }
 
@@ -157,7 +158,8 @@ export function useWhatsNew() {
   React.useEffect(() => {
     if (!known) return;
     if (seen === null) recordSeenVersion(version);
-    else if (view.readFor !== version && resolveVersionOrder(version, seen) === 1) void read.run();
+    else if (view.readFor !== version && Option.contains(resolveVersionOrder(version, seen), 1))
+      void read.run();
   }, [known, version, seen]);
   if (!known) return { releases: [], seen };
   return { releases: resolveWhatsNew(shown.changelog, version, seen), seen };

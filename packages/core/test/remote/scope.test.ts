@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type ActionScope,
   DEFAULT_TEAM_SCOPES,
@@ -49,62 +50,84 @@ describe('resolveScopedRefusal', () => {
     const { harness, taskId, gate, run } = createHandedTask();
     const state = harness.state;
     expect(
-      resolveScopedRefusal(state, guestOf(taskId), { type: 'task.message', taskId, text: 'Hi' })
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(taskId), { type: 'task.message', taskId, text: 'Hi' })
+      )
     ).toBeNull();
     expect(
-      resolveScopedRefusal(state, guestOf(taskId), {
-        type: 'gate.answer',
-        gateId: gate.id,
-        decision: 'approve',
-        response: null,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(taskId), {
+          type: 'gate.answer',
+          gateId: gate.id,
+          decision: 'approve',
+          response: null,
+        })
+      )
     ).toBeNull();
     expect(
-      resolveScopedRefusal(state, guestOf(taskId), { type: 'run.dismiss_silence', runId: run.id })
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(taskId), { type: 'run.dismiss_silence', runId: run.id })
+      )
     ).toBeNull();
-    expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.retry', taskId })).toBeNull();
-    expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.pause', taskId })).toBeNull();
+    expect(
+      Option.getOrNull(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.retry', taskId }))
+    ).toBeNull();
+    expect(
+      Option.getOrNull(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.pause', taskId }))
+    ).toBeNull();
   });
 
   test('refuses another task, by its id, its run or its gate', () => {
     const { harness, taskId, other } = createHandedTask();
     const state = harness.state;
-    expect(resolveScopedRefusal(state, guestOf(other), { type: 'task.message', taskId, text: 'Hi' })).toBe(
-      SCOPE_MESSAGES.task
-    );
     expect(
-      resolveScopedRefusal(state, guestOf(taskId), { type: 'run.dismiss_silence', runId: 'missing' })
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(other), { type: 'task.message', taskId, text: 'Hi' })
+      )
     ).toBe(SCOPE_MESSAGES.task);
     expect(
-      resolveScopedRefusal(state, guestOf(taskId), {
-        type: 'gate.answer',
-        gateId: 'missing',
-        decision: 'approve',
-        response: null,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(taskId), { type: 'run.dismiss_silence', runId: 'missing' })
+      )
+    ).toBe(SCOPE_MESSAGES.task);
+    expect(
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(taskId), {
+          type: 'gate.answer',
+          gateId: 'missing',
+          decision: 'approve',
+          response: null,
+        })
+      )
     ).toBe(SCOPE_MESSAGES.task);
   });
 
   test('refuses what reaches beyond the task, a chosen account and the gates that stay at the keyboard', () => {
     const { harness, taskId, gate } = createHandedTask();
     const state = harness.state;
-    expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.share', taskId })).toBe(
-      SCOPE_MESSAGES.command
-    );
-    expect(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.wait_on', taskId, waitsOn: [] })).toBe(
-      SCOPE_MESSAGES.command
-    );
     expect(
-      resolveScopedRefusal(state, guestOf(taskId), { type: 'task.retry', taskId, account: ACCOUNT })
+      Option.getOrNull(resolveScopedRefusal(state, guestOf(taskId), { type: 'task.share', taskId }))
+    ).toBe(SCOPE_MESSAGES.command);
+    expect(
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(taskId), { type: 'task.wait_on', taskId, waitsOn: [] })
+      )
+    ).toBe(SCOPE_MESSAGES.command);
+    expect(
+      Option.getOrNull(
+        resolveScopedRefusal(state, guestOf(taskId), { type: 'task.retry', taskId, account: ACCOUNT })
+      )
     ).toBe(OWNER_ONLY_MESSAGE);
     const secret = { ...state, gates: { ...state.gates, [gate.id]: { ...gate, type: 'secret' as const } } };
     expect(
-      resolveScopedRefusal(secret, guestOf(taskId), {
-        type: 'gate.answer',
-        gateId: gate.id,
-        decision: 'approve',
-        response: null,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(secret, guestOf(taskId), {
+          type: 'gate.answer',
+          gateId: gate.id,
+          decision: 'approve',
+          response: null,
+        })
+      )
     ).toBe(SCOPE_MESSAGES.gate);
   });
 
@@ -112,27 +135,33 @@ describe('resolveScopedRefusal', () => {
     const { harness, taskId } = createHandedTask();
     const block = '<attachments><attachment url="/api/attachments/x/secret.png" /></attachments>';
     expect(
-      resolveScopedRefusal(harness.state, guestOf(taskId), {
-        type: 'task.message',
-        taskId,
-        text: `See ${block}`,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(harness.state, guestOf(taskId), {
+          type: 'task.message',
+          taskId,
+          text: `See ${block}`,
+        })
+      )
     ).toBe(SCOPE_MESSAGES.attachments);
     expect(
-      resolveScopedRefusal(harness.state, guestOf(taskId), {
-        type: 'round.update',
-        taskId,
-        number: 2,
-        request: block,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(harness.state, guestOf(taskId), {
+          type: 'round.update',
+          taskId,
+          number: 2,
+          request: block,
+        })
+      )
     ).toBe(SCOPE_MESSAGES.attachments);
     expect(
-      resolveScopedRefusal(harness.state, guestOf(taskId), {
-        type: 'round.update',
-        taskId,
-        number: 2,
-        request: 'Plain',
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(harness.state, guestOf(taskId), {
+          type: 'round.update',
+          taskId,
+          number: 2,
+          request: 'Plain',
+        })
+      )
     ).toBeNull();
   });
 
@@ -299,28 +328,38 @@ describe('a teammate’s scope', () => {
     const { harness, shared, own, gate } = createTeamTasks();
     const state = harness.state;
     expect(
-      resolveScopedRefusal(state, teammate(), { type: 'task.prioritize', taskId: shared, priority: 'high' })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate(), { type: 'task.prioritize', taskId: shared, priority: 'high' })
+      )
     ).toBeNull();
     expect(
-      resolveScopedRefusal(state, teammate(), {
-        type: 'gate.answer',
-        gateId: gate.id,
-        decision: 'approve',
-        response: null,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate(), {
+          type: 'gate.answer',
+          gateId: gate.id,
+          decision: 'approve',
+          response: null,
+        })
+      )
     ).toBeNull();
     expect(
-      resolveScopedRefusal(state, teammate(), { type: 'task.prioritize', taskId: own, priority: 'high' })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate(), { type: 'task.prioritize', taskId: own, priority: 'high' })
+      )
     ).toBe(TEAM_SCOPE_MESSAGES.task);
     expect(
-      resolveScopedRefusal(state, teammate(), { type: 'task.prioritize', taskId: 'gone', priority: 'high' })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate(), { type: 'task.prioritize', taskId: 'gone', priority: 'high' })
+      )
     ).toBe(TEAM_SCOPE_MESSAGES.task);
     expect(
-      resolveScopedRefusal(state, teammate(), { type: 'settings.change', patch: { maxFixRounds: 2 } })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate(), { type: 'settings.change', patch: { maxFixRounds: 2 } })
+      )
     ).toBe(TEAM_SCOPE_MESSAGES.command);
-    expect(resolveScopedRefusal(state, teammate(), { type: 'task.hand_off', taskId: shared })).toBe(
-      TEAM_SCOPE_MESSAGES.command
-    );
+    expect(
+      Option.getOrNull(resolveScopedRefusal(state, teammate(), { type: 'task.hand_off', taskId: shared }))
+    ).toBe(TEAM_SCOPE_MESSAGES.command);
   });
 
   test('shares, answers gates and gives back by default, and is refused each scope its team turned off', () => {
@@ -329,20 +368,30 @@ describe('a teammate’s scope', () => {
     const share = { type: 'task.share', taskId: shared } as const;
     const preview = { type: 'preview.share', taskId: shared, serviceId: 'svc' } as const;
     const answer = { type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null } as const;
-    expect(resolveScopedRefusal(state, teammate(), share)).toBeNull();
-    expect(resolveScopedRefusal(state, teammate(), preview)).toBeNull();
-    expect(resolveScopedRefusal(state, teammate({ gates: false }), answer)).toBe(TEAM_SCOPE_MESSAGES.gates);
+    expect(Option.getOrNull(resolveScopedRefusal(state, teammate(), share))).toBeNull();
+    expect(Option.getOrNull(resolveScopedRefusal(state, teammate(), preview))).toBeNull();
+    expect(Option.getOrNull(resolveScopedRefusal(state, teammate({ gates: false }), answer))).toBe(
+      TEAM_SCOPE_MESSAGES.gates
+    );
     expect(
-      resolveScopedRefusal(state, teammate({ gates: false }), {
-        type: 'task.prioritize',
-        taskId: shared,
-        priority: 'high',
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate({ gates: false }), {
+          type: 'task.prioritize',
+          taskId: shared,
+          priority: 'high',
+        })
+      )
     ).toBeNull();
-    expect(resolveScopedRefusal(state, teammate({ share: false }), share)).toBe(TEAM_SCOPE_MESSAGES.share);
-    expect(resolveScopedRefusal(state, teammate({ share: false }), preview)).toBe(TEAM_SCOPE_MESSAGES.share);
+    expect(Option.getOrNull(resolveScopedRefusal(state, teammate({ share: false }), share))).toBe(
+      TEAM_SCOPE_MESSAGES.share
+    );
+    expect(Option.getOrNull(resolveScopedRefusal(state, teammate({ share: false }), preview))).toBe(
+      TEAM_SCOPE_MESSAGES.share
+    );
     expect(
-      resolveScopedRefusal(state, teammate({ actions: false }), { type: 'task.give_back', taskId: shared })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate({ actions: false }), { type: 'task.give_back', taskId: shared })
+      )
     ).toBeNull();
   });
 
@@ -350,23 +399,35 @@ describe('a teammate’s scope', () => {
     const { harness, shared } = createTeamTasks();
     const message = { type: 'task.message', taskId: shared, text: 'Use the new API.' } as const;
     const update = { type: 'round.update', taskId: shared, number: 2, request: 'Plain' } as const;
-    expect(resolveScopedRefusal(harness.state, teammate(), message)).toBe(TEAM_SCOPE_MESSAGES.message);
-    expect(resolveScopedRefusal(harness.state, teammate(), update)).toBe(TEAM_SCOPE_MESSAGES.message);
-    expect(resolveScopedRefusal(harness.state, teammate({ message: true }), message)).toBeNull();
+    expect(Option.getOrNull(resolveScopedRefusal(harness.state, teammate(), message))).toBe(
+      TEAM_SCOPE_MESSAGES.message
+    );
+    expect(Option.getOrNull(resolveScopedRefusal(harness.state, teammate(), update))).toBe(
+      TEAM_SCOPE_MESSAGES.message
+    );
+    expect(
+      Option.getOrNull(resolveScopedRefusal(harness.state, teammate({ message: true }), message))
+    ).toBeNull();
     const pause = { type: 'task.snooze', taskId: shared } as const;
-    expect(resolveScopedRefusal(harness.state, teammate({ actions: false }), pause)).toBe(
+    expect(Option.getOrNull(resolveScopedRefusal(harness.state, teammate({ actions: false }), pause))).toBe(
       TEAM_SCOPE_MESSAGES.actions
     );
     holdBy(harness, shared);
-    expect(resolveScopedRefusal(harness.state, teammate(), message)).toBeNull();
-    expect(resolveScopedRefusal(harness.state, teammate({ actions: false }), pause)).toBeNull();
-    const robin = { ...teammate(), id: 'u-robin', login: 'robin' };
-    expect(resolveScopedRefusal(harness.state, robin, message)).toBe(TEAM_SCOPE_MESSAGES.message);
+    expect(Option.getOrNull(resolveScopedRefusal(harness.state, teammate(), message))).toBeNull();
     expect(
-      resolveScopedRefusal(harness.state, teammate({ share: false }), {
-        type: 'task.unshare',
-        taskId: shared,
-      })
+      Option.getOrNull(resolveScopedRefusal(harness.state, teammate({ actions: false }), pause))
+    ).toBeNull();
+    const robin = { ...teammate(), id: 'u-robin', login: 'robin' };
+    expect(Option.getOrNull(resolveScopedRefusal(harness.state, robin, message))).toBe(
+      TEAM_SCOPE_MESSAGES.message
+    );
+    expect(
+      Option.getOrNull(
+        resolveScopedRefusal(harness.state, teammate({ share: false }), {
+          type: 'task.unshare',
+          taskId: shared,
+        })
+      )
     ).toBe(TEAM_SCOPE_MESSAGES.share);
   });
 
@@ -374,23 +435,27 @@ describe('a teammate’s scope', () => {
     const { harness, shared, gate } = createTeamTasks();
     const block = '<attachments><attachment url="/api/attachments/x/secret.png" /></attachments>';
     expect(
-      resolveScopedRefusal(harness.state, teammate({ message: true }), {
-        type: 'task.message',
-        taskId: shared,
-        text: block,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(harness.state, teammate({ message: true }), {
+          type: 'task.message',
+          taskId: shared,
+          text: block,
+        })
+      )
     ).toBe(SCOPE_MESSAGES.attachments);
     const state = {
       ...harness.state,
       gates: { ...harness.state.gates, [gate.id]: { ...gate, type: 'sign_in' as const } },
     };
     expect(
-      resolveScopedRefusal(state, teammate(), {
-        type: 'gate.answer',
-        gateId: gate.id,
-        decision: 'approve',
-        response: null,
-      })
+      Option.getOrNull(
+        resolveScopedRefusal(state, teammate(), {
+          type: 'gate.answer',
+          gateId: gate.id,
+          decision: 'approve',
+          response: null,
+        })
+      )
     ).toBe(SCOPE_MESSAGES.gate);
   });
 

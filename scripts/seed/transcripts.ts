@@ -198,7 +198,7 @@ export const SESSION_TRANSCRIPT = 'task-embedded-chat-run-1.jsonl';
 
 export function convertSessionTranscript(session: string, runTimes: [string, SeedRunTimes][]) {
   const images: { file: string; bytes: Uint8Array }[] = [];
-  const entries = convertClaudeSession(session, (data, mediaType) => {
+  const entries = convertClaudeSession(session, NOW, (data, mediaType) => {
     const file = `seed-image-${images.length + 1}.${mediaType.split('/')[1] ?? 'png'}`;
     images.push({ file, bytes: Buffer.from(data, 'base64') });
     return `/api/evidence/${file}`;

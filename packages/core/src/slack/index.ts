@@ -35,7 +35,21 @@ export {
   type SlackMessage,
   type SlackMrkdwn,
 } from './blocks.ts';
-export { parseSlackMention, resolveSlackMentionThread, SLACK_ENGINE_EVENTS_PATH } from './contract.ts';
+export {
+  listSlackChannelSchedules,
+  listSlackChannelWatches,
+  resolveSlackChannelTrigger,
+  SLACK_NOT_CONNECTED,
+  type SlackChannelTrigger,
+} from './channels.ts';
+export {
+  parseSlackChannelMessage,
+  parseSlackMention,
+  resolveSlackMentionThread,
+  resolveSlackMessageKey,
+  SLACK_ENGINE_EVENTS_PATH,
+  SLACK_ENGINE_MESSAGES_PATH,
+} from './contract.ts';
 export {
   parseSlackEvaluation,
   SLACK_EVALUATION_SCHEMA,
@@ -118,11 +132,21 @@ export {
   type SlackSnapshot,
 } from './relay.ts';
 export { listSlackMessageLinks } from './links.ts';
-export { serializeSlackMessage, serializeSlackRequest, serializeSlackThread } from './thread.ts';
+export {
+  serializeSlackChannelDelivery,
+  serializeSlackMessage,
+  serializeSlackRequest,
+  serializeSlackThread,
+} from './thread.ts';
 export {
   SLACK_DECISION_LIMITS,
   SLACK_LIMITS,
   SLACK_VIEW_LIMITS,
+  SlackChannel,
+  SlackChannelMessage,
+  SlackChannels,
+  SlackChannelWatch,
+  SlackChannelWatches,
   SlackDecision,
   SlackDecisionModal,
   SlackDecisionReply,

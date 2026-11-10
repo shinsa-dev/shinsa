@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { USER_COMMAND_TYPES } from '../../src/commands/index.ts';
 import {
   ENGINE_BASELINE_COMMANDS,
@@ -21,33 +22,33 @@ const app = (version: string, protocol = ENGINE_PROTOCOL) => ({ version, protoco
 
 describe('resolveVersionOrder', () => {
   test('orders versions by major, minor and patch, with or without a v', () => {
-    expect(resolveVersionOrder('0.1.0', '0.2.0')).toBe(-1);
-    expect(resolveVersionOrder('v1.0.0', '0.9.9')).toBe(1);
-    expect(resolveVersionOrder('0.3.1', 'v0.3.1')).toBe(0);
-    expect(resolveVersionOrder('0.3.1-beta.1', '0.3.0')).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('0.1.0', '0.2.0'))).toBe(-1);
+    expect(Option.getOrNull(resolveVersionOrder('v1.0.0', '0.9.9'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('0.3.1', 'v0.3.1'))).toBe(0);
+    expect(Option.getOrNull(resolveVersionOrder('0.3.1-beta.1', '0.3.0'))).toBe(1);
   });
 
   test('puts a prerelease before its release and after the release before it, as semver does', () => {
-    expect(resolveVersionOrder('1.3.0-beta.2', '1.3.0')).toBe(-1);
-    expect(resolveVersionOrder('1.3.0', '1.3.0-beta.2')).toBe(1);
-    expect(resolveVersionOrder('1.3.0-beta.2', '1.2.9')).toBe(1);
-    expect(resolveVersionOrder('1.3.0-beta.2', '1.3.0-beta.10')).toBe(-1);
-    expect(resolveVersionOrder('1.3.0-beta.2', 'v1.3.0-beta.2')).toBe(0);
-    expect(resolveVersionOrder('1.3.0-alpha.1', '1.3.0-beta.1')).toBe(-1);
-    expect(resolveVersionOrder('1.3.0-beta', '1.3.0-beta.1')).toBe(-1);
-    expect(resolveVersionOrder('1.3.0-beta.1', '1.3.0-beta')).toBe(1);
-    expect(resolveVersionOrder('1.3.0-1', '1.3.0-beta')).toBe(-1);
-    expect(resolveVersionOrder('1.3.0-beta', '1.3.0-1')).toBe(1);
-    expect(resolveVersionOrder('1.3.0-rc', '1.3.0-beta')).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-beta.2', '1.3.0'))).toBe(-1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0', '1.3.0-beta.2'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-beta.2', '1.2.9'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-beta.2', '1.3.0-beta.10'))).toBe(-1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-beta.2', 'v1.3.0-beta.2'))).toBe(0);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-alpha.1', '1.3.0-beta.1'))).toBe(-1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-beta', '1.3.0-beta.1'))).toBe(-1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-beta.1', '1.3.0-beta'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-1', '1.3.0-beta'))).toBe(-1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-beta', '1.3.0-1'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0-rc', '1.3.0-beta'))).toBe(1);
   });
 
   test('ignores build metadata', () => {
-    expect(resolveVersionOrder('1.3.0+abc', '1.3.0')).toBe(0);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.0+abc', '1.3.0'))).toBe(0);
   });
 
   test('has no order for something that is not a version', () => {
-    expect(resolveVersionOrder('dev', '0.1.0')).toBeNull();
-    expect(resolveVersionOrder('0.1.0', '1.2')).toBeNull();
+    expect(Option.getOrNull(resolveVersionOrder('dev', '0.1.0'))).toBeNull();
+    expect(Option.getOrNull(resolveVersionOrder('0.1.0', '1.2'))).toBeNull();
   });
 });
 
@@ -71,11 +72,11 @@ describe('resolveReleaseChannel', () => {
   });
 
   test('orders a canary above the beta and below the release of the same version', () => {
-    expect(resolveVersionOrder('1.3.1-canary.4', '1.3.1-beta.1')).toBe(1);
-    expect(resolveVersionOrder('1.3.1-canary.4', '1.3.1')).toBe(-1);
-    expect(resolveVersionOrder('1.3.1-canary.10', '1.3.1-canary.9')).toBe(1);
-    expect(resolveVersionOrder('1.3.1-canary.1', '1.3.0-beta.2')).toBe(1);
-    expect(resolveVersionOrder('1.3.1-canary.1', '1.3.0')).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.1-canary.4', '1.3.1-beta.1'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.1-canary.4', '1.3.1'))).toBe(-1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.1-canary.10', '1.3.1-canary.9'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.1-canary.1', '1.3.0-beta.2'))).toBe(1);
+    expect(Option.getOrNull(resolveVersionOrder('1.3.1-canary.1', '1.3.0'))).toBe(1);
   });
 });
 
@@ -163,11 +164,13 @@ describe('resolveEngineInfo', () => {
 
 describe('parseEngineInfo', () => {
   test('reads what an engine announced', () => {
-    expect(parseEngineInfo(resolveEngineInfo('1.2.0'))).toEqual(resolveEngineInfo('1.2.0'));
+    expect(Option.getOrNull(parseEngineInfo(resolveEngineInfo('1.2.0')))).toEqual(resolveEngineInfo('1.2.0'));
   });
 
   test('reads loosely: a missing version is a development build and anything but strings is dropped', () => {
-    expect(parseEngineInfo({ protocol: 2, commands: ['task.share', 3], features: 'task.share' })).toEqual({
+    expect(
+      Option.getOrNull(parseEngineInfo({ protocol: 2, commands: ['task.share', 3], features: 'task.share' }))
+    ).toEqual({
       version: DEVELOPMENT_VERSION,
       protocol: 2,
       commands: ['task.share'],
@@ -176,10 +179,10 @@ describe('parseEngineInfo', () => {
   });
 
   test('is null without a whole-number protocol', () => {
-    expect(parseEngineInfo(null)).toBeNull();
-    expect(parseEngineInfo('engine')).toBeNull();
-    expect(parseEngineInfo({ version: '1.0.0' })).toBeNull();
-    expect(parseEngineInfo({ protocol: 1.5 })).toBeNull();
+    expect(Option.getOrNull(parseEngineInfo(null))).toBeNull();
+    expect(Option.getOrNull(parseEngineInfo('engine'))).toBeNull();
+    expect(Option.getOrNull(parseEngineInfo({ version: '1.0.0' }))).toBeNull();
+    expect(Option.getOrNull(parseEngineInfo({ protocol: 1.5 }))).toBeNull();
   });
 });
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   createSlackMessage,
   createSlackSection,
@@ -84,11 +85,14 @@ function buttonsOf(message: SlackMessage): SlackButton[] {
 function valuesOf(message: SlackMessage) {
   return buttonsOf(message)
     .filter((button) => button.value !== undefined)
-    .map((button) => ({ action: button.action_id, ...parseSlackDecisionValue(button.value ?? '') }));
+    .map((button) => ({
+      action: button.action_id,
+      ...Option.getOrNull(parseSlackDecisionValue(button.value ?? '')),
+    }));
 }
 
 function gateCardOf(harness: Harness, taskId: string, gate: Gate = harness.openGate(taskId)) {
-  return serializeSlackGate(harness.task(taskId), gate, URL) ?? never();
+  return Option.getOrNull(serializeSlackGate(harness.task(taskId), gate, URL)) ?? never();
 }
 
 function ask(
@@ -423,10 +427,12 @@ describe('the card for each gate', () => {
         },
       },
     };
-    const longText = readText(serializeSlackGate(long, gate, URL) ?? never());
+    const longText = readText(Option.getOrNull(serializeSlackGate(long, gate, URL)) ?? never());
     expect(longText).toContain('9. *Phase 8*: \n10. *Phase 9*: \n');
     const bare =
-      serializeSlackGate({ ...task, plan: null }, { ...gate, planVersion: undefined }, URL) ?? never();
+      Option.getOrNull(
+        serializeSlackGate({ ...task, plan: null }, { ...gate, planVersion: undefined }, URL)
+      ) ?? never();
     expect(readText(bare)).toContain(`> ${task.title}\n[`);
     expect(valuesOf(bare)[0]?.planVersion).toBeNull();
   });
@@ -454,7 +460,9 @@ describe('the card for each gate', () => {
       ],
       pullRequest: pullRequest(),
     };
-    const failed = readText(serializeSlackGate(failing, harness.openGate(taskId), URL) ?? never());
+    const failed = readText(
+      Option.getOrNull(serializeSlackGate(failing, harness.openGate(taskId), URL)) ?? never()
+    );
     expect(failed).toStartWith(`Ready for your review\n> ${failing.summary.trim()}\n\n`);
     expect(failed).toContain('• ✗ Export tests: `bun test`\n• ✓ Export tests: `bun test`\n');
     expect(failed).toContain('*Checks*\n1 of 2 checks failed.\n');
@@ -463,11 +471,13 @@ describe('the card for each gate', () => {
     );
     expect(failed).toEndWith(`|PR #${failing.pullRequest.number}>`);
     const one = { ...task, checkResults: [{ ...check, outcome: 'pass' as const }] };
-    expect(readText(serializeSlackGate(one, harness.openGate(taskId), URL) ?? never())).toContain(
-      'The check passed.'
-    );
+    expect(
+      readText(Option.getOrNull(serializeSlackGate(one, harness.openGate(taskId), URL)) ?? never())
+    ).toContain('The check passed.');
     const none = { ...task, checkResults: [], summary: 'x'.repeat(400) };
-    const bare = readText(serializeSlackGate(none, harness.openGate(taskId), URL) ?? never());
+    const bare = readText(
+      Option.getOrNull(serializeSlackGate(none, harness.openGate(taskId), URL)) ?? never()
+    );
     expect(bare).toContain(`> ${'x'.repeat(400)}\n`);
     expect(bare).toContain('*Checks*\nNone ran\n');
   });
@@ -508,16 +518,16 @@ describe('the card for each gate', () => {
     );
     expect(valuesOf(message).map((value) => value.decision)).toEqual(['approve', 'reject']);
     const bare = { ...harness.task(taskId), result: null };
-    expect(readText(serializeSlackGate(bare, gate, URL) ?? never())).toBe(
+    expect(readText(Option.getOrNull(serializeSlackGate(bare, gate, URL)) ?? never())).toBe(
       `Proposed change\n> Stream the export in chunks.\n> More detail.\n[Approve]  [Keep as is]  <${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
     );
-    expect(readText(serializeSlackGate({ ...bare, proposal: null }, gate, URL) ?? never())).toContain(
-      '> A change to the code.\n'
-    );
+    expect(
+      readText(Option.getOrNull(serializeSlackGate({ ...bare, proposal: null }, gate, URL)) ?? never())
+    ).toContain('> A change to the code.\n');
     for (const type of ['configuration', 'post_merge'] as const) {
-      expect(serializeSlackGate(harness.task(taskId), { ...gate, type }, URL)).toBeNull();
+      expect(Option.getOrNull(serializeSlackGate(harness.task(taskId), { ...gate, type }, URL))).toBeNull();
     }
-    expect(serializeSlackGate(bare, { ...gate, type: 'result' }, URL)).toBeNull();
+    expect(Option.getOrNull(serializeSlackGate(bare, { ...gate, type: 'result' }, URL))).toBeNull();
   });
 
   test('a failure is its title and detail with Retry; a sign-in only links to Shinsa', () => {
@@ -600,10 +610,8 @@ describe('the result', () => {
     deliver(harness, taskId, 'Backfilled 40 rows.');
     const task = harness.task(taskId);
     const result = task.result ?? never();
-    const message = serializeSlackGate(
-      { ...task, result: { ...result, step: 'operate' } },
-      harness.openGate(taskId),
-      URL
+    const message = Option.getOrNull(
+      serializeSlackGate({ ...task, result: { ...result, step: 'operate' } }, harness.openGate(taskId), URL)
     );
     expect(readText(message ?? never())).toStartWith('Outcome\nBackfilled 40 rows.\n');
   });
@@ -697,7 +705,7 @@ describe('the result', () => {
     const result = task.result ?? never();
     const body = Array.from({ length: 8000 }, (_, index) => `Paragraph ${index} has some words`).join('\n\n');
     const long = { ...task, result: { ...result, body } };
-    const message = serializeSlackGate(long, harness.openGate(taskId), URL) ?? never();
+    const message = Option.getOrNull(serializeSlackGate(long, harness.openGate(taskId), URL)) ?? never();
     expect(message.blocks).toHaveLength(50);
     expect(readBlockText(message.blocks.at(-3) ?? never())).toEndWith('…');
     expect(readText(message)).toContain(`<${URL}|Read the rest in Shinsa>`);
@@ -763,7 +771,9 @@ describe('a post from the outbox', () => {
     ask(harness, taskId, { question: 'Go?' });
     const { state } = harness;
     expect(
-      resolveSlackPostMessage(state, { kind: 'tripped', watchdogId: 'w1' }, 'gone', () => URL)
+      Option.getOrNull(
+        resolveSlackPostMessage(state, { kind: 'tripped', watchdogId: 'w1' }, 'gone', () => URL)
+      )
     ).toBeNull();
     expect(listSlackStatusGates(state, taskId).map((gate) => gate.id)).toEqual(['q1']);
   });
@@ -889,8 +899,10 @@ describe('the merge message', () => {
   test('resolves from the state, and nothing for a task that is gone', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    expect(resolveSlackMergeMessage(harness.state, taskId, 1, URL)?.text).toEndWith('is merged.');
-    expect(resolveSlackMergeMessage(harness.state, 'gone', 1, URL)).toBeNull();
+    expect(Option.getOrNull(resolveSlackMergeMessage(harness.state, taskId, 1, URL))?.text).toEndWith(
+      'is merged.'
+    );
+    expect(Option.getOrNull(resolveSlackMergeMessage(harness.state, 'gone', 1, URL))).toBeNull();
   });
 });
 
@@ -908,11 +920,8 @@ describe('the message when a watchdog finds a problem', () => {
     });
     harness.state.tasks[taskId] = { ...harness.task(taskId), watchdogs: [watchdog] };
     const urlOf = (id: string) => `https://app.shinsa.dev/tasks/${id}`;
-    const message = resolveSlackPostMessage(
-      harness.state,
-      { kind: 'tripped', watchdogId: 'w1' },
-      taskId,
-      urlOf
+    const message = Option.getOrNull(
+      resolveSlackPostMessage(harness.state, { kind: 'tripped', watchdogId: 'w1' }, taskId, urlOf)
     );
     const handleOf = (id: string) => `${harness.task(id).handle} · ${harness.task(id).title}`;
     expect(message?.text).toBe(`${handleOf(taskId)}: the watchdog “Checkout latency” found a problem.`);
@@ -934,7 +943,9 @@ describe('the message when a watchdog finds a problem', () => {
     const taskId = createTask(harness, { request: 'Fix it' });
     harness.state.tasks[taskId] = { ...harness.task(taskId), watchdogs: [watchdogOf({ status: 'tripped' })] };
     const post = (watchdogId: string) =>
-      resolveSlackPostMessage(harness.state, { kind: 'tripped', watchdogId }, taskId, () => URL);
+      Option.getOrNull(
+        resolveSlackPostMessage(harness.state, { kind: 'tripped', watchdogId }, taskId, () => URL)
+      );
     expect(readText(post('w1') ?? never())).toBe(
       ['Watchdog found a problem', '*Checkout latency*', `<${URL}|SUP-1 · Fix it>`].join('\n')
     );
@@ -983,7 +994,7 @@ describe('the escalation message', () => {
   test('asks for a review, with why, what Autopilot does next, the ratings and the pull request', () => {
     const harness = createHarness();
     const { taskId, state } = escalatedState(harness, { escalation: ESCALATION });
-    const message = resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never();
+    const message = Option.getOrNull(resolveSlackEscalationMessage(state, taskId, AT, URL)) ?? never();
     const merges = `<!date^${AT / 1000 + 3600}^{date_short_pretty} at {time}|2026-11-04T15:00:00.000Z>`;
     expect(message.text).toBe('SUP-1 · Fix it is urgent and needs a review.');
     expect(readText(message)).toBe(
@@ -1010,7 +1021,9 @@ describe('the escalation message', () => {
     const harness = createHarness();
     const escalation = { ...ESCALATION, handoff: { ...ESCALATION.handoff, ...handoff } };
     const { taskId, state } = escalatedState(harness, { escalation });
-    const shown = readText(resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never());
+    const shown = readText(
+      Option.getOrNull(resolveSlackEscalationMessage(state, taskId, AT, URL)) ?? never()
+    );
     expect(shown).toContain(text);
     expect(shown).toContain(`*Review*\n${review}`);
   });
@@ -1031,30 +1044,32 @@ describe('the escalation message', () => {
   ])('says it no longer needs anyone once %s', (_case, fields: Partial<Task>, detail) => {
     const harness = createHarness();
     const { taskId, state } = escalatedState(harness, { escalation: null, ...fields });
-    const message = resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never();
+    const message = Option.getOrNull(resolveSlackEscalationMessage(state, taskId, AT, URL)) ?? never();
     expect(message.text).toBe('SUP-1 · Fix it no longer needs anyone.');
     expect(readText(message)).toStartWith(`*No longer needs anyone*\n${detail}\n`);
   });
 
   test('has nothing to say for a task it does not know', () => {
-    expect(resolveSlackEscalationMessage(createHarness().state, 'gone', AT, URL)).toBeNull();
+    expect(Option.isNone(resolveSlackEscalationMessage(createHarness().state, 'gone', AT, URL))).toBe(true);
   });
 
   test('replies once merged that Shinsa keeps watching, with each watchdog, or asks to keep an eye on it', () => {
     const harness = createHarness();
     const merged = pullRequest({ state: 'merged' });
     const { taskId, state } = escalatedState(harness, { pullRequest: merged });
-    const bare = resolveSlackEscalationFollowUp(state, taskId, URL) ?? never();
+    const bare = Option.getOrNull(resolveSlackEscalationFollowUp(state, taskId, URL)) ?? never();
     expect(bare.text).toBe('SUP-1 · Fix it is merged.');
     expect(readText(bare)).toStartWith('*Merged*\nNothing watches it after the merge, so keep an eye on it.');
     const watchdog = watchdogOf({ round: 1 });
     const watched = escalatedState(harness, { pullRequest: merged, watchdogs: [watchdog] });
-    const shown = readText(resolveSlackEscalationFollowUp(watched.state, watched.taskId, URL) ?? never());
+    const shown = readText(
+      Option.getOrNull(resolveSlackEscalationFollowUp(watched.state, watched.taskId, URL)) ?? never()
+    );
     expect(shown).toStartWith('*Merged*\nShinsa keeps watching it after the merge. Keep an eye on it too.');
     expect(shown).toContain(`*${watchdog.title}*`);
     const open = escalatedState(harness, {});
-    expect(resolveSlackEscalationFollowUp(open.state, open.taskId, URL)).toBeNull();
-    expect(resolveSlackEscalationFollowUp(createHarness().state, 'gone', URL)).toBeNull();
+    expect(Option.isNone(resolveSlackEscalationFollowUp(open.state, open.taskId, URL))).toBe(true);
+    expect(Option.isNone(resolveSlackEscalationFollowUp(createHarness().state, 'gone', URL))).toBe(true);
   });
 
   test('sends a test that looks like a real escalation and says nothing needs anyone', () => {

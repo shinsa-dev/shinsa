@@ -30,7 +30,7 @@ describe('useAgentProviders', () => {
     await waitFor(() => expect(failing).toHaveBeenCalledTimes(2));
   });
 
-  it('loads the served list once and shares it with every reader', async () => {
+  it('shares one request between readers that open at the same time', async () => {
     let answer = (_response: Response) => {};
     const served = mock(
       () =>
@@ -47,8 +47,32 @@ describe('useAgentProviders', () => {
     await waitFor(() => expect(live.result.current).toEqual(SERVED));
     expect(served).toHaveBeenCalledTimes(1);
     expect(readFetchCall(...(served.mock.calls[0] as unknown as [URL])).path).toBe('/api/providers');
+  });
+
+  it('asks again on every later open, showing the last list until the answer comes', async () => {
+    const NEWER: AgentProviderInfo[] = [
+      {
+        id: 'claude',
+        label: 'Claude',
+        models: [{ id: 'fable', label: 'Fable 5.2', description: 'The newest Fable.' }],
+      },
+    ];
+    let answer = (_response: Response) => {};
+    const served = mock(
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        })
+    );
+    globalThis.fetch = served as unknown as typeof fetch;
+    const first = renderHook(() => useAgentProviders());
+    answer(Response.json(SERVED));
+    await waitFor(() => expect(first.result.current).toEqual(SERVED));
+    first.unmount();
     const later = renderHook(() => useAgentProviders());
     expect(later.result.current).toEqual(SERVED);
-    expect(served).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(served).toHaveBeenCalledTimes(2));
+    answer(Response.json(NEWER));
+    await waitFor(() => expect(later.result.current).toEqual(NEWER));
   });
 });

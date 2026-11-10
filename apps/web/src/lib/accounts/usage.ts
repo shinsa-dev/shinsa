@@ -17,6 +17,7 @@ import {
   type UsageResetGrant,
   type UsageWindow,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { type AccountProvider, resolveAccountProvider } from '@/lib/accounts/account.ts';
 import { formatDuration, formatMoment, formatSince, formatUntil, isSameDay } from '@/lib/format/time.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
@@ -148,8 +149,14 @@ const LOGIN_STATUS: Partial<Record<ProviderLogin['status'], AccountStatus>> = {
 export function resolveProviderStatus(login: ProviderLogin, now: number): AccountStatus | null {
   const status = LOGIN_STATUS[login.status];
   if (status) return status;
-  const until = login.usage ? resolveSpentUntil(login.usage, null, now) : null;
-  return until === null ? null : { label: 'Out of usage', tone: 'red', until };
+  if (!login.usage) return null;
+  return Option.getOrNull(
+    Option.map(resolveSpentUntil(login.usage, null, now), (until) => ({
+      label: 'Out of usage',
+      tone: 'red' as const,
+      until,
+    }))
+  );
 }
 
 export function listProviderGlances(snapshot: AccountsSnapshot | null, now: number): ProviderGlance[] {
@@ -183,7 +190,7 @@ export function resolveUsageGlance(
   const own = providers.find((glance) => glance.login.provider === preferred);
   if (own) return createProviderGlance(own);
   const model = resolveUsageModel(settings);
-  const account = selectNextAccount(snapshot.accounts, settings, model, now);
+  const account = Option.getOrNull(selectNextAccount(snapshot.accounts, settings, model, now));
   if (account) {
     return {
       provider: CLAUDE_PROVIDER,
@@ -225,8 +232,13 @@ export function resolveAccountStatus(
 ): AccountStatus | null {
   if (account.signIn === 'signed_out') return { label: 'Needs sign-in', tone: 'orange', until: null };
   if (account.paused) return { label: 'Paused', tone: 'neutral', until: null };
-  const until = resolveCandidateSpentUntil(account, model, now);
-  return until === null ? null : { label: 'Out of usage', tone: 'red', until };
+  return Option.getOrNull(
+    Option.map(resolveCandidateSpentUntil(account, model, now), (until) => ({
+      label: 'Out of usage',
+      tone: 'red' as const,
+      until,
+    }))
+  );
 }
 
 export function describeAccountStatus(status: AccountStatus, now: number) {
@@ -245,7 +257,7 @@ export function resolveAccountHeader(
 ): UsageAccountHeader {
   return {
     name: resolveAccountProvider(CLAUDE_PROVIDER, account.email),
-    detail: resolvePlanLabel(account.plan),
+    detail: Option.getOrNull(resolvePlanLabel(account.plan)),
     isDefault: account.isDefault,
     status: resolveAccountStatus(account, model, now),
     checkedAt: account.usage.checkedAt,

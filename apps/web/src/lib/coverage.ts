@@ -15,6 +15,7 @@ import {
   selectMeasuredCoverage,
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { Option } from 'effect';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import type { CoverageDetectionMap } from '@/lib/connection/coverage.ts';
 
@@ -109,9 +110,11 @@ export function createCoverageDraft(repo: Pick<Repo, 'coverage'>): CoverageDraft
 }
 
 export function describeInferredFormat(report: string) {
-  const format = resolveCoverageFormat(report);
   if (!report.trim()) return 'Infer from the path';
-  return format ? `Infer from the path: ${COVERAGE_FORMAT_LABEL[format]}` : 'Infer from the path: unknown';
+  return Option.match(resolveCoverageFormat(report), {
+    onNone: () => 'Infer from the path: unknown',
+    onSome: (format) => `Infer from the path: ${COVERAGE_FORMAT_LABEL[format]}`,
+  });
 }
 
 export function listFormatChoices(report: string): { value: CoverageFormatChoice; label: string }[] {
@@ -139,7 +142,7 @@ export function validateCoverageDraft(draft: CoverageDraft) {
   if (!draft.command.trim()) errors.command = 'Give the command that writes the report.';
   const report = validateReport(draft.report);
   if (report) errors.report = report;
-  else if (draft.format === 'infer' && !resolveCoverageFormat(draft.report)) {
+  else if (draft.format === 'infer' && Option.isNone(resolveCoverageFormat(draft.report))) {
     errors.format = 'Shinsa cannot tell the format from the path. Choose one.';
   }
   return { ok: Object.keys(errors).length === 0, errors };
@@ -155,12 +158,16 @@ export function resolveDraftCoverage(draft: CoverageDraft): CoverageSetting {
 }
 
 export function countUncoveredFiles(coverage: Coverage | null | undefined) {
-  return selectMeasuredCoverage(coverage)?.files.filter((file) => file.covered < file.executable).length ?? 0;
+  return Option.match(selectMeasuredCoverage(coverage), {
+    onNone: () => 0,
+    onSome: (measured) => measured.files.filter((file) => file.covered < file.executable).length,
+  });
 }
 
 export function describeCoverageSummary(coverage: Coverage | null | undefined) {
-  const summary = describeCoverage(coverage);
-  if (!summary) return null;
+  const described = describeCoverage(coverage);
+  if (Option.isNone(described)) return null;
+  const summary = described.value;
   const files = countUncoveredFiles(coverage);
   return files > 0
     ? `${summary} · ${describeCount(files, 'file has', 'files have')} uncovered lines`
@@ -168,8 +175,9 @@ export function describeCoverageSummary(coverage: Coverage | null | undefined) {
 }
 
 export function describeCoverageFact(coverage: Coverage | null | undefined) {
-  const measured = selectMeasuredCoverage(coverage);
-  if (!measured) return null;
+  const selected = selectMeasuredCoverage(coverage);
+  if (Option.isNone(selected)) return null;
+  const measured = selected.value;
   if (measured.covered === measured.executable) return 'All changed lines covered';
   return `${formatCoveragePercent(measured.covered, measured.executable)} of changed lines covered`;
 }

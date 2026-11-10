@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { ChatTool } from '@shinsa/core';
+import { Option } from 'effect';
 import {
   CODE_ARGUMENTS,
   formatStructured,
@@ -23,14 +24,16 @@ describe('splitLines', () => {
 
 describe('formatStructured', () => {
   it('pretty-prints JSON objects and arrays', () => {
-    expect(formatStructured(' {"a":1,"b":[2]} ')).toBe('{\n  "a": 1,\n  "b": [\n    2\n  ]\n}');
-    expect(formatStructured('[1]')).toBe('[\n  1\n]');
+    expect(formatStructured(' {"a":1,"b":[2]} ')).toEqual(
+      Option.some('{\n  "a": 1,\n  "b": [\n    2\n  ]\n}')
+    );
+    expect(formatStructured('[1]')).toEqual(Option.some('[\n  1\n]'));
   });
 
   it('leaves text that is not JSON alone', () => {
-    expect(formatStructured('plain words')).toBeNull();
-    expect(formatStructured('{ not json')).toBeNull();
-    expect(formatStructured('42')).toBeNull();
+    expect(formatStructured('plain words')).toEqual(Option.none());
+    expect(formatStructured('{ not json')).toEqual(Option.none());
+    expect(formatStructured('42')).toEqual(Option.none());
   });
 });
 

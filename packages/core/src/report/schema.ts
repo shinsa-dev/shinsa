@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Schema, Option } from 'effect';
 import type { InquiryShape } from '../commands/index.ts';
 import { describeWholeSuiteRefusal, isWholeSuiteCommand } from '../domain/checks.ts';
 import {
@@ -255,7 +255,7 @@ const TestTarget = HandOverRecord({
 }).check(
   Schema.makeFilter(({ kind, value }: { kind: ManualTestTarget['kind']; value: string }) => {
     if (value && kind === 'url' && !isWebUrl(value)) return '{path}.value must be an http or https URL.';
-    if (value && kind === 'file' && !parseTestFile(value)) {
+    if (value && kind === 'file' && Option.isNone(parseTestFile(value))) {
       return '{path}.value must be a path relative to the repository root, with :line or :start-end when it points at lines.';
     }
     return undefined;

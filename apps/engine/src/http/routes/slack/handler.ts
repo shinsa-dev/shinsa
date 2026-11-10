@@ -31,6 +31,14 @@ export const SlackHandlers = HttpApiBuilder.group(
       .handle('test', ({ payload }) => Effect.flatMap(slack, (found) => found.testContact(payload.contact)))
       .handle('disconnect', () =>
         Effect.flatMap(slack, (found) => Effect.mapError(found.disconnect, resolveRequestFailure))
+      )
+      .handle('channels', () =>
+        Effect.flatMap(slack, (found) =>
+          found.channels.pipe(
+            Effect.map((channels) => ({ channels })),
+            Effect.mapError(resolveRequestFailure)
+          )
+        )
       );
   })
 );

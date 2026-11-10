@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   countFixRepeats,
   countReviewRounds,
@@ -59,20 +60,26 @@ describe('recovery fingerprints', () => {
 
 describe('review input fingerprints', () => {
   test('are null while the tree is unknown, so the reviewer always runs', () => {
-    expect(resolveReviewInputFingerprint({ ...builtTask(), treeHash: null }, [])).toBeNull();
+    expect(
+      Option.getOrNull(resolveReviewInputFingerprint({ ...builtTask(), treeHash: null }, []))
+    ).toBeNull();
   });
 
   test('change with the tree, the plan, a phase report, the walkthrough or the evidence, and nothing else', () => {
     const task = { ...builtTask(), treeHash: 't-1' };
-    const base = resolveReviewInputFingerprint(task, ['e-1', 'e-2']);
+    const base = Option.getOrNull(resolveReviewInputFingerprint(task, ['e-1', 'e-2']));
     expect(base).toMatch(/^review:[0-9a-f]{8}$/);
     const reordered = { ...task, phaseReports: [...task.phaseReports].reverse(), summary: 'Other words.' };
-    expect(resolveReviewInputFingerprint(reordered, ['e-2', 'e-1'])).toBe(base);
+    expect(Option.getOrNull(resolveReviewInputFingerprint(reordered, ['e-2', 'e-1']))).toBe(base);
     const retimed = { ...task, phaseReports: task.phaseReports.map((report) => ({ ...report, at: 1 })) };
-    expect(resolveReviewInputFingerprint(retimed, ['e-1', 'e-2'])).toBe(base);
-    expect(resolveReviewInputFingerprint({ ...task, treeHash: 't-2' }, ['e-1', 'e-2'])).not.toBe(base);
-    expect(resolveReviewInputFingerprint(task, ['e-1'])).not.toBe(base);
-    expect(resolveReviewInputFingerprint({ ...task, plan: null }, ['e-1', 'e-2'])).not.toBe(base);
+    expect(Option.getOrNull(resolveReviewInputFingerprint(retimed, ['e-1', 'e-2']))).toBe(base);
+    expect(
+      Option.getOrNull(resolveReviewInputFingerprint({ ...task, treeHash: 't-2' }, ['e-1', 'e-2']))
+    ).not.toBe(base);
+    expect(Option.getOrNull(resolveReviewInputFingerprint(task, ['e-1']))).not.toBe(base);
+    expect(Option.getOrNull(resolveReviewInputFingerprint({ ...task, plan: null }, ['e-1', 'e-2']))).not.toBe(
+      base
+    );
     const walkthrough = {
       approach: 'Clamp it.',
       flow: 'a → b',
@@ -85,11 +92,11 @@ describe('review input fingerprints', () => {
         index === 0 ? { ...report, walkthrough } : report
       ),
     };
-    expect(resolveReviewInputFingerprint(revised, ['e-1', 'e-2'])).not.toBe(base);
+    expect(Option.getOrNull(resolveReviewInputFingerprint(revised, ['e-1', 'e-2']))).not.toBe(base);
     const resummarised = {
       ...task,
       phaseReports: task.phaseReports.map((report) => ({ ...report, summary: 'Changed.' })),
     };
-    expect(resolveReviewInputFingerprint(resummarised, ['e-1', 'e-2'])).not.toBe(base);
+    expect(Option.getOrNull(resolveReviewInputFingerprint(resummarised, ['e-1', 'e-2']))).not.toBe(base);
   });
 });

@@ -99,20 +99,20 @@ export function serializeSlackDecisionValue(value: SlackDecisionValue) {
   return JSON.stringify(value);
 }
 
-export function parseSlackDecisionValue(text: string): SlackDecisionValue | null {
-  return Option.getOrNull(decodeValue(text));
+export function parseSlackDecisionValue(text: string): Option.Option<SlackDecisionValue> {
+  return decodeValue(text);
 }
 
-export function parseSlackDecisionModal(text: string): SlackDecisionModal | null {
-  return Option.getOrNull(decodeModal(text));
+export function parseSlackDecisionModal(text: string): Option.Option<SlackDecisionModal> {
+  return decodeModal(text);
 }
 
-export function parseSlackDecision(value: unknown): SlackDecision | null {
-  return Option.getOrNull(decodeDecision(value));
+export function parseSlackDecision(value: unknown): Option.Option<SlackDecision> {
+  return decodeDecision(value);
 }
 
-export function parseSlackDecisionReply(value: unknown): SlackDecisionReply | null {
-  return Option.getOrNull(decodeReply(value));
+export function parseSlackDecisionReply(value: unknown): Option.Option<SlackDecisionReply> {
+  return decodeReply(value);
 }
 
 function resolveDecidedChoice(response: string) {
@@ -151,10 +151,10 @@ function createPlainText(text: string, limit: number): SlackPlainText {
   return { type: 'plain_text', text: fitSlackPlainText(text, limit), emoji: false };
 }
 
-export function serializeSlackDecisionModal(metadata: SlackDecisionModal): SlackModal | null {
-  if (!isSlackWriteDecision(metadata.decision)) return null;
+export function serializeSlackDecisionModal(metadata: SlackDecisionModal): Option.Option<SlackModal> {
+  if (!isSlackWriteDecision(metadata.decision)) return Option.none();
   const copy = MODAL_COPY[metadata.decision];
-  return {
+  return Option.some({
     type: 'modal',
     callback_id: SLACK_MODAL_CALLBACK,
     private_metadata: JSON.stringify(metadata),
@@ -174,5 +174,5 @@ export function serializeSlackDecisionModal(metadata: SlackDecisionModal): Slack
         },
       },
     ],
-  };
+  });
 }

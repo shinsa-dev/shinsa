@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import {
   SCHEDULE_LIMITS,
   SECRET_REF_PATTERN,
@@ -19,7 +19,14 @@ import {
 } from '../report/reading.ts';
 import { parseTimeOfDay } from './time.ts';
 
-export const WHEN_KEYS = ['in_minutes', 'run_at', 'every_minutes', 'daily_at', 'webhook'] as const;
+export const WHEN_KEYS = [
+  'in_minutes',
+  'run_at',
+  'every_minutes',
+  'daily_at',
+  'webhook',
+  'slack_channel',
+] as const;
 
 const Weekdays = Items(
   WholeNumber(
@@ -106,7 +113,7 @@ export const DailyAt = HandOverRecord({
 }).check(
   Schema.makeFilter(
     ({ daily_at: text }: { daily_at: string }) =>
-      parseTimeOfDay(text) !== null ||
+      Option.isSome(parseTimeOfDay(text)) ||
       `daily_at “${text}” is not a time of day. Use 24-hour HH:MM, such as 09:00.`,
     { after: 'daily_at' }
   )
@@ -115,6 +122,11 @@ export const DailyAt = HandOverRecord({
 export const InMinutes = CountUpTo(SCHEDULE_LIMITS.maxInMinutes);
 
 export const EveryMinutes = CountUpTo(SCHEDULE_LIMITS.maxEveryMinutes);
+
+export const SlackChannelChoice = HandOverRecord({
+  slack_channel: Required(SCHEDULE_LIMITS.reference),
+  slack_workspace: OptionalText(SCHEDULE_LIMITS.reference),
+});
 
 export const TargetChoice = HandOverRecord({
   new_task: Flag,

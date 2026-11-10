@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { isCommitSha, resolveImageType } from '../../src/index.ts';
 
 describe('isCommitSha', () => {
@@ -13,9 +14,9 @@ describe('isCommitSha', () => {
 
 describe('resolveImageType', () => {
   test('names the image type from the extension, in any case', () => {
-    expect(resolveImageType('assets/Logo.PNG')).toBe('image/png');
-    expect(resolveImageType('photo.jpeg')).toBe('image/jpeg');
-    expect(resolveImageType('icon.svg')).toBeNull();
-    expect(resolveImageType('Makefile')).toBeNull();
+    expect(Option.getOrNull(resolveImageType('assets/Logo.PNG'))).toBe('image/png');
+    expect(Option.getOrNull(resolveImageType('photo.jpeg'))).toBe('image/jpeg');
+    expect(Option.getOrNull(resolveImageType('icon.svg'))).toBeNull();
+    expect(Option.getOrNull(resolveImageType('Makefile'))).toBeNull();
   });
 });

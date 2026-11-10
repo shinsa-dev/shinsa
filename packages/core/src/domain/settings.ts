@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import type { ReviewRating } from '../report/types.ts';
 import { DAY_MS, HOUR_MS } from './time.ts';
@@ -48,9 +49,9 @@ export function resolveSharePreset(settings: Settings): SharePreset {
   return settings.sharePreset ?? DEFAULT_SHARE_PRESET;
 }
 
-export function resolveShareEnd(limit: ShareLimit, now: number) {
+export function resolveShareEnd(limit: ShareLimit, now: number): Option.Option<number> {
   const span = SHARE_LIMIT_MS[limit];
-  return span === undefined ? null : now + span;
+  return span === undefined ? Option.none() : Option.some(now + span);
 }
 
 export type AutopilotRisk = 'none' | ReviewRating;
@@ -306,8 +307,8 @@ export function resolveAttentionLimit(settings: Settings) {
   return Math.max(1, settings.attentionLimit ?? DEFAULT_ATTENTION_LIMIT);
 }
 
-export function resolveDelegationLimit(settings: Settings) {
-  return settings.delegationLimit ?? null;
+export function resolveDelegationLimit(settings: Settings): Option.Option<number> {
+  return Option.fromNullishOr(settings.delegationLimit);
 }
 
 export function resolveAccountSwitchAt(settings: Settings) {

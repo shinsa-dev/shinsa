@@ -47,7 +47,7 @@ export {
   quoteDuplicateOriginal,
   resolveTeammateMachineLabel,
 } from './duplicates.ts';
-export { DomainError } from './errors.ts';
+export { DomainError, type DomainRefusal } from './errors.ts';
 export {
   FeedbackId,
   GateId,
@@ -170,6 +170,7 @@ export {
 } from './rounds.ts';
 export type * from './schedules.ts';
 export {
+  isEventTrigger,
   isScheduleLive,
   isWatchHome,
   resolveSuggestedWatchName,

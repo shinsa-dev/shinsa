@@ -1,4 +1,5 @@
 import { isDecisionGate, listOpenGates, type ShinsaState, selectLeadGate } from '@shinsa/core';
+import { Option } from 'effect';
 import { type CodeMode, resolveClearPatch, resolveModePatch } from '@/lib/code/location.ts';
 import type { NowTarget } from '@/lib/overview/now.ts';
 import { listCodeModes, listTaskTabs, resolveTaskTab, type TaskTab } from '@/lib/tasks/tabs.ts';
@@ -27,7 +28,7 @@ export function useTaskView(state: ShinsaState, taskId: string) {
   const chatRunId = useSearchParam('run');
   const task = state.tasks[taskId] ?? null;
   const decision = task ? listOpenGates(state, task.id).find(isDecisionGate) : undefined;
-  const lead = (task && selectLeadGate(state, task)) ?? undefined;
+  const lead = (task && Option.getOrNull(selectLeadGate(state, task))) ?? undefined;
   const tabs = task ? listTaskTabs(task) : [];
   const codeModes = task ? listCodeModes(task) : [];
   return {

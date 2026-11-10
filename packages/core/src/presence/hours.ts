@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ActiveDay } from '../domain/settings.ts';
 import { DAY_MS, HOUR_MS, MINUTE_MS } from '../domain/time.ts';
 import type { TimingSpan } from '../domain/types.ts';
@@ -138,20 +139,22 @@ function resolveTimeZone(state: Pick<ShinsaState, 'timeZone'>) {
   return state.timeZone ?? UTC;
 }
 
-let learned: { key: readonly unknown[]; value: ActiveHours | null } | null = null;
+let learned: { key: readonly unknown[]; value: Option.Option<ActiveHours> } | null = null;
 
 function isSameKey(left: readonly unknown[], right: readonly unknown[]) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-export function resolveLearnedHours(state: ActiveHoursState, now: number): ActiveHours | null {
+export function resolveLearnedHours(state: ActiveHoursState, now: number): Option.Option<ActiveHours> {
   const timeZone = resolveTimeZone(state);
   const key = [state.away, state.presence, timeZone, Math.floor(now / HOUR_MS)];
   if (learned && isSameKey(learned.key, key)) return learned.value;
   const clock = createLocalClock(timeZone);
   const from = now - ACTIVE_HOURS_LIMITS.windowDays * DAY_MS;
   const marked = selectMarkedHours(state, clock, from, now);
-  const value = marked ? { source: marked.source, timeZone, ...resolveWeek(marked, clock, from, now) } : null;
+  const value: Option.Option<ActiveHours> = marked
+    ? Option.some({ source: marked.source, timeZone, ...resolveWeek(marked, clock, from, now) })
+    : Option.none();
   learned = { key, value };
   return value;
 }
@@ -164,24 +167,26 @@ export function resolveOverrideWeek(days: readonly ActiveDay[]) {
   });
 }
 
-export function resolveActiveHours(state: ActiveHoursState, now: number): ActiveHours | null {
+export function resolveActiveHours(state: ActiveHoursState, now: number): Option.Option<ActiveHours> {
   const override = state.settings.activeHours;
   if (!override) return resolveLearnedHours(state, now);
-  return {
+  return Option.some({
     source: 'override',
     timeZone: resolveTimeZone(state),
     week: resolveOverrideWeek(override),
     observedDays: 0,
-  };
+  });
 }
 
-export function isActiveAt(hours: ActiveHours | null, at: number) {
-  if (!hours) return true;
-  return hours.week[resolveLocalSlot(hours.timeZone, at).slot] === true;
+export function isActiveAt(hours: Option.Option<ActiveHours>, at: number) {
+  return Option.match(hours, {
+    onNone: () => true,
+    onSome: (known) => known.week[resolveLocalSlot(known.timeZone, at).slot] === true,
+  });
 }
 
-export function resolveNextActiveChange(hours: ActiveHours | null, at: number): number | null {
-  if (!hours || hours.week.every((active) => active === hours.week[0])) return null;
+function findNextChange(hours: ActiveHours, at: number) {
+  if (hours.week.every((active) => active === hours.week[0])) return Option.none<number>();
   const clock = createLocalClock(hours.timeZone);
   const now = hours.week[clock(at).slot] === true;
   const first = (Math.floor(at / STEP_MS) + 1) * STEP_MS;
@@ -189,5 +194,12 @@ export function resolveNextActiveChange(hours: ActiveHours | null, at: number): 
     { length: ((WEEK_SLOTS + DAY_HOURS) * HOUR_MS) / STEP_MS },
     (_, index) => first + index * STEP_MS
   );
-  return steps.find((step) => (hours.week[clock(step).slot] === true) !== now) ?? null;
+  return Option.fromUndefinedOr(steps.find((step) => (hours.week[clock(step).slot] === true) !== now));
+}
+
+export function resolveNextActiveChange(
+  hours: Option.Option<ActiveHours>,
+  at: number
+): Option.Option<number> {
+  return Option.flatMap(hours, (known) => findNextChange(known, at));
 }

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ActivityPerson, Task } from './types.ts';
 
 export function resolveFirstName(person: Pick<ActivityPerson, 'login' | 'name'>) {
@@ -7,14 +8,14 @@ export function resolveFirstName(person: Pick<ActivityPerson, 'login' | 'name'>)
 export function selectTaskPerson(
   task: Pick<Task, 'handoff' | 'activity'>,
   login: string
-): ActivityPerson | null {
+): Option.Option<ActivityPerson> {
   const guest = task.handoff?.guest;
-  if (guest?.login === login) return { login, name: guest.name, avatarUrl: guest.avatarUrl };
+  if (guest?.login === login) return Option.some({ login, name: guest.name, avatarUrl: guest.avatarUrl });
   const named = task.activity.filter((entry) => entry.person?.login === login);
-  return named.at(-1)?.person ?? null;
+  return Option.fromNullishOr(named.at(-1)?.person);
 }
 
 export function resolveGuestFirstName(task: Pick<Task, 'handoff' | 'activity'> | undefined, login: string) {
-  const person = task ? selectTaskPerson(task, login) : null;
-  return person ? resolveFirstName(person) : login;
+  if (!task) return login;
+  return Option.match(selectTaskPerson(task, login), { onNone: () => login, onSome: resolveFirstName });
 }

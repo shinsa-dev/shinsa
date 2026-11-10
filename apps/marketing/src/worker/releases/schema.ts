@@ -4,7 +4,7 @@ import { DateTime, Option, Schema } from 'effect';
 export type Channel = ReleaseChannel;
 
 export const Version = Schema.String.check(
-  Schema.makeFilter((value) => resolveVersionOrder(value, value) === 0)
+  Schema.makeFilter((value) => Option.contains(resolveVersionOrder(value, value), 0))
 );
 
 export const DownloadPointer = Schema.Struct({
