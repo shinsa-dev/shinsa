@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { Option, Result } from 'effect';
 import type { DownloadPointer } from '../apps/marketing/src/worker/releases/schema.ts';
 import {
   assertDownloadFile,
@@ -47,20 +48,27 @@ function pointerOf(version: string): DownloadPointer {
 }
 
 function releaseOf(tag: string): DownloadRelease {
-  return parseDownloadRelease(viewOf(tag));
+  return Result.getOrThrow(parseDownloadRelease(viewOf(tag)));
+}
+
+function refusalOf<A>(result: Result.Result<A, { readonly _tag: string; readonly message: string }>) {
+  return Result.match(result, {
+    onSuccess: () => null,
+    onFailure: (failure) => `${failure._tag}: ${failure.message}`,
+  });
 }
 
 const NONE: ChannelPointers = { stable: null, beta: null, canary: null };
 
 describe('parseDownloadRelease', () => {
   it('reads the release gh describes into the pointer its channel serves', () => {
-    expect(parseDownloadRelease(viewOf('v1.0.0-beta.1'))).toEqual({
-      tag: 'v1.0.0-beta.1',
-      channel: 'beta',
-      pointer: pointerOf('1.0.0-beta.1'),
-    });
+    expect(parseDownloadRelease(viewOf('v1.0.0-beta.1'))).toEqual(
+      Result.succeed({ tag: 'v1.0.0-beta.1', channel: 'beta', pointer: pointerOf('1.0.0-beta.1') })
+    );
     expect(releaseOf('v1.0.0').channel).toBe('stable');
-    expect(parseDownloadRelease(viewOf('v1.1.0', { isPrerelease: true })).channel).toBe('beta');
+    expect(Result.getOrThrow(parseDownloadRelease(viewOf('v1.1.0', { isPrerelease: true }))).channel).toBe(
+      'beta'
+    );
     expect(releaseOf('v1.1.1-canary.3').channel).toBe('canary');
   });
 
@@ -68,6 +76,10 @@ describe('parseDownloadRelease', () => {
     const cases: [unknown, string][] = [
       [null, 'gh did not describe a release.'],
       [{ tagName: 7 }, 'gh did not describe a release.'],
+      ['v1.0.0', 'gh did not describe a release.'],
+      [viewOf('v1.0.0', { isDraft: undefined }), 'v1.0.0 is a draft; publish it first.'],
+      [viewOf('v1.0.0', { assets: [null, { name: 'other.dmg' }] }), 'v1.0.0 has no Shinsa-mac-arm64.dmg.'],
+      [viewOf('v1.0.0', {}, { size: -1 }), 'has no size, digest or date.'],
       [viewOf('v1.0.0', { isDraft: true }), 'v1.0.0 is a draft; publish it first.'],
       [viewOf('v1.0.0', { assets: [] }), 'v1.0.0 has no Shinsa-mac-arm64.dmg.'],
       [viewOf('v1.0.0', { assets: null }), 'v1.0.0 has no Shinsa-mac-arm64.dmg.'],
@@ -77,14 +89,16 @@ describe('parseDownloadRelease', () => {
       [viewOf('v1.0.0', { publishedAt: null }), 'has no size, digest or date.'],
     ];
     for (const [view, message] of cases) {
-      expect(() => parseDownloadRelease(view)).toThrow(message);
+      const refusal = refusalOf(parseDownloadRelease(view));
+      expect(refusal).toStartWith('UploadFailed: ');
+      expect(refusal).toContain(message);
     }
   });
 });
 
 describe('assertDownloadFile', () => {
   it('takes the file GitHub describes', () => {
-    expect(() => assertDownloadFile(releaseOf('v1.0.0'), { size: 178563557, sha256: SHA })).not.toThrow();
+    expect(assertDownloadFile(releaseOf('v1.0.0'), { size: 178563557, sha256: SHA })).toEqual(Result.void);
   });
 
   it('refuses a file of another size or digest', () => {
@@ -93,26 +107,32 @@ describe('assertDownloadFile', () => {
       { size: 1, sha256: SHA },
       { size: 178563557, sha256: 'd'.repeat(64) },
     ]) {
-      expect(() => assertDownloadFile(release, file)).toThrow('is not the file GitHub describes');
+      expect(refusalOf(assertDownloadFile(release, file))).toBe(
+        'UploadFailed: The downloaded Shinsa-mac-arm64.dmg of v1.0.0 is not the file GitHub describes.'
+      );
     }
   });
 });
 
 describe('parseStoredPointer', () => {
   it('reads the pointer stored in the bucket', () => {
-    expect(parseStoredPointer(JSON.stringify(pointerOf('1.0.0')))).toEqual(pointerOf('1.0.0'));
+    expect(parseStoredPointer(JSON.stringify(pointerOf('1.0.0')))).toEqual(Option.some(pointerOf('1.0.0')));
   });
 
-  it('is null for a missing or unreadable pointer, so the release writes a new one', () => {
-    expect(parseStoredPointer(null)).toBeNull();
-    expect(parseStoredPointer('not json')).toBeNull();
-    expect(parseStoredPointer('{}')).toBeNull();
+  it('is none for an unreadable pointer, so the release writes a new one', () => {
+    expect(parseStoredPointer('not json')).toEqual(Option.none());
+    expect(parseStoredPointer('{}')).toEqual(Option.none());
+    expect(parseStoredPointer(JSON.stringify({ ...pointerOf('1.0.0'), version: 'nightly' }))).toEqual(
+      Option.none()
+    );
   });
 });
 
 describe('the bucket credentials', () => {
   it('takes the token id from the account token check', () => {
-    expect(parseTokenId({ success: true, result: { id: 'abc', status: 'active' } })).toBe('abc');
+    expect(parseTokenId({ success: true, result: { id: 'abc', status: 'active' } })).toEqual(
+      Result.succeed('abc')
+    );
   });
 
   it('refuses a token the account does not know, naming the account', () => {
@@ -121,8 +141,12 @@ describe('the bucket credentials', () => {
       { success: false, errors: [] },
       { success: true, result: {} },
       { success: true },
+      { success: 'true', result: { id: 'abc' } },
+      { success: true, result: { id: 7 } },
     ]) {
-      expect(() => parseTokenId(answer)).toThrow(`not an active token of the account ${R2_ACCOUNT_ID}`);
+      expect(refusalOf(parseTokenId(answer))).toBe(
+        `UploadFailed: CLOUDFLARE_API_TOKEN is not an active token of the account ${R2_ACCOUNT_ID}.`
+      );
     }
   });
 
@@ -235,24 +259,26 @@ function zipOf(version: string): UpdateZip {
 describe('parseUpdateFile', () => {
   it('reads the zip the release update file describes', () => {
     expect(parseUpdateFile(releaseOf('v1.0.0-canary.41'), updateFileOf('1.0.0-canary.41'))).toEqual(
-      zipOf('1.0.0-canary.41')
+      Result.succeed(zipOf('1.0.0-canary.41'))
     );
   });
 
   it('refuses a file of another version, without a zip, or unreadable, naming the file', () => {
     const release = releaseOf('v1.0.0-beta.5');
-    const refused = (text: string) => () => parseUpdateFile(release, text);
+    const refused = (text: string) => refusalOf(parseUpdateFile(release, text));
     const message =
-      'The beta-mac.yml of v1.0.0-beta.5 does not describe its Shinsa-mac-arm64.zip as 1.0.0-beta.5.';
-    expect(refused(updateFileOf('1.0.0-beta.4'))).toThrow(message);
-    expect(
-      refused(updateFileOf('1.0.0-beta.5').replace('url: Shinsa-mac-arm64.zip', 'url: other.zip'))
-    ).toThrow(message);
-    expect(refused(updateFileOf('1.0.0-beta.5').replace('size: 173065450', 'size: 0'))).toThrow(message);
-    expect(refused(updateFileOf('1.0.0-beta.5').replace(/releaseDate: .*/, ''))).toThrow(message);
-    expect(refused('version: 1.0.0-beta.5\nfiles: none\n')).toThrow(message);
-    expect(refused('files: [')).toThrow(message);
-    expect(refused('- 1')).toThrow(message);
+      'UploadFailed: The beta-mac.yml of v1.0.0-beta.5 does not describe its Shinsa-mac-arm64.zip as 1.0.0-beta.5.';
+    const valid = updateFileOf('1.0.0-beta.5');
+    expect(refused(valid)).toBeNull();
+    expect(refused(updateFileOf('1.0.0-beta.4'))).toBe(message);
+    expect(refused(valid.replace('url: Shinsa-mac-arm64.zip', 'url: other.zip'))).toBe(message);
+    expect(refused(valid.replace('size: 173065450', 'size: 0'))).toBe(message);
+    expect(refused(valid.replace('size: 173065450', 'size: 1.5'))).toBe(message);
+    expect(refused(valid.replace(`    sha512: ${ZIP_SHA512}\n`, ''))).toBe(message);
+    expect(refused(valid.replace(/releaseDate: .*/, ''))).toBe(message);
+    expect(refused('version: 1.0.0-beta.5\nfiles: none\n')).toBe(message);
+    expect(refused('files: [')).toBe(message);
+    expect(refused('- 1')).toBe(message);
   });
 });
 
@@ -260,16 +286,18 @@ describe('assertUpdateZip', () => {
   const release = releaseOf('v1.0.0');
 
   it('takes the zip the update file describes', () => {
-    expect(() =>
-      assertUpdateZip(release, zipOf('1.0.0'), { size: 173065450, sha512: ZIP_SHA512 })
-    ).not.toThrow();
+    expect(assertUpdateZip(release, zipOf('1.0.0'), { size: 173065450, sha512: ZIP_SHA512 })).toEqual(
+      Result.void
+    );
   });
 
   it('refuses a zip of another size or digest', () => {
     const message =
-      'The downloaded Shinsa-mac-arm64.zip of v1.0.0 is not the file its latest-mac.yml describes.';
-    expect(() => assertUpdateZip(release, zipOf('1.0.0'), { size: 1, sha512: ZIP_SHA512 })).toThrow(message);
-    expect(() => assertUpdateZip(release, zipOf('1.0.0'), { size: 173065450, sha512: 'other' })).toThrow(
+      'UploadFailed: The downloaded Shinsa-mac-arm64.zip of v1.0.0 is not the file its latest-mac.yml describes.';
+    expect(refusalOf(assertUpdateZip(release, zipOf('1.0.0'), { size: 1, sha512: ZIP_SHA512 }))).toBe(
+      message
+    );
+    expect(refusalOf(assertUpdateZip(release, zipOf('1.0.0'), { size: 173065450, sha512: 'other' }))).toBe(
       message
     );
   });

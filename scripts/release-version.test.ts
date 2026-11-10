@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { Result } from 'effect';
 import {
   BETA_DOWNLOAD_URL,
   CANARY_DOWNLOAD_URL,
@@ -25,21 +26,36 @@ const TAGS = [
 ];
 
 describe('parseReleaseOptions', () => {
+  const refusal = (channel: string | undefined, bump: string | undefined) =>
+    Result.match(parseReleaseOptions(channel, bump), {
+      onSuccess: () => null,
+      onFailure: (failure) => `${failure._tag}: ${failure.message}`,
+    });
+
   it('takes the workflow inputs as they are', () => {
-    expect(parseReleaseOptions('beta', 'minor')).toEqual({ channel: 'beta', bump: 'minor' });
-    expect(parseReleaseOptions('stable', 'major')).toEqual({ channel: 'stable', bump: 'major' });
-    expect(parseReleaseOptions('canary', 'patch')).toEqual({ channel: 'canary', bump: 'patch' });
+    expect(parseReleaseOptions('beta', 'minor')).toEqual(Result.succeed({ channel: 'beta', bump: 'minor' }));
+    expect(parseReleaseOptions('stable', 'major')).toEqual(
+      Result.succeed({ channel: 'stable', bump: 'major' })
+    );
+    expect(parseReleaseOptions('canary', 'patch')).toEqual(
+      Result.succeed({ channel: 'canary', bump: 'patch' })
+    );
   });
 
-  it('refuses a channel or a bump it does not know', () => {
-    expect(() => parseReleaseOptions('nightly', 'patch')).toThrow(
-      'The channel must be stable, beta or canary, not "nightly".'
+  it('refuses a channel or a bump it does not know, as a tagged error', () => {
+    expect(refusal('nightly', 'patch')).toBe(
+      'ReleaseRefused: The channel must be stable, beta or canary, not "nightly".'
     );
-    expect(() => parseReleaseOptions(undefined, 'patch')).toThrow('not "".');
-    expect(() => parseReleaseOptions('stable', 'huge')).toThrow(
-      'The bump must be patch, minor or major, not "huge".'
+    expect(refusal(undefined, 'patch')).toBe(
+      'ReleaseRefused: The channel must be stable, beta or canary, not "".'
     );
-    expect(() => parseReleaseOptions('stable', undefined)).toThrow('not "".');
+    expect(refusal('stable', 'huge')).toBe(
+      'ReleaseRefused: The bump must be patch, minor or major, not "huge".'
+    );
+    expect(refusal('stable', undefined)).toBe(
+      'ReleaseRefused: The bump must be patch, minor or major, not "".'
+    );
+    expect(refusal('nightly', 'huge')).toContain('The channel must be');
   });
 });
 

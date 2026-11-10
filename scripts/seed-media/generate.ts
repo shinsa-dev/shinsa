@@ -169,10 +169,9 @@ const program = Effect.gen(function* () {
   ) {
     const work = yield* createWorkDirectory('shinsa-seed-media-');
     const list = join(work, 'frames.txt');
-    const frameList = yield* Effect.try({
-      try: () => serializeFrameList(frames, end),
-      catch: () => new ShotEncodeFailed({ message: `The recording of ${shot.file} has no frames.` }),
-    });
+    const frameList = yield* Effect.fromOption(serializeFrameList(frames, end)).pipe(
+      Effect.mapError(() => new ShotEncodeFailed({ message: `The recording of ${shot.file} has no frames.` }))
+    );
     yield* fs
       .writeFileString(list, frameList)
       .pipe(

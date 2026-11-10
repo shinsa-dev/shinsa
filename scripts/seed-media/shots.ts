@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { Option } from 'effect';
 
 export type ShotTheme = 'light' | 'dark';
 
@@ -214,11 +215,11 @@ export function listShotFiles(output: ShotOutput) {
 }
 
 export function serializeFrameList(frames: readonly RecordedFrame[], end: number) {
-  const last = frames.at(-1);
-  if (!last) throw new Error('The recording has no frames.');
   const lines = frames.flatMap((frame, index) => {
     const next = frames[index + 1]?.at ?? Math.max(end, frame.at);
     return [`file '${frame.path}'`, `duration ${(next - frame.at).toFixed(3)}`];
   });
-  return [...lines, `file '${last.path}'`, ''].join('\n');
+  return Option.map(Option.fromNullishOr(frames.at(-1)), (last) =>
+    [...lines, `file '${last.path}'`, ''].join('\n')
+  );
 }
