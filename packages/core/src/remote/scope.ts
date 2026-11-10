@@ -84,7 +84,7 @@ const SHARE_COMMANDS: ReadonlySet<string> = new Set<ScopedCommand['type']>([
   'preview.unshare',
 ]);
 
-const KEYBOARD_GATES: ReadonlySet<GateType> = new Set<GateType>(['secret', 'sign_in']);
+const KEYBOARD_GATES: ReadonlySet<GateType> = new Set<GateType>(['secret', 'sign_in', 'browser_sign_in']);
 
 export const SCOPE_REFUSAL_CODE = 'handoff_scope';
 

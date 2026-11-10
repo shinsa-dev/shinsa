@@ -445,7 +445,9 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
   const gatedFeed = Stream.unwrap(Effect.as(Deferred.await(released), promptFeed));
 
   const start = Effect.gen(function* () {
-    const process = yield* resolveClaudeLaunch(runtime.resolveExecutable).pipe(Effect.mapError(startFailed));
+    const process = yield* resolveClaudeLaunch(runtime.resolveExecutable, input.browserEndpoint ?? null).pipe(
+      Effect.mapError(startFailed)
+    );
     yield* Ref.update(state, (current) => ({
       ...current,
       ledger: { ...current.ledger, echoes: process.version !== null },

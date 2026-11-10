@@ -32,7 +32,7 @@ for await (const chunk of Bun.stdin.stream()) {
     appendFileSync(${JSON.stringify(received)}, line + '\\n');
     const message = JSON.parse(line);
     if (message.method === 'echo') out(JSON.stringify({ id: message.id, result: message.params }));
-    if (message.method === 'env') out(JSON.stringify({ id: message.id, result: { headless: process.env.PLAYWRIGHT_MCP_HEADLESS } }));
+    if (message.method === 'env') out(JSON.stringify({ id: message.id, result: { headless: process.env.PLAYWRIGHT_MCP_HEADLESS, browser: process.env.PLAYWRIGHT_MCP_CDP_ENDPOINT ?? null } }));
     if (message.method === 'refuse') out(JSON.stringify({ id: message.id, error: {} }));
     if (message.method === 'quit') {
       process.stderr.write('first\\n\\nbye from the server');
@@ -74,11 +74,14 @@ describe('the app server client', () => {
       Effect.scoped(
         Effect.gen(function* () {
           const client = yield* makeCodexClient(
-            { path: server.path, cwd: server.cwd },
+            { path: server.path, cwd: server.cwd, browserEndpoint: 'ws://127.0.0.1:7446/browser/cdp/key' },
             { request: () => null }
           );
           expect(yield* client.request('echo', { value: 1 })).toEqual({ value: 1 });
-          expect(yield* client.request('env', {})).toEqual({ headless: 'true' });
+          expect(yield* client.request('env', {})).toEqual({
+            headless: 'true',
+            browser: 'ws://127.0.0.1:7446/browser/cdp/key',
+          });
           const refused = yield* client
             .request('refuse', {})
             .pipe(Effect.match({ onSuccess: () => null, onFailure: (error) => error }));

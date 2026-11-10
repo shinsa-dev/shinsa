@@ -86,6 +86,7 @@ export function SettingRow({ title, children }: { title: React.ReactNode; childr
 export function PathRow({
   icon,
   iconLabel,
+  media,
   title,
   path,
   action,
@@ -93,6 +94,7 @@ export function PathRow({
 }: {
   icon: IconName;
   iconLabel: string;
+  media?: React.ReactNode;
   title: string;
   path?: string;
   action?: React.ReactNode;
@@ -102,7 +104,7 @@ export function PathRow({
     <div className={cn(SETTING_ROW, !dense && SETTING_ROW_WRAPS, 'gap-2')}>
       <Hint label={iconLabel}>
         <span className='grid size-3.5 shrink-0 place-items-center'>
-          <Icon size='sm' name={icon} />
+          {media ?? <Icon size='sm' name={icon} />}
         </span>
       </Hint>
       <span className={cn(SETTING_LABEL, 'flex items-baseline gap-1.5', dense && 'max-sm:flex-1')}>

@@ -33,6 +33,7 @@ export const NativeWindowEvent = Schema.Union([
   Schema.TaggedStruct('FullScreen', { on: Schema.Boolean }),
   Schema.TaggedStruct('LoadFailed', { code: Schema.Int, mainFrame: Schema.Boolean }),
   Schema.TaggedStruct('RendererGone', {}),
+  Schema.TaggedStruct('BoundsChanged', {}),
 ]);
 
 export type NativeWindowEvent = typeof NativeWindowEvent.Type;

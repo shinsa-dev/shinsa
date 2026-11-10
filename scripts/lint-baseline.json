@@ -30,6 +30,7 @@
     "apps/engine/src/agents/quick/json.ts": 1,
     "apps/engine/src/agents/transcripts/file.ts": 1,
     "apps/engine/src/agents/transcripts/lines.ts": 1,
+    "apps/engine/src/browser/cookies/decrypt.ts": 1,
     "apps/engine/src/extensions/input.ts": 1,
     "apps/engine/src/github/ci/workflows.ts": 1,
     "apps/engine/src/http/guard.ts": 1,

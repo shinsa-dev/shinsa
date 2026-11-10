@@ -1,5 +1,5 @@
 import { type AgentModel, KNOWN_CODEX_MODELS } from '@shinsa/core';
-import { Effect, Option, SynchronizedRef } from 'effect';
+import { Cache, Duration, Effect, Exit, Option, Ref } from 'effect';
 import type { CodexParams } from '../client/schema.ts';
 import { makeCodexClient } from '../client/service.ts';
 import { CodexCallFailed } from '../complete/schema.ts';
@@ -9,8 +9,6 @@ import { type CodexModelCatalogHandle, type CodexModelsDefinition, MAX_PAGES, NO
 export const makeCodexModelCatalog = Effect.fn('CodexModelCatalog.make')(function* (
   definition: CodexModelsDefinition
 ) {
-  const catalog = yield* SynchronizedRef.make(Option.none<AgentModel[]>());
-
   const requestRows = Effect.fn('CodexModelCatalog.requestRows')(function* () {
     const executable = yield* definition.executable;
     if (!executable.ok) return yield* new CodexCallFailed({ message: executable.message });
@@ -46,20 +44,25 @@ export const makeCodexModelCatalog = Effect.fn('CodexModelCatalog.make')(functio
     return models;
   });
 
-  const list = SynchronizedRef.modifyEffect(catalog, (cached) =>
-    Option.match(cached, {
-      onSome: (models) => Effect.succeed([models, cached] as const),
-      onNone: () =>
-        requestModels.pipe(
-          Effect.map((models) => [models, Option.some(models)] as const),
-          Effect.catch((failure) =>
-            Effect.logWarning('[Models] Falling back to the built-in Codex list').pipe(
-              Effect.annotateLogs({ error: failure.message }),
-              Effect.as([KNOWN_CODEX_MODELS, cached] as const)
-            )
-          )
-        ),
-    })
+  const catalog = yield* Cache.makeWith((_version: string) => requestModels, {
+    capacity: 1,
+    timeToLive: (exit) => (Exit.isSuccess(exit) ? definition.timeToLive : Duration.zero),
+  });
+
+  const lastGood = yield* Ref.make(Option.none<AgentModel[]>());
+
+  const list = definition.executable.pipe(
+    Effect.flatMap((executable) =>
+      Cache.get(catalog, executable.ok ? `${executable.path}@${executable.version ?? ''}` : '')
+    ),
+    Effect.tap((models) => Ref.set(lastGood, Option.some(models))),
+    Effect.catch((failure) =>
+      Effect.logWarning('[Models] Falling back to the built-in Codex list').pipe(
+        Effect.annotateLogs({ error: failure.message }),
+        Effect.andThen(Ref.get(lastGood)),
+        Effect.map(Option.getOrElse(() => KNOWN_CODEX_MODELS))
+      )
+    )
   );
 
   const handle: CodexModelCatalogHandle = { list };

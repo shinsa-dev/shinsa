@@ -10,6 +10,7 @@ export class ModelsUnavailable extends Schema.TaggedError<
 export interface ModelCatalogDefinition {
   readonly runtime: ClaudeRuntime;
   readonly timeout: Duration.Duration;
+  readonly timeToLive: Duration.Duration;
 }
 
 export interface ModelCatalogHandle {

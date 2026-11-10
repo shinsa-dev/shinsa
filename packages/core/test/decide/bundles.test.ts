@@ -2,9 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   isBundleFollower,
+  isBundleMember,
   listBundleBlockers,
   listBundleFollowers,
+  listOpenBlockers,
   listOpenGates,
+  listPendingDependencies,
   listStackChildren,
   listStackParents,
   listWaitsOn,
@@ -153,6 +156,58 @@ describe('stacking a task on another', () => {
     expect(harness.task(child).stage).toBe('waiting_on_tasks');
     stackOn(harness, child, [parent]);
     expect(harness.events.filter((event) => event.type === 'task.stack_changed')).toHaveLength(1);
+  });
+
+  test('stacking a task that waits on a task further down the bundle drops that wait', () => {
+    const harness = createHarness();
+    const lead = createTask(harness, { request: 'Auto-ship' });
+    const middle = createTask(harness, { request: 'Slack', stacksOn: [lead] });
+    const top = createTask(harness, { request: 'Active hours', waitsOn: [lead] });
+    stackOn(harness, top, [middle]);
+    expect(harness.task(top).waitsOn).toEqual([]);
+    expect(harness.task(top).stageReason).not.toContain('Auto-ship');
+    reachReady(harness, lead);
+    readyWorktree(harness, middle);
+    reachReady(harness, middle, 43);
+    expect(harness.task(top).stage).toBe('triage');
+    readyWorktree(harness, top);
+    expect(harness.task(top).stage).toBe('planning');
+  });
+
+  test('joining two bundles drops every wait between their tasks', () => {
+    const harness = createHarness();
+    const base = createTask(harness, { request: 'Base' });
+    const other = createTask(harness, { request: 'Other' });
+    const sibling = createTask(harness, { request: 'Sibling', stacksOn: [base], waitsOn: [other] });
+    const outside = createTask(harness, { request: 'Outside' });
+    harness.send({ type: 'task.wait_on', taskId: sibling, waitsOn: [other, outside] });
+    stackOn(harness, other, [base]);
+    expect(harness.task(other).stacksOn).toEqual([base]);
+    expect(harness.task(sibling).waitsOn).toEqual([outside]);
+  });
+
+  test('a task never waits on a task in its own bundle, from wait_on or creation', () => {
+    const harness = createHarness();
+    const lead = createTask(harness, { request: 'Lead' });
+    const middle = createTask(harness, { request: 'Middle', stacksOn: [lead] });
+    const sibling = createTask(harness, { request: 'Sibling', stacksOn: [lead] });
+    const top = createTask(harness, { request: 'Top', stacksOn: [middle], waitsOn: [lead, sibling] });
+    expect(harness.task(top).waitsOn).toEqual([]);
+    harness.send({ type: 'task.wait_on', taskId: top, waitsOn: [lead, sibling] });
+    harness.send({ type: 'task.wait_on', taskId: lead, waitsOn: [top] });
+    expect(harness.task(top).waitsOn).toEqual([]);
+    expect(harness.task(lead).waitsOn).toEqual([]);
+  });
+
+  test('a wait on a task of its own bundle already in the log holds nothing', () => {
+    const harness = createHarness();
+    const lead = createTask(harness, { request: 'Lead' });
+    const top = createTask(harness, { request: 'Top', stacksOn: [lead] });
+    const outside = createTask(harness, { request: 'Outside' });
+    const stale = { ...harness.task(top), waitsOn: [lead, outside] };
+    const state = { ...harness.state, tasks: { ...harness.state.tasks, [top]: stale } };
+    expect(listPendingDependencies(state, stale).map((task) => task.id)).toEqual([outside, lead]);
+    expect(listOpenBlockers(state, stale).map((task) => task.id)).toEqual([outside]);
   });
 
   test('stacking a planning task sends it back to wait, and leaving the bundle starts it again', () => {
@@ -549,6 +604,44 @@ describe('a bundle on its way to the merge', () => {
     expect(harness.openGate(parent).type).toBe('merge');
   });
 
+  test('a question stacked on a bundle is no member, so it keeps its wait on another member', () => {
+    const harness = createHarness();
+    const lead = createTask(harness, { request: 'Lead' });
+    const sibling = createTask(harness, { request: 'Sibling', stacksOn: [lead] });
+    const before = new Set(Object.keys(harness.state.tasks));
+    harness.send({
+      type: 'task.create',
+      request: 'Why is it slow?',
+      repoId: null,
+      mode: 'ask',
+      waitsOn: [sibling],
+    });
+    const question = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+    stackOn(harness, question, [lead]);
+    expect(harness.task(question).waitsOn).toEqual([sibling]);
+    expect(isBundleMember(harness.state, harness.task(question), sibling)).toBe(false);
+    expect(listPendingDependencies(harness.state, harness.task(question)).map((task) => task.id)).toContain(
+      sibling
+    );
+  });
+
+  test('a question stacked on the task it waits on moves that wait into the stack', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const before = new Set(Object.keys(harness.state.tasks));
+    harness.send({
+      type: 'task.create',
+      request: 'Why is it slow?',
+      repoId: null,
+      mode: 'ask',
+      waitsOn: [parent],
+    });
+    const question = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+    stackOn(harness, question, [parent]);
+    expect(harness.task(question).waitsOn).toEqual([]);
+    expect(harness.task(question).stacksOn).toEqual([parent]);
+  });
+
   test('a loose task is in no bundle', () => {
     const harness = createHarness();
     const loose = createTask(harness, { request: 'Loose' });
@@ -916,6 +1009,16 @@ describe('triage stacking a new task', () => {
     expect(task.activity.map((entry) => entry.text)).toContain(
       'Stacked on “Rewrite the store in Effect” as a bundle'
     );
+  });
+
+  test('never infers a wait on a task further down the bundle it stacks on', () => {
+    const harness = createHarness();
+    const lead = createTask(harness, { request: 'Lead' });
+    const middle = createTask(harness, { request: 'Middle', stacksOn: [lead] });
+    const outside = createTask(harness, { request: 'Outside' });
+    const top = triageNew(harness, { request: 'Top', stacksOn: [middle], waitsOn: [lead, outside] });
+    expect(harness.task(top).stacksOn).toEqual([middle]);
+    expect(harness.task(top).waitsOn).toEqual([outside]);
   });
 
   test('an empty stack records no stack decision and starts at once', () => {

@@ -40,7 +40,7 @@ export const REPLY_SPEC = {
 export const ACTIONS_SPEC = {
   type: 'array',
   description:
-    'Only when this hand-over leaves the human a plain choice the usual buttons do not cover, such as doing the renames or leaving them: up to 3 replies they can send with one click, each shown as a button beside the main one. A click sends its message to you as their feedback. Leave it out when approving or closing is the only sensible next step.',
+    'Rarely: only when this hand-over leaves the human a real fork the gate’s own buttons do not cover, such as doing the renames or leaving them. At most 2 replies, listed in one Replies menu beside the main button; choosing one sends its message to you as their feedback. Leave it out when approving, closing or typing a message is enough.',
   maxItems: L.actions,
   items: {
     type: 'object',
