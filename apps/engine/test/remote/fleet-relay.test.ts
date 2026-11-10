@@ -529,6 +529,7 @@ describe('a page socket to a teammate’s machine', () => {
     await Effect.runPromise(socket.receive('{"t":"hello"}'));
     await Effect.runPromise(socket.receive(new TextEncoder().encode('{"t":"command"}')));
     await until('both messages reach the machine', () => link.sent.length === 2);
+    await until('the machine’s message reaches the page', () => peer.sent.length === 1);
     expect(peer.sent).toEqual(['{"t":"state"}']);
     expect(link.sent).toEqual(['{"t":"hello"}', '{"t":"command"}']);
     await Effect.runPromise(socket.close);
