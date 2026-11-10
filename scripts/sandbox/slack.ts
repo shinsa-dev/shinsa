@@ -1,4 +1,4 @@
-import { Clock, Effect, Schema } from 'effect';
+import { Clock, Effect, Option, Schema } from 'effect';
 import {
   resolveCurrentRound,
   resolveSlackEscalationFollowUp,
@@ -177,7 +177,7 @@ export const seedSlackSamples = Effect.fn('Sandbox.seedSlackSamples')(function* 
   };
   const root = record('C07ONCALL', null, serializeSlackEscalationCleared(merged, url), now - 2 * HOUR);
   const followUp = resolveSlackEscalationFollowUp({ ...state, tasks: { [base.id]: merged } }, base.id, url);
-  if (followUp) record('C07ONCALL', root.ts, followUp, now - 90 * MINUTE);
+  if (Option.isSome(followUp)) record('C07ONCALL', root.ts, followUp.value, now - 90 * MINUTE);
 });
 
 function escapeHtml(text: string) {

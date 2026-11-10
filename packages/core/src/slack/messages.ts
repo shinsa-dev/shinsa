@@ -769,24 +769,28 @@ export function resolveSlackEscalationMessage(
   taskId: string,
   escalatedAt: number,
   taskUrl: string
-): SlackMessage | null {
+): Option.Option<SlackMessage> {
   const task = state.tasks[taskId];
-  if (!task) return null;
+  if (!task) return Option.none();
   const escalation = task.escalation;
-  if (escalation?.at === escalatedAt) return serializeSlackEscalation(task, escalation, taskUrl);
-  return serializeSlackEscalationCleared(task, taskUrl);
+  if (escalation?.at === escalatedAt) return Option.some(serializeSlackEscalation(task, escalation, taskUrl));
+  return Option.some(serializeSlackEscalationCleared(task, taskUrl));
 }
 
-export function resolveSlackEscalationFollowUp(state: ShinsaState, taskId: string, taskUrl: string) {
+export function resolveSlackEscalationFollowUp(
+  state: ShinsaState,
+  taskId: string,
+  taskUrl: string
+): Option.Option<SlackMessage> {
   const task = state.tasks[taskId];
-  if (task?.pullRequest?.state !== 'merged') return null;
+  if (task?.pullRequest?.state !== 'merged') return Option.none();
   const round = resolveCurrentRound(task).number;
   const merged = serializeSlackMerged(task, round, taskUrl);
   const watched = (task.watchdogs ?? []).some((watchdog) => watchdog.round === round);
   const lead = watched
     ? '*Merged*\nShinsa keeps watching it after the merge. Keep an eye on it too.'
     : '*Merged*\nNothing watches it after the merge, so keep an eye on it.';
-  return { ...merged, blocks: [createSlackSection(lead), ...merged.blocks.slice(1)] };
+  return Option.some({ ...merged, blocks: [createSlackSection(lead), ...merged.blocks.slice(1)] });
 }
 
 export function serializeSlackDeclined() {

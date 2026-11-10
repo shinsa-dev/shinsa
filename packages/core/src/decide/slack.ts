@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError } from '../domain/errors.ts';
 import { isTaskClosed, resolveCurrentRound } from '../domain/rounds.ts';
@@ -92,7 +93,9 @@ export function recordSlackMerge(decider: Decider, command: CommandOf<'slack.rec
 
 export function recordSlackEscalation(decider: Decider, command: CommandOf<'slack.record_escalation'>) {
   const task = decider.state.tasks[command.taskId];
-  if (!task || selectSlackEscalationPost(task.slackEscalations, command.escalatedAt, command.contact)) return;
+  if (!task) return;
+  const sent = selectSlackEscalationPost(task.slackEscalations, command.escalatedAt, command.contact);
+  if (Option.isSome(sent)) return;
   decider.emit({
     type: 'slack.escalation_sent',
     taskId: command.taskId,
@@ -110,7 +113,7 @@ export function recordSlackEscalationFollowUp(
 ) {
   const task = decider.state.tasks[command.taskId];
   const post = selectSlackEscalationPost(task?.slackEscalations, command.escalatedAt, command.contact);
-  if (!post || post.followUpTs !== null) return;
+  if (Option.isNone(post) || post.value.followUpTs !== null) return;
   decider.emit({
     type: 'slack.escalation_followed_up',
     taskId: command.taskId,

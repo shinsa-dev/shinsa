@@ -525,8 +525,10 @@ export class Slack extends Context.Service<
         ) {
           const state = yield* engine.state;
           const task = state.tasks[effect.taskId];
-          const sent = selectSlackEscalationPost(task?.slackEscalations, effect.escalatedAt, effect.contact);
-          const message = resolveSlackEscalationFollowUp(state, effect.taskId, url);
+          const sent = Option.getOrNull(
+            selectSlackEscalationPost(task?.slackEscalations, effect.escalatedAt, effect.contact)
+          );
+          const message = Option.getOrNull(resolveSlackEscalationFollowUp(state, effect.taskId, url));
           if (!task || !message || !sent?.channelId || !sent.ts) return;
           const { contact } = effect;
           const target = { teamId: contact.teamId, kind: contact.kind, id: contact.id, message };
@@ -623,11 +625,15 @@ export class Slack extends Context.Service<
           key: string
         ) {
           const { state, url, machineToken } = yield* resolveEscalationLink(effect.taskId);
-          const message = resolveSlackEscalationMessage(state, effect.taskId, effect.escalatedAt, url);
+          const message = Option.getOrNull(
+            resolveSlackEscalationMessage(state, effect.taskId, effect.escalatedAt, url)
+          );
           const task = state.tasks[effect.taskId];
           if (!task || !message) return;
           const { contact } = effect;
-          const sent = selectSlackEscalationPost(task.slackEscalations, effect.escalatedAt, contact);
+          const sent = Option.getOrNull(
+            selectSlackEscalationPost(task.slackEscalations, effect.escalatedAt, contact)
+          );
           const target = { teamId: contact.teamId, kind: contact.kind, id: contact.id, message, reply: null };
           if (task.escalation?.at !== effect.escalatedAt) {
             if (machineToken && sent) yield* replaceEscalation(machineToken, target, sent, task.id);

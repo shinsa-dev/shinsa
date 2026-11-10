@@ -994,7 +994,7 @@ describe('the escalation message', () => {
   test('asks for a review, with why, what Autopilot does next, the ratings and the pull request', () => {
     const harness = createHarness();
     const { taskId, state } = escalatedState(harness, { escalation: ESCALATION });
-    const message = resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never();
+    const message = Option.getOrNull(resolveSlackEscalationMessage(state, taskId, AT, URL)) ?? never();
     const merges = `<!date^${AT / 1000 + 3600}^{date_short_pretty} at {time}|2026-11-04T15:00:00.000Z>`;
     expect(message.text).toBe('SUP-1 · Fix it is urgent and needs a review.');
     expect(readText(message)).toBe(
@@ -1021,7 +1021,9 @@ describe('the escalation message', () => {
     const harness = createHarness();
     const escalation = { ...ESCALATION, handoff: { ...ESCALATION.handoff, ...handoff } };
     const { taskId, state } = escalatedState(harness, { escalation });
-    const shown = readText(resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never());
+    const shown = readText(
+      Option.getOrNull(resolveSlackEscalationMessage(state, taskId, AT, URL)) ?? never()
+    );
     expect(shown).toContain(text);
     expect(shown).toContain(`*Review*\n${review}`);
   });
@@ -1042,30 +1044,32 @@ describe('the escalation message', () => {
   ])('says it no longer needs anyone once %s', (_case, fields: Partial<Task>, detail) => {
     const harness = createHarness();
     const { taskId, state } = escalatedState(harness, { escalation: null, ...fields });
-    const message = resolveSlackEscalationMessage(state, taskId, AT, URL) ?? never();
+    const message = Option.getOrNull(resolveSlackEscalationMessage(state, taskId, AT, URL)) ?? never();
     expect(message.text).toBe('SUP-1 · Fix it no longer needs anyone.');
     expect(readText(message)).toStartWith(`*No longer needs anyone*\n${detail}\n`);
   });
 
   test('has nothing to say for a task it does not know', () => {
-    expect(resolveSlackEscalationMessage(createHarness().state, 'gone', AT, URL)).toBeNull();
+    expect(Option.isNone(resolveSlackEscalationMessage(createHarness().state, 'gone', AT, URL))).toBe(true);
   });
 
   test('replies once merged that Shinsa keeps watching, with each watchdog, or asks to keep an eye on it', () => {
     const harness = createHarness();
     const merged = pullRequest({ state: 'merged' });
     const { taskId, state } = escalatedState(harness, { pullRequest: merged });
-    const bare = resolveSlackEscalationFollowUp(state, taskId, URL) ?? never();
+    const bare = Option.getOrNull(resolveSlackEscalationFollowUp(state, taskId, URL)) ?? never();
     expect(bare.text).toBe('SUP-1 · Fix it is merged.');
     expect(readText(bare)).toStartWith('*Merged*\nNothing watches it after the merge, so keep an eye on it.');
     const watchdog = watchdogOf({ round: 1 });
     const watched = escalatedState(harness, { pullRequest: merged, watchdogs: [watchdog] });
-    const shown = readText(resolveSlackEscalationFollowUp(watched.state, watched.taskId, URL) ?? never());
+    const shown = readText(
+      Option.getOrNull(resolveSlackEscalationFollowUp(watched.state, watched.taskId, URL)) ?? never()
+    );
     expect(shown).toStartWith('*Merged*\nShinsa keeps watching it after the merge. Keep an eye on it too.');
     expect(shown).toContain(`*${watchdog.title}*`);
     const open = escalatedState(harness, {});
-    expect(resolveSlackEscalationFollowUp(open.state, open.taskId, URL)).toBeNull();
-    expect(resolveSlackEscalationFollowUp(createHarness().state, 'gone', URL)).toBeNull();
+    expect(Option.isNone(resolveSlackEscalationFollowUp(open.state, open.taskId, URL))).toBe(true);
+    expect(Option.isNone(resolveSlackEscalationFollowUp(createHarness().state, 'gone', URL))).toBe(true);
   });
 
   test('sends a test that looks like a real escalation and says nothing needs anyone', () => {
