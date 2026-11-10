@@ -263,6 +263,8 @@ describe('what counts as the tunnel', () => {
     expect(route('/__preview/AAAAAAAAAAAAAA/api', 'POST')).toBe('preview');
     expect(route('/api/slack/events', 'POST')).toBe('slack');
     expect(route('/api/slack/interactions', 'POST')).toBe('slack');
+    expect(route('/api/slack/messages', 'POST')).toBe('slack');
+    expect(route('/api/slack/messages')).toBeNull();
     expect(route('/api/slack/events')).toBeNull();
     expect(route('/api/tasks')).toBeNull();
     expect(route('/ws')).toBeNull();
@@ -281,6 +283,7 @@ describe('a plain request over the tunnel', () => {
     expect(await admit('/health')).toBeNull();
     expect(await admit('/api/hooks/s/t', 'POST')).toBeNull();
     expect(await admit('/api/slack/events', 'POST')).toBeNull();
+    expect(await admit('/api/slack/messages', 'POST')).toBeNull();
     expect(await admit('/remote')).toBe('RouteNotFound');
     expect(await admit('/__preview/AAAAAAAAAAAAAA/')).toBe('RouteNotFound');
     expect(await admit('/api/tasks')).toBe('RouteNotFound');
@@ -299,6 +302,7 @@ describe('a plain request over the tunnel', () => {
   test('a tunnel-only route does not exist on this machine', async () => {
     expect(await admit('/health', 'GET', LOCAL)).toBe('RouteNotFound');
     expect(await admit('/api/slack/events', 'POST', LOCAL)).toBe('RouteNotFound');
+    expect(await admit('/api/slack/messages', 'POST', LOCAL)).toBe('RouteNotFound');
     expect(await admit('/api/tasks', 'GET', LOCAL)).toBeNull();
     expect(await admit('/api/hooks/s/t', 'POST', LOCAL)).toBeNull();
   });

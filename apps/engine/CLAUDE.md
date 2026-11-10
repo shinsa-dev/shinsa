@@ -350,10 +350,13 @@ src/
 │                        wording of a suggested watch (suggest.ts: createWatchWriter, an Effect over a QuickJson, its
 │                        answer decoded by WatchAnswer in answer.ts), the Schedules service (service.ts: start, stop,
 │                        the webhook, the hook URL, the agent tools and the surface's hook secrets, the hooks kept in
-│                        step with the schedules on each change; layers.ts SchedulesLayer(urls), built in
-│                        serve/layers.ts on EngineCore and SecretStore; its routes are http/routes/secrets and
+│                        step with the schedules on each change; layers.ts SchedulesLayer(options), built in
+│                        serve/layers.ts on EngineCore and SecretStore, its options (ScheduleToolsInput) the base
+│                        and hook URLs and `slackChannels`, the channels a `slack_channel` is resolved against,
+│                        which is Slack's `channels` there; its routes are http/routes/secrets and
 │                        webhooks), schema.ts (the shapes, ScheduleTimeZone, WebhookOutcome, the limits and
-│                        RATE_WINDOW)
+│                        RATE_WINDOW), prompt.ts (resolvePromptProblem, shared
+│                        by the webhook and a Slack channel message)
 ├── remote/              Remote access (docs/engine.md → Remote access), every module a Context.Service in its folder's
 │                        service.ts, composed by layers.ts (RemoteClientLayer: RemoteClient and Pairings on
 │                        FetchHttpClient; RemoteEdgeLayer: RemoteUrlOpener and TunnelHealth; RemoteMachineLayer(input):
@@ -441,7 +444,10 @@ src/
 │                        slack.post, a new message only for the result, the finished task and a watchdog that
 │                        found a problem; slack.merge, the round's Merged message posted once with its ts
 │                        recorded (slack.record_merge), then edited in place and only when it changes; GET
-│                        /api/slack and POST /api/slack/disconnect); posts, reactions, the thread's status, links and
+│                        /api/slack and POST /api/slack/disconnect); a watched channel's message
+│                        (handleMessages, POST /api/slack/messages) as schedule.deliver for each enabled schedule
+│                        on it, 60 a minute a schedule; channels, what the bot is in, for `slack_channel`; the
+│                        watched channels sent to app.shinsa.dev on start and on each change (start, stop); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)
 ├── secrets/             secrets.json: webhook tokens and signing secrets, one-use secret refs, MCP sign-ins. schema.ts

@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { Option } from 'effect';
+import { Option, Schema } from 'effect';
 import {
+  parseSlackChannelMessage,
+  resolveSlackMessageKey,
+  SlackChannels,
+  SlackChannelWatches,
   isSameSlackThread,
   parseSlackMention,
   resolveSlackMentionThread,
@@ -128,5 +132,67 @@ describe('a thread', () => {
     expect(resolveSlackThreadKey(thread)).toBe('T1:C1:100.1');
     expect(isSameSlackThread(thread, { ...thread })).toBe(true);
     expect(isSameSlackThread(thread, { ...thread, channelId: 'C2' })).toBe(false);
+  });
+});
+
+const MESSAGE = {
+  eventId: 'Ev9',
+  teamId: 'T1',
+  channelId: 'C1',
+  messageTs: '200.1',
+  userId: 'B7',
+  userName: 'Datadog',
+  bot: true,
+  text: 'p95 is over 2 s.',
+  permalink: 'https://acme.slack.com/archives/C1/p2001',
+  channelName: 'alerts',
+};
+
+describe('a forwarded channel message', () => {
+  test('reads every field it carries and is keyed by its workspace, channel and time', () => {
+    expect(Option.getOrNull(parseSlackChannelMessage(MESSAGE))).toEqual(MESSAGE);
+    expect(resolveSlackMessageKey(MESSAGE)).toBe('T1:C1:200.1');
+  });
+
+  test('is refused without its ids or its text, or when it is not an object', () => {
+    expect(Option.getOrNull(parseSlackChannelMessage(null))).toBeNull();
+    expect(Option.getOrNull(parseSlackChannelMessage({ ...MESSAGE, eventId: undefined }))).toBeNull();
+    expect(Option.getOrNull(parseSlackChannelMessage({ ...MESSAGE, channelId: 'C1/../x' }))).toBeNull();
+    expect(Option.getOrNull(parseSlackChannelMessage({ ...MESSAGE, messageTs: '' }))).toBeNull();
+    expect(Option.getOrNull(parseSlackChannelMessage({ ...MESSAGE, text: 3 }))).toBeNull();
+  });
+
+  test('cuts long text, keeps only an https permalink and reads a person when bot is not said', () => {
+    const parsed = Option.getOrNull(
+      parseSlackChannelMessage({
+        ...MESSAGE,
+        text: 'x'.repeat(SLACK_LIMITS.channelMessage + 10),
+        permalink: 'http://acme.slack.com/archives/C1/p2001',
+        channelName: '',
+        bot: undefined,
+      })
+    );
+    expect(parsed?.text).toHaveLength(SLACK_LIMITS.channelMessage);
+    expect(parsed).toMatchObject({ permalink: null, channelName: null, bot: false });
+  });
+});
+
+describe('the channels and watches a machine exchanges with the relay', () => {
+  const decodeChannels = Schema.decodeUnknownOption(SlackChannels);
+  const decodeWatches = Schema.decodeUnknownOption(SlackChannelWatches);
+  const channel = { teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts', private: false };
+
+  test('a channel names its workspace and whether it is private', () => {
+    expect(Option.getOrNull(decodeChannels({ channels: [channel] }))).toEqual({ channels: [channel] });
+    expect(Option.isNone(decodeChannels({ channels: [{ ...channel, channelName: '' }] }))).toBe(true);
+    expect(Option.isNone(decodeChannels({ channels: [{ ...channel, private: 'no' }] }))).toBe(true);
+  });
+
+  test('watches are workspace and channel ids, at most the live schedules a machine may keep', () => {
+    const watch = { teamId: 'T1', channelId: 'C1' };
+    expect(Option.getOrNull(decodeWatches({ watches: [watch] }))).toEqual({ watches: [watch] });
+    expect(Option.isNone(decodeWatches({ watches: [{ teamId: 'T1', channelId: '#alerts' }] }))).toBe(true);
+    const many = Array.from({ length: SLACK_LIMITS.watches + 1 }, () => watch);
+    expect(Option.isNone(decodeWatches({ watches: many }))).toBe(true);
   });
 });

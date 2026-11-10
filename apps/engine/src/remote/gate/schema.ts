@@ -5,6 +5,7 @@ import {
   SHARE_CHANNEL_PATH,
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_ENGINE_INTERACTIONS_PATH,
+  SLACK_ENGINE_MESSAGES_PATH,
   TEAM_CHANNEL_PATH,
 } from '@shinsa/core';
 import type {
@@ -51,6 +52,7 @@ export const TUNNEL_ROUTES: readonly TunnelRouteEntry[] = [
   { route: 'preview', methods: null, path: PREVIEW_TUNNEL_PREFIX, prefix: true },
   { route: 'slack', methods: POST_ONLY, path: SLACK_ENGINE_EVENTS_PATH, prefix: false },
   { route: 'slack', methods: POST_ONLY, path: SLACK_ENGINE_INTERACTIONS_PATH, prefix: false },
+  { route: 'slack', methods: POST_ONLY, path: SLACK_ENGINE_MESSAGES_PATH, prefix: false },
 ];
 
 export const TUNNEL_HTTP_ROUTES: ReadonlySet<TunnelRoute> = new Set(['health', 'hook', 'slack']);

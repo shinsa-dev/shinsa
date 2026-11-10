@@ -11,8 +11,9 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
 import { resolveProjectInk } from '@/lib/projects.ts';
 import {
-  AUTOMATION_TYPE_LOOK,
   describeScheduleWhen,
+  describeScheduleWhere,
+  resolveAutomationLook,
   resolveAutomationType,
   resolveScheduleIcon,
 } from '@/lib/schedules.ts';
@@ -205,7 +206,7 @@ export function listAutomationFacts(state: ShinsaState, schedule: Schedule): Aut
   const project = selectAutomationProject(state, schedule);
   const last = schedule.runs.filter((run) => run.outcome === 'sent').at(-1);
   const facts: (AutomationFact | null)[] = [
-    { key: 'type', ...AUTOMATION_TYPE_LOOK[type], label: type, at: null },
+    { key: 'type', ...resolveAutomationLook(schedule), label: type, at: null },
     { key: 'state', ...resolveAutomationState(schedule), at: null },
     source && {
       key: 'source',
@@ -229,7 +230,7 @@ export function listAutomationFacts(state: ShinsaState, schedule: Schedule): Aut
       icon: resolveScheduleIcon(schedule),
       label: describeScheduleWhen(schedule),
       tone: 'neutral',
-      hint: null,
+      hint: describeScheduleWhere(schedule),
       at: null,
     },
     schedule.enabled && schedule.stopped === null && schedule.nextRunAt !== null

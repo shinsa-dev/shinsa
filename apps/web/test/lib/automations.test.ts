@@ -149,6 +149,19 @@ describe('a watch’s page', () => {
         runs: [{ at: NOW, outcome: 'failed', taskId: null, deliveryId: null, detail: 'Bad.' }],
       })
     ).toEqual(['Trigger', 'Last run failed', 'When its webhook is called']);
+    const slack = listAutomationFacts(
+      plain,
+      createSchedule({
+        id: 'k',
+        trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+        nextRunAt: null,
+      })
+    );
+    expect(slack.map((fact) => [fact.icon, fact.label, fact.hint])).toEqual([
+      ['IconSlack', 'Trigger', 'Starts or messages a task for each new message in its Slack channel'],
+      ['IconPlayCircle', 'On', null],
+      ['IconSlack', 'When a message is posted in #alerts', 'Acme on Slack'],
+    ]);
     expect(
       facts({ runs: [{ at: NOW, outcome: 'sent', taskId: null, deliveryId: null, detail: null }] })
     ).toEqual(['Schedule', 'On', 'Every hour', 'Next run', 'Last run']);

@@ -262,7 +262,12 @@ describe('Ingress through the tunnel', () => {
     const handle = createWebHandler(createTunnelContext({ slack }), AllRoutes);
     expect(await (await post(handle, '/api/slack/events', '{}', tunnel)).text()).toBe('ok');
     expect(await (await post(handle, '/api/slack/interactions', 'payload=x', tunnel)).text()).toBe('ok');
-    expect(seen).toEqual(['POST /api/slack/events', 'POST /api/slack/interactions']);
+    expect(await (await post(handle, '/api/slack/messages', '{}', tunnel)).text()).toBe('ok');
+    expect(seen).toEqual([
+      'POST /api/slack/events',
+      'POST /api/slack/interactions',
+      'POST /api/slack/messages',
+    ]);
     expect((await post(handle, '/api/slack/events', '{}')).status).toBe(404);
     const inspect = createWebHandler(createTunnelContext({ slack }, { inspect: true }), AllRoutes);
     expect(await (await post(inspect, '/api/slack/events', '{}', tunnel)).json()).toMatchObject({
