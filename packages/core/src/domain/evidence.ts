@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Evidence, EvidenceItemKind, FixReason } from './types.ts';
 
 export interface EvidenceItem {
@@ -140,11 +141,14 @@ export function listEarlierEvidenceItems(evidence: readonly Evidence[]): Earlier
   }));
 }
 
-export function selectEvidenceItem<T extends EvidenceItem>(items: readonly T[], reference: string) {
-  return (
+export function selectEvidenceItem<T extends EvidenceItem>(
+  items: readonly T[],
+  reference: string
+): Option.Option<T> {
+  return Option.fromNullishOr(
     items.find(
       (item) =>
         item.id === reference || item.key === reference || item.parts.some((part) => part.id === reference)
-    ) ?? null
+    )
   );
 }

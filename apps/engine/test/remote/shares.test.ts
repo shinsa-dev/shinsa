@@ -31,7 +31,7 @@ import {
   SHARE_PRESET_SCOPES,
   type ViewScope,
 } from '@shinsa/core';
-import { Clock, Effect, Layer } from 'effect';
+import { Clock, Effect, Layer, Option } from 'effect';
 import type { Transcripts } from '../../src/agents/transcripts/service.ts';
 import { RandomBytes } from '../../src/remote/schema.ts';
 import { SHARE_GONE_REASON } from '../../src/remote/share-channel/schema.ts';
@@ -299,7 +299,7 @@ interface Viewer {
 }
 
 async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID): Promise<Viewer> {
-  const link = parseShareUrl(url);
+  const link = Option.getOrNull(parseShareUrl(url));
   if (!link) throw new Error('not a share link');
   const ephemeral = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',
@@ -319,7 +319,8 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
       const files: Record<string, string> = {};
       for (const message of viewer.messages) {
         if (message.t === 'file') files[message.id] = '';
-        if (message.t === 'body') files[message.id] += decodeText(parseBodyChunk(message.chunk) as Bytes);
+        if (message.t === 'body')
+          files[message.id] += decodeText(Option.getOrNull(parseBodyChunk(message.chunk)) as Bytes);
       }
       return files;
     },
@@ -330,7 +331,7 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
       send: (data) => {
         queue = queue.then(async () => {
           if (typeof data === 'string') {
-            const welcome = parseShareWelcome(data);
+            const welcome = Option.getOrNull(parseShareWelcome(data));
             if (welcome?.type === 'refused') viewer.refused = welcome.reason;
             if (welcome?.type !== 'welcome') return;
             const key = await Effect.runPromise(
@@ -345,7 +346,9 @@ async function openViewer(publisher: Shares, url = SHARE_URL, shareId = SHARE_ID
             return;
           }
           if (!open) throw new Error('a frame before the welcome');
-          const message = parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))));
+          const message = Option.getOrNull(
+            parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))))
+          );
           if (message) viewer.messages.push(message);
         });
       },
@@ -388,7 +391,7 @@ describe('making a share link', () => {
     expect(recorded.url).toBe(
       serializeShareUrl(plane.origin, { instanceId: 'inst1', shareId: SHARE_ID, key })
     );
-    expect(parseShareUrl(recorded.url)?.shareId).toBe(SHARE_ID);
+    expect(Option.getOrNull(parseShareUrl(recorded.url))?.shareId).toBe(SHARE_ID);
     expect(stub.commandIds).toEqual([`${CONTEXT.key}:share.record`]);
   });
 
@@ -407,13 +410,15 @@ describe('making a share link', () => {
       },
     });
     await publisher.link('task-1', CONTEXT);
-    expect(parseShareUrl((stub.dispatched[1] as { url: string }).url)?.instanceId).toBe('inst1');
+    expect(Option.getOrNull(parseShareUrl((stub.dispatched[1] as { url: string }).url))?.instanceId).toBe(
+      'inst1'
+    );
   });
 
   test('a key and an id come from the system random source by default', async () => {
     const { stub, publisher: shares } = await setUp({ random: false });
     await shares.link('task-1', CONTEXT);
-    const link = parseShareUrl((stub.dispatched[0] as { url: string }).url);
+    const link = Option.getOrNull(parseShareUrl((stub.dispatched[0] as { url: string }).url));
     expect(link?.key).toHaveLength(43);
     expect(link?.shareId).not.toBe(SHARE_ID);
   });

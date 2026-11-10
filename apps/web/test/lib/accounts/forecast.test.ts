@@ -7,6 +7,7 @@ import {
   resolveUsageForecast,
   type ShinsaState,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import {
   describeOutage,
   describeOutages,
@@ -174,7 +175,7 @@ describe('the forecast in words', () => {
   ];
 
   it('gives the safe pace and the tightest point with the gap to the next reset', () => {
-    const forecast = resolveUsageForecast(accounts, NOW, 40);
+    const forecast = Option.getOrNull(resolveUsageForecast(accounts, NOW, 40));
     if (!forecast) throw new Error('expected a forecast');
     expect(describeSafePace(forecast)).toBe(
       `Up to ${formatPace(forecast.safePace)} of a weekly limit a day keeps you going for the next 7 days.`
@@ -188,9 +189,11 @@ describe('the forecast in words', () => {
   });
 
   it('says when the pool lasts, when nothing was measured and when every account is spent', () => {
-    const lasting = resolveUsageForecast(accounts, NOW, 1);
-    const unmeasured = resolveUsageForecast(accounts, NOW, null);
-    const spent = resolveUsageForecast([{ id: 'x', label: 'x', left: 0, resetsAt: null }], NOW, null);
+    const lasting = Option.getOrNull(resolveUsageForecast(accounts, NOW, 1));
+    const unmeasured = Option.getOrNull(resolveUsageForecast(accounts, NOW, null));
+    const spent = Option.getOrNull(
+      resolveUsageForecast([{ id: 'x', label: 'x', left: 0, resetsAt: null }], NOW, null)
+    );
     if (!lasting || !unmeasured || !spent) throw new Error('expected forecasts');
     expect(describeRecentPace(lasting, NOW)).toBe(
       'In the last 24 hours you used 1%. At that pace your accounts last the week.'
@@ -201,7 +204,9 @@ describe('the forecast in words', () => {
   });
 
   it('names the account by its id when its label is gone, and a tightest point with no reset after it', () => {
-    const forecast = resolveUsageForecast([accounts[0] as (typeof accounts)[number]], NOW, null);
+    const forecast = Option.getOrNull(
+      resolveUsageForecast([accounts[0] as (typeof accounts)[number]], NOW, null)
+    );
     if (!forecast?.tightest) throw new Error('expected a tightest point');
     const lone = { ...forecast, resets: [forecast.tightest], accounts: [] };
     expect(describeTightest(lone, NOW)).toMatch(
@@ -216,13 +221,15 @@ describe('the forecast in words', () => {
 });
 
 describe('the timeline', () => {
-  const forecast = resolveUsageForecast(
-    [
-      { id: 'work', label: 'work@example.com', left: 8, resetsAt: NOW + 15 * HOUR_MS },
-      { id: 'home', label: 'home@example.com', left: 21, resetsAt: NOW + 63 * HOUR_MS },
-    ],
-    NOW,
-    null
+  const forecast = Option.getOrNull(
+    resolveUsageForecast(
+      [
+        { id: 'work', label: 'work@example.com', left: 8, resetsAt: NOW + 15 * HOUR_MS },
+        { id: 'home', label: 'home@example.com', left: 21, resetsAt: NOW + 63 * HOUR_MS },
+      ],
+      NOW,
+      null
+    )
   );
   if (!forecast) throw new Error('expected a forecast');
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveVersionOrder } from '@shinsa/core';
+import { Option } from 'effect';
 import type { AppUpdater } from 'electron-updater';
 import type { ElectronHttpExecutor } from 'electron-updater/out/electronHttpExecutor.js';
 import { GenericProvider } from 'electron-updater/out/providers/GenericProvider.js';
@@ -48,7 +49,7 @@ async function resolveFeedUpdate(channel: UpdateChannel, current: string, files:
     version: info.version,
     file: requested.at(-1),
     zip: zip?.url.href,
-    offered: resolveVersionOrder(info.version, current) === 1,
+    offered: Option.getOrNull(resolveVersionOrder(info.version, current)) === 1,
   };
 }
 

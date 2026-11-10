@@ -28,7 +28,7 @@ import {
   TEAM_REFUSALS,
 } from '@shinsa/core';
 import { InviteInvalid, MembersFull, NotFound, NotOwner, TeamsFull } from '@shinsa/core/remote/errors';
-import { Clock, Effect, Layer } from 'effect';
+import { Clock, Effect, Layer, Option } from 'effect';
 import { Presence } from '../../src/remote/presence/service.ts';
 import { RandomBytes } from '../../src/remote/schema.ts';
 import { TEAM_REMOTE_CHANGED } from '../../src/remote/teams/schema.ts';
@@ -239,7 +239,7 @@ async function openViewer(
       send: (data) => {
         queue = queue.then(async () => {
           if (typeof data === 'string') {
-            const welcome = parseShareWelcome(data);
+            const welcome = Option.getOrNull(parseShareWelcome(data));
             if (welcome?.type === 'refused') viewer.refused = welcome.reason;
             if (welcome?.type !== 'welcome') return;
             const keys = {
@@ -256,7 +256,9 @@ async function openViewer(
             return;
           }
           if (!open) throw new Error('a frame before the welcome');
-          const message = parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))));
+          const message = Option.getOrNull(
+            parseShareMessage(decodeText(await Effect.runPromise(open(data as Bytes))))
+          );
           if (message) viewer.messages.push(message);
         });
       },

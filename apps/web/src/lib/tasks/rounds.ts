@@ -19,6 +19,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { endSentence, flattenWhitespace } from '@/lib/format/count.ts';
 import { formatSince } from '@/lib/format/time.ts';
@@ -201,7 +202,7 @@ export function listEarlierRounds(task: Task) {
 
 export function listShippingItems(task: Task, round: Round): ShippingItem[] | null {
   if (!canChangeRoundShipping(task, round)) return null;
-  const target = selectShippingTarget(task, round);
+  const target = Option.getOrNull(selectShippingTarget(task, round));
   if (!target) return null;
   return [
     { value: 'onto_pull_request', label: `Onto #${target.number}` },

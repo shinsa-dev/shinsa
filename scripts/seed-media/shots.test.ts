@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { Option } from 'effect';
 import {
   listShotFiles,
   OUTPUT_DIRS,
@@ -73,11 +74,15 @@ describe('serializeFrameList', () => {
         ],
         12
       )
-    ).toBe("file '/f/0.jpg'\nduration 0.500\nfile '/f/1.jpg'\nduration 1.500\nfile '/f/1.jpg'\n");
-    expect(serializeFrameList([{ path: '/f/0.jpg', at: 10 }], 9)).toContain('duration 0.000');
+    ).toEqual(
+      Option.some("file '/f/0.jpg'\nduration 0.500\nfile '/f/1.jpg'\nduration 1.500\nfile '/f/1.jpg'\n")
+    );
+    expect(Option.getOrThrow(serializeFrameList([{ path: '/f/0.jpg', at: 10 }], 9))).toContain(
+      'duration 0.000'
+    );
   });
 
-  test('refuses a recording without frames', () => {
-    expect(() => serializeFrameList([], 1)).toThrow('The recording has no frames.');
+  test('a recording without frames has no frame list', () => {
+    expect(serializeFrameList([], 1)).toEqual(Option.none());
   });
 });

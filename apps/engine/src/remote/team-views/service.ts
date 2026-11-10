@@ -70,8 +70,8 @@ export const makeTeamViews = Effect.fn('TeamViews.make')(function* (definition: 
       );
       return null;
     }
-    const messages = (read.value.messages ?? []).flatMap(
-      (message) => parseShareMessage(JSON.stringify(message)) ?? []
+    const messages = (read.value.messages ?? []).flatMap((message) =>
+      Option.toArray(parseShareMessage(JSON.stringify(message)))
     );
     const held: HeldTeamView | null = messages.length > 0 ? { ...entry, messages } : null;
     return held;

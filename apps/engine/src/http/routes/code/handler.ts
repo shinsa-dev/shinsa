@@ -10,11 +10,11 @@ import {
 } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
 import { CodeUnavailable, FileMissing, RequestFailed } from '@shinsa/core/engine-api/schema';
-import { Effect, FileSystem, Option, Queue, Stream } from 'effect';
+import { Effect, FileSystem, Option, Queue, Result, Stream } from 'effect';
 import { type HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { HttpApiBuilder } from 'effect/http-api';
 import { selectInside } from '../../../files/inside.ts';
-import { assertRepoPath } from '../../../files/paths.ts';
+import { parseRepoPath } from '../../../files/paths.ts';
 import { isPresent } from '../../../files/probe.ts';
 import { CatFiles } from '../../../git/blobs/service.ts';
 import { selectTaskCheckout } from '../../../git/history/checkout.ts';
@@ -25,7 +25,7 @@ import type { SearchQuery } from '../../../git/tree/schema.ts';
 import { CodeFiles } from '../../../git/tree/service.ts';
 import { describeError } from '../../../log/redact.ts';
 import { EngineCore } from '../../../runtime/engine/service.ts';
-import { requestSync } from '../../failures.ts';
+import { requestResult } from '../../failures.ts';
 import { REQUEST_FAILED } from '../../schema.ts';
 import {
   CODE_MISSING_MESSAGE,
@@ -90,7 +90,9 @@ export const CodeHandlers = HttpApiBuilder.group(
     const resolveRefs = Effect.fn('CodeHandlers.resolveRefs')(function* (found: CodeTask) {
       const repo = (yield* engine.state).repos[found.task.repoId ?? ''];
       if (!repo) return yield* new RequestFailed(NO_REPOSITORY);
-      return yield* requestRead(history.taskRefs(repo, found.task, resolveRoundBase(found.task)));
+      return yield* requestRead(
+        history.taskRefs(repo, found.task, Option.getOrNull(resolveRoundBase(found.task)))
+      );
     });
 
     const resolveRef = Effect.fn('CodeHandlers.resolveRef')(function* (
@@ -260,10 +262,12 @@ export const CodeHandlers = HttpApiBuilder.group(
       const paths =
         query.path === undefined
           ? null
-          : yield* requestSync(() => [
-              ...(query.previous ? [assertRepoPath(query.previous)] : []),
-              assertRepoPath(query.path ?? null),
-            ]);
+          : yield* requestResult(
+              Result.all([
+                ...(query.previous ? [parseRepoPath(query.previous)] : []),
+                parseRepoPath(query.path ?? null),
+              ])
+            );
       const refs = !query.base || !query.head ? yield* resolveRefs(found) : null;
       const baseRef = query.base || refs?.base || refs?.head || '';
       const base = yield* requestRead(files.assertCommit(found.repoPath, baseRef));
@@ -305,7 +309,7 @@ export const CodeHandlers = HttpApiBuilder.group(
         'tree',
         Effect.fn('CodeHandlers.tree')(function* ({ params, query, request }) {
           const found = yield* findCodeTask(params.taskRef);
-          const dir = yield* requestSync(() => assertRepoPath(query.dir ?? null, { root: true }));
+          const dir = yield* requestResult(parseRepoPath(query.dir ?? null, { root: true }));
           return yield* respondAt(found, request, query.ref, (ref) => readTree(found, ref, dir));
         })
       )
@@ -313,7 +317,7 @@ export const CodeHandlers = HttpApiBuilder.group(
         'blob',
         Effect.fn('CodeHandlers.blob')(function* ({ params, query, request }) {
           const found = yield* findCodeTask(params.taskRef);
-          const path = yield* requestSync(() => assertRepoPath(query.path ?? null));
+          const path = yield* requestResult(parseRepoPath(query.path ?? null));
           return yield* respondAt(found, request, query.ref, (ref) => readFile(found, ref, path));
         })
       )
@@ -321,8 +325,8 @@ export const CodeHandlers = HttpApiBuilder.group(
         'raw',
         Effect.fn('CodeHandlers.raw')(function* ({ params, query }) {
           const found = yield* findCodeTask(params.taskRef);
-          const path = yield* requestSync(() => assertRepoPath(query.path ?? null));
-          const type = resolveImageType(path);
+          const path = yield* requestResult(parseRepoPath(query.path ?? null));
+          const type = Option.getOrNull(resolveImageType(path));
           if (!type) return yield* new RequestFailed(NOT_AN_IMAGE);
           const ref = yield* resolveRef(found, query.ref ?? null);
           const bytes = yield* readBytes(found, ref, path);

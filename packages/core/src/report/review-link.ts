@@ -27,7 +27,7 @@ function isReviewEvidenceKind(kind: Evidence['kind']): kind is ReviewEvidenceKin
 function listPayloadEvidence(task: Task, evidence: readonly Evidence[]): ReviewPayloadEvidence[] {
   return listPullRequestEvidence(task, evidence).flatMap((item) =>
     item.parts.flatMap((part) => {
-      const url = resolvePublicUrl(part);
+      const url = Option.getOrNull(resolvePublicUrl(part));
       if (!url || !GITHUB_ATTACHMENT.test(url) || !isReviewEvidenceKind(part.kind)) return [];
       return [
         {
@@ -120,8 +120,8 @@ export function serializeReviewPayload(
 
 const decodeReviewPayload = Schema.decodeUnknownOption(ReviewPayload);
 
-export function parseReviewPayload(value: unknown): ReviewPayload | null {
-  return Option.getOrNull(decodeReviewPayload(value));
+export function parseReviewPayload(value: unknown): Option.Option<ReviewPayload> {
+  return decodeReviewPayload(value);
 }
 
 function withoutDetail(payload: ReviewPayload): ReviewPayload {

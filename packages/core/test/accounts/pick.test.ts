@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type AccountCandidate,
   type AccountSummary,
@@ -10,6 +11,7 @@ import {
   resolveCandidateSpentUntil,
   resolvePoolResetAt,
   selectNextAccount,
+  STALE_USAGE_MS,
   type UsageWindow,
 } from '../../src/index.ts';
 
@@ -65,21 +67,21 @@ const FABLE_SPENT = createUsage([
 describe('spent accounts', () => {
   test('an account is spent until the later of its marked and its measured reset', () => {
     const marked = createCandidate('a', { spentUntil: NOW + 10_000 });
-    expect(resolveCandidateSpentUntil(marked, null, NOW)).toBe(NOW + 10_000);
+    expect(Option.getOrNull(resolveCandidateSpentUntil(marked, null, NOW))).toBe(NOW + 10_000);
     const measured = createCandidate('b', {}, 100);
-    expect(resolveCandidateSpentUntil(measured, null, NOW)).toBe(NOW + 60_000);
+    expect(Option.getOrNull(resolveCandidateSpentUntil(measured, null, NOW))).toBe(NOW + 60_000);
     const both = createCandidate('c', { spentUntil: NOW + 90_000 }, 100);
-    expect(resolveCandidateSpentUntil(both, null, NOW)).toBe(NOW + 90_000);
+    expect(Option.getOrNull(resolveCandidateSpentUntil(both, null, NOW))).toBe(NOW + 90_000);
     const earlierMark = createCandidate('d', { spentUntil: NOW + 1_000 }, 100);
-    expect(resolveCandidateSpentUntil(earlierMark, null, NOW)).toBe(NOW + 60_000);
+    expect(Option.getOrNull(resolveCandidateSpentUntil(earlierMark, null, NOW))).toBe(NOW + 60_000);
     const pastMark = createCandidate('e', { spentUntil: NOW - 1 });
-    expect(resolveCandidateSpentUntil(pastMark, null, NOW)).toBeNull();
+    expect(Option.getOrNull(resolveCandidateSpentUntil(pastMark, null, NOW))).toBeNull();
   });
 
   test('a model window only spends the account for that model', () => {
     const account = createCandidate('a', { usage: FABLE_SPENT });
-    expect(resolveCandidateSpentUntil(account, 'claude-fable-5', NOW)).toBe(NOW + 5_000);
-    expect(resolveCandidateSpentUntil(account, 'claude-opus-4-1', NOW)).toBeNull();
+    expect(Option.getOrNull(resolveCandidateSpentUntil(account, 'claude-fable-5', NOW))).toBe(NOW + 5_000);
+    expect(Option.getOrNull(resolveCandidateSpentUntil(account, 'claude-opus-4-1', NOW))).toBeNull();
   });
 
   test('a paused, signed-out or spent account is not usable', () => {
@@ -89,12 +91,28 @@ describe('spent accounts', () => {
     expect(isUsableAccount(createCandidate('a', { signIn: 'signed_out' }), null, NOW)).toBe(false);
     expect(isUsableAccount(createCandidate('a', {}, 100), null, NOW)).toBe(false);
   });
+
+  test('a stale reading no longer keeps an account out, and a marked rejection still does', () => {
+    const later = NOW + STALE_USAGE_MS + 1;
+    const resetsAt = later + 60_000;
+    const stale = createCandidate('a', { usage: createUsage([{ usedPercent: 100, resetsAt }]) });
+    expect(isUsableAccount(stale, null, NOW)).toBe(false);
+    expect(isUsableAccount(stale, null, later)).toBe(true);
+    expect(Option.getOrNull(pickAccount(createRequest([stale], { now: later })))).toEqual({
+      account: stale,
+      reason: null,
+      usable: true,
+    });
+    const rejected = { ...stale, spentUntil: resetsAt };
+    expect(Option.getOrNull(resolveCandidateSpentUntil(rejected, null, later))).toBe(resetsAt);
+    expect(isUsableAccount(rejected, null, later)).toBe(false);
+  });
 });
 
 describe('picking an account', () => {
   test('stays on the previous account while it is below its switch threshold', () => {
     const accounts = [createCandidate('a', { isDefault: true }, 10), createCandidate('b', {}, 50)];
-    expect(pickAccount(createRequest(accounts, { previous: 'b' }))).toEqual({
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { previous: 'b' })))).toEqual({
       account: accounts[1] as AccountCandidate,
       reason: null,
       usable: true,
@@ -103,7 +121,7 @@ describe('picking an account', () => {
 
   test('without a previous account the default is used while it is below its threshold', () => {
     const accounts = [createCandidate('a', {}, 0), createCandidate('b', { isDefault: true }, 50)];
-    expect(pickAccount(createRequest(accounts))?.account.id).toBe('b');
+    expect(Option.getOrNull(pickAccount(createRequest(accounts)))?.account.id).toBe('b');
   });
 
   test('past the threshold the account with the most headroom takes over, with headroom as the reason', () => {
@@ -113,7 +131,7 @@ describe('picking an account', () => {
       createCandidate('c', {}, 20),
       createCandidate('d'),
     ];
-    expect(pickAccount(createRequest(accounts, { previous: 'a' }))).toMatchObject({
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { previous: 'a' })))).toMatchObject({
       account: { id: 'c' },
       reason: 'headroom',
       usable: true,
@@ -137,7 +155,7 @@ describe('picking an account', () => {
       createCandidate('soon', { usage: weekly(60, 15_000) }),
       createCandidate('unknown', { usage: weekly(0, null) }),
     ];
-    expect(pickAccount(createRequest(accounts, { previous: 'a' }))).toMatchObject({
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { previous: 'a' })))).toMatchObject({
       account: { id: 'soon' },
       reason: 'headroom',
     });
@@ -145,21 +163,21 @@ describe('picking an account', () => {
       createCandidate('x', { usage: weekly(50, null) }),
       createCandidate('y', { usage: weekly(10, null) }),
     ];
-    expect(pickAccount(createRequest(noReset))?.account.id).toBe('y');
+    expect(Option.getOrNull(pickAccount(createRequest(noReset)))?.account.id).toBe('y');
   });
 
   test('accounts with known headroom rank before unknown ones, and equal ones keep their order', () => {
     const unknownFirst = [createCandidate('x'), createCandidate('y', {}, 30), createCandidate('z', {}, 30)];
-    expect(pickAccount(createRequest(unknownFirst))?.account.id).toBe('y');
+    expect(Option.getOrNull(pickAccount(createRequest(unknownFirst)))?.account.id).toBe('y');
     const unknownLast = [createCandidate('y', {}, 30), createCandidate('x')];
-    expect(pickAccount(createRequest(unknownLast))?.account.id).toBe('y');
+    expect(Option.getOrNull(pickAccount(createRequest(unknownLast)))?.account.id).toBe('y');
     const allUnknown = [createCandidate('p'), createCandidate('q')];
-    expect(pickAccount(createRequest(allUnknown))?.account.id).toBe('p');
+    expect(Option.getOrNull(pickAccount(createRequest(allUnknown)))?.account.id).toBe('p');
   });
 
   test('when every usable account is past its threshold the one with the most headroom is still used', () => {
     const accounts = [createCandidate('a', {}, 97), createCandidate('b', {}, 92)];
-    expect(pickAccount(createRequest(accounts, { previous: 'a' }))).toMatchObject({
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { previous: 'a' })))).toMatchObject({
       account: { id: 'b' },
       reason: 'headroom',
       usable: true,
@@ -168,30 +186,38 @@ describe('picking an account', () => {
 
   test('a spent or signed-out previous account names why the work moved', () => {
     const spent = [createCandidate('a', {}, 100), createCandidate('b', {}, 10)];
-    expect(pickAccount(createRequest(spent, { previous: 'a' }))?.reason).toBe('usage_limit');
+    expect(Option.getOrNull(pickAccount(createRequest(spent, { previous: 'a' })))?.reason).toBe(
+      'usage_limit'
+    );
     const signedOut = [createCandidate('a', { signIn: 'signed_out' }), createCandidate('b', {}, 10)];
-    expect(pickAccount(createRequest(signedOut, { previous: 'a' }))?.reason).toBe('signed_out');
-    expect(pickAccount(createRequest(spent, { previous: 'gone' }))?.reason).toBeNull();
+    expect(Option.getOrNull(pickAccount(createRequest(signedOut, { previous: 'a' })))?.reason).toBe(
+      'signed_out'
+    );
+    expect(Option.getOrNull(pickAccount(createRequest(spent, { previous: 'gone' })))?.reason).toBeNull();
   });
 
   test('excluded accounts are skipped', () => {
     const accounts = [createCandidate('a', { isDefault: true }), createCandidate('b')];
-    expect(pickAccount(createRequest(accounts, { exclude: new Set(['a']) }))?.account.id).toBe('b');
+    expect(
+      Option.getOrNull(pickAccount(createRequest(accounts, { exclude: new Set(['a']) })))?.account.id
+    ).toBe('b');
   });
 
   test('a bound account is always used, usable or not, and says it moved the work', () => {
     const accounts = [createCandidate('a', {}, 10), createCandidate('b', {}, 100)];
-    expect(pickAccount(createRequest(accounts, { bound: 'b', previous: 'a' }))).toEqual({
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { bound: 'b', previous: 'a' })))).toEqual({
       account: accounts[1] as AccountCandidate,
       reason: 'bound',
       usable: false,
     });
-    expect(pickAccount(createRequest(accounts, { bound: 'a', previous: 'a' }))).toMatchObject({
+    expect(
+      Option.getOrNull(pickAccount(createRequest(accounts, { bound: 'a', previous: 'a' })))
+    ).toMatchObject({
       reason: null,
       usable: true,
     });
-    expect(pickAccount(createRequest(accounts, { bound: 'a' }))?.reason).toBeNull();
-    expect(pickAccount(createRequest(accounts, { bound: 'removed' }))).toBeNull();
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { bound: 'a' })))?.reason).toBeNull();
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { bound: 'removed' })))).toBeNull();
   });
 
   test('when nothing is usable the signed-in account that frees up first is returned as unusable', () => {
@@ -201,7 +227,7 @@ describe('picking an account', () => {
       createCandidate('c', { spentUntil: NOW + 20_000 }),
       createCandidate('d', { paused: true }),
     ];
-    expect(pickAccount(createRequest(accounts, { previous: 'b' }))).toEqual({
+    expect(Option.getOrNull(pickAccount(createRequest(accounts, { previous: 'b' })))).toEqual({
       account: accounts[2] as AccountCandidate,
       reason: 'usage_limit',
       usable: false,
@@ -210,7 +236,7 @@ describe('picking an account', () => {
       createCandidate('a', { signIn: 'signed_out' }),
       createCandidate('b', { signIn: 'signed_out' }),
     ];
-    expect(pickAccount(createRequest(signedOutOnly))?.account.id).toBe('a');
+    expect(Option.getOrNull(pickAccount(createRequest(signedOutOnly)))?.account.id).toBe('a');
   });
 
   test('when every account is paused the default is returned, else the first', () => {
@@ -218,9 +244,12 @@ describe('picking an account', () => {
       createCandidate('a', { paused: true }),
       createCandidate('b', { paused: true, isDefault: true }),
     ];
-    expect(pickAccount(createRequest(withDefault))).toMatchObject({ account: { id: 'b' }, usable: false });
+    expect(Option.getOrNull(pickAccount(createRequest(withDefault)))).toMatchObject({
+      account: { id: 'b' },
+      usable: false,
+    });
     const withoutDefault = [createCandidate('a', { paused: true }), createCandidate('b', { paused: true })];
-    expect(pickAccount(createRequest(withoutDefault))?.account.id).toBe('a');
+    expect(Option.getOrNull(pickAccount(createRequest(withoutDefault)))?.account.id).toBe('a');
   });
 
   test('the last resort never hands back an account this attempt already tried', () => {
@@ -229,12 +258,12 @@ describe('picking an account', () => {
       createCandidate('other', { signIn: 'signed_out' }),
     ];
     const request = createRequest(accounts, { previous: 'tried', exclude: new Set(['tried']) });
-    expect(pickAccount(request)).toMatchObject({ account: { id: 'other' }, usable: false });
-    expect(pickAccount({ ...request, exclude: new Set(['tried', 'other']) })).toBeNull();
+    expect(Option.getOrNull(pickAccount(request))).toMatchObject({ account: { id: 'other' }, usable: false });
+    expect(Option.getOrNull(pickAccount({ ...request, exclude: new Set(['tried', 'other']) }))).toBeNull();
   });
 
   test('without accounts there is nothing to pick', () => {
-    expect(pickAccount(createRequest([]))).toBeNull();
+    expect(Option.getOrNull(pickAccount(createRequest([])))).toBeNull();
   });
 });
 
@@ -246,15 +275,19 @@ describe('pool reset', () => {
       createCandidate('c', { paused: true }),
       createCandidate('d', { signIn: 'signed_out' }),
     ];
-    expect(resolvePoolResetAt(accounts, null, NOW)).toBe(NOW + 20_000);
+    expect(Option.getOrNull(resolvePoolResetAt(accounts, null, NOW))).toBe(NOW + 20_000);
   });
 
   test('a pool with a usable account, or no account to wait for, has no reset', () => {
     expect(
-      resolvePoolResetAt([createCandidate('a', { spentUntil: NOW + 1 }), createCandidate('b')], null, NOW)
+      Option.getOrNull(
+        resolvePoolResetAt([createCandidate('a', { spentUntil: NOW + 1 }), createCandidate('b')], null, NOW)
+      )
     ).toBeNull();
-    expect(resolvePoolResetAt([createCandidate('a', { paused: true })], null, NOW)).toBeNull();
-    expect(resolvePoolResetAt([], null, NOW)).toBeNull();
+    expect(
+      Option.getOrNull(resolvePoolResetAt([createCandidate('a', { paused: true })], null, NOW))
+    ).toBeNull();
+    expect(Option.getOrNull(resolvePoolResetAt([], null, NOW))).toBeNull();
   });
 });
 
@@ -281,8 +314,10 @@ describe('the next account for the usage glance', () => {
   test('names the account Shinsa would pick next, with the setting as the threshold an account leaves unset', () => {
     const settings = { ...createSettings(), accountSwitchAt: 80 };
     const accounts = [summary('a', 85, { isDefault: true }), summary('b', 85, { switchAt: 95 })];
-    expect(selectNextAccount(accounts, settings, 'opus', NOW)?.id).toBe('b');
-    expect(selectNextAccount(accounts, { ...settings, accountSwitchAt: 90 }, 'opus', NOW)?.id).toBe('a');
+    expect(Option.getOrNull(selectNextAccount(accounts, settings, 'opus', NOW))?.id).toBe('b');
+    expect(
+      Option.getOrNull(selectNextAccount(accounts, { ...settings, accountSwitchAt: 90 }, 'opus', NOW))?.id
+    ).toBe('a');
   });
 
   test('passes over an account with a window used up, even when nothing marked it spent', () => {
@@ -290,7 +325,7 @@ describe('the next account for the usage glance', () => {
       summary('spent', 100, { isDefault: true }),
       summary('fresh', 0, { usage: createUsage([]) }),
     ];
-    expect(selectNextAccount(accounts, createSettings(), 'opus', NOW)?.id).toBe('fresh');
-    expect(selectNextAccount([], createSettings(), 'opus', NOW)).toBeNull();
+    expect(Option.getOrNull(selectNextAccount(accounts, createSettings(), 'opus', NOW))?.id).toBe('fresh');
+    expect(Option.getOrNull(selectNextAccount([], createSettings(), 'opus', NOW))).toBeNull();
   });
 });

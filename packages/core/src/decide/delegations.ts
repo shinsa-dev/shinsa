@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { RUN_AGENT_ROLE, resolveAgentModel, resolveAgentProvider } from '../agent-models/index.ts';
 import type { CommandOf, ShinsaCommand } from '../commands/index.ts';
 import {
@@ -103,9 +104,9 @@ function findChild(decider: Decider, parent: Run, childRunId: string): Delegated
 }
 
 function assertDelegationRoom(decider: Decider, parent: Run) {
-  const limit = resolveDelegationLimit(decider.state.settings);
+  const limit = Option.getOrNull(resolveDelegationLimit(decider.state.settings));
   if (limit === null) return;
-  const root = selectRootRun(decider.state, parent) ?? parent;
+  const root = Option.getOrElse(selectRootRun(decider.state, parent), () => parent);
   const live = countLiveUnderRoot(decider.state, root.id);
   if (live >= limit) {
     throw new DomainError({

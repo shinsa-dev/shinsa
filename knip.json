@@ -7,7 +7,7 @@
         "scripts/perf/*.ts",
         "scripts/seed-media/*.ts",
         "scripts/screenshots/*.ts",
-        "scripts/sandbox/service.ts"
+        "scripts/sandbox/dev-server.ts"
       ],
       "ignoreDependencies": ["@effect/language-service", "oxlint", "oxlint-tsgolint"]
     },

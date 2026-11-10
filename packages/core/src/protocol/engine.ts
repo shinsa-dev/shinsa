@@ -149,22 +149,22 @@ export function resolveReleaseChannel(version: string): ReleaseChannel {
   return identifier === 'canary' ? 'canary' : 'beta';
 }
 
-export function resolveVersionOrder(a: string, b: string): -1 | 0 | 1 | null {
+export function resolveVersionOrder(a: string, b: string): Option.Option<-1 | 0 | 1> {
   const left = parseVersion(a);
   const right = parseVersion(b);
-  if (!left || !right) return null;
+  if (!left || !right) return Option.none();
   for (let index = 0; index < 3; index++) {
     const order = compareNumbers(left.release[index] ?? 0, right.release[index] ?? 0);
-    if (order !== 0) return order;
+    if (order !== 0) return Option.some(order);
   }
-  return comparePrerelease(left.prerelease, right.prerelease);
+  return Option.some(comparePrerelease(left.prerelease, right.prerelease));
 }
 
 export function resolveEngineFit(app: ShinsaBuild, engine: ShinsaBuild): EngineFit {
   if (engine.protocol > app.protocol) return { kind: 'update_app', required: true };
   if (engine.protocol < app.protocol) return { kind: 'restart_engine', required: true };
   if (app.version === DEVELOPMENT_VERSION || engine.version === DEVELOPMENT_VERSION) return { kind: 'match' };
-  const order = resolveVersionOrder(engine.version, app.version);
+  const order = Option.getOrNull(resolveVersionOrder(engine.version, app.version));
   if (order === -1) return { kind: 'restart_engine', required: false };
   if (order === 1) return { kind: 'update_app', required: false };
   return { kind: 'match' };
@@ -181,8 +181,8 @@ export function resolveEngineInfo(version: string): EngineInfo {
 
 const decodeEngineInfo = Schema.decodeUnknownOption(EngineInfo);
 
-export function parseEngineInfo(value: unknown): EngineInfo | null {
-  return Option.getOrNull(decodeEngineInfo(value));
+export function parseEngineInfo(value: unknown): Option.Option<EngineInfo> {
+  return decodeEngineInfo(value);
 }
 
 export function resolveEngineCommands(engine: EngineInfo | null): ReadonlySet<string> {

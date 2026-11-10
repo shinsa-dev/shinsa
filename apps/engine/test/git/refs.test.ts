@@ -1,10 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { assertRefName, slugify } from '../../src/git/index.ts';
+import { Effect, Result } from 'effect';
+import { slugify } from '../../src/git/index.ts';
+import { decodeRefName } from '../../src/git/ref-name.ts';
+import { RefName } from '../../src/git/schema.ts';
 
-describe('assertRefName', () => {
+function readRefName(name: string) {
+  return Effect.runSync(Effect.result(decodeRefName(name)));
+}
+
+describe('decodeRefName', () => {
   test('passes branch names through and refuses anything git could read as an option', () => {
     for (const name of ['main', 'feat/x-1', 'release/1.0', 'origin/main'])
-      expect(assertRefName(name)).toBe(name);
+      expect(Result.getOrThrow(readRefName(name))).toBe(RefName.make(name));
     for (const name of [
       '-x',
       '--upload-pack=touch /tmp/x',
@@ -16,7 +23,13 @@ describe('assertRefName', () => {
       'a//b',
       '',
     ]) {
-      expect(() => assertRefName(name)).toThrow('is not a branch name');
+      expect(Result.flip(readRefName(name))).toMatchObject({
+        success: {
+          _tag: 'RefNameInvalid',
+          ref: name,
+          message: `"${name}" is not a branch name Shinsa will pass to git.`,
+        },
+      });
     }
   });
 });

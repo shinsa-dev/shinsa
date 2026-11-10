@@ -171,7 +171,7 @@ export class PreviewHost extends Context.Service<
 
       const respond = Effect.fn('previews.respondHost')(function* (url: URL) {
         if (url.pathname === '/robots.txt') return respondRobots();
-        const address = parsePreviewHost(url.host, config.previewOrigin);
+        const address = Option.getOrNull(parsePreviewHost(url.host, config.previewOrigin));
         if (!address) return respondPage('gone', 404);
         const key = url.searchParams.get(PREVIEW_KEY_PARAM);
         if (key && isPreviewKey(key))

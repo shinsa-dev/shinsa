@@ -1,4 +1,5 @@
 import { type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
+import { Option, Result } from 'effect';
 import { createContext, useContext, useSyncExternalStore } from 'react';
 import { createSignal } from '@/lib/signal.ts';
 
@@ -20,38 +21,32 @@ export interface RouteView {
 
 const signal = createSignal();
 
+function decodeSegment(segment: string) {
+  return Result.getSuccess(Result.try(() => decodeURIComponent(segment)));
+}
+
 function parseSegment(pattern: RegExp, pathname: string) {
   const segment = pattern.exec(pathname)?.[1];
-  if (!segment) return null;
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return null;
-  }
+  return segment ? decodeSegment(segment) : Option.none();
 }
 
 function parseTeamTaskSegments(pathname: string) {
   const match = /^\/teams\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(pathname);
-  if (!match) return null;
-  try {
-    const [teamId, instanceId, taskId] = match.slice(1).map((part) => decodeURIComponent(part)) as [
-      string,
-      string,
-      string,
-    ];
-    return { teamId, instanceId, taskId };
-  } catch {
-    return null;
-  }
+  if (!match) return Option.none();
+  return Option.all({
+    teamId: decodeSegment(match[1] ?? ''),
+    instanceId: decodeSegment(match[2] ?? ''),
+    taskId: decodeSegment(match[3] ?? ''),
+  });
 }
 
 export function parseRoute(pathname: string): Route {
   const reference = parseSegment(/^\/tasks\/([^/]+)$/, pathname);
-  if (reference) return { name: 'task', reference };
+  if (Option.isSome(reference)) return { name: 'task', reference: reference.value };
   const scheduleId = parseSegment(/^\/automations\/([^/]+)$/, pathname);
-  if (scheduleId) return { name: 'automation', scheduleId };
+  if (Option.isSome(scheduleId)) return { name: 'automation', scheduleId: scheduleId.value };
   const team = parseTeamTaskSegments(pathname);
-  if (team) return { name: 'team-task', ...team };
+  if (Option.isSome(team)) return { name: 'team-task', ...team.value };
   if (pathname === '/tasks') return { name: 'tasks' };
   if (pathname === '/settings') return { name: 'settings' };
   if (pathname === '/terminal') return { name: 'terminal' };

@@ -1,4 +1,6 @@
 import type { ChatTool } from '@shinsa/core';
+import { Option, Schema } from 'effect';
+import { StructuredText } from '@/lib/chat/schema.ts';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { countLineChanges } from '@/lib/code/line-changes.ts';
 
@@ -28,14 +30,12 @@ export function splitLines(text: string) {
   return text.replace(/\n+$/, '').split('\n');
 }
 
-export function formatStructured(text: string) {
+const decodeStructured = Schema.decodeUnknownOption(StructuredText);
+
+export function formatStructured(text: string): Option.Option<string> {
   const trimmed = text.trim();
-  if (!/^[[{]/.test(trimmed)) return null;
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2);
-  } catch {
-    return null;
-  }
+  if (!/^[[{]/.test(trimmed)) return Option.none();
+  return Option.map(decodeStructured(trimmed), (value) => JSON.stringify(value, null, 2));
 }
 
 export function resolveToolResult(call: ToolCall): ToolResultView {

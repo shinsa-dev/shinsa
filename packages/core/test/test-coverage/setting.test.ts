@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   resolveCoverageFormat,
   resolveCustomFormat,
@@ -15,21 +16,25 @@ describe('the coverage setting', () => {
   });
 
   test('the report name tells its format when it can', () => {
-    expect(resolveCoverageFormat('coverage/lcov.info')).toBe('lcov');
-    expect(resolveCoverageFormat('out/lcov-report')).toBe('lcov');
-    expect(resolveCoverageFormat('cover.lcov')).toBe('lcov');
-    expect(resolveCoverageFormat(' coverage.xml ')).toBe('cobertura');
-    expect(resolveCoverageFormat('cover.out')).toBe('go');
-    expect(resolveCoverageFormat('c.coverprofile')).toBe('go');
-    expect(resolveCoverageFormat('coverage/data.json')).toBeNull();
+    expect(Option.getOrNull(resolveCoverageFormat('coverage/lcov.info'))).toBe('lcov');
+    expect(Option.getOrNull(resolveCoverageFormat('out/lcov-report'))).toBe('lcov');
+    expect(Option.getOrNull(resolveCoverageFormat('cover.lcov'))).toBe('lcov');
+    expect(Option.getOrNull(resolveCoverageFormat(' coverage.xml '))).toBe('cobertura');
+    expect(Option.getOrNull(resolveCoverageFormat('cover.out'))).toBe('go');
+    expect(Option.getOrNull(resolveCoverageFormat('c.coverprofile'))).toBe('go');
+    expect(Option.getOrNull(resolveCoverageFormat('coverage/data.json'))).toBeNull();
   });
 
   test('a custom setting’s own format wins over the name', () => {
-    expect(resolveCustomFormat({ mode: 'custom', command: 'x', report: 'cover.out', format: 'lcov' })).toBe(
-      'lcov'
-    );
-    expect(resolveCustomFormat({ mode: 'custom', command: 'x', report: 'cover.out', format: null })).toBe(
-      'go'
-    );
+    expect(
+      Option.getOrNull(
+        resolveCustomFormat({ mode: 'custom', command: 'x', report: 'cover.out', format: 'lcov' })
+      )
+    ).toBe('lcov');
+    expect(
+      Option.getOrNull(
+        resolveCustomFormat({ mode: 'custom', command: 'x', report: 'cover.out', format: null })
+      )
+    ).toBe('go');
   });
 });

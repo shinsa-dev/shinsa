@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { parseChoiceValue, resolveDisplayPath, serializeChoiceValue } from '../../src/protocol/onboarding.ts';
 
 describe('resolveDisplayPath', () => {
@@ -14,12 +15,15 @@ describe('resolveDisplayPath', () => {
 describe('choice values', () => {
   test('name the group and the pick, and read back the same way', () => {
     expect(serializeChoiceValue('model', 'claude-opus-5-5')).toBe('model=claude-opus-5-5');
-    expect(parseChoiceValue('model=claude-opus-5-5')).toEqual({ group: 'model', value: 'claude-opus-5-5' });
-    expect(parseChoiceValue('merge=')).toEqual({ group: 'merge', value: '' });
+    expect(Option.getOrNull(parseChoiceValue('model=claude-opus-5-5'))).toEqual({
+      group: 'model',
+      value: 'claude-opus-5-5',
+    });
+    expect(Option.getOrNull(parseChoiceValue('merge='))).toEqual({ group: 'merge', value: '' });
   });
 
   test('a value without a group is not a choice', () => {
-    expect(parseChoiceValue('squash')).toBeNull();
-    expect(parseChoiceValue('=squash')).toBeNull();
+    expect(Option.getOrNull(parseChoiceValue('squash'))).toBeNull();
+    expect(Option.getOrNull(parseChoiceValue('=squash'))).toBeNull();
   });
 });

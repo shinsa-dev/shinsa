@@ -9,6 +9,7 @@ import {
 import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import * as React from 'react';
 import { CompactSections } from '@/components/layout/compact-section.tsx';
 import { SERVICES_PANEL } from '@/components/services/menu.tsx';
@@ -58,7 +59,7 @@ export function TaskServicesFact({ state, task }: { state: ShinsaState; task: Ta
   const now = useNow();
   const { handlers } = useServiceActions({ state, onNavigate: () => setOpen(false) });
   const views = listTaskServices(state, snapshot, task, now);
-  const project = state.projects[resolveTaskProject(state, task) ?? ''] ?? null;
+  const project = state.projects[Option.getOrNull(resolveTaskProject(state, task)) ?? ''] ?? null;
   if (views.length === 0) return null;
   const fact = describeTaskServicesFact(views);
   return (

@@ -8,6 +8,8 @@ import {
   type ShinsaState,
   type UserCommand,
 } from '@shinsa/core';
+import { Option } from 'effect';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { createHomeScene } from '../scene.ts';
 import {
   type CommandListener,
@@ -41,12 +43,12 @@ class DemoSocket extends EventTarget {
   }
 
   send(data: string | Uint8Array<ArrayBuffer>) {
-    const message = typeof data === 'string' ? parseClientMessage(data) : null;
+    const message = typeof data === 'string' ? Option.getOrNull(parseClientMessage(data)) : null;
     if (message?.type === 'command') {
-      setTimeout(() => {
+      scheduleAfter(DEMO_ACK_DELAY_MS, () => {
         this.receive({ type: 'ack', id: message.id, error: null });
         for (const listener of listeners) listener(message.command as UserCommand);
-      }, DEMO_ACK_DELAY_MS);
+      });
       return;
     }
     if (message?.type === 'transcript.subscribe') {

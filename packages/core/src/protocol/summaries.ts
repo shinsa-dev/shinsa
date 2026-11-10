@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { Activity, Evidence, Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -188,8 +189,8 @@ function listTouchedTasks(
   return touched;
 }
 
-function writeChange(entries: Record<string, EntryChange>, id: string, change: EntryChange | null) {
-  if (change) entries[id] = change;
+function writeChange(entries: Record<string, EntryChange>, id: string, change: Option.Option<EntryChange>) {
+  if (Option.isSome(change)) entries[id] = change.value;
   else delete entries[id];
 }
 
@@ -270,16 +271,16 @@ function replaceTaskEntries<T extends { taskId: string }>(
   return { ...Object.fromEntries(kept), ...entries };
 }
 
-export function applyTaskDetail(state: WireState, detail: TaskDetail): WireState | null {
-  if (detail.seq !== state.seq) return null;
+export function applyTaskDetail(state: WireState, detail: TaskDetail): Option.Option<WireState> {
+  if (detail.seq !== state.seq) return Option.none();
   const tasks = { ...state.tasks };
   if (detail.task) tasks[detail.taskId] = detail.task;
   else delete tasks[detail.taskId];
-  return {
+  return Option.some({
     ...state,
     tasks,
     runs: replaceTaskEntries(state.runs, detail.taskId, detail.runs),
     gates: replaceTaskEntries(state.gates, detail.taskId, detail.gates),
     evidence: replaceTaskEntries(state.evidence, detail.taskId, detail.evidence),
-  };
+  });
 }

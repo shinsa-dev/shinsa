@@ -16,7 +16,7 @@ import {
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { toast } from '@shinsa/ui/components/sonner';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { CSSProperties } from 'react';
 import { changeBaseline } from '@/lib/baseline.ts';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -149,7 +149,7 @@ export function selectProject(state: ShinsaState, projectId: string | null) {
 }
 
 export function selectTaskProject(state: ShinsaState, task: Task) {
-  return selectProject(state, resolveTaskProject(state, task));
+  return selectProject(state, Option.getOrNull(resolveTaskProject(state, task)));
 }
 
 export function resolveProjectInk(color: string) {

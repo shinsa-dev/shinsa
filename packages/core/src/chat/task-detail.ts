@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   type Activity,
   type Gate,
@@ -148,8 +149,10 @@ function describeTesting(task: Task) {
 }
 
 function describeTestCoverage(task: Task) {
-  const summary = describeCoverage(task.coverage);
-  return summary ? [`Changed-line coverage: ${summary}.`] : [];
+  return Option.match(describeCoverage(task.coverage), {
+    onNone: () => [],
+    onSome: (summary) => [`Changed-line coverage: ${summary}.`],
+  });
 }
 
 function describeRequest(task: Task) {

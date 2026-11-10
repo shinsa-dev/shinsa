@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import type { ScheduleTargetInput } from '../commands/schedules.ts';
 import {
@@ -96,7 +97,7 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
       );
       return;
     case 'daily':
-      if (!parseTimeOfDay(trigger.time)) {
+      if (Option.isNone(parseTimeOfDay(trigger.time))) {
         throw new DomainError({ code: 'schedule_invalid', message: 'Use 24-hour HH:MM, such as 09:00.' });
       }
       if (
@@ -322,8 +323,10 @@ function isRestart(existing: Schedule | null, body: ScheduleBody) {
 }
 
 function resolveRestart(existing: Schedule | null, body: ScheduleBody, now: number) {
-  if (isNewTrigger(existing, body)) return resolveFirstRun(body.trigger, now, body.timeZone);
-  return resolveNextRun(body.trigger, now, body.timeZone);
+  const next = isNewTrigger(existing, body)
+    ? resolveFirstRun(body.trigger, now, body.timeZone)
+    : resolveNextRun(body.trigger, now, body.timeZone);
+  return Option.getOrNull(next);
 }
 
 function createScheduleRecord(
@@ -530,7 +533,7 @@ export function enableSchedule(decider: Decider, command: CommandOf<'schedule.en
   }
   if (schedule.stopped !== null)
     throw new DomainError({ code: 'schedule_finished', message: describeStopped(schedule) });
-  const nextRunAt = resolveNextRun(schedule.trigger, now, schedule.timeZone);
+  const nextRunAt = Option.getOrNull(resolveNextRun(schedule.trigger, now, schedule.timeZone));
   if (schedule.trigger.kind !== 'webhook' && nextRunAt === null) {
     throw new DomainError({ code: 'schedule_past', message: 'Its time has passed. Delete it.' });
   }
@@ -548,7 +551,7 @@ export function removeSchedule(decider: Decider, command: CommandOf<'schedule.re
 }
 
 function selectGoneReason(decider: Decider, schedule: Schedule) {
-  if (schedule.source && !selectProjectSource(decider, schedule.source)) {
+  if (schedule.source && Option.isNone(selectProjectSource(decider, schedule.source))) {
     return 'Its data source was removed from the project.';
   }
   const target = schedule.target;
@@ -603,7 +606,7 @@ function isScheduleBusy(decider: Decider, schedule: Schedule) {
 }
 
 function resolveFollowing(schedule: Schedule, now: number) {
-  return resolveNextRun(schedule.trigger, now, schedule.timeZone);
+  return Option.getOrNull(resolveNextRun(schedule.trigger, now, schedule.timeZone));
 }
 
 function send(decider: Decider, schedule: Schedule, text: string) {
@@ -625,7 +628,7 @@ function send(decider: Decider, schedule: Schedule, text: string) {
   if (schedule.source) {
     return {
       taskId: target.taskId,
-      runId: startIntake(decider, schedule, decider.task(target.taskId), text),
+      runId: Option.getOrNull(startIntake(decider, schedule, decider.task(target.taskId), text)),
     };
   }
   messageTask(decider, { type: 'task.message', taskId: target.taskId, text }, schedule.id);

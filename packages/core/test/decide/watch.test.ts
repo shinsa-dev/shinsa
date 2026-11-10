@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   PULL_REQUEST_WATCH_WAKE_LIMIT,
   resolvePullRequestSignature,
@@ -370,19 +371,29 @@ describe('what a fix round is keyed to', () => {
       unresolvedThreads: ['t2', 't1'],
       mergeable: false,
     });
-    expect(resolvePullRequestSignature(read, watch())).toBe('check:lint\nconflict\nthread:t1\nthread:t2');
-    expect(resolvePullRequestSignature(detail(), watch())).toBeNull();
-    expect(resolvePullRequestSignature(detail({ mergeable: null }), watch({ conflicting: true }))).toBe(
-      'conflict'
+    expect(Option.getOrNull(resolvePullRequestSignature(read, watch()))).toBe(
+      'check:lint\nconflict\nthread:t1\nthread:t2'
     );
+    expect(Option.getOrNull(resolvePullRequestSignature(detail(), watch()))).toBeNull();
+    expect(
+      Option.getOrNull(resolvePullRequestSignature(detail({ mergeable: null }), watch({ conflicting: true })))
+    ).toBe('conflict');
   });
 
   test('a pull request read without names keys nothing, since its totals cannot tell two failures apart', () => {
-    expect(resolvePullRequestSignature(pullRequest({ checks: 'failing' }), watch())).toBeNull();
-    expect(resolvePullRequestSignature(pullRequest({ unresolvedComments: 2 }), watch())).toBeNull();
+    expect(
+      Option.getOrNull(resolvePullRequestSignature(pullRequest({ checks: 'failing' }), watch()))
+    ).toBeNull();
+    expect(
+      Option.getOrNull(resolvePullRequestSignature(pullRequest({ unresolvedComments: 2 }), watch()))
+    ).toBeNull();
     const halfNamed = detail({ checkRuns: [check('lint', 'failure')], unresolvedThreads: undefined });
-    expect(resolvePullRequestSignature({ ...halfNamed, unresolvedComments: 1 }, watch())).toBeNull();
-    expect(resolvePullRequestSignature(pullRequest({ mergeable: false }), watch())).toBe('conflict');
+    expect(
+      Option.getOrNull(resolvePullRequestSignature({ ...halfNamed, unresolvedComments: 1 }, watch()))
+    ).toBeNull();
+    expect(Option.getOrNull(resolvePullRequestSignature(pullRequest({ mergeable: false }), watch()))).toBe(
+      'conflict'
+    );
   });
 
   test('changes kept in the log list at most ten items with a total and short comment bodies', () => {

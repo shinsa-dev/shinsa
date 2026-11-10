@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { type ChatEntry, type ChatTool, isSubagentEvent } from '../chat/protocol.ts';
 import { describeCount } from '../chat/text.ts';
 import { DomainError, type RunHandoffReason } from '../domain/index.ts';
@@ -168,10 +169,10 @@ function resolveIntro(reason: RunHandoffReason, fromProvider: string) {
   return `This step is being handed to you from another coding agent (${fromProvider}). You are taking over in the middle of the step.`;
 }
 
-export function resolveHandoff(request: HandoffRequest): Handoff | null {
+export function resolveHandoff(request: HandoffRequest): Option.Option<Handoff> {
   const budget = request.charBudget ?? HANDOFF_CHAR_BUDGET;
   const listed = listBlocks(request.sources);
-  if (!listed.some((block) => block.entry.type === 'user')) return null;
+  if (!listed.some((block) => block.entry.type === 'user')) return Option.none();
   const recentStart = resolveRecentStart(listed);
   let elidedEntries = 0;
   const blocks = listed.map((block, index) => {
@@ -210,13 +211,13 @@ export function resolveHandoff(request: HandoffRequest): Handoff | null {
     '</handoff_transcript>',
     '</system-message>',
   ].join('\n');
-  return {
+  return Option.some({
     text,
     totalEntries: blocks.length,
     includedEntries: included.length,
     elidedEntries,
     approxTokens: resolveTokenEstimate(text),
-  };
+  });
 }
 
 export function resolveHandoffPrompt(handoff: string, prompt: string) {

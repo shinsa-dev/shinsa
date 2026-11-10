@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import type { TaskStage } from '../../src/domain/types.ts';
 import {
   isPlacementPoliciesValid,
@@ -79,9 +80,9 @@ describe('placement', () => {
       machine('a', []),
       machine('b', ['building', 'building'], { capacity: 1, projects: ['p'] }),
     ];
-    expect(resolveProjectMachine(machines, 'p')).toBe('b');
-    expect(resolveProjectMachine(machines, 'q')).toBeNull();
-    expect(resolvePlacement(machines, 'p')).toBe('b');
+    expect(Option.getOrNull(resolveProjectMachine(machines, 'p'))).toBe('b');
+    expect(Option.getOrNull(resolveProjectMachine(machines, 'q'))).toBeNull();
+    expect(Option.getOrNull(resolvePlacement(machines, 'p'))).toBe('b');
   });
 
   test('without a project, the machine with the most room takes it', () => {
@@ -89,36 +90,44 @@ describe('placement', () => {
       machine('a', ['building', 'building'], { capacity: 4 }),
       machine('b', ['building'], { capacity: 4 }),
     ];
-    expect(resolvePlacement(machines, null)).toBe('b');
-    expect(resolvePlacement(machines, 'unknown')).toBe('b');
+    expect(Option.getOrNull(resolvePlacement(machines, null))).toBe('b');
+    expect(Option.getOrNull(resolvePlacement(machines, 'unknown'))).toBe('b');
   });
 
   test('a full machine is passed over, and a machine with no limit has room', () => {
     expect(
-      resolvePlacement(
-        [machine('a', ['building'], { capacity: 1 }), machine('b', ['building'], { capacity: 8 })],
-        null
+      Option.getOrNull(
+        resolvePlacement(
+          [machine('a', ['building'], { capacity: 1 }), machine('b', ['building'], { capacity: 8 })],
+          null
+        )
       )
     ).toBe('b');
     expect(
-      resolvePlacement(
-        [machine('a', ['building'], { capacity: 8 }), machine('b', ['building', 'building'])],
-        null
+      Option.getOrNull(
+        resolvePlacement(
+          [machine('a', ['building'], { capacity: 8 }), machine('b', ['building', 'building'])],
+          null
+        )
       )
     ).toBe('b');
   });
 
   test('two machines with no limit share by open tasks, and when all are full the least loaded still takes it', () => {
-    expect(resolvePlacement([machine('a', ['building', 'building']), machine('b', ['building'])], null)).toBe(
-      'b'
-    );
     expect(
-      resolvePlacement(
-        [
-          machine('a', ['building', 'building'], { capacity: 1 }),
-          machine('b', ['building'], { capacity: 1 }),
-        ],
-        null
+      Option.getOrNull(
+        resolvePlacement([machine('a', ['building', 'building']), machine('b', ['building'])], null)
+      )
+    ).toBe('b');
+    expect(
+      Option.getOrNull(
+        resolvePlacement(
+          [
+            machine('a', ['building', 'building'], { capacity: 1 }),
+            machine('b', ['building'], { capacity: 1 }),
+          ],
+          null
+        )
       )
     ).toBe('b');
   });
@@ -127,17 +136,19 @@ describe('placement', () => {
     const busy = machine('busy', [], { resources: use(90, 4) });
     const swapping = machine('swapping', [], { resources: use(10, 30) });
     const idle = machine('idle', ['building', 'building', 'building'], { resources: use(20, 8) });
-    expect(resolvePlacement([busy, swapping, idle], null)).toBe('idle');
+    expect(Option.getOrNull(resolvePlacement([busy, swapping, idle], null))).toBe('idle');
   });
 
   test('headroom counts in steps, so near-equal machines fall back to open tasks', () => {
     expect(
-      resolvePlacement(
-        [
-          machine('a', ['building', 'building'], { resources: use(21, 4) }),
-          machine('b', ['building'], { resources: use(24, 4) }),
-        ],
-        null
+      Option.getOrNull(
+        resolvePlacement(
+          [
+            machine('a', ['building', 'building'], { resources: use(21, 4) }),
+            machine('b', ['building'], { resources: use(24, 4) }),
+          ],
+          null
+        )
       )
     ).toBe('b');
   });
@@ -145,8 +156,8 @@ describe('placement', () => {
   test('capacity still wins over headroom, and a project over both', () => {
     const full = machine('full', ['building'], { capacity: 1, resources: use(0, 0), projects: ['p'] });
     const busy = machine('busy', ['building'], { capacity: 4, resources: use(95, 30) });
-    expect(resolvePlacement([full, busy], null)).toBe('busy');
-    expect(resolvePlacement([full, busy], 'p')).toBe('full');
+    expect(Option.getOrNull(resolvePlacement([full, busy], null))).toBe('busy');
+    expect(Option.getOrNull(resolvePlacement([full, busy], 'p'))).toBe('full');
   });
 
   test('the router’s answer stands unless it names a full machine while another has room', () => {
@@ -162,24 +173,28 @@ describe('placement', () => {
 
   test('when a machine reports no resources, room alone decides as before', () => {
     expect(
-      resolvePlacement(
-        [
-          machine('old', ['building'], { capacity: 4 }),
-          machine('new', ['building', 'building'], { capacity: 4, resources: use(0, 0) }),
-        ],
-        null
+      Option.getOrNull(
+        resolvePlacement(
+          [
+            machine('old', ['building'], { capacity: 4 }),
+            machine('new', ['building', 'building'], { capacity: 4, resources: use(0, 0) }),
+          ],
+          null
+        )
       )
     ).toBe('old');
     expect(
-      resolvePlacement(
-        [machine('old', [], { resources: null }), machine('new', ['building'], { resources: use(0, 0) })],
-        null
+      Option.getOrNull(
+        resolvePlacement(
+          [machine('old', [], { resources: null }), machine('new', ['building'], { resources: use(0, 0) })],
+          null
+        )
       )
     ).toBe('old');
   });
 
   test('no machine, no placement', () => {
-    expect(resolvePlacement([], null)).toBeNull();
+    expect(Option.getOrNull(resolvePlacement([], null))).toBeNull();
   });
 });
 
@@ -231,24 +246,28 @@ describe('placement policies', () => {
 
   test('the answer names one of the machines, with a short reason; "none" or anything else is no answer', () => {
     expect(
-      parsePlacementAnswer(question, { machine: 'studio', reason: ' Simulator tests run here. ' })
+      Option.getOrNull(
+        parsePlacementAnswer(question, { machine: 'studio', reason: ' Simulator tests run here. ' })
+      )
     ).toEqual({
       machineId: 'studio',
       reason: 'Simulator tests run here.',
     });
     expect(
-      parsePlacementAnswer(question, { machine: 'server', reason: 'x'.repeat(300) })?.reason
+      Option.getOrNull(parsePlacementAnswer(question, { machine: 'server', reason: 'x'.repeat(300) }))?.reason
     ).toHaveLength(240);
-    expect(parsePlacementAnswer(question, { machine: 'server' })).toEqual({
+    expect(Option.getOrNull(parsePlacementAnswer(question, { machine: 'server' }))).toEqual({
       machineId: 'server',
       reason: '',
     });
     expect(
-      parsePlacementAnswer(question, { machine: NO_PLACEMENT_MACHINE, reason: 'No policy fits.' })
+      Option.getOrNull(
+        parsePlacementAnswer(question, { machine: NO_PLACEMENT_MACHINE, reason: 'No policy fits.' })
+      )
     ).toBeNull();
-    expect(parsePlacementAnswer(question, { machine: 7 })).toBeNull();
-    expect(parsePlacementAnswer(question, null)).toBeNull();
-    expect(parsePlacementAnswer(question, 'studio')).toBeNull();
+    expect(Option.getOrNull(parsePlacementAnswer(question, { machine: 7 }))).toBeNull();
+    expect(Option.getOrNull(parsePlacementAnswer(question, null))).toBeNull();
+    expect(Option.getOrNull(parsePlacementAnswer(question, 'studio'))).toBeNull();
   });
 
   test('each machine lists the projects it holds with their repositories, and the repositories outside one', () => {
@@ -281,7 +300,7 @@ describe('placement policies', () => {
 
   test('a question from a page is checked field by field before the classifier sees it', () => {
     const json = JSON.parse(JSON.stringify(question)) as unknown;
-    expect(parsePlacementQuestion(json)).toEqual(question);
+    expect(Option.getOrNull(parsePlacementQuestion(json))).toEqual(question);
     const candidate = question.machines[0];
     const broken: unknown[] = [
       null,
@@ -325,43 +344,52 @@ describe('placement policies', () => {
         machines: [candidate, { ...candidate, id: 'b', repositories: Array.from({ length: 31 }, () => 'r') }],
       },
     ];
-    for (const value of broken) expect(parsePlacementQuestion(value)).toBeNull();
+    for (const value of broken) expect(Option.getOrNull(parsePlacementQuestion(value))).toBeNull();
     expect(
+      Option.getOrNull(
+        parsePlacementQuestion({
+          ...question,
+          machines: [candidate, { ...candidate, id: 'b', name: 'n'.repeat(200) }],
+        })
+      )?.machines[1]?.name
+    ).toHaveLength(120);
+    const long = Option.getOrNull(
       parsePlacementQuestion({
         ...question,
-        machines: [candidate, { ...candidate, id: 'b', name: 'n'.repeat(200) }],
-      })?.machines[1]?.name
-    ).toHaveLength(120);
-    const long = parsePlacementQuestion({
-      ...question,
-      machines: [
-        candidate,
-        {
-          ...candidate,
-          id: 'b',
-          projects: [
-            { name: 'n'.repeat(200), description: 'd'.repeat(400), repositories: ['r'.repeat(200)] },
-          ],
-        },
-      ],
-    })?.machines[1]?.projects[0];
+        machines: [
+          candidate,
+          {
+            ...candidate,
+            id: 'b',
+            projects: [
+              { name: 'n'.repeat(200), description: 'd'.repeat(400), repositories: ['r'.repeat(200)] },
+            ],
+          },
+        ],
+      })
+    )?.machines[1]?.projects[0];
     expect([long?.name.length, long?.description.length, long?.repositories[0]?.length]).toEqual([
       120, 300, 120,
     ]);
     const { resources: _resources, ...older }: Partial<PlacementCandidate> = { ...question.machines[0] };
     expect(
-      parsePlacementQuestion({ ...question, machines: [older, { ...older, id: 'b' }] })?.machines[1]
-        ?.resources
+      Option.getOrNull(parsePlacementQuestion({ ...question, machines: [older, { ...older, id: 'b' }] }))
+        ?.machines[1]?.resources
     ).toBeNull();
   });
 
   test('a project still wins, and room decides the rest', () => {
     expect(
-      resolvePlacement(
-        [studio, { ...server, state: { ...server.state, projects: { p: { name: 'P', description: '' } } } }],
-        'p'
+      Option.getOrNull(
+        resolvePlacement(
+          [
+            studio,
+            { ...server, state: { ...server.state, projects: { p: { name: 'P', description: '' } } } },
+          ],
+          'p'
+        )
       )
     ).toBe('server');
-    expect(resolvePlacement([server, studio], null)).toBe('studio');
+    expect(Option.getOrNull(resolvePlacement([server, studio], null))).toBe('studio');
   });
 });

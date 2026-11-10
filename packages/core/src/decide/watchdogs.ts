@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeCount } from '../chat/text.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -391,19 +392,20 @@ function resolveCheckedWatchdog(decider: Decider, task: Task, found: Watchdog, r
 
 export function endWatchCheck(decider: Decider, task: Task, run: Run, read: ReadReport) {
   const found = selectWatchingRun(task, run.id);
-  if (!found)
+  if (Option.isNone(found))
     throw new DomainError({
       code: 'watchdog_not_found',
       message: 'No watchdog waits on this check. End your turn.',
     });
-  if (found.status === 'watching') {
-    assertLiveWhenFiled(read, hasFoundReports(listFiledTaskIds(decider, found), found));
+  const checked = found.value;
+  if (checked.status === 'watching') {
+    assertLiveWhenFiled(read, hasFoundReports(listFiledTaskIds(decider, checked), checked));
     if (read.live === false) {
-      leaveProduction(decider, task, run, found, read.summary);
+      leaveProduction(decider, task, run, checked, read.summary);
       return;
     }
   }
-  const watchdog = resolveCheckedWatchdog(decider, task, found, read);
+  const watchdog = resolveCheckedWatchdog(decider, task, checked, read);
   if (!watchdog) {
     awaitProduction(decider, task, run.id);
     return;
@@ -416,13 +418,13 @@ export function endWatchCheck(decider: Decider, task: Task, run: Run, read: Read
 export function moveWatchCheck(decider: Decider, from: string, to: string) {
   const task = decider.task(decider.state.runs[to]?.taskId ?? '');
   const watchdog = selectWatchingRun(task, from);
-  if (!watchdog) return;
-  decider.emit({ type: 'watchdog.checking', taskId: task.id, watchdogId: watchdog.id, runId: to });
+  if (Option.isNone(watchdog)) return;
+  decider.emit({ type: 'watchdog.checking', taskId: task.id, watchdogId: watchdog.value.id, runId: to });
 }
 
 export function missWatchCheck(decider: Decider, runId: string, reason: string) {
   const task = decider.task(decider.state.runs[runId]?.taskId ?? '');
-  const watchdog = selectWatchingRun(task, runId);
+  const watchdog = Option.getOrNull(selectWatchingRun(task, runId));
   if (!watchdog) return false;
   const filed = listFiledTaskIds(decider, watchdog);
   if (hasFoundReports(filed, watchdog)) recordTrip(decider, task, watchdog, reason, filed);

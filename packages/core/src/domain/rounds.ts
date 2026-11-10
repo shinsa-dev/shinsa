@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { splitMessageAttachments } from '../chat/attachments.ts';
 import { isTaskSettled } from './stages.ts';
 import type { PipelineStep } from './steps.ts';
@@ -151,21 +152,24 @@ export function resolveNextRoundNumber(task: RoundSource) {
   return Math.max(...resolveTaskRounds(task).map((round) => round.number)) + 1;
 }
 
-export function resolveRoundBase(task: RoundSource) {
+export function resolveRoundBase(task: RoundSource): Option.Option<string> {
   const active = selectActiveRound(task);
   const stacked = resolveTaskRounds(task).some(
     (round) =>
       round.status === 'shipped' && round.branch === active?.base && round.pullRequest?.state === 'open'
   );
-  if (active?.base && stacked) return active.base;
-  return task.stackBases?.[0] ?? null;
+  if (active?.base && stacked) return Option.some(active.base);
+  return Option.fromNullishOr(task.stackBases?.[0]);
 }
 
 export function resolveRoundBases(task: RoundSource) {
-  const base = resolveRoundBase(task);
-  if (base === null) return [];
-  const bases = task.stackBases ?? [];
-  return bases[0] === base ? [...bases] : [base];
+  return Option.match(resolveRoundBase(task), {
+    onNone: () => [],
+    onSome: (base) => {
+      const bases = task.stackBases ?? [];
+      return bases[0] === base ? [...bases] : [base];
+    },
+  });
 }
 
 export function listStackedPullRequests(task: RoundSource) {
@@ -194,16 +198,21 @@ export function formatRoundLabel(round: Pick<Round, 'number'>) {
   return `Round ${round.number}`;
 }
 
-export function selectShippingTarget(task: RoundSource, round: Pick<Round, 'number' | 'status'>) {
+export function selectShippingTarget(
+  task: RoundSource,
+  round: Pick<Round, 'number' | 'status'>
+): Option.Option<RoundPullRequest> {
   if (round.status === 'waiting')
-    return task.pullRequest?.state === 'open' ? toRoundPullRequest(task.pullRequest) : null;
+    return task.pullRequest?.state === 'open'
+      ? Option.some(toRoundPullRequest(task.pullRequest))
+      : Option.none();
   const shipped = resolveTaskRounds(task).filter(
     (candidate) =>
       candidate.number < round.number &&
       candidate.status === 'shipped' &&
       candidate.pullRequest?.state === 'open'
   );
-  return shipped.at(-1)?.pullRequest ?? null;
+  return Option.fromNullishOr(shipped.at(-1)?.pullRequest);
 }
 
 export function canChangeRoundShipping(task: ShippingSource, round: Pick<Round, 'status'>) {

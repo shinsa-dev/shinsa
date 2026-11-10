@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isRecord } from '../domain/records.ts';
 import {
   STATE_FIELDS,
@@ -44,10 +45,10 @@ function resolveValueChange(previous: unknown, next: unknown): ValueChange {
   return { put: next };
 }
 
-export function resolveEntryChange(previous: unknown, next: unknown): EntryChange | null {
-  if (previous === next) return null;
-  if (next === undefined) return { remove: true };
-  if (!isRecord(previous) || !isRecord(next)) return { put: next };
+export function resolveEntryChange(previous: unknown, next: unknown): Option.Option<EntryChange> {
+  if (previous === next) return Option.none();
+  if (next === undefined) return Option.some({ remove: true });
+  if (!isRecord(previous) || !isRecord(next)) return Option.some({ put: next });
   const fields: Record<string, ValueChange> = {};
   const unset: string[] = [];
   for (const [key, value] of Object.entries(next)) {
@@ -58,8 +59,8 @@ export function resolveEntryChange(previous: unknown, next: unknown): EntryChang
   for (const key of Object.keys(previous)) {
     if (!Object.hasOwn(next, key)) unset.push(key);
   }
-  if (unset.length === 0 && Object.keys(fields).length === 0) return null;
-  return { fields, unset };
+  if (unset.length === 0 && Object.keys(fields).length === 0) return Option.none();
+  return Option.some({ fields, unset });
 }
 
 function readEntry(state: ShinsaState, key: StateRecordKey, id: string): unknown {
@@ -85,7 +86,7 @@ export function resolveStatePatch(
     const entries: Record<string, EntryChange> = {};
     for (const id of changes[key] ?? []) {
       const change = resolveEntryChange(readEntry(previous, key, id), readEntry(next, key, id));
-      if (change) entries[id] = change;
+      if (Option.isSome(change)) entries[id] = change.value;
     }
     if (Object.keys(entries).length > 0) records[key] = entries;
   }
@@ -109,8 +110,8 @@ function applyEntryChange(previous: unknown, change: EntryChange): unknown {
   return entry;
 }
 
-export function applyStatePatch(state: WireState, patch: StatePatch): WireState | null {
-  if (patch.from !== state.seq) return null;
+export function applyStatePatch(state: WireState, patch: StatePatch): Option.Option<WireState> {
+  if (patch.from !== state.seq) return Option.none();
   const next: Record<string, unknown> = { ...state, seq: patch.to };
   for (const [key, change] of Object.entries(patch.fields)) {
     next[key] = applyValueChange(next[key], change);
@@ -124,5 +125,5 @@ export function applyStatePatch(state: WireState, patch: StatePatch): WireState 
     }
     next[key] = record;
   }
-  return next as unknown as WireState;
+  return Option.some(next as unknown as WireState);
 }

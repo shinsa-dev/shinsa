@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useDelay } from '@/hooks/use-delay.ts';
 
 export const SETTLE_MS = 400;
 
@@ -11,11 +12,7 @@ export function useSettling(active: boolean, settleMs: number = SETTLE_MS): Sett
     setPrevious(active);
     setSettling(!active);
   }
-  React.useEffect(() => {
-    if (!settling) return;
-    const timer = setTimeout(() => setSettling(false), settleMs);
-    return () => clearTimeout(timer);
-  }, [settling, settleMs]);
+  useDelay(() => setSettling(false), settling ? settleMs : null);
   if (active) return 'active';
   return settling ? 'settling' : null;
 }

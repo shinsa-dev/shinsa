@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, jest, mock, spyOn, test } from 'bun:test';
 import type { ChatEvent, UserCommand } from '@shinsa/core';
 import { Effect } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { Socket } from 'effect/socket';
+import { DEMO_ACK_DELAY_MS } from '../../src/lib/demo-server/schema.ts';
 
 await mock.module('../../src/lib/scene.ts', () => ({ createHomeScene: (now: number) => ({ scene: now }) }));
 await mock.module('../../src/lib/demo-repo.ts', () => ({
@@ -36,6 +37,7 @@ const SAY: ChatEvent = { type: 'notice', text: 'Hello.' } as unknown as ChatEven
 
 afterEach(() => {
   mock.restore();
+  jest.useRealTimers();
 });
 
 describe('the demo fetch', () => {
@@ -93,10 +95,7 @@ describe('the demo socket', () => {
   });
 
   test('opens with the scene, then acks a command and hands it to every listener', () => {
-    spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void) => {
-      run();
-      return 0;
-    }) as typeof setTimeout);
+    jest.useFakeTimers();
     const socket = transport.open('ws://demo.test/ws') as unknown as ReturnType<typeof createDemoSocket>;
     const seen = listen(socket);
     openDemoSockets();
@@ -111,8 +110,10 @@ describe('the demo socket', () => {
     const stop = onDemoCommand((command) => commands.push(command));
     const command = { type: 'task.prioritize', taskId: 't-1', priority: 'high' };
     socket.send(JSON.stringify({ type: 'command', id: 'c-1', command }));
+    jest.advanceTimersByTime(DEMO_ACK_DELAY_MS);
     stop();
     socket.send(JSON.stringify({ type: 'command', id: 'c-2', command }));
+    jest.advanceTimersByTime(DEMO_ACK_DELAY_MS);
     expect(commands).toEqual([command as unknown as UserCommand]);
     expect(seen.slice(3)).toEqual([
       { type: 'ack', id: 'c-1', error: null },

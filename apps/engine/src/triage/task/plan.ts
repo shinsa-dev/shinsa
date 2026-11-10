@@ -13,7 +13,7 @@ import {
   type TaskSize,
   type TriageReasons,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { JsonSchema } from '../../agents/providers/index.ts';
 import {
   type ChoiceQuestion,
@@ -276,7 +276,7 @@ function listOpenTasks(state: ShinsaState, task: Task, project: Project | null) 
     (candidate) =>
       candidate.id !== task.id &&
       !isTaskSettled(candidate) &&
-      (!project || resolveTaskProject(state, candidate) === project.id)
+      (!project || Option.getOrNull(resolveTaskProject(state, candidate)) === project.id)
   );
 }
 

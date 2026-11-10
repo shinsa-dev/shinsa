@@ -68,17 +68,17 @@ export const createTeamKeyRequest = Effect.fn('createTeamKeyRequest')(function* 
   return request;
 });
 
-export function readTeamKeyRequest(value: unknown): TeamKeyRequest | null {
-  if (!isRecord(value)) return null;
+export function readTeamKeyRequest(value: unknown): Option.Option<TeamKeyRequest> {
+  if (!isRecord(value)) return Option.none();
   const { ephemeral, ask, signature } = value;
   if (!(typeof ephemeral === 'string' && typeof signature === 'string' && typeof ask === 'boolean'))
-    return null;
-  return { ephemeral, ask, signature };
+    return Option.none();
+  return Option.some({ ephemeral, ask, signature });
 }
 
 export function parseTeamKeyRefusal(text: string) {
-  const fields = parseJsonRecord(text);
-  return fields?.type === 'refused' ? readTeamKeyRequest(fields.keyRequest) : null;
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
+  return fields?.type === 'refused' ? readTeamKeyRequest(fields.keyRequest) : Option.none();
 }
 
 export const verifyTeamKeyRequest = Effect.fn('verifyTeamKeyRequest')(function* (
@@ -87,7 +87,7 @@ export const verifyTeamKeyRequest = Effect.fn('verifyTeamKeyRequest')(function* 
   request: TeamKeyRequest
 ) {
   const key = yield* parseSigningPublicKey(signingKey);
-  const signature = parseBase64Url(request.signature);
+  const signature = Option.getOrNull(parseBase64Url(request.signature));
   if (!(key && signature)) return false;
   return yield* Effect.promise(() =>
     crypto.subtle.verify(
@@ -156,19 +156,20 @@ export const sealTeamKey = Effect.fn('sealTeamKey')(function* (input: TeamKeySea
   return delivery;
 });
 
-export function parseTeamKeyDelivery(text: string): TeamKeyDelivery | null {
-  const fields = parseJsonRecord(text);
-  if (fields?.type !== 'team-key' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
+export function parseTeamKeyDelivery(text: string): Option.Option<TeamKeyDelivery> {
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
+  if (fields?.type !== 'team-key' || fields.version !== REMOTE_PROTOCOL_VERSION) return Option.none();
   const { team, recipient, sealed } = fields;
-  if (!(typeof team === 'string' && typeof recipient === 'string' && typeof sealed === 'string')) return null;
-  return { type: 'team-key', version: REMOTE_PROTOCOL_VERSION, team, recipient, sealed };
+  if (!(typeof team === 'string' && typeof recipient === 'string' && typeof sealed === 'string'))
+    return Option.none();
+  return Option.some({ type: 'team-key', version: REMOTE_PROTOCOL_VERSION, team, recipient, sealed });
 }
 
 export const openTeamKey = Effect.fn('openTeamKey')(function* (
   privateKey: CryptoKey,
   delivery: TeamKeyDelivery
 ) {
-  const bytes = parseBase64Url(delivery.sealed);
+  const bytes = Option.getOrNull(parseBase64Url(delivery.sealed));
   if (!bytes || bytes.length <= EPHEMERAL_BYTES + TEAM_KEY_IV_BYTES) return null;
   const senderBytes = bytes.slice(0, EPHEMERAL_BYTES);
   const sender = yield* parsePublicKey(serializeBase64Url(senderBytes));

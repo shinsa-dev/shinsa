@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   AWAY_LIMITS,
   DAY_MS,
@@ -39,7 +40,7 @@ const NIGHT_HOURS = [0, 1, 2, 3, 4, 5, 6, 7];
 
 describe('away hours', () => {
   test('are learned from the time you were away, by the hour of the day', () => {
-    expect(resolveAwayHours({ away: nights(10), presence: {} }, NOW)).toEqual({
+    expect(Option.getOrNull(resolveAwayHours({ away: nights(10), presence: {} }, NOW))).toEqual({
       hours: NIGHT_HOURS,
       source: 'away',
     });
@@ -48,29 +49,33 @@ describe('away hours', () => {
   test('an hour counts only when at least half of it was away, on at least half of the days', () => {
     const half = nights(10, NOW, 0, 8.4);
     const rare = nights(2, NOW, 10, 11);
-    const away = resolveAwayHours({ away: { ...half, ...rare }, presence: {} }, NOW);
+    const away = Option.getOrNull(resolveAwayHours({ away: { ...half, ...rare }, presence: {} }, NOW));
     expect(away?.hours).toEqual(NIGHT_HOURS);
   });
 
   test('ignore time away from before the last 14 days and a span past now counts only up to now', () => {
     const old = nights(5, NOW - 20 * DAY_MS, 12, 20);
     const open = { open: { from: NOW - HOUR_MS, to: NOW + DAY_MS } };
-    const away = resolveAwayHours({ away: { ...old, ...open, ...nights(4) }, presence: {} }, NOW);
+    const away = Option.getOrNull(
+      resolveAwayHours({ away: { ...old, ...open, ...nights(4) }, presence: {} }, NOW)
+    );
     expect(away?.hours).toEqual(NIGHT_HOURS);
   });
 
   test('fall back to the hours you were not active when too few days were away', () => {
-    const away = resolveAwayHours({ away: nights(AWAY_LIMITS.minDays - 1), presence: daytime(10) }, NOW);
+    const away = Option.getOrNull(
+      resolveAwayHours({ away: nights(AWAY_LIMITS.minDays - 1), presence: daytime(10) }, NOW)
+    );
     expect(away?.source).toBe('activity');
     expect(away?.hours).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 18, 19, 20, 21, 22, 23]);
   });
 
   test('are unknown with too little of either, and nothing is away then', () => {
     const away = resolveAwayHours({ away: nights(2), presence: daytime(2) }, NOW);
-    expect(away).toBeNull();
+    expect(away).toEqual(Option.none());
     expect(isAwayAt(away, NOW)).toBe(false);
-    expect(isAwayAt({ hours: [3], source: 'away' }, 21 * DAY_MS + 3.5 * HOUR_MS)).toBe(true);
-    expect(isAwayAt({ hours: [3], source: 'away' }, 21 * DAY_MS + 4 * HOUR_MS)).toBe(false);
+    expect(isAwayAt(Option.some({ hours: [3], source: 'away' }), 21 * DAY_MS + 3.5 * HOUR_MS)).toBe(true);
+    expect(isAwayAt(Option.some({ hours: [3], source: 'away' }), 21 * DAY_MS + 4 * HOUR_MS)).toBe(false);
   });
 });
 
@@ -91,7 +96,7 @@ function awayNow(harness: Harness) {
 
 function shiftOf(harness: Harness, purpose: 'plan' | 'build' | 'fix' | 'operate', role = 'agent' as const) {
   const taskId = createTask(harness);
-  return resolveNightShift(harness.state, harness.task(taskId), role, purpose, harness.now);
+  return Option.getOrNull(resolveNightShift(harness.state, harness.task(taskId), role, purpose, harness.now));
 }
 
 describe('the night shift', () => {
@@ -102,7 +107,9 @@ describe('the night shift', () => {
     const on = nightHarness();
     awayNow(on);
     const taskId = createTask(on);
-    expect(resolveNightShift(on.state, on.task(taskId), 'reviewer', 'build', on.now)).toBeNull();
+    expect(
+      Option.getOrNull(resolveNightShift(on.state, on.task(taskId), 'reviewer', 'build', on.now))
+    ).toBeNull();
     expect(shiftOf(on, 'operate')).toBeNull();
   });
 
