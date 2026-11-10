@@ -1,15 +1,60 @@
 import { join } from 'node:path';
 import { Effect, Layer, Queue, Stream } from 'effect';
-import { app, BrowserWindow, nativeTheme, screen } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  type MenuItemConstructorOptions,
+  nativeTheme,
+  screen,
+  type WebContents,
+} from 'electron';
 import { APP_NAME } from '../app/schema.ts';
 import { NativeWindow } from '../native-window/service.ts';
 import { Prefs } from '../prefs/service.ts';
 import { resolveWindowBounds } from '../window/bounds.ts';
-import { MIN_SIZE, type NativeWindowEvent, type WindowGuards } from '../window/schema.ts';
+import { listContextMenuEntries } from '../window/context-menu.ts';
+import {
+  type ContextAction,
+  type ContextMenuEntry,
+  MIN_SIZE,
+  type NativeWindowEvent,
+  type WindowGuards,
+} from '../window/schema.ts';
 
 const TRAFFIC_LIGHTS = { x: 16, y: 15 };
 
 const BACKGROUND = { dark: '#101012', light: '#ffffff' };
+
+const runContextAction = (contents: WebContents, action: ContextAction) => {
+  switch (action._tag) {
+    case 'Replace':
+      return contents.replaceMisspelling(action.word);
+    case 'Learn':
+      return void contents.session.addWordToSpellCheckerDictionary(action.word);
+    case 'LookUp':
+      return contents.showDefinitionForSelection();
+  }
+};
+
+const toContextItem = (contents: WebContents, entry: ContextMenuEntry): MenuItemConstructorOptions => {
+  switch (entry.kind) {
+    case 'separator':
+      return { type: 'separator' };
+    case 'role':
+      return { role: entry.role, enabled: entry.enabled };
+    case 'note':
+      return { label: entry.label, enabled: false };
+    case 'action':
+      return { label: entry.label, click: () => runContextAction(contents, entry.action) };
+  }
+};
+
+const lockZoom = (contents: WebContents) =>
+  Effect.andThen(
+    Effect.sync(() => contents.setZoomLevel(0)),
+    Effect.ignore(Effect.tryPromise(() => contents.setVisualZoomLevelLimits(1, 1)))
+  );
 
 const loaded = (load: () => Promise<void>) =>
   Effect.match(Effect.tryPromise(load), { onFailure: () => false, onSuccess: () => true });
@@ -43,6 +88,7 @@ export const NativeWindowLive = Layer.effect(
         spellcheck: true,
         backgroundThrottling: false,
         v8CacheOptions: 'bypassHeatCheck',
+        devTools: false,
       },
     });
     const contents = win.webContents;
@@ -52,6 +98,8 @@ export const NativeWindowLive = Layer.effect(
     });
     win.on('enter-full-screen', () => emit({ _tag: 'FullScreen', on: true }));
     win.on('leave-full-screen', () => emit({ _tag: 'FullScreen', on: false }));
+    win.on('resized', () => emit({ _tag: 'BoundsChanged' }));
+    win.on('moved', () => emit({ _tag: 'BoundsChanged' }));
     contents.on('will-navigate', (details) => {
       if (!guards || !Effect.runSync(guards.navigate(details.url))) details.preventDefault();
     });
@@ -62,6 +110,13 @@ export const NativeWindowLive = Layer.effect(
     contents.on('did-fail-load', (_event, code, _description, _url, mainFrame) =>
       emit({ _tag: 'LoadFailed', code, mainFrame })
     );
+    contents.on('did-finish-load', () => Effect.runFork(lockZoom(contents)));
+    contents.on('zoom-changed', () => Effect.runFork(lockZoom(contents)));
+    contents.on('context-menu', (_event, params) => {
+      const entries = listContextMenuEntries(params);
+      if (entries.length === 0) return;
+      Menu.buildFromTemplate(entries.map((entry) => toContextItem(contents, entry))).popup({ window: win });
+    });
     contents.on('render-process-gone', () => emit({ _tag: 'RendererGone' }));
     return NativeWindow.of({
       contentsId: contents.id,

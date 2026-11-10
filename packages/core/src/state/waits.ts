@@ -41,7 +41,11 @@ function applyMonitorEnded(state: ShinsaState, event: EventOf<'monitor.ended'>) 
 function applyUsageWaitArmed(state: ShinsaState, event: EventOf<'usage_wait.armed'>) {
   const previous = state.tasks[event.taskId]?.usageWait;
   updateTask(state, event.taskId, event.at, { usageWait: event.wait });
-  if (previous?.status === 'armed' && previous.resetAt === event.wait.resetAt) return;
+  if (
+    previous?.status === 'armed' &&
+    (previous.resetAt === event.wait.resetAt || previous.id === event.wait.id)
+  )
+    return;
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'account',
@@ -53,6 +57,7 @@ function applyUsageWaitArmed(state: ShinsaState, event: EventOf<'usage_wait.arme
 const PACE_ARMED: Record<UsagePaceScope, string> = {
   daily: 'Held the next step at the daily usage limit; it starts when the last 24 hours drop below it',
   project: 'Held the next step at the project’s usage limit; it starts when the last 24 hours drop below it',
+  admission: 'Held the build until its estimate fits today’s usage; it starts in queue order',
 };
 
 function describeArmed(wait: UsageWait) {

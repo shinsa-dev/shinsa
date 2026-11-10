@@ -110,8 +110,14 @@ another provider drops the model it had, unless the same change names one (switc
 `defaultModel` the same way). Model names come from `KNOWN_AGENT_PROVIDERS` (Claude's `KNOWN_AGENT_MODELS`, "opus"
 is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the right names from the first paint;
 `GET /api/providers` then replaces them with each provider's live catalog (`listModels`: the Claude SDK's
-`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
-serves the default provider's list, the one setup's Model step offers.
+`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). Each provider keeps its
+catalog in an Effect `Cache` keyed by the program's path and version, for `MODEL_CATALOG_TTL` (5 minutes): an
+update to Claude Code or Codex is a new key, so the next read asks the new program straight away, and a failed or
+empty answer is not kept, so the next read asks again; meanwhile the read serves the last list the provider gave
+(the built-in list until it gave one), so a failed ask never swaps a live list for older built-in names. The web asks
+`GET /api/providers` on every mount of `useAgentProviders()` (Settings and its Agents section), showing the last
+list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
+default provider's list, the one setup's Model step offers.
 
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
@@ -232,9 +238,11 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   proves its change with a test or a check links that check by its id instead of pasting its output (Evidence,
   below).
 - **Headless.** Checks run with `CI=1`, which test runners and Playwright read as headless, and every browser Shinsa
-  or its agents start is headless (`resolveBrowserEnv`), so nothing a check runs opens a window on your screen. The
-  same environment gives the Playwright MCP a device scale factor of 2 (`Desktop Chrome HiDPI`), so evidence an agent
-  captures stays sharp on a Retina screen (Evidence, below).
+  or its agents start is headless (`resolveBrowserEnv`), so nothing a check runs opens a window on your screen; the
+  one window is the sign-in window you open yourself (The shared browser, below). An agent's Playwright MCP drives its
+  project's shared browser, which Chrome renders at a device scale factor of 2; without one, the same environment gives
+  the MCP's own browser that scale (`Desktop Chrome HiDPI`), so evidence an agent captures stays sharp on a Retina
+  screen either way (Evidence, below).
 
 ### Test coverage of the change
 
@@ -1085,12 +1093,12 @@ folds in `state/shapes.ts`).
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
   of planning a fix.
-- **Suggested replies.** Any hand-over but the reviewer's can carry up to three `actions` (`label`, `message`).
+- **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
   that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
-  plan, proposal, review, merge and result cards show them as outline buttons before the main one, ⌘K lists them as
-  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent. A
-  click sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
+  plan, proposal, review, merge and result cards list them in one outline Replies menu before the main button, each label with its message under it, ⌘K lists them as
+  "Suggested reply" while one of those gates is open, and both show them only while a message can reach the agent.
+  Choosing one sends the message as yours (`task.message`), so it does what typing it does there: at review it asks for
   changes in this round, at your OK it declines the proposal and resumes the inquiry.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
   characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
@@ -1273,10 +1281,12 @@ and only the order in which finished work reaches you is managed.
   OK, an operation and a secret rank as questions), paused (a failure, a setup to fix, a sign-in),
   then the oldest first), and the guide never leads with a low priority decision while anything else waits
   (`parseBriefing` drops such an answer; low ones go to the end of next).
-- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up or usage runs
-  low: holding the compute only delays work you asked for, and priority already keeps finished work out of your way.
-  Work you want planned now and built later goes in the backlog, and only you (or an agent you asked) put it there;
-  triage never does.
+- **No hold but the one you choose.** Shinsa never parks new work on its own while decisions pile up, and never
+  because usage runs low unless you switched Auto pace on (Agent usage → Auto pace, below): holding the compute only
+  delays work you asked for, and priority already keeps finished work out of your way. With Auto pace on, a build
+  waits its turn within the forecast's safe pace, ordered by priority and then the projects you work on most; planning, questions
+  and answers still never wait. Work you want planned now and built later goes in the backlog, and only you (or an
+  agent you asked) put it there; triage and Auto pace never do.
 
 ### Dependencies
 
@@ -1351,6 +1361,14 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
 `stack_on` (`stacksOn` on `task.create`, this task first), or splits its plan into a chain with `split_task`'s
 `stacked` (Delegation, below). Triage stacks a new task on an open change when it is that change's next piece
 (`stacks_on`, Task shapes, above). Stacking on a task it already waits on moves that wait into the stack.
+
+- **No wait inside a bundle.** A bundle merges as one, so a task that waits for another task of its own bundle to
+  merge would hold the bundle while the bundle holds it. A wait on any member, below, above or beside it, is dropped:
+  `changeStack` drops it from every member of the bundle a stack change leaves (joining two bundles drops the waits
+  between them), and `task.wait_on`, `task.create` and triage never add one (`isBundleMember`, `state/queries.ts`). A
+  wait already in the log on a member holds nothing (`listDependencies` skips it), so the task starts and the lead's
+  merge gate opens as if it were gone. A task stacked on a bundle that opens no pull request of its own is not a member,
+  and keeps its waits.
 
 - **A graph, not a line.** A task can stack on several tasks and several tasks can stack on one, so a bundle fans out
   and back in: A, then B, C and D on A, then F on B, C and D, then E on F. A bundle is every task connected to a task
@@ -1621,8 +1639,9 @@ stops here.
 ## Gates
 
 Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
-`question` is an agent waiting for an answer and `secret` an agent waiting for a secret (`request_secret`); both are an
-agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
+`question` is an agent waiting for an answer, `secret` an agent waiting for a secret (`request_secret`) and
+`browser_sign_in` an agent waiting for its project's shared browser to be signed in to a site
+(`request_browser_sign_in`, The shared browser, below); all three are an agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
 above), `operation` an operation after the merge waiting for your OK on the merged commit, and `result` a finished
 answer, report or diagnosis waiting for you to read and close it (Task shapes → Answered, not done). `failure` means the
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
@@ -1644,9 +1663,12 @@ says so in its plan instead of an agent splitting the request before anyone read
 lists the other parts (a title, a request that stands on its own, and when each starts: now, waiting on this task or
 an earlier part, or stacked on one), and the phases cover only the work that stays (`docs/protocol.md` → Plan
 parameters). The planning prompt says when (`describePlanSplit`, `prompts/roles.ts`): only for a task that opens a
-pull request, parts in parallel by default, waiting only on code on an unmerged branch, stacked only for pieces of one
-rewrite, and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
-Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both.
+pull request; parts that serve one goal (pieces of one feature, a change and its follow-ups, work on the same code)
+stacked as a bundle, which is how most splits end; in parallel only for a part with a different goal worth merging
+alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
+Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
+every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
@@ -2019,8 +2041,8 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 ### Evidence
 
 The review opens with proof, not the diff: screenshots before and after, a recording of an interaction, the checks
-that prove the logic (`docs/spec.md` 6). Shinsa does not run a browser of its own; the agents capture evidence with
-the tools they have and hand it over with `attach_evidence` (since 2026-10-26), and Shinsa keeps the output of the
+that prove the logic (`docs/spec.md` 6). The agents capture evidence with the tools they have, in their project's
+shared browser when the screen needs a sign-in (The shared browser, below), and hand it over with `attach_evidence` (since 2026-10-26), and Shinsa keeps the output of the
 checks it ran.
 
 - **Who captures it.** The Agent proves its own work. Every phase instruction (`resolvePhaseInstruction`,
@@ -2230,9 +2252,21 @@ checks it ran.
 - **A run's share is its cost at the account's learned rate** (`resolveUsageShares` over `resolveUsageRates` in
   `costs/rate.ts`, each worked out once per `state.runs`), the way its cost is its tokens at the model's prices. The subscription meter tracks
   model-weighted compute, which the API-equivalent cost already weighs by model and token type, so the rate is
-  "percent of the weekly window per dollar", learned per window (each account, or a provider's own login), so plans
-  of different sizes (Max 5x, Max 20x) and providers (Claude, Codex) each have their own. It is derived from the log
-  every time state is built, never stored.
+  "percent of the weekly window per dollar", learned per pool, so plans of different sizes (Max 5x, Max 20x) and
+  providers (Claude, Codex) each have their own. It is derived from the log every time state is built, never stored.
+  - **One pool per provider and plan.** A meter's window stays the account (`account:<id>`), so overlapping runs line
+    up per account, but its observations are learned in the pool `resolveRatePool` gives it: `plan:<provider>:<plan>`
+    for an account whose plan is known, so every account on one plan teaches and reads one rate, and the window
+    itself otherwise (an account with no known plan, a provider's own login). The plan is each account's current one
+    (`state.accountPlans`, `account.plan_recorded`, which the account roster sends whenever an account's plan differs
+    from state, under one key per plan, `resolvePlanKey`: `Claude Ultra`, `ultra` and `claude_ultra` are `ultra`), so
+    the whole log pools at once and an account that changes plan moves to that plan's pool; removing an account
+    forgets its plan. A plan of none is recorded as no plan.
+  - **A starting rate.** A known plan with a measured rate (`STARTING_RATES`, dated: Claude Ultra 0.0255% per dollar,
+    measured on 2026-11-08 from 276 tasks on four Ultra accounts) starts from it, counted as 2 points of movement at
+    that rate (`USAGE_RATE_LIMITS.startingMovement`), so a pool with no observation has an early estimate from its
+    first task and real readings outweigh it within a few. It never makes a rate trusted: trust counts only the
+    pool's own tasks and movement. Update the table when the provider changes its limits.
   - **What it learns from.** Every attempt with two readings is an observation: the window moved from its first
     reading to its last, while every run on that window cost something in that interval (each attempt's cost spread
     evenly over its time, counted for the part inside the interval). An observation is left out when the window's
@@ -2320,6 +2354,63 @@ checks it ran.
   ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
   held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
   watchdog files are ordinary tasks that follow every limit.
+- **What a build will cost** (`costs/estimate.ts`, `resolveBuildEstimate`, pure, derived every time). A task with a
+  plan has an estimate of its build: the build, fix and review runs of the current round. A finished build is a
+  sample, described by the log of its plan's phases, files and length, and of what planning it cost. With at least
+  20 samples (`BUILD_ESTIMATE_LIMITS`) a ridge-regularised linear fit of the log cost over those four, fitted once
+  per state change on every sample, predicts the build, raised by the 70th percentile of how far the fit missed past
+  builds, so it errs toward starting one task fewer. Tested on 303 past builds, each estimated only from those
+  before it, its typical miss was a factor of 1.5 (a factor of 1.8 for the 20 nearest builds by plan shape it
+  replaced) and it came in under the real cost about 25% of the time. With fewer samples it uses `DEFAULT_BUILD_COSTS`, measured on 2026-11-08 from those builds ($3.80 a phase
+  for one or two phases, rising to $20 a phase at six or more). Before a phase is done, what is left is the estimate
+  minus what was spent; after each phase, the rest is the remaining phases times the average of the estimate (worth
+  one phase) and the real cost per finished phase. In percent it uses the rate of the task's account, or its last
+  meter's window, else the best learned rate, and stays in dollars with none. The task's cost popover shows it
+  under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
+- **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
+  readings are, so the engine's account roster works out each provider's safe pace (`listProviderPaces`, the forecast
+  with every usable reset grant that clears the weekly limit counted as a full refill) on every accounts refresh and
+  records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
+  own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
+- **Auto pace** (`autoPace`, off by default, only yours, in
+  `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
+  as above. With it on, a task's first build run in a round waits for admission (`holdForAdmission` in
+  `dispatchRuns`, after the task limits and before the daily and project limits) unless its build already started, it is delegated, or
+  you started it with Build now (`Task.paceLimitsIgnored`). Planning, answers, research, investigations, operations,
+  later phases, checks, fixes, reviews and watchdog checks never wait, and a build that started finishes. A task
+  with no recorded pace or no estimate does not wait either.
+  - **The budget** is the recorded safe pace for the next 24 hours, less 10% kept for urgent tasks
+    (`ADMISSION_LIMITS.reserve`; an urgent build may use all of it), minus the provider's last 24 hours and the
+    estimated rest of every build already started (`resolveAdmission`). A build fits when its estimate does; one
+    larger than the whole budget counts as the budget, so it starts once nothing else is using it.
+  - **The queue** (`sortAdmissionQueue`), with nothing to set: task priority (urgent first), then the focus project,
+    then the projects you act on most, learned as the median time from a gate opening to your answer over the last 14
+    days (`resolveProjectResponses`, `ENGAGEMENT_LIMITS`, at least 3 answers; a project without them comes after),
+    then how many open tasks wait on it, then age. A build that fits still waits behind one ranked ahead of it on the same
+    provider, so smaller tasks never starve a larger one.
+  - **The hold** is a pace hold with scope `admission` (`usage_wait.armed`, `cause: pace`, stage reason "waiting its
+    turn to build within today's usage", `resetAt` the time the last 24 hours free enough room, else 30 minutes).
+    Each time runs are dispatched, `admitBuilds` first walks the queue: it releases the first build that fits, counts its estimate,
+    and goes on, so held builds start one at a time in order; a hold whose time passed with no room is armed again
+    for a new time. Build now is Resume now (`usage_wait.resume_now`), and from you it also sets
+    `paceLimitsIgnored`, as for the other pace holds. Switching Auto pace off releases every admission hold. A build
+    admitted still stops at the daily and project limits.
+  - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
+    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace has its own section in Settings → Agent usage, right above the Forecast
+    it follows (`AutoPaceSettings`): its switch, and while it is on, one row per provider with what is left for its
+    builds in the next 24 hours, the reserve and how many builds wait (`selectPaceBudget`). Home's guide leaves waiting builds out of the
+    running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
+    3:40 PM" or "next", `listWaitingBuilds`), the first two by name and the rest in a popover; once you are back it
+    adds how many tasks built overnight are ready for your review (`describeOvernightReviews`).
+- **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.
+  Your away hours are learned from the last 14 days (`AWAY_LIMITS`): an hour of the day is away when the `away`
+  spans cover at least half of it on at least half the days observed, given at least 3 days of spans; with fewer,
+  it falls back to activity, an hour with any presence on under 15% of the days. With neither, there is no night
+  shift. Only the Agent is told, in its user turn, never its system prompt (`resolveNightShiftTold`): while it plans
+  a task whose build will probably wait (you are away, admission holds are queued, or the budget has no room), that
+  it builds unattended and should ask every question now; while it builds or fixes during your away hours, that it
+  should decide what it can, record each choice as a judgement call (a summary line for a fix), and use `ask` only
+  for what it must not decide alone. A night build stops at your review like any other.
 - **The usage forecast** (`forecast/`, `resolveUsageForecast`, pure; the web runs it on the accounts it reads).
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
@@ -2327,7 +2418,7 @@ checks it ran.
   horizon). For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
   from the account that resets soonest, which is the best order for budgets that expire. A binary search finds
   the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
-  the recommendation, which you can apply as the daily limit; the forecast also names the tightest reset (the one
+  the recommendation, which Auto pace builds within; the forecast also names the tightest reset (the one
   the pool must reach before it runs dry at a faster pace), the timeline of each account, and when the pool would
   run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
   limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
@@ -2339,8 +2430,9 @@ checks it ran.
   pace you pick (`resolveForecastTimeline`: the safe pace, the last 24 hours, or one and a half or twice the safe pace;
   the last 24 hours first when it is faster), a dashed amber line at the tightest point when the safe pace is drawn,
   the tightest point in words and the last 24 hours of that provider (meters on an account's window for
-  Claude, `provider:<id>` for the rest). Use as daily limit sends `settings.change` with `dailyUsageLimit` set to the
-  pace; the forecast is worked out again on every accounts refresh and every minute.
+  Claude, `provider:<id>` for the rest). The daily limit stays its own setting under Limits; the forecast offers no
+  button to copy its pace there, since Auto pace follows the pace itself. The forecast is worked out again on every
+  accounts refresh and every minute.
 
 ### Silent runs
 
@@ -2800,8 +2892,8 @@ and the run supervisor.
   `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
   version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
   parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
-  merging together, Scheduling → Bundles), for a rewrite whose pieces ship at once; it is refused next to
-  `this_task_waits`. Without it each part starts at once and ships on its own. These are the only
+  merging together, Scheduling → Bundles), the usual choice whenever the parts serve one goal; it is refused next to
+  `this_task_waits`. Without it each part starts at once and ships on its own, only for parts with different goals. These are the only
   ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
   line.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own
@@ -2999,8 +3091,9 @@ running when the window closes or the app quits, and a page that comes back find
   would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
   its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
   one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
-- **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
-  does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
+- **When the engine stops.** `stop()` hangs up every shell and its process group (`SIGHUP` and the PTY closed, as
+  closing a terminal window does, then `SIGKILL` after 3 s) and waits until each group is empty, so nothing it started
+  outlives the engine, and saves each screen. A restarted
   engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
   again, which starts a new shell in the same folder below the old output. Closing a terminal hangs it up and deletes
   its screen.
@@ -3069,8 +3162,12 @@ beside your run (Runs for a task, below).
   adds how long it has been so, `resolveServicesSummary` the counts the header shows.
 - **Start, stop, restart.** `POST /api/services/<id>/start` opens the service's terminal the first time and starts its
   command again in the same tab after that, below the old output (a start of a running one does nothing). `/stop`
-  hangs it up as closing a terminal window does (`SIGHUP` and the PTY closed, `SIGKILL` 3 s later): the whole
-  process group, so a dev server and the watchers it started end together, and the tab stays with its last screen.
+  hangs it up as closing a terminal window does, but to the whole process group the shell leads, not the shell alone
+  (`SIGHUP` to `-pid` and the PTY closed, `SIGKILL` to the group 3 s later), so a dev server and the watchers it
+  started end together, and the tab stays with its last screen. The stop counts as done only once no process in the
+  group is alive (`TerminalPty`'s `hangUpGroup` polls signal 0 on `GROUP_POLL_SCHEDULE`, 3 s after each signal), so a
+  server that takes a moment to let go of its port has let go by the time a start runs. A shell that exits on its own
+  has whatever it left in its group stopped the same way, so no server outlives its run as an orphan.
   `/restart` stops and starts. `POST /api/services/start-all { projectId }` starts every service of a project that is
   not running. Closing a service's tab stops it and forgets the tab; the service stays.
 - **Runs for a task.** A run is a service's terminal with its `taskId`: `null` for yours, in the service's own
@@ -3086,8 +3183,10 @@ beside your run (Runs for a task, below).
   `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
   run's tab and removing one closes them all.
 - **A port per run.** Every task run gets a port of its own, chosen as it starts (`Terminals.#resolvePort`,
-  `pickFreePort` in `pty.ts`: the run's last port while it is still free, else a port the system hands out for
-  `Bun.listen` on port 0, never one another running service holds; `service_port_unavailable` when none is), kept on
+  `TerminalPty.pickPort`: the run's last port, tried again every 100 ms for up to 5 s while something still holds it
+  (`PORT_RELEASE_SCHEDULE`), so a restart comes back on the same port and every link to it keeps working; only after
+  that a port the system hands out for `Bun.listen` on port 0, never one another running service holds;
+  `service_port_unavailable` when none is), kept on
   `TerminalInfo.port` and put in the service's port variable over its own variables, so a task's run never meets
   yours or another task's. Your run is unchanged unless the service has a preview URL; with one it uses the port its
   own variables set, else a free port it keeps across restarts. The command must listen on that variable: Next and
@@ -3289,7 +3388,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -3402,8 +3501,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     owner, and a sealed channel's GitHub user is looked up in the owner and members the last heartbeat answered
     (`Remote.resolveActor`). Anyone else gets no owner, never the machine's owner, so a stranger never runs on the
     owner's accounts. A task an agent files (a courier, a split, a fork, a watchdog's) takes the owner of the task it
-    came from. Tasks from before, and those Slack, schedules and webhooks start, have none and count as the
-    machine owner's. Owners never change after creation.
+    came from. A task a Slack mention starts is owned by the GitHub account its Slack user is linked as (Slack below),
+    so each member connects their own Slack from Settings → Slack on the shared machine. Tasks from before, and those
+    schedules and webhooks start, have none and count as the machine owner's. Owners never change after creation.
   - **Claude accounts.** Each account records the member who signed it in (`owner` in `accounts.json`, null for the
     machine's owner and every account from before). A run leases only its task owner's accounts, on renewal and on
     rotation after a usage limit too (`AccountOwnership`, `AccountRotation.listCandidates`), and a task bound to
@@ -3598,7 +3698,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
+  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
   `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
@@ -3968,15 +4068,27 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   the fragment, which no browser sends to a server, so app.shinsa.dev never sees it and cannot read a team view. The
   invite only lets someone ask; turning the link off (`invite/remove`) or making a new one (`invite`) stops the old
   one, and a member already in keeps their key.
-- **Joining works like a machine invite, after remote access.** Whoever opens the join link signs in with GitHub; the
+- **Joining works like a machine invite, with or without a machine.** Whoever opens the join link signs in with GitHub; the
   page names the team and its owner first (`POST /__remote/teams/preview { invite }`, which records nothing) and keeps
-  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). Teams reach teammates
-  only through machines, so the page then reads your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`):
-  with none paired it shows the fleet page's steps to turn on remote access (`PAIR_STEPS`, `lib/remote/setup-steps.ts`),
-  and with paired machines this browser reaches none of, the steps to add this device (`listAddDeviceSteps`), each with
-  Check again and no Ask to join. app.shinsa.dev enforces it too: `POST /__remote/teams/join { invite }` from an
-  account with no paired machine of its own is 409 `no_machine` (`NoMachine`) and records nothing; otherwise it
-  records that the account asked (`team_requesters`) and makes it no member. The page reads the projects of each
+  the key in the browser (and the link in `sessionStorage`, so it survives sign-in and pairing). The page then reads
+  your machines (`resolveJoinSetup`, `lib/teams/join-machines.ts`): with paired machines this browser reaches none of,
+  it shows the steps to add this device (`listAddDeviceSteps`), or that it waits for an answer or the machines are
+  offline, each with Check again and no Ask to join. With no machine paired at all it shows the fleet page's steps to
+  turn on remote access first (`kind: 'pair'`, `PAIR_STEPS`, `lib/remote/setup-steps.ts`), since a team works only
+  when its people share their machines; Join without a machine, below Check again and meant only for someone who runs
+  Shinsa nowhere, then offers Ask to join: such a person shares no projects and reaches the team only through the
+  machines shared with it (Remote access → Shared machines), and the page says so. If they pair a machine later, its
+  heartbeat lists the team, the team's card says the machine waits for the team's key with Request access for the
+  team's owner to answer (Handing a machine the team's key, below), and while it shares no project the card says
+  teammates see nothing from it (`TEAM_SHARES_NOTHING`). Nothing is shared by itself: which projects a team sees
+  stays yours alone. `POST /__remote/teams/join
+  { invite }` records that the account asked (`team_requesters`), machine or not, and makes it no member. Once the
+  owner accepts, every machine shared with the team grants the new member on its next heartbeat (`Remote.syncSharedTeams`
+  grants every member it has not), and the hosted dashboard adds this browser to each such machine by itself
+  (`admitTeamMachines`, Giving a teammate this machine, below). Until one is shared, app.shinsa.dev shows a team member
+  with no machine of their own Reached through your team instead of the pairing steps, and Settings → Teams, local
+  and hosted, reads No machines in the line of each person with no machine in the team (`hasNoTeamMachines`).
+  For a person with a machine, the page reads the projects of each
   machine it reaches with one `GET /api/projects` over the sealed channel, never the whole state (giving up on one
   after 4 s), and offers them to share, none required: with none picked it says teammates see nothing of yours until
   you share a project. Ask to join then sends every machine it reaches `POST /api/remote/teams/join { url }`, picks or
@@ -4542,8 +4654,9 @@ Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
 ## Slack
 
 Mention the Shinsa bot in Slack and the machine of the person who mentioned it does the work. There is one Slack app
-for everyone, on app.shinsa.dev; each person connects their own Slack user to one of their own machines, so the same
-mention from a teammate who connected their Shinsa runs on their machine, and from one who did not, runs nowhere. It
+for everyone, on app.shinsa.dev; each person connects their own Slack user to one machine they own or are a member
+of (a shared machine's teammates included), so the same mention from a teammate who connected their Shinsa runs on
+that machine as them, and from one who did not, runs nowhere. It
 needs remote access (above): the relay reaches the machine through its tunnel, and the machine posts back through the
 relay with its machine token. No machine holds a Slack token. A thread the mention links to is read with the token of
 the person who mentioned the bot, never the bot's, so a thread in a channel the bot is not in, such as a shared
@@ -4555,7 +4668,9 @@ the machine side is `apps/engine/src/slack/`.
 Slack ──event──► app.shinsa.dev /slack/events
                   ├─ Slack's signature, the event id seen once
                   ├─ author of another org ─► nothing
-                  ├─ author not connected ──► private "Connect Slack"
+                  ├─ author not connected, or no longer owner
+                  │  or member of the linked machine
+                  │                    ──► private "Connect Slack"
                   ├─ machine offline ───────► "<machine> is offline"
                   ├─ linked threads, read with the author's token
                   │  └─ one unreadable ──► a private note after
@@ -4568,7 +4683,10 @@ Slack ──event──► app.shinsa.dev /slack/events
                   the model reads the thread
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
                   └─ work ──► slack.start_task:
-                              task.create, as from Home
+                              task.create, as from Home, owned
+                              by the linked GitHub account
+   linked account not in the machine's owner and members
+                  ──► "No access to this Shinsa", nothing starts
    the task moves or a gate opens or closes
                   ──► slack.status: the one card, edited
                       (the open gate with its buttons, the result,
@@ -4600,11 +4718,24 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   `groups:history`, `groups:read`, `chat:write`, `reactions:write` and `users:read` (`SLACK_BOT_SCOPES`, `apps/cloud/slack-manifest.json`) and the same user scopes, so its installer is linked in that one step. Either way your Slack user is
   linked to that machine with your user token kept sealed (`slack_links.sealed_user_token`, AES-GCM under
   `SLACK_TOKEN_KEY`, as a bot token is) and you land on `/slack/linked` (`routes/remote/slack.tsx`), which names the workspace or
-  says what went wrong. A machine can be linked in several workspaces; a Slack user to one machine at a time
-  (connecting again from another machine moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
+  says what went wrong. The machine is one you own or are a member of (a shared machine's teammates are members);
+  a guest, or someone with no access, gets not found. A member links only to a machine that announces
+  `slack-task-owner` (`MACHINE_FEATURES`), so an older engine never starts their mention as its owner's; one that
+  does not gets "Only this machine's owner can connect Slack until Shinsa on it is updated." Without `?instance=`,
+  connect picks your own machine seen last, else one you are a member of. The link records the GitHub account that
+  signed in (`slack_links.user_id`), which is whose tasks your mentions start. A machine can be linked in several
+  workspaces, and by each of its people; a Slack user to one machine at a time (connecting again from another machine
+  moves it). The section reads `GET /api/slack` (`SlackSnapshot`: remote access
   on, the connect link, the links with workspace, user and when, or the problem when app.shinsa.dev cannot be
-  reached) when Settings opens and when the window comes back. Disconnect (`POST /api/slack/disconnect`) removes every
-  link of this machine; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
+  reached) when Settings opens and when the window comes back. Each shows only the links of the person reading it:
+  `/__remote/slack/links` names each link's GitHub account (`accountId`, null from an older Worker, which linked only
+  owners), and the engine keeps a member's own (the sealed channel's GitHub user) and, for the owner or the keyboard,
+  the owner's and those with no account (`Slack.snapshot(viewer)`). So a member who has not connected sees Not
+  connected and Connect your Slack, even when others have, and never Disconnect (`describeSlackStatus`,
+  `resolveSlackConnectLabel`). The snapshot also counts everyone else's links (`othersLinked`), so an owner who has
+  not linked their own Slack while members have sees Not connected with how many members' accounts start tasks here,
+  and still gets Disconnect. Disconnect (`POST /api/slack/disconnect`) removes every
+  link of this machine, its members' too; from another device only its owner may (`OwnerOnlyRoute`). Your user token is revoked
   (`auth.revoke`, best effort: a failure is logged as `[Cloud] A Slack user token could not be revoked` and the
   links still go) when you disconnect, when the machine is removed (`revokeMachineUserTokens`) and when connecting
   again brings a different token (`replaceUserToken`; Slack gives the same one back while it is valid, which is
@@ -4625,7 +4756,9 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
   (`resolveSlackReadableText`), a permalink, the channel's name (`conversations.info`; null without `channels:read` or
-  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked, and
+  `groups:read`, in a direct message, or when Slack refuses), the thread's last 100 messages, bots marked,
+  `linkedUserId` (the GitHub account the author's link records; the Worker checks first that it is still the
+  machine's owner or a member, else the author gets the private Connect Slack prompt and nothing is sent), and
   `linkedThreads` (below). Each
   message is read from its `text`, its `blocks` (section, header, context and rich text) and its `attachments`
   (pretext, title, text and fields, else the fallback), taking the longer of the text and the blocks and adding the
@@ -4680,7 +4813,12 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   asks for work there still starts a task. Anything someone wants done or wants to know about their code, product or work is a
   task, and so is a mention the model does not answer: `slack.start_task` (command id `<effect
   key>:slack.start_task`) starts it, messaging the thread's task instead when one opened meanwhile. Nothing is
-  posted while it reads; a mention that is not a task loses its ⏳.
+  posted while it reads; a mention that is not a task loses its ⏳. Before any of it, `linkedUserId` is looked up in
+  the owner and members the last heartbeat answered (`Remote.resolveActor`) and `slack.start_task` is dispatched
+  with that person as the actor, so the task's owner is the person who mentioned the bot and it runs on their Claude
+  accounts and GitHub token (Shared machines above). An account the machine no longer lists starts nothing and gets
+  one reply, "No access to this Shinsa" (`serializeSlackNoAccess`), with no ⏳ and no model call; a mention without
+  `linkedUserId` (from an older app.shinsa.dev) starts a task with no owner, as before.
 - **This one check is the only thing Slack adds.** A task it starts is the same `task.create` Home sends with
   everything on Auto, through the same `createTask` and the same triage (repository, kind, priority, and whatever
   triage learns next, such as finding a duplicate of an open task), so a change to triage reaches Slack with no
@@ -4864,7 +5002,7 @@ plainly what protects what.
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
     `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
-    `watchdogsIgnoreUsageLimits`), a
+    `watchdogsIgnoreUsageLimits`, `autoPace`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
@@ -6018,6 +6156,92 @@ what it costs at the start of every run, so you can turn off what you do not use
 | `POST /api/extensions/skills/choose {skillId, enabled}`, `/plugins/choose {pluginId, enabled}` | A skill or a plugin on or off (Shinsa's own skills are refused) |
 | `POST /api/extensions/optimizer {enabled?, days?, skills?}` | The context optimizer's settings |
 
+## The shared browser
+
+Each project has one Chrome its agents share, kept by the engine rather than by an agent, so it outlives every run and
+task and keeps its sign-ins (since 2026-11-09). You sign it in once per site, by copying the sign-in from your everyday
+browser or by hand in a plain window, and every later task of that project starts signed in. Before it, each agent's
+Playwright MCP made a fresh profile per worktree, headless, that closed with the run, and Google refuses to sign in to
+a browser a program drives. The module is `apps/engine/src/browser/`: `host/`, `proxy/`, `cookies/` and `cdp/`.
+
+```
+agent's Playwright MCP ──ws──► engine /browser/cdp/<run key>   BrowserProxy
+                                 │ loopback only, key of a live run
+                                 ▼
+                        BrowserHost.acquire(project) ──► Chrome, headless
+                                 ▲                ~/.config/shinsa/data/browser/<project id>/
+you: Settings → Browser ─────────┤
+  Copy sign-ins ── BrowserCookies: your browser's cookie file ──► Storage.setCookies
+  Open sign-in window ── the same profile, a normal window, nothing attached
+```
+
+- **The host** (`BrowserHost`) runs installed Google Chrome (`CHROME_EXECUTABLES`: Chrome, Chrome Beta, Chromium) on
+  one profile per project at `~/.config/shinsa/data/browser/<project id>/` (`browserDir`, in the data directory so a
+  seeded or inspected copy carries its own), never Playwright's Chromium. It starts it
+  headless the first time an agent connects (`--headless=new`, `--force-device-scale-factor=2`, a debugging port on
+  127.0.0.1 only), shares it between every agent of the project, and stops it after 10 idle minutes with no
+  connection (`BrowserHostSettings`). Stopping asks Chrome to close and waits for it to exit, so it writes its cookies
+  first; a kill would lose the sign-ins made since the last write. Both modes run with `--use-mock-keychain`, so the
+  profile encrypts the same way in each and Chrome never asks for your Keychain. Browser state lives in these folders,
+  never in the event log.
+- **Agents reach it through the engine** (`BrowserProxy`). Each run of a task in a project is issued a key
+  (`RunSupervisor.issueBrowser`) that the run's scope revokes when it ends, closing its connections; the endpoint,
+  `ws://127.0.0.1:<port>/browser/cdp/<key>`, goes into the run's environment as `PLAYWRIGHT_MCP_CDP_ENDPOINT`
+  (`resolveBrowserEnv`), for Claude's process and Codex's app server alike, never into the prompt (Caching, below).
+  The route refuses a connection from outside this machine, from another site's Origin, or with a key that is not a
+  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start or the sign-in
+  window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
+  agent cannot take every other agent's pages down. Every agent shares the default context, so the cookies are one
+  jar, but each connection sees only its own pages (`createTargetFilter`): a page counts as its own when it opened it
+  (`Target.createTarget`) or a page of its own opened it (a popup, by `openerId`). Every other page is hidden from its
+  `Target.attachedToTarget`, events and `Target.getTargets`, resumed if it waits for this connection and detached, and
+  closing or attaching to it is refused; otherwise the Playwright MCP would adopt the pages already open, so two tasks
+  would drive the same tab. A page that appears while the agent's own new page is on the way is held until Chrome says
+  which page it opened. A key names its project, so one project's agents never reach
+  another's browser. Since Playwright will not start with both a device and an endpoint, Shinsa's default
+  `Desktop Chrome HiDPI` is left out on the shared browser; a device or endpoint you set on the server yourself wins.
+  A task with no project gets no key, and its MCP starts a headless browser of its own as before.
+- **Copying sign-ins** (`BrowserCookies`). It finds your Chromium browsers (Dia, Chrome, Arc, Brave, Edge;
+  `SOURCE_BROWSERS`), your default one first (Launch Services), and lists the sites each is signed in to from its
+  Default profile's cookie file, copied to a temporary folder first so the browser is never locked or written to.
+  Listing reads only host names, so it asks for nothing; a site counts as signed in only by an HttpOnly cookie that is
+  not cross-site (`SameSite=None`, which ad and tracking cookies need) and not an analytics, bot or load-balancer one
+  (`NOT_SIGN_IN_COOKIES`), and sites group by registrable domain with a short list
+  of shared hosting suffixes (`MULTI_PART_SUFFIXES`), not the full public suffix list. Copying the sites you tick reads
+  that browser's key from your Keychain (`security find-generic-password`, the `<Browser> Safe Storage` item; macOS
+  asks you once), decrypts their cookies and writes them into the project's Chrome with `Storage.setCookies`. Expired
+  and partitioned cookies are skipped, and a session cookie gets 14 days (`SESSION_COOKIE_LIFETIME`), since it would
+  otherwise go each time the shared Chrome stops. Google refuses a copied session (tried when this was built), so
+  Google sites are signed in in the window instead. Safari and Firefox are not read, and all of this is macOS only.
+- **The sign-in window.** Open sign-in window stops the headless Chrome and opens the same profile as a normal Chrome
+  window, with no debugging port and nothing attached, so Google lets you sign in. While it is open, agents are
+  refused with `signing_in`; Done, or quitting that Chrome (⌘Q), hands the profile back, and the next agent starts it
+  headless again with your sign-in in it. Closing its last window does not, since Chrome on macOS keeps running
+  without one; Open sign-in window then opens a new window in that Chrome (`BrowserHost.reveal`, a second launch on the
+  profile that Chrome hands to the one running).
+- **Agents ask with `request_browser_sign_in {url, reason}`** (`agent.request_browser_sign_in`), the building Agent and
+  the investigator only. It opens a `browser_sign_in` gate naming the site (`browserSignIn: {url, site}`) and the run
+  waits on it like a question (Gates, above); a task with no project is refused (`browser_no_project`). The task
+  overview shows it as a card (`BrowserSignInCard`): Copy from your default browser copies that site and answers the
+  gate in one click when that browser is signed in to it (not offered for Google sites), Open sign-in window then Done answers it the same way, Choose
+  sites… opens the copy dialog, and Skip rejects it. Approve tells the agent the browser is signed in and to open the
+  page again; reject to carry on without it (`resolveBrowserSignInReply`). Only you answer it, and copying and the
+  window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip, and a guest or a
+  teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page first, to use the
+  repository's own test users where it has them, and never to launch a browser of their own to sign in.
+- **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
+  started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
+  never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
+  button that signs the browser out of that one site (`sites/remove {site}`: every cookie on the site set to expire
+  through `Storage.setCookies`, since Chrome's browser connection has no delete), Copy sign-ins, Open sign-in window
+  (Done while it is open) and Sign out of everything, which stops the browser and removes the profile. The routes are
+  owner-only, behind the `browser` engine feature (`docs/protocol.md` → The socket): `GET
+  /api/browser/projects/:projectId`, `GET /api/browser/sources`, `GET /api/browser/sources/:sourceId/sites`, and
+  `POST` `copy`, `window`, `window/close`, `sites/remove` and `sign-out` under `/api/browser/projects/:projectId/`. The section is hidden on app.shinsa.dev.
+- **Limits.** Agents of one project share one cookie jar, so two tasks that need different users of the same site
+  collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage does not carry
+  across a task's ports.
+
 ## The agent loop
 
 How one run executes, from the supervisor (`agents/supervisor/`, `agents/turns/plan.ts`) down to the Claude adapter
@@ -6221,8 +6445,8 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
-- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the built-in list
-  when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
+- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the last list it gave, or
+  the built-in one, when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
 
 **Resume fallback** (`agents/turns/plan.ts`). Before resuming, the supervisor checks the session: a session owned by another
 provider is handed over; one marked lost (`run.session_lost`, recorded for every run that used it, so no retry or
@@ -6840,8 +7064,9 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   scope, a report it cannot place or read the typed `CoverageReportUnreadable`, answered as unavailable with its
   reason. `TerminalFiles` keeps data/terminals/ on `JsonFile`, every saved terminal and service decoded by a schema
   (`StoredTerminal`, `StoredService`) and one that breaks it dropped; `TerminalPty` spawns your shell in Bun's PTY as
-  a scoped resource whose release hangs it up and kills it after `HANG_UP_GRACE` (3 s), reads the program in front
-  through `Shell`, and picks a free port with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
+  a scoped resource whose release hangs up its process group and kills it after `HANG_UP_GRACE` (3 s), waiting until
+  the group is empty, reads the program in front through `Shell`, and picks a port: the run's last one on
+  `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
 - **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
@@ -6970,6 +7195,8 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── check-bases/   The detached checkouts of base commits that checks compare with (Checks, above)
     ├── caches/        Build caches a repository's checkouts share (`<repo id>/turbo`; Where agents work, above)
     ├── transcripts/   One JSONL chat transcript per run
+    ├── browser/       Each project's shared Chrome profile (`<project id>/`), its sign-ins included; Sign out of
+    │                  everything removes it (The shared browser, above)
     ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
     │                  chat's tool images at the top (Evidence, above)
     ├── attachments/   The files and images you attached to a request or a message, one folder per upload
@@ -7030,7 +7257,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
   schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
   `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
-  above). It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
+  above). It reads each project's signed-in sites from its saved cookie file without starting its Chrome. It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
   a Shinsa that is running, on another port; it shows the log as it was when it started.
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
@@ -7038,7 +7265,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
   (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
   running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
-  script by its path in the checkout that seeded it. The evidence (`scripts/seed/evidence.ts`) is real files in
+  script by its path in the checkout that seeded it. Superwall's and Basket's shared browsers have a few signed-in sites
+  (`scripts/seed/browser.ts`, a cookie file under `data/browser/`) and Personal's has none. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a
   settings page in dark mode at 1280px and 390px and of a
   crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of

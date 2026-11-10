@@ -13,6 +13,7 @@ import {
   type GateDecision,
   isAgentQuestion,
   isDecisionGate,
+  isBundleMember,
   isDependencyOf,
   isOverBudget,
   isTaskSettled,
@@ -855,7 +856,14 @@ function listMoveMarks(state: ShinsaState) {
   ]);
 }
 
+const RERUN_PLANS = ['Claude Ultra', 'max', null];
+
 function selectRerun(state: ShinsaState, side: Random): ShinsaCommand | null {
+  if (chance(side, OUTAGE_ODDS)) {
+    const account = pick(side, ACCOUNTS);
+    const plan = pick(side, RERUN_PLANS) ?? null;
+    if (account) return { type: 'account.plan_recorded', accountId: account.id, provider: 'claude', plan };
+  }
   if (!chance(side, OUTAGE_ODDS)) return null;
   if (chance(side, 0.3)) return selectOwnerSignedOut(state, side);
   const working = Object.values(state.tasks).filter(
@@ -963,6 +971,14 @@ function assertMoveInvariants(state: ShinsaState) {
   }
 }
 
+function assertNoWaitInsideBundle(state: ShinsaState, task: Task, context: string) {
+  if (isTaskSettled(task)) return;
+  expect(
+    task.waitsOn.filter((id) => isBundleMember(state, task, id)),
+    context
+  ).toEqual([]);
+}
+
 function assertInvariants(state: ShinsaState, now: number) {
   const queue = resolveQueue(state, now);
   const seen = new Map<string, string>();
@@ -1006,6 +1022,7 @@ function assertInvariants(state: ShinsaState, now: number) {
       task.waitsOn.some((id) => isDependencyOf(state, task.id, id)),
       context
     ).toBe(false);
+    assertNoWaitInsideBundle(state, task, context);
 
     assertShapeInvariants(task, gates, state, context);
     assertBundleInvariants(state, task, gates, context);
@@ -1917,13 +1934,16 @@ describe('decide under random command sequences', () => {
     'keeps every invariant while steps are rerun on chosen accounts',
     () => {
       let bound = 0;
+      const plans = new Set<string>();
       let ownerGates = 0;
       for (let seed = 1; seed <= SEEDS; seed += 1) {
         const state = simulate(seed, STEPS, 'reruns');
         bound += Object.values(state.runs).filter((run) => run.account).length;
+        for (const known of Object.values(state.accountPlans)) plans.add(known.plan);
         ownerGates += Object.values(state.gates).filter((gate) => gate.cause === 'owner_account').length;
       }
       expect(bound).toBeGreaterThan(0);
+      expect([...plans].sort()).toEqual(['max', 'ultra']);
       expect(ownerGates).toBeGreaterThan(0);
     },
     SEEDS * 2_000

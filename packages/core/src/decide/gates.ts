@@ -280,6 +280,7 @@ export function answerGate(
   switch (gate.type) {
     case 'question':
     case 'secret':
+    case 'browser_sign_in':
       answerQuestion(decider, gate);
       return;
     case 'failure':

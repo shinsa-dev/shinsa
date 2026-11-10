@@ -21,6 +21,7 @@ import {
   serializeSlackReconnectPrompt,
   serializeSlackUnreadLinks,
   serializeSlackMerged,
+  serializeSlackNoAccess,
   serializeSlackOffline,
   type Task,
   type TaskShape,
@@ -319,6 +320,26 @@ describe('the card for each gate', () => {
       `Secret needed\n*Stripe key*\nGive it in Shinsa, never in Slack.\n<${URL}|Give it in Shinsa>\n${footerOf(harness, taskId)}`
     );
     expect(valuesOf(message)).toEqual([]);
+  });
+
+  test('a browser sign-in is done on the machine, so Slack only links to it', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({
+      type: 'agent.request_browser_sign_in',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'b1',
+      url: 'https://vercel.com/login',
+      reason: 'The deploy page asks me to sign in.',
+    });
+    const gate = harness.state.gates.b1;
+    const message = gateCardOf(harness, taskId, gate);
+    expect(readText(message)).toBe(
+      `Sign-in needed\n*vercel.com*\nSign in from Shinsa on the machine that runs the task.\n<${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
+    );
+    expect(valuesOf(message)).toEqual([]);
+    const bare = gateCardOf(harness, taskId, { ...(gate ?? never()), browserSignIn: null });
+    expect(readText(bare)).toContain('*Sign in to vercel.com*');
   });
 
   test('a plan is its goal, its phases, Approve with the version it shows and Request changes…', () => {
@@ -710,6 +731,10 @@ describe("the bot's own replies", () => {
       '<https://app.shinsa.dev/slack/connect|Connect Slack>'
     );
     expect(readText(serializeSlackOffline('Studio & Co'))).toStartWith('*Studio &amp; Co is offline*\n');
+    expect(serializeSlackNoAccess().text).toBe(
+      'Your GitHub account no longer has access to this Shinsa, so nothing was started.'
+    );
+    expect(readText(serializeSlackNoAccess())).toStartWith('*No access to this Shinsa*\n');
   });
 
   test('asks to connect again, or says how many linked threads could not be read', () => {

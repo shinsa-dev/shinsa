@@ -293,6 +293,15 @@ describe('HandoverCard for the process tools', () => {
     answered.unmount();
     const waited = renderCard(call('wait_for', { notes: 'The deploy.' }, 'Shinsa will wake a fresh agent.'));
     expect(waited.getByText(/Scheduled a check-in/)).toBeTruthy();
+    waited.unmount();
+    const signIn = renderCard(
+      call(
+        'request_browser_sign_in',
+        { url: 'https://vercel.com/login', reason: 'The deploy page.' },
+        'Signed in.'
+      )
+    );
+    expect(signIn.getByText(/Asked you to sign its browser in/)).toBeTruthy();
   });
 
   it('lists the judgement calls a phase handed over, and shows an investigation’s diagnosis', () => {

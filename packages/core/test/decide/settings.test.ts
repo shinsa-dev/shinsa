@@ -554,6 +554,13 @@ describe('settings', () => {
     }
   });
 
+  test('Auto pace is off until you switch it on', () => {
+    const harness = createHarness();
+    expect(harness.state.settings.autoPace).toBe(false);
+    harness.send({ type: 'settings.change', patch: { autoPace: true } });
+    expect(harness.state.settings.autoPace).toBe(true);
+  });
+
   test('accounts switch at a whole percentage from 1 to 100', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { accountSwitchAt: 95 } });

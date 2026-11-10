@@ -81,6 +81,7 @@ export interface Settings {
   placementPolicies?: string[];
   shareLimit?: ShareLimit;
   sharePreset?: SharePreset;
+  autoPace?: boolean;
   sharedTeams?: string[];
 }
 
@@ -113,6 +114,7 @@ export const SETTINGS_KEYS = [
   'placementPolicies',
   'shareLimit',
   'sharePreset',
+  'autoPace',
   'sharedTeams',
 ] as const satisfies readonly (keyof Settings)[];
 
@@ -131,6 +133,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'shareLimit',
   'sharePreset',
   'watchdogsIgnoreUsageLimits',
+  'autoPace',
   'sharedTeams',
 ] as const satisfies readonly (keyof Settings)[];
 
@@ -177,6 +180,10 @@ export function resolveWatchdogsIgnoreUsageLimits(settings: Settings) {
   return settings.watchdogsIgnoreUsageLimits ?? true;
 }
 
+export function resolveAutoPace(settings: Settings) {
+  return settings.autoPace ?? false;
+}
+
 const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
@@ -205,6 +212,7 @@ const DEFAULT_SETTINGS: Settings = {
   placementPolicies: [],
   shareLimit: DEFAULT_SHARE_LIMIT,
   sharePreset: DEFAULT_SHARE_PRESET,
+  autoPace: false,
   sharedTeams: [],
 };
 

@@ -32,6 +32,16 @@ export const DIALOG_HEADER_STICKY =
  */
 export const DIALOG_BODY = 'flex min-h-0 w-full flex-1 flex-col items-center gap-3 overflow-y-auto p-4';
 
+/**
+ * A dialog's edge, drawn again above its content. In dark the edge is an inset
+ * ring, which the sticky header's opaque background would paint over at the
+ * top; this overlay keeps the whole edge visible (the same as `Card`). In
+ * light the edge is an outer ring, which this overlay's clipped copy leaves to
+ * the popup's own shadow. Shared with `AlertDialogContent`.
+ */
+export const DIALOG_EDGE =
+  "after:corner-superellipse/1.125 after:pointer-events-none after:absolute after:inset-0 after:z-30 after:rounded-[inherit] after:shadow-md after:content-['']";
+
 export const DIALOG_SCRIM_MOTION =
   'transition-opacity duration-150 ease-out data-ending-style:duration-100 starting:opacity-0 data-starting-style:opacity-0 data-ending-style:opacity-0';
 
@@ -88,6 +98,7 @@ function DialogContent({
         data-reduced-motion='fade'
         className={cn(
           'corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(26.25rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-background text-fg-3 shadow-md outline-none max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-[calc(100vw-1.5rem)]',
+          DIALOG_EDGE,
           DIALOG_MOTION,
           className
         )}

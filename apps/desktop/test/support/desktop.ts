@@ -240,9 +240,12 @@ function makeWorldLayer(world: DesktopWorld) {
         writeText: (path, text) =>
           world.unwritable.has(path)
             ? Effect.fail(new FileWriteFailed({ path, message: 'read-only' }))
-            : Effect.sync(() => {
-                world.files.set(path, text);
-              }),
+            : Effect.andThen(
+                Effect.promise(() => Promise.resolve()),
+                Effect.sync(() => {
+                  world.files.set(path, text);
+                })
+              ),
         appendText: (path, text) =>
           world.unwritable.has(path)
             ? Effect.fail(new FileWriteFailed({ path, message: 'read-only' }))
@@ -442,6 +445,7 @@ function makeNativeLayer(world: DesktopWorld) {
           quit: push('quit'),
           setBadge: (text) => push(`badge ${text}`),
           openExternal: (url) => push(`open ${url}`),
+          openPath: (path) => push(`open path ${path}`),
           writeClipboard: (text) => push(`copy ${text}`),
           setAboutPanel: (panel) =>
             Effect.sync(() => {
@@ -490,7 +494,7 @@ export function emitUpdate(world: DesktopWorld, event: UpdateEvent) {
 export const flush = Effect.repeat(Effect.yieldNow, { times: 50 });
 
 export function closeWindow(world: DesktopWorld) {
-  return Effect.runPromise(Effect.suspend(() => world.windowGuards?.close ?? Effect.succeed(false)));
+  return Effect.runSync(Effect.suspend(() => world.windowGuards?.close ?? Effect.succeed(false)));
 }
 
 export function offer<A>(queue: Queue.Queue<A> | null, value: A) {

@@ -75,6 +75,7 @@ export const GATE: Record<GateType, { label: string; icon: IconName; tone: Tone 
   merge: { label: 'Ready to merge', icon: 'IconMerged', tone: 'green' },
   question: QUESTION_GATE,
   secret: QUESTION_GATE,
+  browser_sign_in: { label: 'Browser sign-in', icon: 'IconGlobe', tone: 'blue' },
   proposal: { label: 'Change to approve', icon: 'IconFileEdit', tone: 'purple' },
   operation: { label: 'Operation to confirm', icon: 'IconConsole', tone: 'purple' },
   failure: { label: 'Paused', icon: 'IconPause', tone: 'orange' },

@@ -27,6 +27,7 @@ import {
   WATCHDOG_LIMITS_ITEMS,
   WATCHDOG_LIMITS_TITLE,
 } from '@/lib/accounts/limits.ts';
+import { BROWSER_SECTION } from '@/lib/browser.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
 import { connection } from '@/lib/connection/socket.ts';
@@ -211,6 +212,11 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
       'worktrees',
       'checkout',
     ],
+  },
+  {
+    title: BROWSER_SECTION,
+    icon: 'IconGlobe',
+    keywords: ['browser', 'chrome', 'sign in', 'cookies', 'session', 'dia', 'playwright'],
   },
   { title: 'Appearance', icon: 'IconSun', keywords: ['theme', 'layout', 'dark', 'light'] },
   { title: 'Setup', icon: 'IconArrowRotateClockwise', keywords: ['onboarding', 'setup steps'] },

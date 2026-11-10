@@ -137,6 +137,28 @@ describe('ranking decisions', () => {
       'An agent needs a secret from you',
     ]);
   });
+
+  test('an agent asking for a browser sign-in names the site it needs', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({
+      type: 'agent.request_browser_sign_in',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'b1',
+      url: 'https://vercel.com/login',
+      reason: 'The deploy page asks me to sign in.',
+    });
+    const [entry] = resolveQueue(harness.state, 0).ready;
+    expect(entry?.reason).toBe('An agent needs its project’s browser signed in');
+    const gate = harness.state.gates.b1 as Gate;
+    expect(resolveGateWords(gate).why(gate, {} as Task)).toBe(
+      'An agent needs its project’s browser signed in to vercel.com'
+    );
+    const bare = { type: 'browser_sign_in', title: 'Sign in' } as Gate;
+    expect(resolveGateWords(bare).why(bare, {} as Task)).toBe(
+      'An agent needs its project’s browser signed in to a site'
+    );
+  });
 });
 
 describe('what is working and what is waiting', () => {

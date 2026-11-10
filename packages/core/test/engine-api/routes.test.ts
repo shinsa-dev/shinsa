@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { HttpApi } from 'effect/http-api';
+import { EngineApi } from '../../src/engine-api/api.ts';
 import {
   listEngineBaselineRoutes,
   listEngineRoutes,
@@ -137,12 +139,23 @@ const FEATURE_ROUTES = {
   ],
   'team-keys': ['POST /api/remote/teams/key/request', 'POST /api/remote/teams/key/answer'],
   'usage.pace_limits': [],
+  'usage.auto_pace': [],
   'team-relay': ['GET /api/teams/relays'],
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
   'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
   'focus.projects': [],
+  browser: [
+    'GET /api/browser/projects/([^/]+)',
+    'GET /api/browser/sources',
+    'GET /api/browser/sources/([^/]+)/sites',
+    'POST /api/browser/projects/([^/]+)/copy',
+    'POST /api/browser/projects/([^/]+)/window',
+    'POST /api/browser/projects/([^/]+)/window/close',
+    'POST /api/browser/projects/([^/]+)/sites/remove',
+    'POST /api/browser/projects/([^/]+)/sign-out',
+  ],
   initiatives: ['GET /api/initiatives', 'GET /api/initiatives/([^/]+)'],
 };
 
@@ -155,6 +168,14 @@ const LOCAL_ONLY = [
 ];
 
 const OWNER_ONLY = [
+  'GET /api/browser/projects/([^/]+)',
+  'GET /api/browser/sources',
+  'GET /api/browser/sources/([^/]+)/sites',
+  'POST /api/browser/projects/([^/]+)/copy',
+  'POST /api/browser/projects/([^/]+)/window',
+  'POST /api/browser/projects/([^/]+)/window/close',
+  'POST /api/browser/projects/([^/]+)/sites/remove',
+  'POST /api/browser/projects/([^/]+)/sign-out',
   'GET /api/github-token',
   'POST /api/github-token',
   'POST /api/remote/link/create',
@@ -251,6 +272,18 @@ describe('EngineApi routes', () => {
     expect(sorted(listEngineBaselineRoutes())).toEqual(sorted(BASELINE_ROUTES));
   });
 
+  test('every write declares a JSON body, so the client sends one the gate admits', () => {
+    const bodiless: string[] = [];
+    HttpApi.reflect(EngineApi, {
+      onGroup: () => undefined,
+      onEndpoint: ({ endpoint }) => {
+        if (endpoint.method !== 'GET' && endpoint.payload.size === 0)
+          bodiless.push(resolveEngineRouteKey(endpoint.method, endpoint.path));
+      },
+    });
+    expect(bodiless).toEqual([]);
+  });
+
   test('keeps at the machine only what needs its screen or ends the channel', () => {
     for (const route of listEngineRoutes())
       expect([route.key, route.localOnly]).toEqual([route.key, isLocalOnly(route.method, route.path)]);
@@ -261,7 +294,7 @@ describe('EngineApi routes', () => {
       expect([route.key, route.guest]).toEqual([route.key, resolveOldGuest(route.method, route.path)]);
   });
 
-  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices, a service’s command and terminals are for the owner, and only an attachment upload takes a larger body', () => {
+  test('settings, accounts, MCPs, secrets, versions, restarting, teams, Slack, the invite link, members, devices, a service’s command, terminals and the shared browser are for the owner, and only an attachment upload takes a larger body', () => {
     const routes = listEngineRoutes();
     expect(sorted(routes.filter((route) => route.ownerOnly).map((route) => route.key))).toEqual(
       sorted(OWNER_ONLY)

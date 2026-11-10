@@ -8,7 +8,7 @@ import { Textarea } from '@shinsa/ui/components/textarea';
 import { render } from '@testing-library/react';
 import { ResizeHandle } from '@/components/layout/sidebar/resize-handle.tsx';
 import { applyDesktop } from '@/lib/desktop.ts';
-import { installDesktop } from './support/desktop.ts';
+import { IGNORED_ACTIONS, installDesktop } from './support/desktop.ts';
 
 const DESKTOP_CSS = readFileSync(new URL('../src/desktop.css', import.meta.url), 'utf8').replace(
   /\s*\n\s*/g,
@@ -96,7 +96,7 @@ afterEach(() => {
 
 describe('desktop.css', () => {
   it('leaves the pointer alone in a browser', () => {
-    stop = applyDesktop(() => undefined);
+    stop = applyDesktop(() => undefined, IGNORED_ACTIONS);
     const { getByRole } = renderClickables();
     expect(cursorOf(getByRole('button', { name: 'Approve' }))).toBe('pointer');
     expect(cursorOf(getByRole('link', { name: 'SW-1' }))).toBe('pointer');
@@ -105,7 +105,7 @@ describe('desktop.css', () => {
   for (const windowState of ['window', 'fullscreen'] as const) {
     it(`replaces the pointer hand with the arrow in the Mac app (${windowState})`, () => {
       fake = installDesktop(windowState);
-      stop = applyDesktop(() => undefined);
+      stop = applyDesktop(() => undefined, IGNORED_ACTIONS);
       const { container, getByRole } = renderClickables();
       expect(document.documentElement.dataset.desktop).toBe(windowState);
       expect(listPointers(container).map((element) => element.outerHTML.slice(0, 80))).toEqual([]);
@@ -120,7 +120,7 @@ describe('desktop.css', () => {
 
   it('keeps every other cursor: text, resize, grab and not-allowed', () => {
     fake = installDesktop();
-    stop = applyDesktop(() => undefined);
+    stop = applyDesktop(() => undefined, IGNORED_ACTIONS);
     const { getByRole, getByLabelText, container } = renderClickables();
     expect(cursorOf(getByLabelText('Title'))).toBe('text');
     expect(cursorOf(getByLabelText('Message'))).toBe('text');
@@ -134,7 +134,7 @@ describe('desktop.css', () => {
 
   it('keeps the resize cursor across the page while a pane is dragged', () => {
     fake = installDesktop();
-    stop = applyDesktop(() => undefined);
+    stop = applyDesktop(() => undefined, IGNORED_ACTIONS);
     const { getByRole } = renderClickables();
     document.body.style.cursor = 'col-resize';
     expect(cursorOf(getByRole('button', { name: 'Approve' }))).toBe('col-resize');

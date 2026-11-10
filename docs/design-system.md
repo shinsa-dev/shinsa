@@ -70,7 +70,7 @@ These are the rules every other section applies. When a case is not covered anyw
 14. **One keyboard shortcut.** ⌘K opens the command menu everywhere. Only three workspaces bind keys of their own,
     and only while open: the Code tab (⌘P, ⇧⌘F, ⌘F, ⌘G), the Review tab (J, K) and the Terminal page (⌘T, ⌘W);
     the image viewer takes Esc, ←, →, `+`, `-` and `0` while it is open, and the Mac app's menu has its own
-    (⌘, ⌘R ⌘[ ⌘] ⇧⌘H). Invent no others.
+    (⌘, ⌘N ⌘W ⌘[ ⌘] ⇧⌘H). Invent no others.
 15. **Every collapsible remembers.** Open or folded, it comes back as you left it.
 16. **Each string has one job.** Sentence case, a full sentence, plain words, no exclamation marks, no em dashes, no
     selling. A button is a verb and its object.
@@ -2308,7 +2308,7 @@ Dialog (Root)
    └─ DialogCloseButton          (when showCloseButton)
 ```
 
-Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls) and `DIALOG_HEADER_STICKY` (the header that stays).
+Exports: `Dialog`, `DialogTrigger`, `DialogPortal`, `DialogClose`, `DialogOverlay`, `DialogContent`, `DialogCloseButton`, `DialogHeader`, `DialogFooter`, `DialogTitle`, `DialogDescription`, the motion strings `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION`, and the layout strings `DIALOG_BODY` (the body that scrolls), `DIALOG_HEADER_STICKY` (the header that stays) and `DIALOG_EDGE` (the popup's edge drawn again above its content, so the sticky header's background never hides the top of the dark inset ring; `AlertDialogContent` uses it too).
 
 **Props**
 
@@ -3775,10 +3775,10 @@ A 12.5px ring at 30% of the ink with a quarter arc at full ink, 1.5px strokes (i
 
 **Classes:**
 
-- Root: `peer group/switch relative inline-flex h-4 w-6 shrink-0 items-center rounded-full border border-transparent bg-bg-3 transition-[background-color,box-shadow] duration-200 ease-out outline-none after:absolute after:-inset-x-3 after:-inset-y-2 not-data-disabled:cursor-pointer data-checked:bg-primary-4 data-disabled:cursor-not-allowed data-disabled:[&>span]:opacity-50`
-- Thumb: `pointer-events-none flex size-3 items-center justify-center rounded-full bg-background text-primary-4 ring-0 transition-transform duration-150 ease-out shadow-control-knob translate-x-px data-checked:translate-x-[calc(100%-3px)]`
+- Root: `peer group/switch relative inline-flex h-4.5 w-6.5 shrink-0 items-center rounded-full border border-transparent bg-bg-3 transition-[background-color,box-shadow] duration-200 ease-out outline-none after:absolute after:-inset-x-3 after:-inset-y-2 not-data-disabled:cursor-pointer data-checked:bg-primary-4 data-disabled:cursor-not-allowed data-disabled:[&>span]:opacity-50`
+- Thumb: `pointer-events-none flex size-3.5 items-center justify-center rounded-full bg-background text-primary-4 ring-0 transition-transform duration-150 ease-out shadow-control-knob translate-x-px data-checked:translate-x-[calc(100%-5px)]`
 
-**Geometry:** track 24 × 16px, fully round, 1px transparent border; knob 12px, 2px from every edge (1px border + 1px translate); checked, its translate becomes 9px (`100% − 3px`), 8px further right, so it sits 2px from the right edge. The invisible `::after` extends the hit area 12px left and right and 8px up and down (48 × 32px).
+**Geometry:** track 26 × 18px, fully round, 1px transparent border; knob 14px, 2px from every edge (1px border + 1px translate); checked, its translate becomes 9px (`100% − 5px`), 8px further right, so it sits 2px from the right edge. The invisible `::after` extends the hit area 12px left and right and 8px up and down (50 × 34px).
 
 | State | Track | Knob |
 | --- | --- | --- |
@@ -7012,7 +7012,7 @@ Example: tabbing onto a list row shows no ring; its tooltip, if any, appears imm
 
 #### One keyboard shortcut
 
-- The app binds one global key: ⌘K (Ctrl K) for the command menu. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, Reload ⌘R, Back ⌘[, Forward ⌘], Home ⇧⌘H).
+- The app binds one global key: ⌘K (Ctrl K) for the command menu. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
 
 Example: pressing J on the Review tab moves to the next point; pressing J elsewhere does nothing.
 
@@ -8043,7 +8043,8 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 
 **Rules**
 
-- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; View has Reload ⌘R, zoom and full screen; Go has Back ⌘[, Forward ⌘] and Home ⇧⌘H, as in Finder and Safari. No other app-level shortcut.
+- The menu is the OS's own: Settings… ⌘, (opens settings) and Restart Engine in the first menu; File has New Task ⌘N (opens Home's new task field), Command Menu… ⌘K and Close Window ⌘W; Edit; no View menu, so macOS puts Enter Full Screen in Window; Go has Back ⌘[, Forward ⌘], Home ⇧⌘H, Tasks, Terminal and Settings, as in Finder and Safari; Help has macOS's menu search, What's New, the website, Report an Issue… and Show Engine Log. No other app-level shortcut.
+- Like a native app it never zooms (⌘+, ⌘− and ⌘0 do nothing, pinch never zooms the page) and shows nothing of a browser: no Reload, no developer tools, no Inspect Element. A right click on selected text or in a field opens macOS's own text menu (spelling guesses, Look Up, Cut, Copy, Paste); anywhere else nothing opens.
 - A menu bar (status) item shows while the app runs: the product mark as a template image with the count of decisions waiting beside it, and a menu with the engine's state, what needs you and what is working (each task opens its page), Open and Quit, Quit saying the engine and its agents keep running.
 - Back and Forward step through the page's own history and never onto the engine's waiting page.
 - A focused code editor keeps ⌘[ and ⌘] for outdent and indent: the page sees the key before the menu does.
@@ -9509,7 +9510,7 @@ keyboard usable instead:
   | Terminal page, while open | ⌘T new terminal, ⌘W close it; a focused terminal takes every key a terminal would (Ctrl K included) |
   | Image viewer | Esc close, ← → previous / next, `+` `-` zoom, `0` fit |
   | Find bar | Enter next match, ⇧Enter previous, Escape closes and returns focus to what it searched |
-  | Mac app menu | ⌘[ back, ⌘] forward, ⇧⌘H Home, ⌘, Settings, ⌘R reload |
+  | Mac app menu | ⌘N new task, ⌘W close window, ⌘[ back, ⌘] forward, ⇧⌘H Home, ⌘, Settings |
 
   The linter rejects any `addEventListener('keydown' | 'keyup')` in the app outside the four hooks that own these
   shortcuts; every other key handler sits on the element that has focus (`onKeyDown`). A shortcut that
@@ -9626,7 +9627,7 @@ and the user's setting has to win.
   | Input, select trigger, default tab list | 26px |
   | Underline tab list | 32px |
   | Checkbox `sm` / `md` | 14 / 16px |
-  | Switch | 24 × 16px track, 12px thumb |
+  | Switch | 26 × 18px track, 14px thumb |
 
 - **Whole rows and tiles are the target**: a list row, a task row, a disclosure header is one click target end to
   end, never a small link inside a row.

@@ -4,16 +4,17 @@ import {
   HOUR_MS,
   listForecastAccounts,
   MINUTE_MS,
-  resolveEngineInfo,
   resolveUsageForecast,
+  type Settings,
+  type ShinsaState,
 } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
 import { createAccount, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { spyOnEngine } from '../../support/engine.ts';
-import { listSentCommands, pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import { pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
@@ -57,9 +58,9 @@ function expectedPace() {
   return forecast?.safePace ?? 0;
 }
 
-function renderForecast(dailyUsageLimit: number | null = null) {
-  const state = createShinsaState({});
-  state.settings = { ...createSettings(), dailyUsageLimit };
+function renderForecast(settings: Partial<Settings> = {}, usagePaces: ShinsaState['usagePaces'] = {}) {
+  const state = createShinsaState({ patch: { usagePaces } });
+  state.settings = { ...createSettings(), ...settings };
   return render(
     <TooltipProvider>
       <ForecastSettings state={state} />
@@ -75,7 +76,7 @@ describe('the usage forecast', () => {
     expect(screen.queryByText('Forecast')).toBeNull();
   });
 
-  it('shows the safe pace, a lane per account and the tightest point, and applies it as the daily limit', async () => {
+  it('shows the safe pace, a lane per account and the tightest point, with nothing to apply as a daily limit', async () => {
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
     const { container } = renderForecast();
@@ -100,10 +101,7 @@ describe('the usage forecast', () => {
     expect(
       screen.getByText(/^At .+% a day every account is out of usage for .+ in all, starting in .+\.$/)
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Use as daily limit' }));
-    await waitFor(() =>
-      expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { dailyUsageLimit: pace } }])
-    );
+    expect(screen.queryByRole('button', { name: 'Use as daily limit' })).toBeNull();
   });
 
   it('marks where every account is out of usage at once', async () => {
@@ -127,26 +125,5 @@ describe('the usage forecast', () => {
     expect(outage?.classList.contains('pointer-events-auto')).toBe(true);
     const lane = container.querySelector('[data-usable]')?.closest('.relative');
     expect(overlay?.compareDocumentPosition(lane as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-  });
-
-  it('still forecasts on an engine without the daily limit, but offers nothing to apply', async () => {
-    const engine = resolveEngineInfo('1.0.0');
-    spyOnEngine({
-      ...engine,
-      features: engine.features.filter((feature) => feature !== 'usage.pace_limits'),
-    });
-    pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
-    await settle();
-    renderForecast();
-    expect(screen.getByText('Forecast')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Use as daily limit' })).toBeNull();
-  });
-
-  it('says when the daily limit already is the safe pace', async () => {
-    pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
-    await settle();
-    renderForecast(expectedPace());
-    const button = screen.getByRole('button', { name: 'Daily limit set' }) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
   });
 });

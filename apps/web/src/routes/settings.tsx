@@ -9,6 +9,8 @@ import { AccountSettings } from '@/components/settings/accounts.tsx';
 import { AgentSettings } from '@/components/settings/agents.tsx';
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
+import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
+import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
@@ -104,10 +106,11 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
       return (
         <>
           <AccountSettings settings={state.settings} />
+          <AutoPaceSettings state={state} />
           <ForecastSettings state={state} />
           <LimitSettings
             settings={state.settings}
-            rates={resolveUsageRates(state.runs)}
+            rates={resolveUsageRates(state.runs, state.accountPlans)}
             recentUsage={resolveRecentUsage(state, Date.now(), { provider: CLAUDE_PROVIDER }).percent}
           />
         </>
@@ -118,6 +121,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <FolderSettings />
           <WorktreeSettings />
           <ProjectSettings state={state} />
+          <BrowserSettings state={state} />
         </>
       );
     case 'integrations':
@@ -147,7 +151,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
       repos,
       explorerSide,
       updateChannel,
-      resolveUsageRates(state.runs)
+      resolveUsageRates(state.runs, state.accountPlans)
     )
   );
   const extensions = useExtensions();

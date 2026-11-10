@@ -7,6 +7,8 @@ import { Accounts } from '../../src/accounts/roster/service.ts';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Providers } from '../../src/agents/providers/registry/service.ts';
 import { Transcripts } from '../../src/agents/transcripts/service.ts';
+import { BrowserCookies } from '../../src/browser/cookies/service.ts';
+import { BrowserHost } from '../../src/browser/host/service.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { Extensions } from '../../src/extensions/registry/service.ts';
@@ -96,6 +98,8 @@ export interface HttpContext {
   terminals?: Terminals['Service'];
   refiner?: ServiceRefiner['Service'];
   resources?: Pick<ResourceMonitor['Service'], 'subscribe' | 'snapshot'>;
+  browserHost?: BrowserHost['Service'];
+  browserCookies?: BrowserCookies['Service'];
 }
 
 const OPTIONAL_SERVICES = [
@@ -122,6 +126,8 @@ const OPTIONAL_SERVICES = [
   ['terminals', Terminals],
   ['refiner', ServiceRefiner],
   ['resources', ResourceMonitor],
+  ['browserHost', BrowserHost],
+  ['browserCookies', BrowserCookies],
 ] as const satisfies readonly (readonly [keyof HttpContext, unknown])[];
 
 export function createHttpContext(

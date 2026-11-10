@@ -33,7 +33,11 @@ export const makeCodexClient = Effect.fn('CodexClient.make')(function* (
   const { CLAUDECODE: _claudeCode, ...inherited } = Bun.env;
 
   const child = yield* Effect.try({
-    try: () => spawnAppServer(options.path, options.cwd, { ...resolveBrowserEnv(inherited), ...options.env }),
+    try: () =>
+      spawnAppServer(options.path, options.cwd, {
+        ...resolveBrowserEnv(inherited, [], options.browserEndpoint ?? null),
+        ...options.env,
+      }),
     catch: (error) => new CodexRequestError({ method: 'app-server', message: describeError(error) }),
   });
   const closed = yield* Ref.make(false);

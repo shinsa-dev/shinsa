@@ -351,6 +351,33 @@ describe('gate commands', () => {
     );
   });
 
+  it('offers Start N-task bundle on a plan whose parts stack on this task', () => {
+    const gate = createGate({ id: 'g', taskId: 't', type: 'plan' });
+    const task = createTask({
+      id: 't',
+      stage: 'awaiting_plan',
+      plan: {
+        version: 1,
+        body: '',
+        proposedAt: 0,
+        document: {
+          goal: 'g',
+          phases: [],
+          behaviour: [],
+          approach: '',
+          files: [],
+          outOfScope: [],
+          verification: [],
+          questions: [],
+          split: [{ title: 'A', request: 'a', order: 'stacks_on', on: 0 }],
+        },
+      },
+    });
+    const approve = commandsFor(task, gate)[0];
+    expect(approve?.label).toBe('Start 2-task bundle');
+    expect(approve?.keywords).toContain('bundle');
+  });
+
   it('offers only Approve the plan and Revise on a plan without a split', () => {
     const gate = createGate({ id: 'g', taskId: 't', type: 'plan' });
     const task = createTask({ id: 't', stage: 'awaiting_plan' });

@@ -2158,8 +2158,20 @@ Only these, and they win over anything below:
       keeps its socket, so notifications go on); the menu bar item's Open Shinsa, a `shinsa://` link, a
       notification or opening Shinsa again brings both back, and ⌘Q quits the app and never stops the engine. Its
       size and place are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own
-      (Settings… ⌘, opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no
-      other shortcut.
+      (`menu/template.ts`): Shinsa (About, Check for Updates…, Settings… ⌘, opening `/settings`, Restart Engine);
+      File (New Task ⌘N, which opens Home's new task field, Command Menu… ⌘K, Close Window ⌘W); Edit; no View menu, so
+      macOS puts its own Enter Full Screen in Window; Go (Back ⌘[, Forward ⌘], Home ⇧⌘H, Tasks, Terminal, Settings);
+      Window; and Help, with macOS's menu search field, What's New (the changelog), Shinsa Website, Report an
+      Issue… (a new issue on `shinsa-dev/shinsa` in the browser) and Show Engine Log (`engine.log` in Console). The
+      items that act on the page reach it as one bridge message, `onAction` (`new-task`, `command-menu`,
+      `whats-new`, `applyDesktop`); a page older than the app has no listener and an app older than the page sends
+      none, so either side ignores what it does not know, and the page's own ⌘K handler takes the key first. No
+      other shortcut. Like a native app it never zooms: the menu has no zoom items, so ⌘+, ⌘− and ⌘0 do nothing,
+      pinch never zooms the page (the image viewer's own pinch zoom stays) and a zoom level Electron kept from
+      before is reset to 100%. Nothing of a browser shows either: no Reload, no developer tools
+      (`devTools` is off, so ⌥⌘I does nothing) and no Inspect Element, in the dev app too. A right click on selected text or in a field opens macOS's own text menu
+      (`window/context-menu.ts`): spelling guesses and Learn Spelling on a misspelled word, Look Up on a selection,
+      Copy on selected text, Cut, Copy, Paste and Select All in a field as it allows; anywhere else nothing opens.
     - **The menu bar item** shows while the app runs (`main/tray.ts`, its text in `lib/tray.ts`): the Shinsa mark at
       14 of the 18 points as a template image (`static/trayTemplate.png`, written by `scripts/icon.ts`), so macOS
       draws it in the menu bar's own colour, with the number of decisions waiting for you beside it (none when
@@ -2992,12 +3004,12 @@ Only these, and they win over anything below:
       finds, ⌘L clears the scrollback (the engine's copy too, and `^L` to the shell outside a full-screen program, so
       the prompt is drawn again at the top; ⌘K stays the command menu, where Clear the scrollback is a command), ⌘+,
       ⌘− and ⌘0 set the font size, ⌘Home, ⌘End, ⌘PageUp and ⌘PageDown scroll; Home, End, PageUp and PageDown go to
-      the program, as in Ghostty. Every other ⌘ key is Shinsa's and the app's (⌘K, ⌘,, ⌘R, ⌘[…). Elsewhere it is
+      the program, as in Ghostty. Every other ⌘ key is Shinsa's and the app's (⌘K, ⌘,, ⌘N, ⌘[…). Elsewhere it is
       Ctrl+Shift+C, V, A, F and L, and Ctrl K goes to the shell, so ⌘K's menu opens from outside the terminal.
     - **⌘T and ⌘W.** While the Terminal page is open, ⌘T opens a tab (as New terminal does) and ⌘W closes the one in
       front with the rule above (`hooks/use-terminal-keys.ts`, the one page-level listener besides 14's, 32's and
-      34's). The Mac app's menu has no Close Window item, so ⌘W reaches the page there; a browser keeps both for its
-      own tabs.
+      34's). The page sees the key before the Mac app's menu, so there ⌘W closes the tab and File's Close Window
+      takes ⌘W only on other pages; a browser keeps both for its own tabs.
     - **Run in terminal.** Every shell fence marked `run` (```` ```bash run ````) in a task's prose, notes, chat and
       Overview, How to test's commands and the steps around the merge has Run in terminal in its code block's corner
       beside Copy; a plain ```` ```bash ```` fence is an example with Copy alone (`CodeBlock`, How

@@ -484,8 +484,10 @@ describe('signing in an account', () => {
     await world.accounts.startLogin(null);
     const [created] = world.accounts.store.list();
     world.processes[0]?.exit(1);
-    await until('the account to be removed', () => world.accounts.store.list().length === 0);
-    expect(existsSync(created?.configDir as string)).toBe(false);
+    await until(
+      'the account and its folder to be removed',
+      () => world.accounts.store.list().length === 0 && !existsSync(created?.configDir as string)
+    );
     expect(world.calls.some((call) => call.command[2] === 'logout')).toBe(true);
 
     const first = await addAccount(world, 'work@example.com', 10);
@@ -560,7 +562,103 @@ describe('inspect mode', () => {
     await world.accounts.stop();
     expect(world.calls).toEqual([]);
     expect(world.secretReads).toEqual([]);
+    expect(dispatched(world).some((command) => command.type === 'account.plan_recorded')).toBe(false);
     expect(readFileSync(join(live.root, 'accounts.json'), 'utf8')).toBe(registry);
+  });
+});
+
+describe('recording each account’s plan', () => {
+  function planCommands(world: World) {
+    return dispatched(world).filter((command) => command.type === 'account.plan_recorded');
+  }
+
+  test('records the plan an account is on, again only once it changes', async () => {
+    const world = await createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 10);
+    expect(planCommands(world)).toContainEqual({
+      type: 'account.plan_recorded',
+      accountId: account.id,
+      provider: 'claude',
+      plan: 'max',
+    });
+    expect(world.stub.commandIds).toContain(`account-plan:${account.id}:max:0`);
+    world.stub.update((state) => {
+      state.seq = 7;
+      state.accountPlans[account.id] = { provider: 'claude', plan: 'max', at: 1 };
+    });
+    const before = planCommands(world).length;
+    await world.accounts.store.update(account.id, { paused: true });
+    expect(planCommands(world)).toHaveLength(before);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({
+        attempts: [
+          {
+            attemptId: 'a1',
+            provider: 'claude',
+            model: null,
+            resumed: false,
+            handoff: null,
+            startedAt: 1,
+            account: { id: account.id, email: account.email },
+          },
+        ],
+      });
+    });
+    await world.accounts.onNotice('run-1', {
+      kind: 'account',
+      email: 'a@example.com',
+      organization: null,
+      plan: 'Claude Ultra',
+    });
+    expect(planCommands(world).at(-1)).toMatchObject({ accountId: account.id, plan: 'ultra' });
+    expect(world.stub.commandIds).toContain(`account-plan:${account.id}:ultra:7`);
+  });
+
+  test('a plan the log refuses is only logged', async () => {
+    const world = await createWorld({ registry: true });
+    const logs = captureLogs();
+    world.stub.reject((command) => command.type === 'account.plan_recorded', new Error('the log is closed'));
+    const account = await addAccount(world, 'a@example.com', 10);
+    expect(logs.fieldsOf('[Accounts] Could not record the plan an account is on')[0]).toMatchObject({
+      accountId: account.id,
+    });
+    expect(world.accounts.snapshot().accounts[0]?.plan).toBe('max');
+  });
+});
+
+describe('recording the safe usage pace', () => {
+  function paceCommands(world: World) {
+    return dispatched(world).filter((command) => command.type === 'usage.pace_recorded');
+  }
+
+  test('records each provider’s safe pace from its usage, again only once it moves', async () => {
+    const world = await createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 10);
+    const recorded = paceCommands(world).at(-1);
+    expect(recorded).toMatchObject({ type: 'usage.pace_recorded', provider: 'claude' });
+    const pace = recorded?.type === 'usage.pace_recorded' ? recorded.pace : null;
+    expect(pace).toBeGreaterThan(0);
+    world.stub.update((state) => {
+      state.usagePaces.claude = { provider: 'claude', pace: pace ?? 0, at: 1 };
+    });
+    const before = paceCommands(world).length;
+    await world.accounts.store.update(world.accounts.store.list()[0]?.id ?? '', { switchAt: 80 });
+    expect(paceCommands(world)).toHaveLength(before);
+  });
+
+  test('a pace the log refuses is only logged, and inspect mode records none', async () => {
+    const world = await createWorld({ registry: true });
+    const logs = captureLogs();
+    world.stub.reject((command) => command.type === 'usage.pace_recorded', new Error('the log is closed'));
+    await addAccount(world, 'a@example.com', 10);
+    expect(logs.fieldsOf('[Accounts] Could not record the safe usage pace')[0]).toMatchObject({
+      provider: 'claude',
+    });
+    await world.accounts.stop();
+    const inspected = await createWorld({ root: world.root, inspect: true });
+    await inspected.accounts.start();
+    expect(paceCommands(inspected)).toEqual([]);
+    await inspected.accounts.stop();
   });
 });
 
@@ -1996,7 +2094,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       { type: 'provider.record_sign_in', provider: 'codex' },
     ]);
     expect(world.stub.dispatched.some((command) => command.type === 'account.signed_in')).toBe(false);
-    expect(world.stub.commandIds.at(-1)).toBe('provider-login:codex:gate-1');
+    expect(world.stub.commandIds).toContain('provider-login:codex:gate-1');
   });
 
   test('a sign-in that cannot be carried on is logged, and a failed sign-in check keeps the last one', async () => {

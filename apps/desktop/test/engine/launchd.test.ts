@@ -10,6 +10,7 @@ import {
   parseLaunchdJob,
   parseRegistration,
   resolveDataDir,
+  resolveEngineLog,
   resolveEngineProgram,
   resolveEngineTarget,
   resolveLaunchAgentPath,
@@ -114,6 +115,10 @@ describe('the engine’s data folder', () => {
     expect(resolveDataDir({ XDG_CONFIG_HOME: '/x' }, '/u')).toBe('/x/shinsa/data');
     expect(resolveDataDir({ HOME: '/me' }, '/u')).toBe('/me/.config/shinsa/data');
     expect(resolveDataDir({}, '/u')).toBe('/u/.config/shinsa/data');
+  });
+
+  it('keeps the engine log in it', () => {
+    expect(resolveEngineLog({ SHINSA_HOME: '/h' }, '/u')).toBe('/h/data/engine.log');
   });
 });
 

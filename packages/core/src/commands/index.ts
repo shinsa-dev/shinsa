@@ -191,6 +191,7 @@ type AgentCommand =
       | { steps: PipelineStep[] }
     ))
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
+  | { type: 'agent.request_browser_sign_in'; runId: string; gateId: string; url: string; reason: string }
   | DelegationAgentCommand
   | ScheduleAgentCommand
   | MemoryAgentCommand
@@ -318,6 +319,8 @@ type SystemCommand =
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
+  | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
+  | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand

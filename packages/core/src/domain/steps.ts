@@ -616,6 +616,22 @@ const HARD_GATES = {
     refusal: 'Paste the secret into the secret field.',
     pauses: false,
   },
+  browser_sign_in: {
+    type: 'browser_sign_in',
+    strength: 'hard',
+    decidedBy: 'you',
+    title: 'Browser sign-in',
+    shows: ['the site the agent needs signed in', 'why it needs it'],
+    decisions: [
+      {
+        decision: 'approve',
+        does: 'Tells the agent the project’s browser is signed in; it opens the page again and carries on.',
+      },
+      { decision: 'reject', does: 'Tells the agent to carry on without signing in.' },
+    ],
+    refusal: 'Say you signed in, or skip it.',
+    pauses: false,
+  },
   proposal: {
     type: 'proposal',
     strength: 'hard',

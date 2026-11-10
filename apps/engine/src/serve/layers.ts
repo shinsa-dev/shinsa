@@ -11,6 +11,7 @@ import { QuickCalls, QuickFastMode } from '../agents/quick/index.ts';
 import { RunSupervisorLayer } from '../agents/supervisor/layers.ts';
 import { TeammateTasks } from '../agents/tool-calls/schema.ts';
 import { BriefingWriter } from '../briefing/service.ts';
+import { BrowserLayer } from '../browser/layers.ts';
 import { resolveEngineChangelog } from '../changelog/index.ts';
 import { ChecksLayer } from '../checks/layers.ts';
 import { prepareDataDir, type ServerConfig } from '../config/index.ts';
@@ -277,6 +278,8 @@ function createSlackLayer(config: ServerConfig) {
           return (yield* remote.isEnabled) ? (yield* remoteStore.file).credentials : null;
         }),
         appOrigin: config.remoteOrigin,
+        resolveActor: remote.resolveActor,
+        isOwner: remote.isOwner,
       });
     })
   );
@@ -454,7 +457,7 @@ function createServeLayer(
     Layer.provideMerge(createServedLayer(options, instance, stop)),
     Layer.provideMerge(createEffectsLayer(options, instance)),
     Layer.provideMerge(createRunsLayer(options)),
-    Layer.provideMerge(Layer.merge(Previews.layer, SharedTeams.layer)),
+    Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer)),
     Layer.provideMerge(
       Layer.mergeAll(
         createTriageLayer(),

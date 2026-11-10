@@ -11,6 +11,7 @@ export interface CodexModelsDefinition {
   readonly env: Record<string, string | undefined> | undefined;
   readonly cwd: string;
   readonly timeout: Duration.Duration;
+  readonly timeToLive: Duration.Duration;
 }
 
 export interface CodexModelCatalogHandle {

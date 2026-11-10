@@ -10,6 +10,7 @@ export class DesktopShell extends Context.Service<
     readonly quit: Effect.Effect<void>;
     setBadge(text: string): Effect.Effect<void>;
     openExternal(url: string): Effect.Effect<void>;
+    openPath(path: string): Effect.Effect<void>;
     writeClipboard(text: string): Effect.Effect<void>;
     setAboutPanel(panel: AboutPanel): Effect.Effect<void>;
     applyMenu(sections: readonly MenuSection[]): Effect.Effect<void>;

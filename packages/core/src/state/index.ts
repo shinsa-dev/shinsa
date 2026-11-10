@@ -37,6 +37,7 @@ export {
   canChangeStack,
   findTask,
   isBundleFollower,
+  isBundleMember,
   isDependencyOf,
   isHeldInBacklog,
   isRunWaiting,

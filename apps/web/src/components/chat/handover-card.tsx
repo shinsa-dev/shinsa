@@ -468,6 +468,7 @@ export function HandoverCard({
     case 'remove_service':
     case 'note':
     case 'wait_for':
+    case 'request_browser_sign_in':
       return <InsetToolRow call={call} live={live} />;
     case 'create_task':
     case 'delegate_task':

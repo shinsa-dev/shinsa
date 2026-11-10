@@ -6,6 +6,7 @@ import {
   type DesktopStart,
   type DesktopUpdate,
   type DesktopWindowState,
+  type PageAction,
 } from '../bridge/schema.ts';
 
 function subscribe<T>(channel: string, listener: (value: T) => void) {
@@ -37,6 +38,7 @@ if (start) {
     onWindowState: (listener) => subscribe<DesktopWindowState>(CHANNELS.windowState, listener),
     onUpdate: (listener) => subscribe<DesktopUpdate>(CHANNELS.update, listener),
     onAway: (listener) => subscribe<AwaySpan>(CHANNELS.away, listener),
+    onAction: (listener) => subscribe<PageAction>(CHANNELS.action, listener),
   };
   contextBridge.exposeInMainWorld('shinsaDesktop', bridge);
 }

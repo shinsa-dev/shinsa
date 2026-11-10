@@ -1,5 +1,5 @@
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
-import type { Run, RunAttempt, RunMeter } from '../domain/index.ts';
+import type { AccountPlan, Run, RunAttempt, RunMeter } from '../domain/index.ts';
 import { DAY_MS, MINUTE_MS } from '../domain/time.ts';
 
 export const USAGE_RATE_LIMITS = {
@@ -7,7 +7,17 @@ export const USAGE_RATE_LIMITS = {
   minMovement: 10,
   halfLifeMs: 7 * DAY_MS,
   idleMs: 2 * MINUTE_MS,
+  startingMovement: 2,
 } as const;
+
+interface StartingRate {
+  percentPerUsd: number;
+  measuredOn: string;
+}
+
+export const STARTING_RATES: Record<string, StartingRate> = {
+  'claude:ultra': { percentPerUsd: 0.0255, measuredOn: '2026-11-08' },
+};
 
 interface UsageShare {
   percent: number;
@@ -48,13 +58,34 @@ interface WindowLog {
   observations: Observation[];
 }
 
-const RATES = new WeakMap<Record<string, Run>, Map<string, UsageRate | null>>();
-const SHARES = new WeakMap<Record<string, Run>, Map<string, UsageShareState>>();
+type AccountPlans = Record<string, AccountPlan>;
+
+interface WindowSamples {
+  observed: boolean;
+  samples: Sample[];
+}
+
+const NO_PLANS: AccountPlans = {};
+const SAMPLES = new WeakMap<Record<string, Run>, Map<string, WindowSamples>>();
+const RATES = new WeakMap<Record<string, Run>, WeakMap<AccountPlans, Map<string, UsageRate | null>>>();
+const SHARES = new WeakMap<Record<string, Run>, WeakMap<AccountPlans, Map<string, UsageShareState>>>();
 
 const PROVIDER_WINDOW = 'provider:';
+const ACCOUNT_WINDOW = 'account:';
 
 export function resolveMeterWindow(attempt: Pick<RunAttempt, 'account' | 'provider'>) {
-  return attempt.account ? `account:${attempt.account.id}` : `${PROVIDER_WINDOW}${attempt.provider}`;
+  return attempt.account ? `${ACCOUNT_WINDOW}${attempt.account.id}` : `${PROVIDER_WINDOW}${attempt.provider}`;
+}
+
+export function resolveRatePool(window: string, plans: AccountPlans) {
+  if (!window.startsWith(ACCOUNT_WINDOW)) return window;
+  const plan = plans[window.slice(ACCOUNT_WINDOW.length)];
+  return plan ? `plan:${plan.provider}:${plan.plan}` : window;
+}
+
+function resolveStartingRate(window: string, plans: AccountPlans) {
+  const plan = window.startsWith(ACCOUNT_WINDOW) ? plans[window.slice(ACCOUNT_WINDOW.length)] : undefined;
+  return plan ? (STARTING_RATES[`${plan.provider}:${plan.plan}`] ?? null) : null;
 }
 
 export function resolveWindowProvider(window: string) {
@@ -160,15 +191,15 @@ function listSamples(log: WindowLog) {
     .sort((a, b) => a.known - b.known);
 }
 
-function resolveRate(samples: Sample[]): UsageRate | null {
-  const last = samples.at(-1);
-  if (!last) return null;
+function resolveRate(samples: Sample[], start: StartingRate | null): UsageRate | null {
+  if (samples.length === 0 && !start) return null;
+  const last = Math.max(...samples.map((sample) => sample.known));
   const tasks = new Set<string>();
   let movement = 0;
-  let decayedMovement = 0;
-  let decayedCost = 0;
+  let decayedMovement = start ? USAGE_RATE_LIMITS.startingMovement : 0;
+  let decayedCost = start ? USAGE_RATE_LIMITS.startingMovement / start.percentPerUsd : 0;
   for (const sample of samples) {
-    const weight = 2 ** (-(last.known - sample.known) / USAGE_RATE_LIMITS.halfLifeMs);
+    const weight = 2 ** (-(last - sample.known) / USAGE_RATE_LIMITS.halfLifeMs);
     decayedMovement += sample.movement * weight;
     decayedCost += sample.costUsd * weight;
     movement += sample.movement;
@@ -197,28 +228,76 @@ function resolveRunShare(run: Run, rates: Map<string, UsageRate | null>): UsageS
   return { percent, tasks, trusted };
 }
 
-export function resolveUsageRates(runs: Record<string, Run>): Map<string, UsageRate | null> {
-  const known = RATES.get(runs);
+function listWindowSamples(runs: Record<string, Run>) {
+  const known = SAMPLES.get(runs);
   if (known) return known;
   const windows = new Map<string, WindowLog>();
   for (const run of Object.values(runs)) collectRun(windows, run);
-  const rates = new Map<string, UsageRate | null>();
+  const samples = new Map<string, WindowSamples>();
   for (const [key, log] of windows) {
-    if (log.observations.length > 0) rates.set(key, resolveRate(listSamples(log)));
+    samples.set(key, { observed: log.observations.length > 0, samples: listSamples(log) });
   }
-  RATES.set(runs, rates);
+  SAMPLES.set(runs, samples);
+  return samples;
+}
+
+function listPoolWindows(samples: Map<string, WindowSamples>, plans: AccountPlans) {
+  const windows = new Set(samples.keys());
+  for (const accountId of Object.keys(plans)) windows.add(`${ACCOUNT_WINDOW}${accountId}`);
+  const pools = new Map<string, string[]>();
+  for (const window of windows) {
+    const pool = resolveRatePool(window, plans);
+    pools.set(pool, [...(pools.get(pool) ?? []), window]);
+  }
+  return pools;
+}
+
+function resolvePoolRates(runs: Record<string, Run>, plans: AccountPlans) {
+  const samples = listWindowSamples(runs);
+  const rates = new Map<string, UsageRate | null>();
+  for (const windows of listPoolWindows(samples, plans).values()) {
+    const pooled = windows.flatMap((window) => samples.get(window)?.samples ?? []);
+    const rate = resolveRate(pooled, resolveStartingRate(windows[0] as string, plans));
+    for (const window of windows) {
+      if (rate || samples.get(window)?.observed) rates.set(window, rate);
+    }
+  }
   return rates;
 }
 
-export function resolveUsageShares(runs: Record<string, Run>): Map<string, UsageShareState> {
-  const known = SHARES.get(runs);
+function resolveCached<T>(
+  cache: WeakMap<Record<string, Run>, WeakMap<AccountPlans, T>>,
+  runs: Record<string, Run>,
+  plans: AccountPlans,
+  resolve: () => T
+) {
+  const byPlans = cache.get(runs) ?? new WeakMap<AccountPlans, T>();
+  cache.set(runs, byPlans);
+  const known = byPlans.get(plans);
   if (known) return known;
-  const rates = resolveUsageRates(runs);
-  const shares = new Map<string, UsageShareState>();
-  for (const run of Object.values(runs)) {
-    const share = resolveRunShare(run, rates);
-    if (share) shares.set(run.id, share);
-  }
-  SHARES.set(runs, shares);
-  return shares;
+  const resolved = resolve();
+  byPlans.set(plans, resolved);
+  return resolved;
+}
+
+export function resolveUsageRates(
+  runs: Record<string, Run>,
+  plans: AccountPlans = NO_PLANS
+): Map<string, UsageRate | null> {
+  return resolveCached(RATES, runs, plans, () => resolvePoolRates(runs, plans));
+}
+
+export function resolveUsageShares(
+  runs: Record<string, Run>,
+  plans: AccountPlans = NO_PLANS
+): Map<string, UsageShareState> {
+  return resolveCached(SHARES, runs, plans, () => {
+    const rates = resolveUsageRates(runs, plans);
+    const shares = new Map<string, UsageShareState>();
+    for (const run of Object.values(runs)) {
+      const share = resolveRunShare(run, rates);
+      if (share) shares.set(run.id, share);
+    }
+    return shares;
+  });
 }
