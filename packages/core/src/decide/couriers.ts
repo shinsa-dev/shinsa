@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DELEGATION_LIMITS,
@@ -92,7 +93,8 @@ function waitOn(decider: Decider, task: Task, ids: string[]) {
 function resolveCourierRepo(decider: Decider, task: Task, command: CommandOf<'agent.create_task'>) {
   if (command.repoId) return command.repoId;
   const elsewhere =
-    command.projectId !== undefined && command.projectId !== resolveTaskProject(decider.state, task);
+    command.projectId !== undefined &&
+    command.projectId !== Option.getOrNull(resolveTaskProject(decider.state, task));
   return elsewhere ? null : task.repoId;
 }
 

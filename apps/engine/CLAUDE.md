@@ -62,7 +62,7 @@ src/
 │                        which symbols: TTY, NO_COLOR, FORCE_COLOR, TERM; the 16-colour tones; code in backticks),
 │                        text.ts (visible width, wrapping, truncation, ~ for home, splitHint for an error's hint),
 │                        layout.ts (Display, aligned lists, tables that fit the width, usage lines, fields),
-│                        closest.ts (did you mean), spinner.ts (progress on a terminal's stderr), index.ts
+│                        closest.ts (did you mean), spinner.ts (progress on a terminal's stderr, a scoped fiber on SPINNER_FRAMES), index.ts
 │                        (resolveTerminal: the process's Terminal). The surface's formatters take a Display too; an
 │                        agent's tool gets PLAIN_DISPLAY
 ├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
@@ -494,7 +494,7 @@ src/
 │                        selectOnPath, the PATH lookup in place of Bun.which; a failed read answers false, none or
 │                        no entries), inside.ts (the one containment check that reads the disk:
 │                        selectInside and selectWritableInside, on real paths, so a symlink cannot leave), paths.ts
-│                        (the pure halves: isInside, assertRepoPath); every module asking whether a path stays in a
+│                        (the pure halves: isInside, parseRepoPath, a Result); every module asking whether a path stays in a
 │                        folder calls them
 ├── git/                 service.ts (Git: attempt answers a CommandResult, run fails with GitFailed and retries a held
 │                        index.lock on LOCK_RETRY, read answers a command's raw bytes with its byte or line cap, a
@@ -521,7 +521,7 @@ src/
 │                        failure CodeReadFailed with its code; entries.ts the pure parsers), leftovers/
 │                        (LeftoverProcesses: the processes still working in a folder, stopped with a grace period
 │                        polled on STOP_POLL_SCHEDULE). conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
-│                        resolveCommitType, serializeConventionalSubject) and refs.ts (assertRefName, slugify) are
+│                        resolveCommitType, serializeConventionalSubject) and refs.ts (slugify) are
 │                        pure; index.ts re-exports them. blobs/ (CatFiles: one long-lived
 │                        `git cat-file --batch-command` per repository, the process, its waiting reads, each a
 │                        Deferred, and its idle and answer timers as fibers, every reader closed with the layer's
@@ -838,7 +838,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   repository's check commands, workspace or coverage;
   which decisions those are is `docs/engine.md` → Who can change Shinsa. Core refuses them on your behalf as well. There are no keys, codes or cookies and no per-caller routes;
   never add one, since an agent's shell reads whatever the user can.
-- **Nothing reaches git or gh as an option.** Branch names pass `assertRefName` (no leading `-`, no `..`), fetches put
+- **Nothing reaches git or gh as an option.** Branch names pass `decodeRefName` (no leading `-`, no `..`), fetches put
   `--` before the ref, `gh api` gets strings with `-f`, and the merge method is checked against core's
   `MERGE_METHODS`.
 - **Agent runs are unattended**: `bypassPermissions`, the user's `claude` binary, user/project/local settings, the
@@ -901,7 +901,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the effects, once no `claude` can still talk to it, then HTTP, then the services' own scopes, `EngineCore`, the log
   and the lock last. Your terminals' shells are hung up before the clocks stop, and their screens saved. Anything new
   that starts a process or a timer is stopped there too.
-- **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
+- **Hand-overs are validated here** (`agents/handover.ts`, `resolveHandOver`, a Result): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
   log. Evidence is checked by core's `validateEvidence` (`storeEvidence`): exactly one of a path (absolute or relative
   to the worktree, at most 200 MB), an http or https URL, or text; a test or check takes only a check id and is

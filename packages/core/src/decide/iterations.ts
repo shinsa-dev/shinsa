@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   DomainError,
   type ReplyingHandOver,
@@ -14,7 +15,7 @@ export function requestIteration(decider: Decider, taskId: string, text: string 
   decider.emit({
     type: 'iteration.requested',
     taskId,
-    iterationId: selectOpenIteration(task)?.id ?? decider.context.newId(),
+    iterationId: Option.getOrNull(selectOpenIteration(task))?.id ?? decider.context.newId(),
     round: resolveCurrentRound(task).number,
     text: text?.trim() ?? '',
     comments,
@@ -28,7 +29,7 @@ export function answerIteration(
   reply: AgentReply | null,
   tool: ReplyingHandOver
 ) {
-  const open = selectOpenIteration(task);
+  const open = Option.getOrNull(selectOpenIteration(task));
   if (!open && reply) {
     throw new DomainError({
       code: 'reply_unasked',

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   copyTeammateOriginal,
@@ -60,11 +61,12 @@ export function selectTriageDuplicate(
   task: Task,
   repoId: string | null,
   duplicateOf: string | undefined
-) {
+): Option.Option<Task> {
   const original = duplicateOf ? decider.state.tasks[duplicateOf] : undefined;
-  if (!original || original.id === task.id || isTaskSettled(original) || original.duplicate) return null;
-  if (original.repoId === null || original.repoId !== repoId) return null;
-  return original;
+  if (!original || original.id === task.id || isTaskSettled(original) || original.duplicate)
+    return Option.none();
+  if (original.repoId === null || original.repoId !== repoId) return Option.none();
+  return Option.some(original);
 }
 
 export function closeTriageDuplicate(decider: Decider, task: Task, original: Task, why: string | null) {

@@ -131,10 +131,11 @@ export default function CodeEditor(props: CodeEditorProps) {
   const latest = React.useRef(props);
   latest.current = props;
   const find = React.useSyncExternalStore(session.findHost.subscribe, session.findHost.read);
-  const annotationsKey = JSON.stringify(splitAnnotations(notes, spots, keep, focus, split && diffing));
+  const annotations = splitAnnotations(notes, spots, keep, focus, split && diffing);
+  const annotationsKey = JSON.stringify(annotations);
   const noteKeys = notes.map((note) => note.key).join('\0');
-  const latestAnnotations = React.useRef(annotationsKey);
-  latestAnnotations.current = annotationsKey;
+  const latestAnnotations = React.useRef(annotations);
+  latestAnnotations.current = annotations;
 
   React.useLayoutEffect(() => {
     const host = parent.current;
@@ -148,7 +149,7 @@ export default function CodeEditor(props: CodeEditorProps) {
       baseline: latest.current.baseline ?? null,
       target: latest.current.reveal !== null,
       split: split && original !== null,
-      annotations: JSON.parse(latestAnnotations.current) as ReturnType<typeof splitAnnotations>,
+      annotations: latestAnnotations.current,
     });
     measureCode(CODE_MARKS.shown, path);
   }, [session, docKey, path, original, split]);
@@ -163,7 +164,7 @@ export default function CodeEditor(props: CodeEditorProps) {
   React.useLayoutEffect(() => {
     const views = session.views;
     if (!views || session.current !== docKey) return;
-    const value = JSON.parse(annotationsKey) as ReturnType<typeof splitAnnotations>;
+    const value = latestAnnotations.current;
     views.b.dispatch({ effects: setAnnotations.of(value.b) });
     views.a?.dispatch({ effects: setAnnotations.of(value.a) });
     if (views.a) revealSplitLines({ a: views.a, b: views.b, chunks: session.chunks }, value.b.keep);

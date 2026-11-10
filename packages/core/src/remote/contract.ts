@@ -159,8 +159,8 @@ export type MachineCredentials = typeof MachineCredentials.Type;
 
 const decodeMachineCredentials = Schema.decodeUnknownOption(Schema.fromJsonString(MachineCredentials));
 
-export function parseMachineCredentials(text: string): MachineCredentials | null {
-  return Option.getOrNull(decodeMachineCredentials(text));
+export function parseMachineCredentials(text: string): Option.Option<MachineCredentials> {
+  return decodeMachineCredentials(text);
 }
 
 export const PairPollResponse = Schema.Union([
@@ -452,11 +452,11 @@ export function serializeEnrollFragment(fragment: EnrollFragment) {
   return [fragment.instanceId, fragment.machineKey, fragment.secret, fragment.invite].join('.');
 }
 
-export function parseEnrollFragment(fragment: string): EnrollFragment | null {
+export function parseEnrollFragment(fragment: string): Option.Option<EnrollFragment> {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length !== 4 || parts.some((part) => !URL_SAFE_SEGMENT.test(part))) return null;
+  if (parts.length !== 4 || parts.some((part) => !URL_SAFE_SEGMENT.test(part))) return Option.none();
   const [instanceId, machineKey, secret, invite] = parts as [string, string, string, string];
-  return { instanceId, machineKey, secret, invite };
+  return Option.some({ instanceId, machineKey, secret, invite });
 }
 
 export function resolveEnrollUrl(fragment: EnrollFragment, origin: string = REMOTE_APP_ORIGIN) {

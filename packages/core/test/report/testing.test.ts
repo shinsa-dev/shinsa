@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   createTesting,
   hasTesting,
@@ -31,12 +32,24 @@ describe('the testing guide', () => {
   });
 
   test('reads a file as a path, a path with a line or range, or a file reference', () => {
-    expect(parseTestFile('src/a.ts')).toEqual({ path: 'src/a.ts', line: null, end: null });
-    expect(parseTestFile(' src/a.ts:12 ')).toEqual({ path: 'src/a.ts', line: 12, end: null });
-    expect(parseTestFile('src/a.ts:12-20')).toEqual({ path: 'src/a.ts', line: 12, end: 20 });
-    expect(parseTestFile('shinsa://file/src/a.ts#L3-L4')).toEqual({ path: 'src/a.ts', line: 3, end: 4 });
-    expect(parseTestFile('../a.ts')).toBeNull();
-    expect(parseTestFile('shinsa://task/abc')).toBeNull();
+    expect(Option.getOrNull(parseTestFile('src/a.ts'))).toEqual({ path: 'src/a.ts', line: null, end: null });
+    expect(Option.getOrNull(parseTestFile(' src/a.ts:12 '))).toEqual({
+      path: 'src/a.ts',
+      line: 12,
+      end: null,
+    });
+    expect(Option.getOrNull(parseTestFile('src/a.ts:12-20'))).toEqual({
+      path: 'src/a.ts',
+      line: 12,
+      end: 20,
+    });
+    expect(Option.getOrNull(parseTestFile('shinsa://file/src/a.ts#L3-L4'))).toEqual({
+      path: 'src/a.ts',
+      line: 3,
+      end: 4,
+    });
+    expect(Option.getOrNull(parseTestFile('../a.ts'))).toBeNull();
+    expect(Option.getOrNull(parseTestFile('shinsa://task/abc'))).toBeNull();
   });
 
   test('writes a file back as path:line-end', () => {

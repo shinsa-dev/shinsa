@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { SHINSA_TOOL_NAMES } from '@shinsa/core';
+import { Option, Result } from 'effect';
 import {
   isSurfaceTool,
   listSurfaceToolSpecs,
@@ -52,14 +53,34 @@ describe('the surface as agent tools', () => {
   });
 
   test('reads a call; unknown tools, human-only actions and unknown fields are refused', () => {
-    expect(readSurfaceToolCall('tasks_show', { task: 'SW-1' })).toMatchObject({ values: { task: 'SW-1' } });
-    expect(() => readSurfaceToolCall('nope', {})).toThrow('No tool nope.');
-    expect(() => readSurfaceToolCall('merges_approve', { task: 'SW-1' })).toThrow('No tool merges_approve.');
-    expect(() => readSurfaceToolCall('tasks_create', { request: 'Fix it' })).toThrow('No tool tasks_create.');
-    expect(() => readSurfaceToolCall('questions_answer', { task: 'SW-1', answer: 'Yes' })).toThrow(
-      'No tool questions_answer.'
-    );
-    expect(() => readSurfaceToolCall('tasks_show', { task: 'x', extra: 1 })).toThrow('Unknown field extra.');
-    expect(() => readSurfaceToolCall('tasks_show', {})).toThrow('task is required.');
+    expect(Result.getOrThrow(readSurfaceToolCall('tasks_show', { task: 'SW-1' }))).toMatchObject({
+      values: { task: 'SW-1' },
+    });
+    expect(
+      Result.getFailure(readSurfaceToolCall('nope', {})).pipe(Option.map((error) => error.message))
+    ).toEqual(Option.some('No tool nope.'));
+    expect(
+      Result.getFailure(readSurfaceToolCall('merges_approve', { task: 'SW-1' })).pipe(
+        Option.map((error) => error.message)
+      )
+    ).toEqual(Option.some('No tool merges_approve.'));
+    expect(
+      Result.getFailure(readSurfaceToolCall('tasks_create', { request: 'Fix it' })).pipe(
+        Option.map((error) => error.message)
+      )
+    ).toEqual(Option.some('No tool tasks_create.'));
+    expect(
+      Result.getFailure(readSurfaceToolCall('questions_answer', { task: 'SW-1', answer: 'Yes' })).pipe(
+        Option.map((error) => error.message)
+      )
+    ).toEqual(Option.some('No tool questions_answer.'));
+    expect(
+      Result.getFailure(readSurfaceToolCall('tasks_show', { task: 'x', extra: 1 })).pipe(
+        Option.map((error) => error.message)
+      )
+    ).toEqual(Option.some('Unknown field extra.'));
+    expect(
+      Result.getFailure(readSurfaceToolCall('tasks_show', {})).pipe(Option.map((error) => error.message))
+    ).toEqual(Option.some('task is required.'));
   });
 });

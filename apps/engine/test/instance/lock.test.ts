@@ -184,7 +184,7 @@ describe('telling a live process from a dead one', () => {
   });
 
   test('the boot time stays put while the machine runs', () => {
-    expect(Math.abs(resolveBootedAt() - resolveBootedAt())).toBeLessThan(2_000);
-    expect(resolveBootedAt()).toBeLessThan(Date.now());
+    expect(Math.abs(resolveBootedAt(Date.now()) - resolveBootedAt(Date.now()))).toBeLessThan(2_000);
+    expect(resolveBootedAt(Date.now())).toBeLessThan(Date.now());
   });
 });

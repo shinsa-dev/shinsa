@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   type Evidence,
   isEvidenceKey,
@@ -161,9 +162,9 @@ describe('replaced and removed evidence', () => {
 
   test('an item is found by its id, its key or the id of one of its parts', () => {
     const items = listEvidenceItems([before, fresh, banner2]);
-    expect(selectEvidenceItem(items, 'settings')?.id).toBe('before');
-    expect(selectEvidenceItem(items, 'new')?.id).toBe('before');
-    expect(selectEvidenceItem(items, 'banner-2')?.key).toBe('banner');
-    expect(selectEvidenceItem(items, 'missing')).toBeNull();
+    expect(Option.getOrNull(selectEvidenceItem(items, 'settings'))?.id).toBe('before');
+    expect(Option.getOrNull(selectEvidenceItem(items, 'new'))?.id).toBe('before');
+    expect(Option.getOrNull(selectEvidenceItem(items, 'banner-2'))?.key).toBe('banner');
+    expect(Option.getOrNull(selectEvidenceItem(items, 'missing'))).toBeNull();
   });
 });

@@ -1,7 +1,6 @@
 import type { TaskPriority } from '@shinsa/core';
 import { Effect } from 'effect';
 import { describeVersion, type ServerHealth } from '../instance/index.ts';
-import { describeError } from '../log/index.ts';
 import { type CommandReceipt, describeQueue, describeUptime, QUEUE_EMPTY } from '../surface/index.ts';
 import {
   type Display,
@@ -19,10 +18,9 @@ import { CliFailed, type CommandIo } from './schema.ts';
 export type { CommandIo } from './schema.ts';
 
 export const readArgs = Effect.fn('Cli.readArgs')(function* (args: string[]) {
-  return yield* Effect.try({
-    try: () => parseArgs(args),
-    catch: (error) => new CliFailed({ message: describeError(error) }),
-  });
+  return yield* Effect.fromResult(parseArgs(args)).pipe(
+    Effect.mapError((error) => new CliFailed({ message: error.message }))
+  );
 });
 
 function resolvePriority(flags: Set<string>): TaskPriority {

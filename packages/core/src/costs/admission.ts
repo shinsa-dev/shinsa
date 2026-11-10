@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import { isProjectInFocus } from '../domain/focus.ts';
 import {
@@ -140,7 +141,8 @@ function resolveCommitted(state: ShinsaState, provider: string, skip: string | n
   for (const [taskId, buildProvider] of listBuildingTasks(state)) {
     const task = state.tasks[taskId];
     if (taskId === skip || buildProvider !== provider || !task) continue;
-    committed += resolveBuildEstimate(state, task)?.remainingPercent ?? 0;
+    const estimate = Option.flatMap(resolveBuildEstimate(state, task), (found) => found.remainingPercent);
+    committed += Option.getOrUndefined(estimate) ?? 0;
   }
   return committed;
 }
@@ -150,10 +152,12 @@ export function resolveAdmission(
   task: Task,
   provider: string,
   now: number
-): AdmissionVerdict | null {
+): Option.Option<AdmissionVerdict> {
   const pace = state.usagePaces[provider]?.pace ?? null;
-  const estimate = resolveBuildEstimate(state, task)?.remainingPercent ?? null;
-  if (pace === null || estimate === null) return null;
+  const estimate = Option.getOrNull(
+    Option.flatMap(resolveBuildEstimate(state, task), (found) => found.remainingPercent)
+  );
+  if (pace === null || estimate === null) return Option.none();
   const limit = task.priority === 'urgent' ? pace : pace * (1 - ADMISSION_LIMITS.reserve);
   const need = Math.min(estimate, limit);
   const recent = resolveRecentUsage(state, now, { provider });
@@ -161,14 +165,17 @@ export function resolveAdmission(
   const fits = percent + need <= limit;
   const freesAt = fits
     ? now
-    : (resolveRecentUsageFreesAt(recent, limit - (percent - recent.percent) - need) ??
-      now + ADMISSION_LIMITS.recheckMs);
-  return { fits, need, limit, percent, freesAt: Math.max(freesAt, now + MINUTE_MS) };
+    : Option.getOrElse(
+        resolveRecentUsageFreesAt(recent, limit - (percent - recent.percent) - need),
+        () => now + ADMISSION_LIMITS.recheckMs
+      );
+  return Option.some({ fits, need, limit, percent, freesAt: Math.max(freesAt, now + MINUTE_MS) });
 }
 
 export function resolveAdmissionRoom(state: ShinsaState, provider: string, now: number) {
-  const pace = state.usagePaces[provider]?.pace ?? null;
-  if (pace === null) return null;
-  const used = resolveRecentUsage(state, now, { provider }).percent + resolveCommitted(state, provider, null);
-  return pace * (1 - ADMISSION_LIMITS.reserve) - used;
+  return Option.map(Option.fromNullishOr(state.usagePaces[provider]?.pace), (pace) => {
+    const used =
+      resolveRecentUsage(state, now, { provider }).percent + resolveCommitted(state, provider, null);
+    return pace * (1 - ADMISSION_LIMITS.reserve) - used;
+  });
 }

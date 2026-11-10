@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { DAY_MS } from '../domain/time.ts';
 
 export type McpTransport = 'stdio' | 'http' | 'sse';
@@ -166,12 +167,11 @@ export interface UsageFacts {
 }
 
 export function resolveIdleDays(facts: UsageFacts, now: number) {
-  const since = facts.lastUsedAt ?? facts.firstSeenAt;
-  if (since === null) return null;
-  return Math.max(0, Math.floor((now - since) / DAY_MS));
+  return Option.map(Option.fromNullOr(facts.lastUsedAt ?? facts.firstSeenAt), (since) =>
+    Math.max(0, Math.floor((now - since) / DAY_MS))
+  );
 }
 
 export function isUnused(facts: UsageFacts, now: number, days: number) {
-  const idle = resolveIdleDays(facts, now);
-  return idle !== null && idle >= days;
+  return Option.exists(resolveIdleDays(facts, now), (idle) => idle >= days);
 }

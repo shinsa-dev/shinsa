@@ -15,6 +15,7 @@ import {
   selectMeasuredCoverage,
   type WorkReport,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { resolveShortPath } from '@/lib/chat/tool-describe.ts';
 import { stripInlineMarkdown } from '@/lib/format/markdown.ts';
 import type { Tone } from '@/lib/format/tone.ts';
@@ -239,7 +240,7 @@ function listBuiltProse(
   const tested =
     hasTesting(walkthrough?.testing) ||
     (report?.checks.length ?? 0) > 0 ||
-    selectMeasuredCoverage(coverage) !== null;
+    Option.isSome(selectMeasuredCoverage(coverage));
   const timed = (when: MergeStepTiming) => (steps.some((step) => step.when === when) ? [when] : []);
   return [
     ...(walkthrough ? (['approach', 'flow'] as const) : []),

@@ -1,9 +1,9 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { type Bytes, concatBytes, parseBase64Url, serializeBase64Url } from './bytes.ts';
 import { RemoteKeyInvalid } from './schema.ts';
 
 export const importHmacKey = Effect.fn('importHmacKey')(function* (secret: string) {
-  const raw = parseBase64Url(secret);
+  const raw = Option.getOrNull(parseBase64Url(secret));
   if (!raw || raw.length === 0) return null;
   return yield* Effect.promise(() =>
     crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
@@ -44,8 +44,8 @@ export const verifySignedToken = Effect.fn('verifySignedToken')(function* (
 ) {
   const [encoded, encodedSignature, extra] = token.split('.');
   if (encoded === undefined || encodedSignature === undefined || extra !== undefined) return null;
-  const payload = parseBase64Url(encoded);
-  const signature = parseBase64Url(encodedSignature);
+  const payload = Option.getOrNull(parseBase64Url(encoded));
+  const signature = Option.getOrNull(parseBase64Url(encodedSignature));
   const key = yield* importHmacKey(secret);
   if (!payload || !signature || !key) return null;
   if (!(yield* verifyHmac(key, signature, concatBytes(label, payload)))) return null;

@@ -29,7 +29,7 @@ function isConnectChannel(value: unknown): value is ConnectChannel {
 }
 
 function readClaim(payload: string): ConnectClaim | null {
-  const fields = parseJsonRecord(payload);
+  const fields = Option.getOrUndefined(parseJsonRecord(payload));
   if (!fields) return null;
   const { i, u, c, n, e } = fields;
   if (typeof i !== 'string' || typeof u !== 'string' || !isConnectChannel(c)) return null;

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   createState,
   DAY_MS,
@@ -209,7 +210,7 @@ describe('a task is a conversation of rounds', () => {
       base: `fix/${taskId}`,
       shipping: 'stacked',
     });
-    expect(resolveRoundBase(task)).toBe(`fix/${taskId}`);
+    expect(Option.getOrNull(resolveRoundBase(task))).toBe(`fix/${taskId}`);
     expect(resolveRoundBases({ ...task, stackBases: ['fix/other', 'fix/more'] })).toEqual([`fix/${taskId}`]);
     readyRound(harness, taskId);
     expect(harness.activeRun(taskId).prompt).toContain(`stacked on branch fix/${taskId}`);
@@ -242,7 +243,7 @@ describe('a task is a conversation of rounds', () => {
     expect(task.pullRequest).toBeNull();
     expect(task.branch).toBe(`fix/${taskId}-round-2`);
     expect(resolveCurrentRound(task)).toMatchObject({ number: 2, base: null, status: 'active' });
-    expect(resolveRoundBase(task)).toBeNull();
+    expect(Option.getOrNull(resolveRoundBase(task))).toBeNull();
     readyRound(harness, taskId);
     expect(harness.activeRun(taskId).prompt).toContain(
       "It starts from the default branch, which holds the earlier rounds' merged work."

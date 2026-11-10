@@ -16,7 +16,7 @@ import {
   serializeChannelMessage,
   serializePublicKey,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 
 export function createKeyPair() {
   return crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, ['deriveBits']) as Promise<CryptoKeyPair>;
@@ -63,7 +63,7 @@ export async function startHandshake(input: {
   return {
     hello: JSON.stringify(hello),
     finish: async (text) => {
-      const welcome = parseServerHello(text);
+      const welcome = Option.getOrNull(parseServerHello(text));
       if (welcome?.type !== 'welcome') throw new Error(`Refused: ${text}`);
       const session = await Effect.runPromise(
         deriveClientSession({
@@ -84,7 +84,8 @@ export async function startHandshake(input: {
         compression: welcome.compression,
         seal: (message) => Effect.runPromise(sealFrame(encodeText(serializeChannelMessage(message)))),
         sealText: (plain) => Effect.runPromise(sealFrame(encodeText(plain))),
-        open: async (frame) => parseChannelMessage(decodeText(await Effect.runPromise(openFrame(frame)))),
+        open: async (frame) =>
+          Option.getOrNull(parseChannelMessage(decodeText(await Effect.runPromise(openFrame(frame))))),
       };
     },
   };

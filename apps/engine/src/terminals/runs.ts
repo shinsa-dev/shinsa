@@ -17,7 +17,7 @@ export const selectServiceRunIn = Effect.fn('Terminals.selectServiceRunIn')(func
   }
   const task = state.tasks[taskId];
   if (!(task?.worktreePath && task.repoId)) return Option.none<ServiceRun>();
-  const cwd = resolveTaskServiceCwd(state, service, task);
+  const cwd = Option.getOrNull(resolveTaskServiceCwd(state, service, task));
   if (cwd === null) return Option.none<ServiceRun>();
   const env = yield* resolveSharedCacheEnv(task.worktreePath, machine.dataDir, task.repoId);
   return Option.some<ServiceRun>({ cwd, place: 'worktree', taskId, env });

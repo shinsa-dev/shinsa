@@ -35,3 +35,13 @@ export class ToolCallFailed extends Schema.TaggedError<ToolCallFailed, { readonl
   'ToolCallFailed',
   { message: Schema.String }
 ) {}
+
+export class HandOverRejected extends Schema.TaggedError<
+  HandOverRejected,
+  { readonly brand: unique symbol }
+>()('HandOverRejected', { errors: Schema.Array(Schema.String), message: Schema.String }) {}
+
+export class TaskReferenceUnknown extends Schema.TaggedError<
+  TaskReferenceUnknown,
+  { readonly brand: unique symbol }
+>()('TaskReferenceUnknown', { reference: Schema.String, message: Schema.String }) {}

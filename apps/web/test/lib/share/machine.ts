@@ -15,7 +15,7 @@ import {
   serializeShareMessage,
   verifyShareHello,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { Socket } from 'effect/socket';
 import type { ShareStreamOptions } from '@/lib/share/live.ts';
 import { createSocketTransport, type PendingRetry } from '../../support/engine-socket.ts';
@@ -112,7 +112,7 @@ export function createFakeShareMachine(): FakeShareMachine {
       return socket;
     },
     answer: async (socket, data) => {
-      const hello = parseShareHello(data);
+      const hello = Option.getOrNull(parseShareHello(data));
       if (!(hello && (await Effect.runPromise(verifyShareHello(machine.key, hello))))) {
         socket.emit('message', { data: JSON.stringify({ type: 'refused', reason: 'Wrong key.' }) });
         return;

@@ -64,17 +64,20 @@ function compareHeadroom(left: MachineLoad, right: MachineLoad) {
 }
 
 export function resolveProjectMachine(machines: PlacementMachine[], projectId: string) {
-  return machines.find((machine) => projectId in machine.state.projects)?.id ?? null;
+  return Option.map(
+    Option.fromUndefinedOr(machines.find((machine) => projectId in machine.state.projects)),
+    (machine) => machine.id
+  );
 }
 
 export function resolvePlacement(machines: PlacementMachine[], projectId: string | null) {
-  const owner = projectId ? resolveProjectMachine(machines, projectId) : null;
-  if (owner) return owner;
+  const owner = projectId ? resolveProjectMachine(machines, projectId) : Option.none<string>();
+  if (Option.isSome(owner)) return owner;
   const loads = machines.map(resolveMachineLoad);
   const roomy = loads.filter((load) => !load.full);
   const compare = loads.every((load) => load.headroom !== null) ? compareHeadroom : compareLoads;
   const [best] = (roomy.length > 0 ? roomy : loads).sort(compare);
-  return best?.id ?? null;
+  return Option.map(Option.fromUndefinedOr(best), (load) => load.id);
 }
 
 export function resolveRoutedPlacement(
@@ -208,12 +211,18 @@ const decodePlacementReply = Schema.decodeUnknownOption(PlacementReply);
 
 const decodePlacementQuestion = Schema.decodeUnknownOption(PlacementQuestion);
 
-export function parsePlacementAnswer(question: PlacementQuestion, value: unknown): PlacementAnswer | null {
+export function parsePlacementAnswer(
+  question: PlacementQuestion,
+  value: unknown
+): Option.Option<PlacementAnswer> {
   const reply = Option.getOrNull(decodePlacementReply(value));
-  if (!reply || !question.machines.some((candidate) => candidate.id === reply.machine)) return null;
-  return { machineId: reply.machine, reason: reply.reason.trim().slice(0, PLACEMENT_LIMITS.reason) };
+  if (!reply || !question.machines.some((candidate) => candidate.id === reply.machine)) return Option.none();
+  return Option.some({
+    machineId: reply.machine,
+    reason: reply.reason.trim().slice(0, PLACEMENT_LIMITS.reason),
+  });
 }
 
-export function parsePlacementQuestion(value: unknown): PlacementQuestion | null {
-  return Option.getOrNull(decodePlacementQuestion(value));
+export function parsePlacementQuestion(value: unknown): Option.Option<PlacementQuestion> {
+  return decodePlacementQuestion(value);
 }

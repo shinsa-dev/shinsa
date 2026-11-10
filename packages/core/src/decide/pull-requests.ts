@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   type BundleConflict,
@@ -167,7 +168,9 @@ function openMergeGate(decider: Decider, task: Task, pullRequest: PullRequest, r
     'awaiting_merge',
     removal ? 'removed from the merge queue' : 'pull request is clean'
   );
-  const body = [removal, describeBundleMerge(decider.state, task), task.summary].filter(Boolean).join('\n\n');
+  const body = [removal, Option.getOrNull(describeBundleMerge(decider.state, task)), task.summary]
+    .filter(Boolean)
+    .join('\n\n');
   decider.openGate(task.id, 'merge', task.title, body, { details: { commit: headSha } });
 }
 
@@ -338,7 +341,7 @@ function reactToWatch(
     task.id,
     pullRequest.mergeable === false ? 'conflict' : 'pull_request',
     resolvePullRequestFixPrompt(pullRequest, trimWatchChanges(report.changes), removal),
-    resolvePullRequestSignature(pullRequest, report.next),
+    Option.getOrNull(resolvePullRequestSignature(pullRequest, report.next)),
     { base: pullRequest.base ?? null, commentsOnly: isCommentsOnly(pullRequest, report.changes) }
   );
 }
@@ -480,7 +483,7 @@ export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.r
   }
   holdInBundle(decider, decider.task(task.id), task.pullRequest?.headSha ?? null);
   const behind = startBundleUpdate(decider, conflict);
-  if (behind) requestPush(decider, behind);
+  if (Option.isSome(behind)) requestPush(decider, behind.value);
 }
 
 export function recordUpdateConflict(

@@ -134,7 +134,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
 
       const worktree: ShareWorkingSource = sources.worktree ?? {
         readBase: (repo, task) =>
-          history.taskRefs(repo, task, resolveRoundBase(task)).pipe(
+          history.taskRefs(repo, task, Option.getOrNull(resolveRoundBase(task))).pipe(
             Effect.map((refs) => refs.base ?? refs.head),
             Effect.mapError(unreadable)
           ),
@@ -153,7 +153,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         const now = yield* Clock.currentTimeMillis;
         for (const task of Object.values((yield* engine.state).tasks)) {
           if ((task.share?.endsAt ?? Number.POSITIVE_INFINITY) <= now) continue;
-          const link = parseShareUrl(task.share?.url ?? null);
+          const link = Option.getOrNull(parseShareUrl(task.share?.url ?? null));
           if (link?.shareId === shareId && link.instanceId === instanceId)
             return { taskId: task.id, key: link.key };
         }
@@ -214,7 +214,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         Effect.map(remote.isEnabled, (enabled) => enabled && isShareId(shareId));
 
       const authorize = Effect.fn('Shares.authorize')(function* (text: string, shareId: string) {
-        const hello = parseShareHello(text);
+        const hello = Option.getOrNull(parseShareHello(text));
         if (hello?.share !== shareId) return null;
         const share = yield* resolveShare(shareId);
         if (!(share && (yield* verifyShareHello(share.key, hello)))) return { refused: SHARE_GONE_REASON };
@@ -263,7 +263,7 @@ export class Shares extends Context.Service<Shares, SharesHandle>()('shinsa/engi
         if (!task?.share) return;
         const credentials = (yield* store.file).credentials;
         if (!credentials) return yield* createFinalFailure(SHARE_NOT_PAIRED);
-        const current = parseShareUrl(task.share.url);
+        const current = Option.getOrNull(parseShareUrl(task.share.url));
         const url =
           current?.instanceId === credentials.instanceId
             ? null

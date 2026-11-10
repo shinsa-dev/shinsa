@@ -98,10 +98,16 @@ function createEngineIo(base: string, engine: FakeEngine | null, overrides: Engi
   const io: EngineIo = {
     base,
     display: PLAIN_DISPLAY,
-    startProgress: (text) => {
-      progress.push(text);
-      return { stop: () => progress.push('stopped') };
-    },
+    startProgress: (text) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          progress.push(text);
+        }),
+        () =>
+          Effect.sync(() => {
+            progress.push('stopped');
+          })
+      ),
     bundled: true,
     service,
     waitMs: 2000,

@@ -8,6 +8,7 @@ import {
   type TaskPriority,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import type { TeammateMachine } from '@/lib/connection/socket.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
@@ -153,7 +154,7 @@ function listLaterActions(task: Task): TaskActionKey[] {
   if (isTaskSettled(task)) return [];
   const snooze: TaskActionKey = task.snoozed ? 'unsnooze' : 'snooze';
   if (task.backlog) return ['removeFromBacklog', snooze];
-  return resolveBacklogRefusal(task) === null ? ['moveToBacklog', snooze] : [snooze];
+  return Option.isNone(resolveBacklogRefusal(task)) ? ['moveToBacklog', snooze] : [snooze];
 }
 
 export function runTaskAction(task: Task, key: TaskActionKey) {

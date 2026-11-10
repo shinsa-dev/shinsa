@@ -13,6 +13,7 @@ import {
   ViewPlugin,
   type ViewUpdate,
 } from '@codemirror/view';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { isTokenFailure, type TokenAnswer, unpackLines } from './textmate.ts';
 import type { TokenAsk, TokenClient, TokenSet } from './tokens.ts';
 
@@ -136,7 +137,7 @@ function buildTokenDecorations(view: EditorView): DecorationSet {
 class SyntaxView {
   decorations: DecorationSet;
   #cancel: (() => void) | null = null;
-  #timer: ReturnType<typeof setTimeout> | null = null;
+  #timer: (() => void) | null = null;
 
   constructor(
     readonly view: EditorView,
@@ -155,17 +156,17 @@ class SyntaxView {
 
   destroy() {
     this.#cancel?.();
-    if (this.#timer) clearTimeout(this.#timer);
+    this.#timer?.();
   }
 
   #schedule() {
     if (!this.options.grammar) return;
-    if (this.#timer) clearTimeout(this.#timer);
-    this.#timer = setTimeout(() => {
+    this.#timer?.();
+    this.#timer = scheduleAfter(this.options.delayMs ?? EDIT_DELAY_MS, () => {
       this.#timer = null;
       const field = this.view.state.field(tokenField);
       this.#request(resolveMissingLines(field.lines, this.view.state.doc.lines));
-    }, this.options.delayMs ?? EDIT_DELAY_MS);
+    });
   }
 
   #request(need: TokenAsk['need'] | undefined) {

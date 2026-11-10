@@ -1,5 +1,6 @@
 import { describeCount, type SearchMatch, type SearchResult } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option, Result } from 'effect';
 
 export interface MatchGroup {
   path: string;
@@ -64,19 +65,15 @@ export const SEARCH_OPTIONS: SearchOption[] = [
 function createPattern(query: string, options: SearchOptions) {
   const literal = options.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const source = options.wholeWord ? `\\b(?:${literal})\\b` : literal;
-  try {
-    return new RegExp(source, options.caseSensitive ? 'g' : 'gi');
-  } catch {
-    return null;
-  }
+  return Result.getSuccess(Result.try(() => new RegExp(source, options.caseSensitive ? 'g' : 'gi')));
 }
 
 export function splitMatchText(text: string, query: string, options: SearchOptions) {
-  const pattern = query ? createPattern(query, options) : null;
-  if (!pattern) return [{ text, hit: false }];
+  const pattern = query ? createPattern(query, options) : Option.none();
+  if (Option.isNone(pattern)) return [{ text, hit: false }];
   const parts: { text: string; hit: boolean }[] = [];
   let last = 0;
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(pattern.value)) {
     if (match[0] === '') break;
     if (match.index > last) parts.push({ text: text.slice(last, match.index), hit: false });
     parts.push({ text: match[0], hit: true });

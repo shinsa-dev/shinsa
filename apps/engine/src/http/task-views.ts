@@ -21,6 +21,7 @@ import type {
   TaskDetailView,
   TaskView,
 } from '@shinsa/core/engine-api/schema';
+import { Option } from 'effect';
 import type { TaskFilter } from './routes/tasks/schema.ts';
 
 export interface ChatRequest {
@@ -85,7 +86,7 @@ export function matchesTaskQuery(state: ShinsaState, task: Task, words: readonly
 }
 
 export function listTaskMatches(state: ShinsaState, ref: string): readonly Task[] {
-  const exact = state.tasks[ref] ?? selectTaskByHandle(state, ref);
+  const exact = state.tasks[ref] ?? Option.getOrNull(selectTaskByHandle(state, ref));
   if (exact) return [exact];
   const lower = ref.toLowerCase();
   return Object.values(state.tasks).filter(

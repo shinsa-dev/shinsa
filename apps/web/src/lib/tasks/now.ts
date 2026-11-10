@@ -8,6 +8,7 @@ import {
   selectLeadGate,
   type Task,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { formatSteps } from '@/lib/format/count.ts';
 import { describeWaitsOn } from '@/lib/tasks/groups.ts';
 
@@ -46,7 +47,7 @@ function resolveActivePhase(task: Task) {
 }
 
 export function resolveTaskNow(state: ShinsaState, task: Task): string {
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate) return resolveGateNow(task, gate);
 
   const waitsOn = listWaitsOn(state, task);

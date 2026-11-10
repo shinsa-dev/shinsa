@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   applyStatePatch,
   createState,
@@ -51,7 +52,7 @@ describe('state patches', () => {
       const patch = roundTrip(resolveStatePatch(state, decision.state, decision.changes));
       expect(patch.from).toBe(state.seq);
       expect(patch.to).toBe(decision.state.seq);
-      const next = applyStatePatch(client, patch);
+      const next = Option.getOrNull(applyStatePatch(client, patch));
       expect(next).toEqual(plain(decision.state));
       client = next ?? client;
       state = decision.state;
@@ -69,9 +70,8 @@ describe('state patches', () => {
       { type: 'task.prioritize', taskId, priority: 'low' },
       { now: harness.now + 1, newId: () => 'unused' }
     );
-    const next = applyStatePatch(
-      client,
-      roundTrip(resolveStatePatch(harness.state, decision.state, decision.changes))
+    const next = Option.getOrNull(
+      applyStatePatch(client, roundTrip(resolveStatePatch(harness.state, decision.state, decision.changes)))
     );
     expect(next?.tasks[other]).toBe(client.tasks[other]);
     expect(next?.runs).toBe(client.runs);
@@ -88,7 +88,10 @@ describe('state patches', () => {
     const next = { ...base, seq: 1, onBehalfActions: [kept, added] } as unknown as ShinsaState;
     const patch = resolveStatePatch(base, next, {});
     expect(patch.fields.onBehalfActions).toEqual({ drop: 1, append: [added] });
-    expect(applyStatePatch(base, patch)?.onBehalfActions as unknown[]).toEqual([kept, added]);
+    expect(Option.getOrNull(applyStatePatch(base, patch))?.onBehalfActions as unknown[]).toEqual([
+      kept,
+      added,
+    ]);
   });
 
   test('send a list that changed otherwise whole', () => {
@@ -107,7 +110,7 @@ describe('state patches', () => {
       const next = { ...base, seq: 1, onBehalfActions: after } as unknown as ShinsaState;
       const patch = resolveStatePatch(previous, next, {});
       expect(patch.fields.onBehalfActions).toEqual({ put: after });
-      expect(applyStatePatch(previous, patch)?.onBehalfActions as unknown[]).toEqual(after);
+      expect(Option.getOrNull(applyStatePatch(previous, patch))?.onBehalfActions as unknown[]).toEqual(after);
     }
   });
 
@@ -138,7 +141,7 @@ describe('state patches', () => {
       fields: { inputTokens: { put: 2 } },
       unset: ['costUsd'],
     });
-    const applied = applyStatePatch(plain(previous), roundTrip(patch));
+    const applied = Option.getOrNull(applyStatePatch(plain(previous), roundTrip(patch)));
     expect(applied?.taskNumbers).toEqual({ SW: 4, NEW: 1 });
     expect(applied?.sessionUsage.a as unknown).toEqual({
       inputTokens: 2,
@@ -150,12 +153,14 @@ describe('state patches', () => {
     removed.sessionUsage = { a: { inputTokens: 1 } as never };
     const fewer = resolveStatePatch(removed, createState(), { sessionUsage: ['a'] });
     expect(fewer.records.sessionUsage?.a).toEqual({ remove: true });
-    const merged = applyStatePatch(createState(), {
-      from: 0,
-      to: 1,
-      fields: {},
-      records: { sessionUsage: { b: { fields: { list: { drop: 0, append: [1] } }, unset: [] } } },
-    });
+    const merged = Option.getOrNull(
+      applyStatePatch(createState(), {
+        from: 0,
+        to: 1,
+        fields: {},
+        records: { sessionUsage: { b: { fields: { list: { drop: 0, append: [1] } }, unset: [] } } },
+      })
+    );
     expect(merged?.sessionUsage.b).toEqual({ list: [1] } as never);
   });
 
@@ -172,7 +177,7 @@ describe('state patches', () => {
     const patch = roundTrip(resolveStatePatch(before, decision.state, decision.changes));
     expect(JSON.stringify(patch)).not.toContain('"prompt"');
     expect(patch.records.runs?.['fix-run']).toEqual({ put: expect.objectContaining({ fixFocus: 'checks' }) });
-    const client = applyStatePatch(plain(before), patch);
+    const client = Option.getOrNull(applyStatePatch(plain(before), patch));
     expect(client?.runs['fix-run']).not.toHaveProperty('prompt');
     expect(client?.runs['fix-run']?.fixFocus).toBe('checks');
   });
@@ -186,6 +191,6 @@ describe('state patches', () => {
 
   test('refuse a patch for another version of the state', () => {
     const state = createState();
-    expect(applyStatePatch(state, { from: 4, to: 5, fields: {}, records: {} })).toBeNull();
+    expect(Option.getOrNull(applyStatePatch(state, { from: 4, to: 5, fields: {}, records: {} }))).toBeNull();
   });
 });

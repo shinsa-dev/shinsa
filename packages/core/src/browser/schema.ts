@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Option, Schema } from 'effect';
 import { HandOverRecord, Required } from '../report/reading.ts';
 import { resolveSignInSite } from './site.ts';
 
@@ -14,7 +14,7 @@ export interface BrowserSignInRequest {
 
 export const BrowserSignInInput = HandOverRecord({
   url: Required(BROWSER_SIGN_IN_LIMITS.url).check(
-    Schema.makeFilter((url: string) => resolveSignInSite(url) !== null || SIGN_IN_URL_MESSAGE)
+    Schema.makeFilter((url: string) => Option.isSome(resolveSignInSite(url)) || SIGN_IN_URL_MESSAGE)
   ),
   reason: Required(BROWSER_SIGN_IN_LIMITS.reason),
 });

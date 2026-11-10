@@ -75,7 +75,9 @@ const readLineCount = Effect.fn('Cli.readLineCount')(function* (raw: string | un
 
 export const printLogs = Effect.fn('Cli.printLogs')(function* (args: string[], io: LogsIo) {
   const fs = yield* FileSystem.FileSystem;
-  const { flags, values } = parseArgs(args);
+  const { flags, values } = yield* Effect.fromResult(parseArgs(args)).pipe(
+    Effect.mapError((error) => new DomainError({ code: 'arguments_invalid', message: error.message }))
+  );
   const count = yield* readLineCount(values.get('--lines'));
   const path = join(resolveShinsaPaths(io.env).dataDir, ENGINE_LOG);
   const text = yield* fs.readFileString(path).pipe(

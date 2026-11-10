@@ -127,7 +127,7 @@ export const SlackEventRoutes = Layer.unwrap(
 
     const resolveClick = (actions: BlockActions): Interaction | null => {
       const [action] = actions.actions;
-      const value = parseSlackDecisionValue(action.value);
+      const value = Option.getOrNull(parseSlackDecisionValue(action.value));
       const interactionId = actions.trigger_id ?? action.action_ts;
       if (!value || !interactionId || !actions.response_url.startsWith(RESPONSE_URL_ORIGIN)) return null;
       const { message } = actions;
@@ -164,7 +164,7 @@ export const SlackEventRoutes = Layer.unwrap(
     const resolveSubmission = (submission: ViewSubmission): Interaction | null => {
       const { view } = submission;
       if (view.callback_id !== SLACK_MODAL_CALLBACK) return null;
-      const modal = parseSlackDecisionModal(view.private_metadata);
+      const modal = Option.getOrNull(parseSlackDecisionModal(view.private_metadata));
       const text =
         view.state.values[SLACK_RESPONSE_INPUT.block]?.[SLACK_RESPONSE_INPUT.action]?.value?.trim();
       if (!modal || !text) return null;
@@ -485,7 +485,7 @@ export const SlackEventRoutes = Layer.unwrap(
       );
       if (Option.isNone(response) || !response.value.ok) return null;
       const reply = yield* Effect.option(Effect.tryPromise(() => response.value.json()));
-      return Option.match(reply, { onNone: () => null, onSome: parseSlackDecisionReply });
+      return Option.getOrNull(Option.flatMap(reply, parseSlackDecisionReply));
     });
 
     const respondToClick = (message: CardMessage, body: Readonly<Record<string, unknown>>) =>
@@ -551,7 +551,7 @@ export const SlackEventRoutes = Layer.unwrap(
       const check = yield* checkDecider(interaction.card);
       if (!check.allowed) return yield* respondPrivatelyToClick(interaction.message, check.reason);
       const opened = yield* selectWorkspaceToken(interaction.card.teamId);
-      const view = serializeSlackDecisionModal(interaction.modal);
+      const view = Option.getOrNull(serializeSlackDecisionModal(interaction.modal));
       if (Option.isNone(opened) || !view) return;
       yield* slack
         .call(
