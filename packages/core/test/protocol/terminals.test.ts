@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { Option } from 'effect';
 import {
   listTerminalPlaces,
   parseTerminalClientFrame,
@@ -54,14 +55,16 @@ describe('listTerminalPlaces', () => {
 
 describe('resolveTaskTerminalPlace', () => {
   it('opens in the task’s worktree, else its repository, else nowhere', () => {
-    expect(resolveTaskTerminalPlace(STATE, STATE.tasks.building as Task)?.path).toBe('/wt/building');
-    expect(resolveTaskTerminalPlace(STATE, STATE.tasks.bare as Task)).toEqual({
+    expect(Option.getOrNull(resolveTaskTerminalPlace(STATE, STATE.tasks.building as Task))?.path).toBe(
+      '/wt/building'
+    );
+    expect(Option.getOrNull(resolveTaskTerminalPlace(STATE, STATE.tasks.bare as Task))).toEqual({
       path: '/code/web',
       label: 'web',
       kind: 'repository',
       taskId: null,
     });
-    expect(resolveTaskTerminalPlace(STATE, task('none', {}))).toBeNull();
+    expect(Option.getOrNull(resolveTaskTerminalPlace(STATE, task('none', {})))).toBeNull();
   });
 });
 
@@ -76,50 +79,52 @@ describe('resolveTerminalLabel', () => {
 
 describe('parseTerminalClientFrame', () => {
   it('reads a resize within the limits', () => {
-    expect(parseTerminalClientFrame('{"type":"resize","cols":120,"rows":40}')).toEqual({
+    expect(Option.getOrNull(parseTerminalClientFrame('{"type":"resize","cols":120,"rows":40}'))).toEqual({
       type: 'resize',
       cols: 120,
       rows: 40,
     });
-    expect(parseTerminalClientFrame('{"type":"resize","cols":0,"rows":40}')).toBeNull();
-    expect(parseTerminalClientFrame('{"type":"resize","cols":12.5,"rows":40}')).toBeNull();
-    expect(parseTerminalClientFrame('{"type":"resize","cols":5000,"rows":40}')).toBeNull();
+    expect(Option.getOrNull(parseTerminalClientFrame('{"type":"resize","cols":0,"rows":40}'))).toBeNull();
+    expect(Option.getOrNull(parseTerminalClientFrame('{"type":"resize","cols":12.5,"rows":40}'))).toBeNull();
+    expect(Option.getOrNull(parseTerminalClientFrame('{"type":"resize","cols":5000,"rows":40}'))).toBeNull();
   });
 
   it('reads the page’s colours only as hex', () => {
     const colors = { foreground: '#111111', background: '#FFFFFF', cursor: '#0055ff' };
-    expect(parseTerminalClientFrame(JSON.stringify({ type: 'colors', colors }))).toEqual({
+    expect(Option.getOrNull(parseTerminalClientFrame(JSON.stringify({ type: 'colors', colors })))).toEqual({
       type: 'colors',
       colors,
     });
     expect(
-      parseTerminalClientFrame(JSON.stringify({ type: 'colors', colors: { ...colors, cursor: 'red' } }))
+      Option.getOrNull(
+        parseTerminalClientFrame(JSON.stringify({ type: 'colors', colors: { ...colors, cursor: 'red' } }))
+      )
     ).toBeNull();
-    expect(parseTerminalClientFrame('{"type":"colors","colors":null}')).toBeNull();
+    expect(Option.getOrNull(parseTerminalClientFrame('{"type":"colors","colors":null}'))).toBeNull();
   });
 
   it('reads a request to clear the scrollback', () => {
-    expect(parseTerminalClientFrame('{"type":"clear"}')).toEqual({ type: 'clear' });
+    expect(Option.getOrNull(parseTerminalClientFrame('{"type":"clear"}'))).toEqual({ type: 'clear' });
   });
 
   it('ignores anything else', () => {
-    expect(parseTerminalClientFrame('not json')).toBeNull();
-    expect(parseTerminalClientFrame('null')).toBeNull();
-    expect(parseTerminalClientFrame('{"type":"input"}')).toBeNull();
+    expect(Option.getOrNull(parseTerminalClientFrame('not json'))).toBeNull();
+    expect(Option.getOrNull(parseTerminalClientFrame('null'))).toBeNull();
+    expect(Option.getOrNull(parseTerminalClientFrame('{"type":"input"}'))).toBeNull();
   });
 });
 
 describe('parseTerminalServerFrame', () => {
   it('reads a reset with the terminal’s size, the end of the screen and nothing else', () => {
-    expect(parseTerminalServerFrame('{"type":"reset","cols":80,"rows":24}')).toEqual({
+    expect(Option.getOrNull(parseTerminalServerFrame('{"type":"reset","cols":80,"rows":24}'))).toEqual({
       type: 'reset',
       cols: 80,
       rows: 24,
     });
-    expect(parseTerminalServerFrame('{"type":"live"}')).toEqual({ type: 'live' });
-    expect(parseTerminalServerFrame('{"type":"reset","cols":80}')).toBeNull();
-    expect(parseTerminalServerFrame('{"type":"other"}')).toBeNull();
-    expect(parseTerminalServerFrame('null')).toBeNull();
-    expect(parseTerminalServerFrame('{')).toBeNull();
+    expect(Option.getOrNull(parseTerminalServerFrame('{"type":"live"}'))).toEqual({ type: 'live' });
+    expect(Option.getOrNull(parseTerminalServerFrame('{"type":"reset","cols":80}'))).toBeNull();
+    expect(Option.getOrNull(parseTerminalServerFrame('{"type":"other"}'))).toBeNull();
+    expect(Option.getOrNull(parseTerminalServerFrame('null'))).toBeNull();
+    expect(Option.getOrNull(parseTerminalServerFrame('{'))).toBeNull();
   });
 });

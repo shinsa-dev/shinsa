@@ -12,6 +12,7 @@ import {
   type Task,
   type TaskStage,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { isAdmissionWait, isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { formatMoment } from '@/lib/format/time.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -112,7 +113,7 @@ export function dropPullRequestNumbers(text: string) {
 
 function listOvernightReviews(state: ShinsaState, now: number) {
   const away = resolveAwayHours(state, now);
-  if (!away || isAwayAt(away, now)) return [];
+  if (Option.isNone(away) || isAwayAt(away, now)) return [];
   return Object.values(state.gates).filter(
     (gate) =>
       gate.type === 'review' &&

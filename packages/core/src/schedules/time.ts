@@ -1,3 +1,4 @@
+import { Option, Result } from 'effect';
 import { SCHEDULE_LIMITS } from '../domain/schedules.ts';
 import { type ScheduleTrigger } from '../domain/schema.ts';
 import { HOUR_MS, MINUTE_MS } from '../domain/time.ts';
@@ -34,18 +35,13 @@ function resolveFormatter(timeZone: string) {
 }
 
 export function isTimeZone(value: string) {
-  try {
-    resolveFormatter(value);
-    return true;
-  } catch {
-    return false;
-  }
+  return Result.isSuccess(Result.try(() => resolveFormatter(value)));
 }
 
-export function parseTimeOfDay(value: string): { hour: number; minute: number } | null {
+export function parseTimeOfDay(value: string): Option.Option<{ hour: number; minute: number }> {
   const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(value.trim());
-  if (!match) return null;
-  return { hour: Number(match[1]), minute: Number(match[2]) };
+  if (!match) return Option.none();
+  return Option.some({ hour: Number(match[1]), minute: Number(match[2]) });
 }
 
 export function serializeTimeOfDay(time: { hour: number; minute: number }) {
@@ -96,9 +92,10 @@ function resolveNextDaily(
   trigger: Extract<ScheduleTrigger, { kind: 'daily' }>,
   after: number,
   timeZone: string
-) {
-  const time = parseTimeOfDay(trigger.time);
-  if (!time) return null;
+): Option.Option<number> {
+  const parsed = parseTimeOfDay(trigger.time);
+  if (Option.isNone(parsed)) return Option.none();
+  const time = parsed.value;
   const today = readWallClock(timeZone, after);
   for (let offset = 0; offset <= DAYS_TO_SEARCH; offset += 1) {
     const date = new Date(Date.UTC(today.year, today.month - 1, today.day + offset));
@@ -110,25 +107,29 @@ function resolveNextDaily(
       hour: time.hour,
       minute: time.minute,
     });
-    if (at > after) return at;
+    if (at > after) return Option.some(at);
   }
-  return null;
+  return Option.none();
 }
 
-export function resolveNextRun(trigger: ScheduleTrigger, after: number, timeZone: string): number | null {
+export function resolveNextRun(
+  trigger: ScheduleTrigger,
+  after: number,
+  timeZone: string
+): Option.Option<number> {
   switch (trigger.kind) {
     case 'once':
-      return trigger.at > after ? trigger.at : null;
+      return trigger.at > after ? Option.some(trigger.at) : Option.none();
     case 'interval':
-      return after + Math.max(SCHEDULE_LIMITS.minEveryMinutes, trigger.everyMinutes) * MINUTE_MS;
+      return Option.some(after + Math.max(SCHEDULE_LIMITS.minEveryMinutes, trigger.everyMinutes) * MINUTE_MS);
     case 'daily':
       return resolveNextDaily(trigger, after, timeZone);
     case 'webhook':
-      return null;
+      return Option.none();
   }
 }
 
 export function resolveFirstRun(trigger: ScheduleTrigger, now: number, timeZone: string) {
-  if (trigger.kind === 'once') return trigger.at;
+  if (trigger.kind === 'once') return Option.some(trigger.at);
   return resolveNextRun(trigger, now, timeZone);
 }

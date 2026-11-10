@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   isTaskSettled,
   listActiveRuns,
@@ -14,7 +15,7 @@ const BODY = 'Welcome to Shinsa. You chose ~/Developer and signed in to Claude.'
 function welcome() {
   const harness = createHarness();
   const decision = harness.send({ type: 'onboarding.welcome', body: BODY });
-  const task = selectWelcomeTask(harness.state.tasks);
+  const task = Option.getOrNull(selectWelcomeTask(harness.state.tasks));
   if (!task) throw new Error('no welcome task');
   return { harness, decision, task };
 }
@@ -76,6 +77,6 @@ describe('the welcome task', () => {
     expect(() => harness.send({ type: 'onboarding.welcome', body: '  ' })).toThrow(
       'The welcome needs a summary.'
     );
-    expect(selectWelcomeTask(harness.state.tasks)).toBeNull();
+    expect(Option.getOrNull(selectWelcomeTask(harness.state.tasks))).toBeNull();
   });
 });

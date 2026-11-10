@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   AUTOPILOT_DEFAULTS,
   createSettings,
@@ -125,9 +126,11 @@ describe('resolveWatchdogDefaults', () => {
 describe('resolveDelegationLimit', () => {
   test('sets no limit on delegations at once unless one is chosen', () => {
     expect(createSettings().delegationLimit).toBeNull();
-    expect(resolveDelegationLimit(createSettings())).toBeNull();
-    expect(resolveDelegationLimit({ ...createSettings(), delegationLimit: undefined })).toBeNull();
-    expect(resolveDelegationLimit({ ...createSettings(), delegationLimit: 4 })).toBe(4);
+    expect(Option.getOrNull(resolveDelegationLimit(createSettings()))).toBeNull();
+    expect(
+      Option.getOrNull(resolveDelegationLimit({ ...createSettings(), delegationLimit: undefined }))
+    ).toBeNull();
+    expect(Option.getOrNull(resolveDelegationLimit({ ...createSettings(), delegationLimit: 4 }))).toBe(4);
   });
 });
 

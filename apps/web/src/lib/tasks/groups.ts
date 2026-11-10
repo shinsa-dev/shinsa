@@ -18,6 +18,7 @@ import {
   type TeamFeedTask,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { GATE } from '@/lib/format/labels.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { isMergingWithBundle, selectBundleRoot } from '@/lib/tasks/bundles.ts';
@@ -129,7 +130,7 @@ function resolveGroupWithin(state: ShinsaState, task: Task, seen: ReadonlySet<st
   if (task.stage === 'cancelled') return 'cancelled';
   if (isTaskSettled(task)) return 'done';
   if (task.snoozed) return 'snoozed';
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate && isHeldInBacklog(state, gate)) return 'backlog';
   if (gate) return resolveGateGroup(gate);
   const next = new Set(seen).add(task.id);

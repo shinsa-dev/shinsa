@@ -9,6 +9,7 @@ import { connection } from '@/lib/connection/socket.ts';
 import { refreshVersions } from '@/lib/connection/versions.ts';
 import { prefetchEvidence } from '@/lib/evidence/prefetch.ts';
 import { listReviewChapters, listReviewPoints } from '@/lib/review/report.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { findTaskTarget, listIdleTasks } from '@/lib/tasks/prefetch.ts';
 import { hasReview, listTaskTabs } from '@/lib/tasks/tabs.ts';
 import { prefetchCode } from './lazy-code.tsx';
@@ -45,24 +46,24 @@ function useHoverPrefetch(state: ShinsaState) {
   const latest = React.useRef(state);
   latest.current = state;
   React.useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancel: (() => void) | null = null;
     let pending: string | null = null;
     const onOver = (event: PointerEvent) => {
       const taskId = findTaskTarget(event.target);
       if (taskId === pending) return;
-      if (timer) clearTimeout(timer);
-      timer = null;
+      cancel?.();
+      cancel = null;
       pending = taskId;
       if (!taskId) return;
-      timer = setTimeout(() => {
-        timer = null;
+      cancel = scheduleAfter(HOVER_INTENT_MS, () => {
+        cancel = null;
         prefetchTask(latest.current, taskId);
-      }, HOVER_INTENT_MS);
+      });
     };
     document.addEventListener('pointerover', onOver);
     return () => {
       document.removeEventListener('pointerover', onOver);
-      if (timer) clearTimeout(timer);
+      cancel?.();
     };
   }, []);
 }

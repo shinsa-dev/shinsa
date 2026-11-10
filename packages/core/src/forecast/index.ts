@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { AccountSummary, AccountsSnapshot, AccountUsage } from '../protocol/accounts.ts';
@@ -68,9 +69,9 @@ export function resolveForecastAccount(
   spentUntil: number | null,
   now: number,
   options: ForecastOptions = {}
-): ForecastAccount | null {
+): Option.Option<ForecastAccount> {
   const weekly = usage.windows.find((window) => window.kind === 'weekly');
-  if (!weekly) return null;
+  if (!weekly) return Option.none();
   const spent =
     spentUntil !== null && spentUntil > now && (weekly.resetsAt === null || spentUntil >= weekly.resetsAt);
   let left = spent ? 0 : Math.max(0, FORECAST_LIMITS.fullPercent - weekly.usedPercent);
@@ -80,7 +81,7 @@ export function resolveForecastAccount(
     left = FORECAST_LIMITS.fullPercent;
   }
   const refill = options.grants ? resolveGrantRefill(usage, now) : 0;
-  return { id, label, left: left + refill, resetsAt };
+  return Option.some({ id, label, left: left + refill, resetsAt });
 }
 
 export function listForecastAccounts(
@@ -90,17 +91,18 @@ export function listForecastAccounts(
 ): ForecastAccount[] {
   return accounts
     .filter((account) => !account.paused && account.signIn !== 'signed_out')
-    .map((account) =>
-      resolveForecastAccount(
-        account.id,
-        account.email ?? account.id,
-        account.usage,
-        account.spentUntil,
-        now,
-        options
+    .flatMap((account) =>
+      Option.toArray(
+        resolveForecastAccount(
+          account.id,
+          account.email ?? account.id,
+          account.usage,
+          account.spentUntil,
+          now,
+          options
+        )
       )
-    )
-    .filter((account) => account !== null);
+    );
 }
 
 export function listForecastProviders(snapshot: AccountsSnapshot) {
@@ -119,25 +121,23 @@ export function listProviderForecastAccounts(
   if (provider === CLAUDE_PROVIDER) return listForecastAccounts(snapshot.accounts, now, options);
   const login = snapshot.providers?.find((entry) => entry.provider === provider);
   if (!login?.usage || login.status === 'signed_out') return [];
-  const account = resolveForecastAccount(
-    provider,
-    login.email ?? login.label,
-    login.usage,
-    null,
-    now,
-    options
+  return Option.toArray(
+    resolveForecastAccount(provider, login.email ?? login.label, login.usage, null, now, options)
   );
-  return account ? [account] : [];
 }
 
 export function resolveRecordablePace(pace: number | null) {
-  return pace !== null && Number.isFinite(pace) ? Math.max(0, pace) : null;
+  return Option.map(
+    Option.filter(Option.fromNullOr(pace), (value) => Number.isFinite(value)),
+    (value) => Math.max(0, value)
+  );
 }
 
 export function isPaceMoved(known: number | null, pace: number | null) {
   const next = resolveRecordablePace(pace);
-  if (next === null || known === null) return next !== known;
-  return Math.abs(known - next) >= FORECAST_LIMITS.paceStep;
+  if (Option.isNone(next)) return known !== null;
+  if (known === null) return true;
+  return Math.abs(known - next.value) >= FORECAST_LIMITS.paceStep;
 }
 
 export interface ProviderPace {
@@ -148,7 +148,8 @@ export interface ProviderPace {
 export function listProviderPaces(snapshot: AccountsSnapshot, now: number): ProviderPace[] {
   return listForecastProviders(snapshot).map((provider) => {
     const accounts = listProviderForecastAccounts(snapshot, provider, now, { grants: true });
-    return { provider, pace: resolveUsageForecast(accounts, now)?.safePace ?? null };
+    const forecast = resolveUsageForecast(accounts, now);
+    return { provider, pace: Option.isSome(forecast) ? forecast.value.safePace : null };
   });
 }
 
@@ -259,15 +260,15 @@ export function resolveUsageForecast(
   accounts: readonly ForecastAccount[],
   now: number,
   currentPace: number | null = null
-): UsageForecast | null {
-  if (accounts.length === 0) return null;
+): Option.Option<UsageForecast> {
+  if (accounts.length === 0) return Option.none();
   const to = now + FORECAST_LIMITS.horizonMs;
   const ordered = [...accounts].sort(byDeadline);
   const safePace = resolveSafePace(ordered, now, to);
   const safe = simulate(ordered, safePace, now, to);
   const pace = currentPace ?? 0;
   const current = pace > 0 ? simulate(ordered, pace, now, to) : null;
-  return {
+  return Option.some({
     from: now,
     to,
     accounts: ordered,
@@ -276,5 +277,5 @@ export function resolveUsageForecast(
     tightest: selectTightest(safe.resets),
     currentPace,
     runsOutAt: current?.dryAt ?? null,
-  };
+  });
 }

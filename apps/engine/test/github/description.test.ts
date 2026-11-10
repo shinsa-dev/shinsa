@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { type Evidence, parseReviewPayload, type Repo, type Task } from '@shinsa/core';
-import { Effect, Layer, ManagedRuntime } from 'effect';
+import { Effect, Layer, ManagedRuntime, Option } from 'effect';
 import { serializeReviewLink } from '../../src/github/description/link.ts';
 import { PullRequestDescriber } from '../../src/github/description/service.ts';
 import { Evidence as EvidenceFiles } from '../../src/store/evidence/service.ts';
@@ -173,8 +173,8 @@ describe('serializeReviewLink', () => {
       evidence
     );
     const encoded = /#review=([\w-]+)\)/.exec(description.body)?.[1] ?? '';
-    const payload = parseReviewPayload(
-      JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64url')).toString())
+    const payload = Option.getOrNull(
+      parseReviewPayload(JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64url')).toString()))
     );
     expect(payload?.task).toMatchObject({ id: task.id, handle: 'LOC-28', summary: 'Did it.' });
     expect(payload?.evidence.map((part) => part.url)).toEqual([
@@ -217,8 +217,8 @@ describe('serializeReviewLink', () => {
     const encoded = /#review=([\w-]+)\)/.exec(description.body)?.[1] ?? '';
     expect(encoded.length).toBeGreaterThan(0);
     expect(encoded.length).toBeLessThanOrEqual(24_000);
-    const payload = parseReviewPayload(
-      JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64url')).toString())
+    const payload = Option.getOrNull(
+      parseReviewPayload(JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64url')).toString()))
     );
     expect(payload?.task).toMatchObject({ handle: 'LOC-28', title: task.title });
     expect(payload?.report.walkthrough?.flow ?? '').toBe('');

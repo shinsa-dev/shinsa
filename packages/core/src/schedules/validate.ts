@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ScheduleTargetInput } from '../commands/schedules.ts';
 import { MINUTE_MS, type ScheduleTrigger, type TaskPriority } from '../domain/index.ts';
 import { HandOverReader, type Validation } from '../report/reading.ts';
@@ -54,8 +55,8 @@ function readWebhook(reader: HandOverReader, value: unknown): TriggerRead {
 
 function readDaily(reader: HandOverReader, input: Record<string, unknown>): ScheduleTrigger {
   const { daily_at: raw, weekdays } = reader.read(DailyAt, input, []);
-  const time = parseTimeOfDay(raw);
-  return { kind: 'daily', time: time ? serializeTimeOfDay(time) : raw, weekdays };
+  const time = Option.match(parseTimeOfDay(raw), { onNone: () => raw, onSome: serializeTimeOfDay });
+  return { kind: 'daily', time, weekdays };
 }
 
 interface TriggerRead {

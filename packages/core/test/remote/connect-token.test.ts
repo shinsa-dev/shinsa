@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { concatBytes, encodeText, serializeBase64Url } from '../../src/remote/bytes.ts';
 import { decodeText, parseBase64Url } from '../../src/remote/bytes.ts';
 import {
@@ -140,7 +140,7 @@ describe('connect tokens', () => {
       })
     );
     const [encoded = '', encodedSignature = ''] = token.split('.');
-    const payload = parseBase64Url(encoded) ?? new Uint8Array();
+    const payload = Option.getOrNull(parseBase64Url(encoded)) ?? new Uint8Array();
     const key = await crypto.subtle.importKey(
       'raw',
       new Uint8Array(32).fill(3),
@@ -148,7 +148,7 @@ describe('connect tokens', () => {
       false,
       ['verify']
     );
-    const signature = parseBase64Url(encodedSignature) ?? new Uint8Array();
+    const signature = Option.getOrNull(parseBase64Url(encodedSignature)) ?? new Uint8Array();
     expect(await crypto.subtle.verify('HMAC', key, signature, payload)).toBe(true);
     expect(JSON.parse(decodeText(payload))).toEqual({ i: 'abc', u: '42', e: CLAIM.expiresAt });
     expect(await Effect.runPromise(verifyConnectToken(KEY, token, REMOTE, NOW))).toBeNull();

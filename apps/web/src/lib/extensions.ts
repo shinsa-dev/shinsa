@@ -16,6 +16,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { Option, Result } from 'effect';
 import type { Tone } from '@/lib/format/tone.ts';
 import { listProjects, resolveProjectMark, selectProject } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
@@ -552,11 +553,11 @@ const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const HEADER_KEY = /^[A-Za-z0-9-]+$/;
 
 function isWebUrl(text: string) {
-  try {
-    return ['http:', 'https:'].includes(new URL(text).protocol);
-  } catch {
-    return false;
-  }
+  const protocol = Result.getOrElse(
+    Result.try(() => new URL(text).protocol),
+    () => ''
+  );
+  return ['http:', 'https:'].includes(protocol);
 }
 
 export type DraftCheck =
@@ -668,7 +669,7 @@ export function describeServerPlaces(server: McpServerSummary) {
 
 export function resolveUnusedDays(lastUsedAt: number | null, snapshot: ExtensionsSnapshot, now: number) {
   if (snapshot.usage.readAt === null) return null;
-  return resolveIdleDays({ lastUsedAt, firstSeenAt: snapshot.usage.since }, now);
+  return Option.getOrNull(resolveIdleDays({ lastUsedAt, firstSeenAt: snapshot.usage.since }, now));
 }
 
 export function describeLastUsed(days: number | null) {

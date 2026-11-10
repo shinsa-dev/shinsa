@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeCount } from '../chat/text.ts';
 import {
   DAY_MS,
@@ -73,7 +74,9 @@ const ROUND_JOB: Record<OperationTiming | 'build', string> = {
 };
 
 function describeRoundJob(task: Task) {
-  return ROUND_JOB[resolveOperationTiming(resolveTaskPipeline(task)) ?? 'build'];
+  return ROUND_JOB[
+    Option.getOrElse(resolveOperationTiming(resolveTaskPipeline(task)), () => 'build' as const)
+  ];
 }
 
 export function resolveAgentPrompt(instruction: string) {
@@ -81,7 +84,7 @@ export function resolveAgentPrompt(instruction: string) {
 }
 
 function describeOperationNote(task: Task) {
-  const timing = resolveOperationTiming(resolveTaskPipeline(task));
+  const timing = Option.getOrNull(resolveOperationTiming(resolveTaskPipeline(task)));
   if (timing === null) return '';
   if (timing === 'alone') return ['', OPERATION_NOTE].join('\n');
   return [
@@ -92,7 +95,9 @@ function describeOperationNote(task: Task) {
 }
 
 function hasPullRequestToShipOnto(task: Task) {
-  return task.pullRequest?.state === 'open' || selectShippingTarget(task, resolveCurrentRound(task)) !== null;
+  return (
+    task.pullRequest?.state === 'open' || Option.isSome(selectShippingTarget(task, resolveCurrentRound(task)))
+  );
 }
 
 function describeShapeChoice(task: Task) {
@@ -171,7 +176,7 @@ export function resolvePlanningPrompt(
 }
 
 function describeOperationForBuilder(task: Task) {
-  if (resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge') return '';
+  if (!Option.contains(resolveOperationTiming(resolveTaskPipeline(task)), 'post_merge')) return '';
   return "Do not run the plan's operation yet: you run it after the pull request merges and the human confirms it.";
 }
 
@@ -370,8 +375,9 @@ function describeTestingForReview(task: Task) {
 }
 
 function describeCoverageForReview(task: Task) {
-  const summary = describeCoverage(task.coverage);
-  if (!summary) return '';
+  const described = describeCoverage(task.coverage);
+  if (Option.isNone(described)) return '';
+  const summary = described.value;
   const gaps = listCoverageGaps(task.coverage);
   return [
     '',
@@ -494,7 +500,7 @@ export function resolveResearcherPrompt(task: Task, repo: Repo | null, followUp:
     '',
     `Read the code and anything else you need, then call \`submit_report\` with \`report\`: markdown, at most ${SHAPE_LIMITS.report} characters.`,
     'Lead with the conclusion or recommendation in one paragraph, then the comparison or findings, then the evidence (files and lines as shinsa:// links, sources as links).',
-    describeWhatFollows(task) ?? PROPOSAL_RULE,
+    Option.getOrElse(describeWhatFollows(task), () => PROPOSAL_RULE),
     'Then stop.',
   ].join('\n');
 }
@@ -517,10 +523,11 @@ export function resolveInvestigatorPrompt(task: Task, repo: Repo | null, followU
     'Reproduce the problem first. You may run anything, add logging or write a failing test to narrow it down: this worktree is scratch and nothing you change in it ships. Shinsa resets it before any fix is built.',
     `When you know the cause, or have ruled out what you can, call \`report_diagnosis\` with \`diagnosis\`: markdown, at most ${SHAPE_LIMITS.diagnosis} characters.`,
     'Lead with the cause in one or two sentences (or what is still unknown), then how you reproduced it and the evidence (files and lines as shinsa:// links).',
-    describeWhatFollows(task) ??
-      (continues
+    Option.getOrElse(describeWhatFollows(task), () =>
+      continues
         ? 'The human already asked for a fix: an agent plans it from your diagnosis next, so end with what the fix should change. If you found nothing worth fixing, set `recommend` to `close`: the task then waits for the human to close it or go on anyway.'
-        : PROPOSAL_RULE),
+        : PROPOSAL_RULE
+    ),
     'Then stop.',
   ].join('\n');
 }
@@ -537,7 +544,7 @@ function describeImpact(task: Task) {
 }
 
 function describeOperation(task: Task) {
-  const timing = resolveOperationTiming(resolveTaskPipeline(task));
+  const timing = Option.getOrNull(resolveOperationTiming(resolveTaskPipeline(task)));
   const steps = task.plan?.document?.operation ?? [];
   if (timing === null || timing === 'alone' || steps.length === 0)
     return describePlan(task) + describeImpact(task);
@@ -551,7 +558,7 @@ function describeOperation(task: Task) {
 }
 
 function describeOperationOpening(task: Task) {
-  if (resolveOperationTiming(resolveTaskPipeline(task)) === 'post_merge') return '';
+  if (Option.contains(resolveOperationTiming(resolveTaskPipeline(task)), 'post_merge')) return '';
   return task.plan?.approvedAt ? 'The human approved the plan.' : '';
 }
 
@@ -591,7 +598,7 @@ export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: s
     describeOwedReply(task, 'answer'),
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
-    describeWhatFollows(task) ?? PROPOSAL_RULE,
+    Option.getOrElse(describeWhatFollows(task), () => PROPOSAL_RULE),
     'Only for work you noticed that serves a different goal than this task, propose it with `suggest_tasks`. Then stop.',
   ].join('\n');
 }

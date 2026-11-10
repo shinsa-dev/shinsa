@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   compareTasks,
   type Gate,
@@ -19,22 +20,22 @@ export interface WaitLeaf {
   gate: Gate | null;
 }
 
-export function selectLeadGate(state: ShinsaState, task: Task) {
+export function selectLeadGate(state: ShinsaState, task: Task): Option.Option<Gate> {
   const gates = listOpenGates(state, task.id);
   const current = gates.filter((gate) => gate.type !== 'post_merge');
   const lead = current.find((gate) => !isDecisionGate(gate)) ?? current[0];
-  if (lead) return lead;
-  return isRoundFinished(task) ? (gates[0] ?? null) : null;
+  if (lead) return Option.some(lead);
+  return isRoundFinished(task) ? Option.fromNullishOr(gates[0]) : Option.none();
 }
 
 function resolveStall(state: ShinsaState, task: Task): Omit<WaitLeaf, 'path' | 'task'> | null {
   if (task.stage === 'cancelled') return { reason: 'cancelled', gate: null };
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (!gate || isGateHeld(state, gate)) return null;
   return { reason: isPausingGate(gate) ? 'paused' : 'needs_you', gate };
 }
 
-export function traceStalledLeaf(state: ShinsaState, task: Task): WaitLeaf | null {
+export function traceStalledLeaf(state: ShinsaState, task: Task): Option.Option<WaitLeaf> {
   const seen = new Set<string>([task.id]);
   const visit = (current: Task, path: Task[]): WaitLeaf | null => {
     for (const parent of listWaitsOn(state, current).sort(compareTasks)) {
@@ -48,5 +49,5 @@ export function traceStalledLeaf(state: ShinsaState, task: Task): WaitLeaf | nul
     }
     return null;
   };
-  return visit(task, []);
+  return Option.fromNullishOr(visit(task, []));
 }

@@ -7,19 +7,15 @@ import { createSharedRun } from '@/lib/runtime/shared-run.ts';
 
 let latest: AgentProviderInfo[] = KNOWN_AGENT_PROVIDERS;
 
-let loaded = false;
-
 const read = createSharedRun(
   Effect.gen(function* () {
     const engine = yield* EngineClient;
     latest = [...(yield* engine.server.providers())];
-    loaded = true;
   }).pipe(Effect.ignore)
 );
 
 export function resetAgentProviders() {
   latest = KNOWN_AGENT_PROVIDERS;
-  loaded = false;
   read.reset();
 }
 
@@ -28,7 +24,7 @@ export function useAgentProviders() {
   useAppEffect(
     () =>
       Effect.andThen(
-        loaded ? Effect.void : Effect.promise(() => read.run()),
+        Effect.promise(() => read.run()),
         Effect.sync(() => setProviders(latest))
       ),
     []

@@ -45,6 +45,8 @@ describe('Evidence', () => {
     expect(note).toMatch(/^\/api\/evidence\/task-1\/round-1\/contrast-\w+\.md$/);
     expect(copied).toMatch(/^\/api\/evidence\/task-1\/round-3\/evidence-\w+\.png$/);
     expect((await store.copyFile(bare, FOLDER, 'Log')).endsWith('.bin')).toBe(true);
+    expect(readFileSync(join(dir, nameOf(image)), 'utf8')).toBe('png');
+    expect(readFileSync(join(dir, nameOf(odd))).length).toBe(0);
     expect(readFileSync(join(dir, nameOf(text)), 'utf8')).toBe('all green');
     expect(readFileSync(join(dir, nameOf(copied)), 'utf8')).toBe('shot');
     expect(await store.selectFile(nameOf(copied))).toBe(join(dir, nameOf(copied)));

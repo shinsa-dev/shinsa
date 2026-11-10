@@ -1,7 +1,9 @@
+import { Effect } from 'effect';
 import * as React from 'react';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
 import { StatusText } from '@/components/status/text.tsx';
 import { PullRequestBadge } from '@/components/tasks/pull-request-badge.tsx';
+import { useAppEffect } from '@/hooks/use-app-effect.ts';
 import { createLoopState, LOOP_ENTRIES } from '../../lib/loop-scene.ts';
 import { FIRST_STEP_MS, useFocus } from './focus.ts';
 import { DemoRoot, Stage } from './frame.tsx';
@@ -15,22 +17,16 @@ export function LoopDemo() {
   const started = React.useRef(false);
   const { state, task } = React.useMemo(() => createLoopState(now, shown), [now, shown]);
 
-  React.useEffect(() => {
-    if (!focused) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setShown(LOOP_ENTRIES.length);
-      return;
-    }
+  useAppEffect(() => {
+    if (!focused) return Effect.void;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      return Effect.sync(() => setShown(LOOP_ENTRIES.length));
     const last = shown >= LOOP_ENTRIES.length;
     const delay = started.current ? STEP_MS : FIRST_STEP_MS;
-    const timer = setTimeout(
-      () => {
-        started.current = true;
-        setShown(last ? 1 : shown + 1);
-      },
-      last ? STEP_MS * 3 : delay
-    );
-    return () => clearTimeout(timer);
+    return Effect.sync(() => {
+      started.current = true;
+      setShown(last ? 1 : shown + 1);
+    }).pipe(Effect.delay(last ? STEP_MS * 3 : delay));
   }, [focused, shown]);
 
   const entries = [...task.activity].reverse();

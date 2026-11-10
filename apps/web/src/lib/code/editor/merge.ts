@@ -1,6 +1,7 @@
 import { Chunk, MergeView, uncollapseUnchanged } from '@codemirror/merge';
 import { EditorState, type Extension, type StateEffect, Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { Option } from 'effect';
 import { COLLAPSE } from '@/lib/code/collapse.ts';
 import { listHiddenSpans } from './collapsed.ts';
 import { DIFF_CONFIG } from './unified.ts';
@@ -55,11 +56,14 @@ export function revealSplitLines(merge: Pick<MergeView, 'a' | 'b' | 'chunks'>, l
   if (a.length > 0) merge.a.dispatch({ effects: a });
 }
 
-export function findConfigBase(state: EditorState): Extension {
+export function selectConfigBase(state: EditorState): Option.Option<Extension> {
   const config: unknown = Reflect.get(state, 'config');
   const base: unknown = typeof config === 'object' && config !== null ? Reflect.get(config, 'base') : null;
-  if (!Array.isArray(base)) throw new Error('CodeMirror no longer keeps a state’s extensions on its config.');
-  return base;
+  return Array.isArray(base) ? Option.some(base) : Option.none();
+}
+
+function resolveConfigBase(state: EditorState): Extension {
+  return Option.getOrUndefined(selectConfigBase(state)) ?? [];
 }
 
 export class SplitView {
@@ -80,7 +84,7 @@ export class SplitView {
     merge.dom.style.height = '100%';
     merge.dom.style.overflow = 'auto';
     this.merge = merge;
-    this.#base = { a: findConfigBase(merge.a.state), b: findConfigBase(merge.b.state) };
+    this.#base = { a: resolveConfigBase(merge.a.state), b: resolveConfigBase(merge.b.state) };
     merge.dom.addEventListener('scroll', () => this.#readScroll(), { passive: true });
     for (const side of ['a', 'b'] as const) {
       const scroller = merge[side].scrollDOM;
@@ -100,16 +104,14 @@ export class SplitView {
     const chunks = Chunk.build(a, b, DIFF_CONFIG);
     const shown = this.merge.chunks;
     this.merge.chunks = chunks;
-    try {
-      return {
-        a: EditorState.create({ doc: a, extensions: [sides.a, SPLIT_THEME, this.#base.a] }),
-        b: EditorState.create({ doc: b, extensions: [sides.b, SPLIT_THEME, this.#base.b] }),
-        chunks,
-        scroll: null,
-      };
-    } finally {
-      this.merge.chunks = shown;
-    }
+    const pair = {
+      a: EditorState.create({ doc: a, extensions: [sides.a, SPLIT_THEME, this.#base.a] }),
+      b: EditorState.create({ doc: b, extensions: [sides.b, SPLIT_THEME, this.#base.b] }),
+      chunks,
+      scroll: null,
+    };
+    this.merge.chunks = shown;
+    return pair;
   }
 
   show(pair: SplitPair) {

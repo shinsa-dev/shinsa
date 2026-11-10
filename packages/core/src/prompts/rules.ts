@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { listCallableToolNames, type RunRole, type ShinsaToolName } from '../domain/index.ts';
 import { MANAGE_RULES } from './manage.ts';
 import { resolveOrchestrationRules } from './orchestration-rules.ts';
@@ -115,10 +116,11 @@ export function resolveHouseRules(role: RunRole) {
 
 const BRIEFED_ROLES: readonly RunRole[] = ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'];
 
-export function splitHouseRules(prompt: string) {
+export function splitHouseRules(prompt: string): Option.Option<{ rules: string; instruction: string }> {
   for (const role of BRIEFED_ROLES) {
     const rules = resolveHouseRules(role);
-    if (prompt.startsWith(`${rules}\n\n`)) return { rules, instruction: prompt.slice(rules.length + 2) };
+    if (prompt.startsWith(`${rules}\n\n`))
+      return Option.some({ rules, instruction: prompt.slice(rules.length + 2) });
   }
-  return null;
+  return Option.none();
 }

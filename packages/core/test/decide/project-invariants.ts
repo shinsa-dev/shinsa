@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import { Option } from 'effect';
 import {
   NO_PROJECT_KEY,
   PROJECT_KEY_PATTERN,
@@ -76,7 +77,7 @@ export function assertHandleInvariants(state: ShinsaState) {
     const owner = seen.get(task.handle);
     if (owner) throw new Error(`${context}: handle ${task.handle} is also ${owner}'s`);
     seen.set(task.handle, task.id);
-    expect(parseTaskHandle(task.handle), context).toBe(task.handle);
+    expect(Option.getOrNull(parseTaskHandle(task.handle)), context).toBe(task.handle);
     const [key = '', number = '0'] = task.handle.split('-');
     expect(key === NO_PROJECT_KEY || PROJECT_KEY_PATTERN.test(key), `${context}: key ${key}`).toBe(true);
     expect(state.taskNumbers[key] ?? 0, `${context}: counter of ${key}`).toBeGreaterThanOrEqual(

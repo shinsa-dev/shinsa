@@ -1,4 +1,5 @@
 import { createDecipheriv, createHash, pbkdf2Sync } from 'node:crypto';
+import { Result } from 'effect';
 import {
   COOKIE_IV,
   COOKIE_KEY_BYTES,
@@ -15,16 +16,16 @@ export function createCookieKey(password: string) {
 export function decryptCookieValue(key: Uint8Array, encrypted: Uint8Array, hostKey: string) {
   const prefix = new TextDecoder().decode(encrypted.subarray(0, ENCRYPTED_PREFIX.length));
   if (prefix !== ENCRYPTED_PREFIX) return null;
-  try {
-    const decipher = createDecipheriv('aes-128-cbc', key, COOKIE_IV);
-    const plain = Buffer.concat([
-      decipher.update(encrypted.subarray(ENCRYPTED_PREFIX.length)),
-      decipher.final(),
-    ]);
-    const digest = createHash('sha256').update(hostKey).digest();
-    const signed = plain.length >= HOST_DIGEST_BYTES && plain.subarray(0, HOST_DIGEST_BYTES).equals(digest);
-    return plain.subarray(signed ? HOST_DIGEST_BYTES : 0).toString('utf8');
-  } catch {
-    return null;
-  }
+  return Result.getOrNull(
+    Result.try(() => {
+      const decipher = createDecipheriv('aes-128-cbc', key, COOKIE_IV);
+      const plain = Buffer.concat([
+        decipher.update(encrypted.subarray(ENCRYPTED_PREFIX.length)),
+        decipher.final(),
+      ]);
+      const digest = createHash('sha256').update(hostKey).digest();
+      const signed = plain.length >= HOST_DIGEST_BYTES && plain.subarray(0, HOST_DIGEST_BYTES).equals(digest);
+      return plain.subarray(signed ? HOST_DIGEST_BYTES : 0).toString('utf8');
+    })
+  );
 }

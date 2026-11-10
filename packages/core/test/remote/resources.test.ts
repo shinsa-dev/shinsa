@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   describeGigabytes,
   describeResourceSummary,
@@ -62,8 +63,10 @@ describe('describing use', () => {
 
 describe('parsing a summary', () => {
   test('accepts a well-formed one and refuses any field out of shape', () => {
-    expect(parseResourceSummary(summary)).toEqual(summary);
-    expect(parseResourceSummary({ ...summary, diskFreeBytes: null })?.diskFreeBytes).toBeNull();
+    expect(Option.getOrNull(parseResourceSummary(summary))).toEqual(summary);
+    expect(
+      Option.getOrNull(parseResourceSummary({ ...summary, diskFreeBytes: null }))?.diskFreeBytes
+    ).toBeNull();
     const broken: unknown[] = [
       null,
       'summary',
@@ -76,6 +79,6 @@ describe('parsing a summary', () => {
       { ...summary, memoryUsedBytes: 9 * GB },
       { ...summary, diskFreeBytes: -1 },
     ];
-    for (const value of broken) expect(parseResourceSummary(value)).toBeNull();
+    for (const value of broken) expect(Option.getOrNull(parseResourceSummary(value))).toBeNull();
   });
 });

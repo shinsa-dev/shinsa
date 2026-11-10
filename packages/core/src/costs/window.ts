@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Task, UsagePaceScope } from '../domain/index.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -76,15 +77,15 @@ export function resolveRecentUsage(state: ShinsaState, now: number, scope: Recen
   };
 }
 
-export function resolveRecentUsageFreesAt(recent: RecentUsage, limit: number) {
+export function resolveRecentUsageFreesAt(recent: RecentUsage, limit: number): Option.Option<number> {
   let percent = recent.percent;
-  if (percent < limit) return null;
+  if (percent < limit) return Option.none();
   const freeing =
     recent.spends.find((spend) => {
       percent -= spend.percent;
       return percent < limit;
     }) ?? recent.spends.at(-1);
-  return freeing ? freeing.at + RECENT_USAGE_MS : null;
+  return Option.map(Option.fromNullishOr(freeing), (spend) => spend.at + RECENT_USAGE_MS);
 }
 
 function resolveScopeHold(
@@ -92,10 +93,15 @@ function resolveScopeHold(
   scope: UsagePaceScope,
   limit: number | null | undefined,
   projectId: string | null
-): PaceHold | null {
-  if (limit === null || limit === undefined) return null;
-  const freesAt = resolveRecentUsageFreesAt(recent, limit);
-  return freesAt === null ? null : { scope, limit, percent: recent.percent, projectId, freesAt };
+): Option.Option<PaceHold> {
+  if (limit === null || limit === undefined) return Option.none();
+  return Option.map(resolveRecentUsageFreesAt(recent, limit), (freesAt) => ({
+    scope,
+    limit,
+    percent: recent.percent,
+    projectId,
+    freesAt,
+  }));
 }
 
 export function resolvePaceHold(
@@ -103,12 +109,12 @@ export function resolvePaceHold(
   task: Task,
   provider: string,
   now: number
-): PaceHold | null {
-  if (task.paceLimitsIgnored) return null;
+): Option.Option<PaceHold> {
+  if (task.paceLimitsIgnored) return Option.none();
   const daily = state.settings.dailyUsageLimit;
   const projectId = task.projectId ?? null;
   const project = projectId === null ? null : (state.projects[projectId] ?? null);
-  if ((daily === null || daily === undefined) && !project?.usageLimit) return null;
+  if ((daily === null || daily === undefined) && !project?.usageLimit) return Option.none();
   const holds = [
     resolveScopeHold(resolveRecentUsage(state, now, { provider }), 'daily', daily, null),
     project
@@ -118,7 +124,7 @@ export function resolvePaceHold(
           project.usageLimit,
           project.id
         )
-      : null,
-  ].filter((hold) => hold !== null);
-  return holds.sort((a, b) => b.freesAt - a.freesAt)[0] ?? null;
+      : Option.none(),
+  ].flatMap(Option.toArray);
+  return Option.fromNullishOr(holds.sort((a, b) => b.freesAt - a.freesAt)[0]);
 }

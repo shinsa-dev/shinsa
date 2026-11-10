@@ -12,7 +12,7 @@ import {
   type Settings,
   serializeChoiceValue,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { ClaudeAccount } from './accounts.ts';
 import {
   CONTINUE,
@@ -234,7 +234,9 @@ const findGroupValue = Effect.fn('OnboardingSteps.findGroupValue')(function* (
   group: OnboardingChoiceGroup,
   values: string[]
 ) {
-  const picks = values.filter((value) => parseChoiceValue(value)?.group === group.id);
+  const picks = values.filter((value) =>
+    Option.exists(parseChoiceValue(value), (choice) => choice.group === group.id)
+  );
   const option = group.options.find((entry) => entry.value === picks[0]);
   if (picks.length !== 1 || !option) {
     const labels = group.options.map((entry) => entry.label);
@@ -243,7 +245,7 @@ const findGroupValue = Effect.fn('OnboardingSteps.findGroupValue')(function* (
       message: `Pick one ${group.label.toLowerCase()} option: ${describeList(labels, 'or')}.`,
     });
   }
-  return parseChoiceValue(option.value)?.value as string;
+  return Option.getOrNull(parseChoiceValue(option.value))?.value as string;
 });
 
 function resolveMergeLabel(method: Settings['mergeMethod']) {

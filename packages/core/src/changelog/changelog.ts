@@ -1,4 +1,4 @@
-import { Schema } from 'effect';
+import { Schema, Option } from 'effect';
 import { listIssueMessages } from '../domain/issues.ts';
 import { resolveVersionOrder } from '../protocol/engine.ts';
 import {
@@ -54,9 +54,11 @@ function compareChanges(a: ChangeEntry, b: ChangeEntry) {
 }
 
 function compareReleases(a: ChangelogRelease, b: ChangelogRelease) {
-  if (a.version === null) return -1;
-  if (b.version === null) return 1;
-  return resolveVersionOrder(b.version, a.version) ?? b.version.localeCompare(a.version);
+  const { version: older } = a;
+  const { version: newer } = b;
+  if (older === null) return -1;
+  if (newer === null) return 1;
+  return Option.getOrElse(resolveVersionOrder(newer, older), () => newer.localeCompare(older));
 }
 
 export function resolveChangelog(changes: readonly ReleasedChange[]): Changelog {
@@ -91,7 +93,8 @@ export function resolvePublicChangelog(changelog: Changelog): Changelog {
 export function listUnseenReleases(changelog: Changelog, lastSeen: string | null) {
   if (lastSeen === null) return [];
   return changelog.releases.filter(
-    (release) => release.version !== null && resolveVersionOrder(release.version, lastSeen) === 1
+    (release) =>
+      release.version !== null && Option.contains(resolveVersionOrder(release.version, lastSeen), 1)
   );
 }
 

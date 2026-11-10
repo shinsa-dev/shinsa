@@ -4,6 +4,7 @@ import {
   type AgentProviderInfo,
   type AgentRole,
   type CompactionMode,
+  createUsd,
   describeUsd,
   type FastModeAvailability,
   listAgentProviders,
@@ -26,6 +27,7 @@ import {
   type UsageRate,
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { Option } from 'effect';
 import { resolveProviderIcon } from '@/lib/accounts/account.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { resolveToggledRoots } from '@/lib/onboarding.ts';
@@ -232,7 +234,7 @@ export const MERGE_ITEMS: SettingItem<Settings['mergeMethod']>[] = [
 const BUDGETS = [1, 2, 5, 10, 20];
 
 function createBudgetItem(limit: number): SettingItem<string> {
-  return { value: String(limit), label: `${describeUsd(limit)} per task`, icon: 'IconCoins' };
+  return { value: String(limit), label: `${describeUsd(createUsd(limit))} per task`, icon: 'IconCoins' };
 }
 
 export function listBudgetItems(settings: Settings): SettingItem<string>[] {
@@ -295,7 +297,7 @@ function isLearningRate(account: AccountSummary, rates: UsageRates) {
 }
 
 function listWeeklyAccounts(accounts: AccountSummary[]) {
-  return accounts.filter((account) => resolveWeeklyPercent(account.usage) !== null);
+  return accounts.filter((account) => Option.isSome(resolveWeeklyPercent(account.usage)));
 }
 
 function hasLearningAccount(accounts: AccountSummary[], rates: UsageRates | null) {
@@ -411,7 +413,7 @@ function createDelegationLimitItem(limit: number): SettingItem<string> {
 }
 
 export function listDelegationLimitItems(settings: Settings): SettingItem<string>[] {
-  const current = resolveDelegationLimit(settings);
+  const current = Option.getOrNull(resolveDelegationLimit(settings));
   const limits =
     current === null || DELEGATION_LIMITS.includes(current)
       ? DELEGATION_LIMITS
@@ -424,8 +426,7 @@ export function listDelegationLimitItems(settings: Settings): SettingItem<string
 }
 
 export function resolveDelegationLimitValue(settings: Settings) {
-  const limit = resolveDelegationLimit(settings);
-  return limit === null ? 'off' : String(limit);
+  return Option.match(resolveDelegationLimit(settings), { onNone: () => 'off', onSome: String });
 }
 
 export function parseDelegationLimit(value: string) {

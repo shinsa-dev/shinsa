@@ -15,6 +15,8 @@ export {
   listRelevantWindows,
   resolveHeadroom,
   resolveSpentUntil,
+  STALE_USAGE_MS,
+  isStaleUsage,
   resolveUsedPercent,
   resolveWeeklyPercent,
   resolveWeeklyReading,

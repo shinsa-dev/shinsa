@@ -11,7 +11,7 @@ import {
   type TaskOwner,
   type UserCommand,
 } from '@shinsa/core';
-import { Effect, Result } from 'effect';
+import { Effect, Result, Option } from 'effect';
 import { createReadOnlyError } from '../instance/index.ts';
 import type { RemoteHandle } from '../remote/machine/schema.ts';
 import type { EngineCore } from '../runtime/engine/service.ts';
@@ -71,14 +71,16 @@ export const dispatchUserCommand = Effect.fn('dispatchUserCommand')(function* (
   const parsed = parseUserCommand(body);
   if (Result.isFailure(parsed)) return yield* Effect.fail(resolveRequestFailure(parsed.failure));
   const command = parsed.success;
-  const refusal = resolveOwnerOnlyRefusal(source.origin, command);
+  const refusal = Option.getOrNull(resolveOwnerOnlyRefusal(source.origin, command));
   if (refusal)
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: OWNER_ONLY_CODE, message: refusal }))
     );
   const stranger = yield* resolveTeammateRefusal(command, source.teams);
   if (stranger) return yield* Effect.fail(resolveRequestFailure(stranger));
-  const outside = source.guest ? resolveScopedRefusal(yield* engine.state, source.guest, command) : null;
+  const outside = source.guest
+    ? Option.getOrNull(resolveScopedRefusal(yield* engine.state, source.guest, command))
+    : null;
   if (outside)
     return yield* Effect.fail(
       resolveRequestFailure(new DomainError({ code: SCOPE_REFUSAL_CODE, message: outside }))
