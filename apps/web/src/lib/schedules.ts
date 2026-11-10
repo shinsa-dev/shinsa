@@ -24,6 +24,7 @@ const TRIGGER_ICON: Record<Schedule['trigger']['kind'], IconName> = {
   interval: 'IconArrowsRepeat',
   daily: 'IconClock',
   webhook: 'IconGlobe',
+  slack: 'IconSlack',
 };
 
 export function resolveScheduleIcon(schedule: Schedule): IconName {

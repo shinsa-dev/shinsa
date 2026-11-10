@@ -100,10 +100,17 @@ describe('the next run', () => {
     expect(resolveNextRun({ kind: 'interval', everyMinutes: 0 }, friday, 'UTC')).toBe(friday + MINUTE);
   });
 
-  test('a one-off runs once, a webhook never on a clock', () => {
+  test('a one-off runs once, a webhook and a Slack channel never on a clock', () => {
     expect(resolveNextRun({ kind: 'once', at: friday + 1 }, friday, 'UTC')).toBe(friday + 1);
     expect(resolveNextRun({ kind: 'once', at: friday }, friday, 'UTC')).toBeNull();
     expect(resolveNextRun({ kind: 'webhook', signature: null, replayKey: null }, friday, 'UTC')).toBeNull();
+    expect(
+      resolveNextRun(
+        { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+        friday,
+        'UTC'
+      )
+    ).toBeNull();
   });
 
   test('the first run of a one-off keeps its own time', () => {

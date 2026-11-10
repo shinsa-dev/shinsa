@@ -897,7 +897,13 @@ describe('pairing this machine', () => {
       name: 'Studio',
       publicKey: started.machineKey,
       version: '1',
-      features: ['bound-connect-tokens', 'sealed-pairing', 'slack-linked-threads', 'slack-task-owner'],
+      features: [
+        'bound-connect-tokens',
+        'sealed-pairing',
+        'slack-linked-threads',
+        'slack-task-owner',
+        'slack-channel-triggers',
+      ],
     });
     expect((await readSnapshot(await local('/api/remote/pair', {}))).pairing?.claimCode).toBe('K7PQ');
     await until('paired', () => remote.snapshot().paired);

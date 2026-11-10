@@ -170,6 +170,7 @@ export {
 } from './rounds.ts';
 export type * from './schedules.ts';
 export {
+  isEventTrigger,
   isScheduleLive,
   isWatchHome,
   resolveSuggestedWatchName,
