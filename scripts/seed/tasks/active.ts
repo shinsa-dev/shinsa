@@ -534,6 +534,41 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
       taskId: 'task-docs-gate',
       watchdog: {
         ...base,
+        id: 'watchdog-docs-sign-in',
+        title: 'Docs sign-in redirects',
+        check: 'No request to /docs/framework is redirected to the sign-in page.',
+        source: { server: 'maple', data: 'OpenTelemetry traces and logs of the docs site and the API' },
+        firstCheckMinutes: 30,
+        maxGapMinutes: 6 * 60,
+        forMinutes: 72 * 60,
+        startsOn: 'merge',
+        productionCheck: null,
+        status: 'awaiting_production',
+        awaitingSince: NOW - 2 * HOUR,
+        startedAt: null,
+        endsAt: null,
+        nextCheckAt: NOW + 40 * MINUTE,
+        checks: [
+          ...[0.5, 1.5, 3.5].map((hours) => ({
+            at: mergedAt + hours * HOUR,
+            healthy: true,
+            summary: 'No redirect to the sign-in page since the last check.',
+          })),
+          {
+            at: NOW - 2 * HOUR,
+            healthy: true,
+            summary:
+              'Vercel rolled production back to the deployment before #339, so the change is no longer live.',
+          },
+        ],
+        endedAt: null,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
         id: 'watchdog-docs-search',
         title: 'Docs search clicks',
         check: 'Search clicks on the framework pages do not drop below last week’s daily average.',

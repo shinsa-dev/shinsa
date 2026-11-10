@@ -125,6 +125,7 @@ export function resolveNextRun(
     case 'daily':
       return resolveNextDaily(trigger, after, timeZone);
     case 'webhook':
+    case 'slack':
       return Option.none();
   }
 }

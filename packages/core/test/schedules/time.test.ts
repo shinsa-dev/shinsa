@@ -117,13 +117,22 @@ describe('the next run', () => {
     );
   });
 
-  test('a one-off runs once, a webhook never on a clock', () => {
+  test('a one-off runs once, a webhook and a Slack channel never on a clock', () => {
     expect(Option.getOrNull(resolveNextRun({ kind: 'once', at: friday + 1 }, friday, 'UTC'))).toBe(
       friday + 1
     );
     expect(Option.getOrNull(resolveNextRun({ kind: 'once', at: friday }, friday, 'UTC'))).toBeNull();
     expect(
       Option.getOrNull(resolveNextRun({ kind: 'webhook', signature: null, replayKey: null }, friday, 'UTC'))
+    ).toBeNull();
+    expect(
+      Option.getOrNull(
+        resolveNextRun(
+          { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+          friday,
+          'UTC'
+        )
+      )
     ).toBeNull();
   });
 

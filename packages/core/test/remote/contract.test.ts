@@ -128,6 +128,7 @@ describe('the remote contract schemas', () => {
     const beat = Schema.decodeUnknownSync(HeartbeatRequest)({ localUrl: 'http://127.0.0.1:7446', features });
     expect(hasMachineFeature(beat.features ?? [], 'bound-connect-tokens')).toBe(true);
     expect(hasMachineFeature(beat.features ?? [], 'slack-task-owner')).toBe(true);
+    expect(hasMachineFeature(beat.features ?? [], 'slack-channel-triggers')).toBe(true);
     expect(hasMachineFeature([], 'sealed-pairing')).toBe(false);
     const decodeHeartbeat = Schema.decodeUnknownOption(HeartbeatRequest);
     const many = Array.from({ length: 17 }, (_, index) => `feature-${index}`);

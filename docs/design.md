@@ -1841,7 +1841,8 @@ Only these, and they win over anything below:
     `lib/notifications/`, `lib/preferences/notifications.ts`, `hooks/use-attention.ts`):
     - **Settings → Automations → Schedules**: one 40px row per schedule, oldest first: the name as `Truncate` over one `text-2xs`
       `fg-2` `Truncate` line of what it does and when ("Starts a new task · every hour", "Asks a new question ·
-      …", "Messages “‹task›” · weekdays at 9:00 AM", "… · when its webhook is called"; a daily time on the app's
+      …", "Messages “‹task›” · weekdays at 9:00 AM", "… · when its webhook is called", "… · when a message is posted in
+      #alerts", whose tile is Slack's mark in the trigger's orange; a daily time on the app's
       clock), then its state: "Next at 4:03 PM"
       through `TimeAgo` (a weekday this week, else the date), "Paused" and "Finished" in `fg-2`, "Last run failed"
       red. A `•••` click menu: Pause / Resume, Copy webhook URL, Open the task (the one it messages, else the last it
@@ -1858,7 +1859,7 @@ Only these, and they win over anything below:
       product is "Eunoe" with a capital E in every string on screen; `eunoe` stays for code, commands and paths.
     - **⌘K**: a Schedules group, only while there is a schedule, with Schedules (scrolls to the section); each
       schedule matches while typing, by name with when it runs as the hint ("Every hour") and its icon (hourglass
-      once, repeat interval, clock daily, globe webhook), and
+      once, repeat interval, clock daily, globe webhook, Slack's mark for a channel), and
       opens a page of the same actions, Delete behind a confirm page. Change a setting adds Play a sound, Sound, Show
       a notification, Compaction, the speed choices and, with Claude Code’s compaction, Compact idle sessions; Jump to
       has Context.

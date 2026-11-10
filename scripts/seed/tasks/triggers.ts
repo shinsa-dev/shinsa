@@ -165,6 +165,25 @@ function listSchedules(): Schedule[] {
       createdBy: { kind: 'you' },
     }),
     schedule({
+      id: 'schedule-alerts',
+      name: 'Triage production alerts',
+      text: 'An alert was posted in #alerts. Find what broke, and fix it when the cause is in this repository.',
+      trigger: {
+        kind: 'slack',
+        teamId: 'T04SUPERWALL',
+        teamName: 'Superwall',
+        channelId: 'C07ALERTS',
+        channelName: 'alerts',
+      },
+      runCount: 3,
+      runs: [
+        scheduleRun('sent', 30 * HOUR),
+        scheduleRun('skipped', 9 * HOUR, 'The last task is still open.'),
+        scheduleRun('sent', 2 * HOUR),
+      ],
+      createdBy: { kind: 'you' },
+    }),
+    schedule({
       id: 'schedule-support',
       name: 'Support reports',
       text: 'Bug reports and feature requests about the docs and the paywalls.',

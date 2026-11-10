@@ -105,12 +105,14 @@ type Answer = (
 
 function createLink(answer?: Answer): FakeLink {
   const socketListeners = new Set<(data: string) => void>();
+  const unheard: string[] = [];
   const closeListeners = new Set<(error: DeviceChannelError) => void>();
   const fake: FakeLink = {
     requests: [],
     sent: [],
     closed: false,
     emit: (data) => {
+      if (socketListeners.size === 0) unheard.push(data);
       for (const listener of socketListeners) listener(data);
     },
     drop: (error) => {
@@ -130,6 +132,7 @@ function createLink(answer?: Answer): FakeLink {
           : Effect.sync(() => void fake.sent.push(data)),
       subscribeSocket: (listener) => {
         socketListeners.add(listener);
+        for (const data of unheard.splice(0)) listener(data);
         return () => socketListeners.delete(listener);
       },
       subscribeClose: (listener) => {

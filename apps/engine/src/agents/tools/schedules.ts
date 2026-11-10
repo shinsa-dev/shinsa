@@ -46,9 +46,10 @@ export const SCHEDULE_TOOL_SPECS = {
     name: 'set_schedule',
     description: [
       'Do something later, once or on a repeat: send a message into this task (the default), into another task (task_id), start a new task each time (new_task) in this repository or the one you name, or read a data source of the project (source) and file a task for each new report.',
-      'Give exactly one of in_minutes, run_at, every_minutes, daily_at or webhook. Pass schedule_id to change or pause one; anything you leave out stays as it was, and a change that keeps the time keeps the next run.',
+      'Give exactly one of in_minutes, run_at, every_minutes, daily_at, webhook or slack_channel. Pass schedule_id to change or pause one; anything you leave out stays as it was, and a change that keeps the time keeps the next run.',
       'A run is skipped while the last one is still going, a machine that was asleep runs a missed schedule once when it wakes, and daily times follow the wall clock of time_zone.',
       'For a webhook, message is a template: {{body.path}}, {{headers.name}}, {{query.name}} and {{request}} are filled in from each request and marked as untrusted data. The reply gives the URL to hand to the sender.',
+      'For slack_channel, each new top-level message in the channel runs it once, with the author, the channel, a link and the text added to message as untrusted data. Slack must be connected and @Shinsa invited to the channel.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -129,6 +130,17 @@ export const SCHEDULE_TOOL_SPECS = {
             },
           },
           additionalProperties: false,
+        },
+        slack_channel: {
+          type: 'string',
+          maxLength: L.reference,
+          description:
+            'Run for each new message in this Slack channel, by name such as #alerts. Only a channel @Shinsa was invited to.',
+        },
+        slack_workspace: {
+          type: 'string',
+          maxLength: L.reference,
+          description: 'With slack_channel: the Slack workspace, when several have a channel by that name.',
         },
         enabled: { type: 'boolean', description: 'false pauses it, true resumes it.' },
         max_runs: {

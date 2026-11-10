@@ -602,6 +602,18 @@ describe('a merged task with watchdogs', () => {
     expect(harness.effectsOf('slack.status')).toHaveLength(statuses);
   });
 
+  test('a watching check that finds the change no longer in production only edits the merge message', () => {
+    const harness = createHarness();
+    const taskId = mergeFromSlack(harness);
+    const statuses = harness.effectsOf('slack.status').length;
+    fireWatchdog(harness, taskId);
+    endWatchCheck(harness, taskId, 'Production was rolled back.', true, false);
+    expect(harness.task(taskId).watchdogs?.[0]?.status).toBe('awaiting_production');
+    expect(postsOf(harness)).toEqual([]);
+    expect(mergesOf(harness)).toHaveLength(2);
+    expect(harness.effectsOf('slack.status')).toHaveLength(statuses);
+  });
+
   test('a task merged before the merge message was kept is never announced again by a check', () => {
     const harness = createHarness();
     const taskId = mergeFromSlack(harness, [], {

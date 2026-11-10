@@ -4,6 +4,7 @@ import {
   listOpenWatchSuggestions,
   listProjectRepos,
   listSchedules,
+  resolveSlackChannelTrigger,
   type Schedule,
   type ScheduleRequest,
   type ShinsaEvent,
@@ -23,13 +24,13 @@ import {
   type ScheduleToolRun,
   type ScheduleToolsShape,
   ScheduleToolRefused,
-  type ScheduleUrls,
+  type ScheduleToolsInput,
 } from './schema.ts';
 
 export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsShape>()(
   'shinsa/engine/schedules/tools/ScheduleTools'
 ) {
-  static readonly layer = (urls: ScheduleUrls) =>
+  static readonly layer = (options: ScheduleToolsInput) =>
     Layer.effect(
       ScheduleTools,
       Effect.gen(function* () {
@@ -57,9 +58,9 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           scheduleId: string,
           token: string
         ) {
-          const remote = yield* urls.hookUrl(scheduleId, token);
+          const remote = yield* options.hookUrl(scheduleId, token);
           if (remote) return remote;
-          return `${yield* urls.baseUrl}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${token}`;
+          return `${yield* options.baseUrl}${WEBHOOK_ROUTE_PREFIX}/${encodeURIComponent(scheduleId)}/${token}`;
         });
 
         const upsertHookUrl = Effect.fn('ScheduleTools.upsertHookUrl')(function* (scheduleId: string) {
@@ -176,6 +177,17 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           return { ...target, repoId: yield* resolveNamedRepo(state, task, repository) };
         });
 
+        const resolveTrigger = Effect.fn('ScheduleTools.resolveTrigger')(function* (
+          request: ScheduleRequest
+        ) {
+          if (request.slackChannel === null) return request.trigger;
+          const { trigger, problem } = resolveSlackChannelTrigger(
+            yield* options.slackChannels,
+            request.slackChannel
+          );
+          return trigger ?? (yield* refuse(problem));
+        });
+
         const writeSchedule = Effect.fn('ScheduleTools.writeSchedule')(function* (
           input: Record<string, unknown>,
           run: ScheduleToolRun
@@ -195,7 +207,7 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
             scheduleId: request.scheduleId,
             name: request.name,
             text: request.text,
-            trigger: request.trigger,
+            trigger: yield* resolveTrigger(request),
             target: yield* resolveTarget(before, task, request),
             source: request.source,
             enabled: request.enabled,

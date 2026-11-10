@@ -207,7 +207,8 @@ src/
 │   ├── watchdogs.ts Watchdogs after a merge: arming them from the walkthrough (syncWatchdogs, after every command),
 │   │                firing a check as a read-only `watch` turn of the task's watch session, deferring it while the task
 │   │                works, ending a check (endWatchCheck: tripped by the reports it filed, missed when the source
-│   │                was out of reach, healthy otherwise; `live` while it waits for production), stopping them,
+│   │                was out of reach, healthy otherwise; `live` while it waits for production, and `live` false from a watching
+│   │                check sends the task's watching watchdogs back to waiting: leaveProduction), stopping them,
 │   │                connecting a source;
 │   │                a project's data sources (watch_source.write, watch_source.remove)
 │   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits
@@ -220,7 +221,7 @@ src/
 │   │                adoption, recovery
 │   ├── couriers.ts  create_task and split_task
 │   ├── orchestration.ts  Routing the delegation commands
-│   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook deliveries
+│   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook and Slack channel deliveries
 │   ├── intake.ts    A watch (a schedule that reads an integration): its hidden home (createWatchHome, closeWatchHome),
 │   │                a read as a read-only `intake` turn, ending one (endIntakeRead), a read that gives up
 │   ├── reads.ts     What a watch and a watchdog share: file_report (dedupe by the project's filed reports, a watch's
@@ -365,7 +366,11 @@ src/
 │                    the session key, and the team feed types (docs/engine.md → Teams)
 ├── slack/           The Slack bot, shared by the engine and the hosted Worker: the forwarded mention and its parser
 │                    (schema.ts: SlackMention, SlackThreadMessage, SlackId, SLACK_LIMITS; contract.ts:
-│                    parseSlackMention, SLACK_ENGINE_EVENTS_PATH), the
+│                    parseSlackMention, SLACK_ENGINE_EVENTS_PATH), a channel's message forwarded to an automation
+│                    (SlackChannelMessage, parseSlackChannelMessage, SLACK_ENGINE_MESSAGES_PATH,
+│                    resolveSlackMessageKey; thread.ts serializeSlackChannelDelivery, its text fenced as
+│                    untrusted data; channels.ts: resolveSlackChannelTrigger from the channels the bot is in,
+│                    listSlackChannelWatches and listSlackChannelSchedules over the state), the
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
 │                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation), and
@@ -499,7 +504,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     waiting on its delegations always has something on its way to it (a claim, or a running child), a running
     one has no undelivered report outside a claim, and no gate is a delegated run's question (it goes to its parent);
   - schedules (`schedule-invariants.ts`): a stopped schedule is off with no next run, a live timed one has one and a
-    webhook none, at most 20 runs and 500 replay keys kept, the run count within `max_runs`, at most 20 live schedules
+    webhook or a Slack channel trigger none, at most 20 runs and 500 replay keys kept, the run count within `max_runs`, at most 20 live schedules
     per task;
   - rounds (`round-invariants.ts`): rounds are numbered one by one, at most one is active and an open task works on
     exactly one, a round waiting to start comes after every started one and a closed task has none waiting; every

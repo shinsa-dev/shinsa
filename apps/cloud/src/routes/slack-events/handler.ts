@@ -11,12 +11,14 @@ import {
   SLACK_DECIDE_ACTION,
   SLACK_ENGINE_EVENTS_PATH,
   SLACK_ENGINE_INTERACTIONS_PATH,
+  SLACK_ENGINE_MESSAGES_PATH,
   SLACK_LIMITS,
   SLACK_MODAL_CALLBACK,
   SLACK_RELAY_PATHS,
   SLACK_RESPONSE_INPUT,
   SLACK_VIEW_LIMITS,
   SLACK_WRITE_ACTION,
+  type SlackChannelMessage,
   type SlackDecision,
   type SlackDecisionReply,
   type SlackLinkedThread,
@@ -32,7 +34,7 @@ import {
   serializeSlackUnreadLinks,
 } from '@shinsa/core';
 import { BodyInvalid } from '@shinsa/core/remote/errors';
-import { Cause, Clock, Effect, Layer, Option, type Redacted, Schema } from 'effect';
+import { Cause, Clock, Duration, Effect, Layer, Option, type Redacted, Schema } from 'effect';
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from 'effect/http';
 import { selectMachineRole } from '../../auth/access.ts';
 import { CloudConfig } from '../../config/service.ts';
@@ -40,12 +42,19 @@ import { isMachineOnline } from '../../domain/machines.ts';
 import { requestOnlineMachine } from '../../http/forward.ts';
 import { deferWork } from '../../http/worker.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
+import { resolveChannelAccess } from '../../slack/membership.ts';
+import { MEMBERSHIP_WINDOW } from '../../slack/schema.ts';
 import { readSignedBody } from '../../slack/signed-body.ts';
 import { selectUserToken } from '../../slack/user-tokens.ts';
 import { requestSignedMachine, selectWorkspaceToken } from '../../slack/workspace.ts';
 import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
-import type { SlackLink, SlackWorkspace } from '../../store/slack/schema.ts';
+import type {
+  SlackChannelWatch,
+  SlackChannelWatcher,
+  SlackLink,
+  SlackWorkspace,
+} from '../../store/slack/schema.ts';
 import { SlackStore } from '../../store/slack/service.ts';
 import { resolveSlackMessageText } from './message.ts';
 import {
@@ -60,6 +69,8 @@ import {
   InteractionForm,
   JsonObject,
   MentionEnvelope,
+  MemberLeftEvent,
+  MessageEnvelope,
   type MentionEvent,
   ChannelInfo,
   Permalink,
@@ -72,6 +83,7 @@ import {
   type SlackCard,
   type ThreadEntry,
   ThreadMessage,
+  PUBLIC_CHANNEL_TYPE,
   UninstallEvent,
   UserTokensRevokedEvent,
   type ViewSubmission,
@@ -91,6 +103,8 @@ export const SlackEventRoutes = Layer.unwrap(
     const decodeUninstall = Schema.decodeUnknownOption(UninstallEvent);
     const decodeUserRevoke = Schema.decodeUnknownOption(UserTokensRevokedEvent);
     const decodeMention = Schema.decodeUnknownOption(MentionEnvelope);
+    const decodeMessage = Schema.decodeUnknownOption(MessageEnvelope);
+    const decodeMemberLeft = Schema.decodeUnknownOption(MemberLeftEvent);
     const decodeThreadMessage = Schema.decodeUnknownOption(ThreadMessage);
     const decodeForm = Schema.decodeUnknownOption(InteractionForm);
     const decodeBlockActions = Schema.decodeUnknownOption(BlockActionsSchema);
@@ -214,6 +228,18 @@ export const SlackEventRoutes = Layer.unwrap(
         Effect.orElseSucceed(() => null)
       );
 
+    const selectPermalink = (channelId: string, ts: string, token: Redacted.Redacted<string>) =>
+      slack
+        .call(
+          'chat.getPermalink',
+          { token, body: { form: { channel: channelId, message_ts: ts } } },
+          Permalink
+        )
+        .pipe(
+          Effect.map((answer) => answer.permalink || null),
+          Effect.orElseSucceed(() => null)
+        );
+
     const listThreadEntries = Effect.fn('slackEvents.listThreadEntries')(function* (
       mention: MentionEvent,
       botUserId: string,
@@ -329,16 +355,7 @@ export const SlackEventRoutes = Layer.unwrap(
         channelName: read.channelName,
         thread: read.entries.map(resolveThreadMessage),
       }));
-      const permalink = yield* slack
-        .call(
-          'chat.getPermalink',
-          { token, body: { form: { channel: mention.channelId, message_ts: mention.ts } } },
-          Permalink
-        )
-        .pipe(
-          Effect.map((answer) => answer.permalink || null),
-          Effect.orElseSucceed(() => null)
-        );
+      const permalink = yield* selectPermalink(mention.channelId, mention.ts, token);
       const channelName = yield* selectChannelName(mention.channelId, token);
       return {
         eventId: mention.eventId,
@@ -453,6 +470,98 @@ export const SlackEventRoutes = Layer.unwrap(
         return yield* postInThread(serializeSlackOffline(machine.value.name));
       if (linked.reconnect) return yield* postPrivately(serializeSlackReconnectPrompt(connectUrl));
       if (linked.unread > 0) yield* postPrivately({ text: serializeSlackUnreadLinks(linked.unread) });
+    });
+
+    const hasChannelAccess = Effect.fn('slackEvents.hasChannelAccess')(function* (
+      watch: SlackChannelWatch,
+      watcher: SlackChannelWatcher,
+      now: number
+    ) {
+      if (
+        watcher.memberCheckedAt !== null &&
+        now - watcher.memberCheckedAt < Duration.toMillis(MEMBERSHIP_WINDOW)
+      )
+        return true;
+      const links = (yield* store.listMachineLinks(watcher.machineId)).filter(
+        (link) => link.workspaceId === watch.workspaceId
+      );
+      const access = yield* resolveChannelAccess(links, watch.channelId);
+      if (access === 'member') {
+        yield* store.recordWatchMember(watch, watcher.machineId);
+        return true;
+      }
+      if (access === 'denied') {
+        yield* store.removeWatch(watch, watcher.machineId);
+        yield* Effect.logWarning('[Cloud] A private Slack channel is no longer watched').pipe(
+          Effect.annotateLogs({ instanceId: watcher.machineId, teamId: watch.workspaceId })
+        );
+        return false;
+      }
+      yield* Effect.logError('[Cloud] A private Slack channel message was held back').pipe(
+        Effect.annotateLogs({ instanceId: watcher.machineId, teamId: watch.workspaceId })
+      );
+      return false;
+    });
+
+    const listTriggeredMachines = Effect.fn('slackEvents.listTriggeredMachines')(function* (
+      watch: SlackChannelWatch,
+      open: boolean
+    ) {
+      const now = yield* Clock.currentTimeMillis;
+      const triggered: Machine[] = [];
+      for (const watcher of yield* store.listChannelWatchers(watch)) {
+        const machine = yield* machines.select(watcher.machineId);
+        if (Option.isNone(machine) || !isMachineOnline(machine.value, now)) continue;
+        if (!hasMachineFeature(machine.value.features, 'slack-channel-triggers')) continue;
+        if (open || (yield* hasChannelAccess(watch, watcher, now))) triggered.push(machine.value);
+      }
+      return triggered;
+    });
+
+    const handleChannelMessage = Effect.fn('slackEvents.handleChannelMessage')(function* ({
+      event_id: eventId,
+      team_id: teamId,
+      event,
+    }: MessageEnvelope) {
+      if (event.thread_ts && event.thread_ts !== event.ts) return;
+      const triggered = yield* listTriggeredMachines(
+        { workspaceId: teamId, channelId: event.channel },
+        event.channel_type === PUBLIC_CHANNEL_TYPE
+      );
+      if (triggered.length === 0) return;
+      const opened = yield* selectWorkspaceToken(teamId);
+      if (Option.isNone(opened)) return;
+      const { workspace, token } = opened.value;
+      const entry = resolveThreadEntry(event, workspace.botUserId);
+      if (!entry || entry.userId === workspace.botUserId) return;
+      if (listSlackMentionedUsers(entry.text).includes(workspace.botUserId)) return;
+      const users = yield* resolveUserNames([entry], token);
+      const message = {
+        eventId,
+        teamId,
+        channelId: event.channel,
+        messageTs: event.ts,
+        userId: entry.userId,
+        userName: (entry.botName ?? users.get(entry.userId) ?? entry.userId).slice(0, SLACK_LIMITS.userName),
+        bot: entry.botName !== null,
+        text: resolveSlackReadableText(entry.text, { users, botUserId: workspace.botUserId }).slice(
+          0,
+          SLACK_LIMITS.channelMessage
+        ),
+        permalink: yield* selectPermalink(event.channel, event.ts, token),
+        channelName: yield* selectChannelName(event.channel, token),
+      } satisfies SlackChannelMessage;
+      for (const machine of triggered) {
+        const answer = yield* requestOnlineMachine(
+          'slack',
+          machine.id,
+          requestSignedMachine(machine, SLACK_ENGINE_MESSAGES_PATH, message)
+        );
+        if (Option.isSome(answer) && !answer.value.ok)
+          yield* Effect.logError('[Cloud] A machine refused a Slack channel message').pipe(
+            Effect.annotateLogs({ instanceId: machine.id, status: answer.value.status })
+          );
+      }
     });
 
     const serializeOfflineRefusal = (name: string) =>
@@ -609,6 +718,14 @@ export const SlackEventRoutes = Layer.unwrap(
           yield* store.clearUserToken(userRevoke.value.team_id, slackUserId);
         return ok();
       }
+      const left = decodeMemberLeft(fields.value);
+      if (Option.isSome(left)) {
+        yield* store.expireWatchMembers({
+          workspaceId: left.value.team_id,
+          channelId: left.value.event.channel,
+        });
+        return ok();
+      }
       const mention = Option.map(decodeMention(fields.value), resolveMention);
       if (Option.isSome(mention))
         yield* deferWork(
@@ -619,6 +736,21 @@ export const SlackEventRoutes = Layer.unwrap(
                   cause: Cause.pretty(cause),
                   teamId: mention.value.teamId,
                   eventId: mention.value.eventId,
+                })
+              )
+            )
+          )
+        );
+      const message = decodeMessage(fields.value);
+      if (Option.isSome(message))
+        yield* deferWork(
+          handleChannelMessage(message.value).pipe(
+            Effect.catchCause((cause) =>
+              Effect.logError('[Cloud] A Slack channel message could not be forwarded').pipe(
+                Effect.annotateLogs({
+                  cause: Cause.pretty(cause),
+                  teamId: message.value.team_id,
+                  eventId: message.value.event_id,
                 })
               )
             )

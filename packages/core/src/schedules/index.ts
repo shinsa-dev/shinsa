@@ -3,6 +3,7 @@ export { isTimeZone, parseTimeOfDay, resolveFirstRun, resolveNextRun, serializeT
 export {
   type ReportFilingRequest,
   type ScheduleRequest,
+  type SlackChannelRequest,
   validateReadReport,
   validateReportFiling,
   validateScheduleRequest,

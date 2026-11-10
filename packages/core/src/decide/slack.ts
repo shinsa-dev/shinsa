@@ -148,6 +148,7 @@ function resolveEventTask(state: ShinsaState, event: ShinsaEventInput) {
     case 'watchdog.armed':
     case 'watchdog.started':
     case 'watchdog.live':
+    case 'watchdog.not_live':
     case 'watchdog.checking':
     case 'watchdog.deferred':
     case 'watchdog.missed':
@@ -163,6 +164,7 @@ function resolveEventTask(state: ShinsaState, event: ShinsaEventInput) {
 const MERGE_EDIT_EVENTS: ReadonlySet<ShinsaEventInput['type']> = new Set<ShinsaEventInput['type']>([
   'watchdog.started',
   'watchdog.live',
+  'watchdog.not_live',
   'watchdog.deferred',
   'watchdog.missed',
   'watchdog.checked',
@@ -175,6 +177,7 @@ function isWatchEvent(event: ShinsaEventInput) {
 }
 
 const WATCH_CHECK_EVENTS: ReadonlySet<ShinsaEventInput['type']> = new Set<ShinsaEventInput['type']>([
+  'watchdog.not_live',
   'watchdog.deferred',
   'watchdog.checked',
   'watchdog.missed',

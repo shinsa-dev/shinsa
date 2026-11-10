@@ -329,6 +329,33 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   (`agents.sessions.setStatus`, best effort: `applied: false`, not logged, for `not_authorized` from an app not on
   Agent Sessions (`agent_view` stays off) and `feature_disabled`; any other refusal is logged and answered 502); `/__remote/slack/links` (each with the GitHub account that linked it, `accountId`) and `/unlink` read and remove its links. Message
   text passes through the Worker on its way and is never stored: D1 keeps ids, names and the sealed tokens.
+- **A watched channel's messages go to its machines** (`docs/engine.md` → Slack, Schedules and webhooks). An engine
+  lists the channels it may set a trigger on (`GET /__remote/slack/channels`): the ones the bot is in, in its
+  linked workspaces (`users.conversations` with the bot token), a private one only when a Slack user linked to
+  that machine is a member of it, asked with that person's own token (`users.conversations`,
+  `private_channel`; a person whose token is gone, revoked or lacks the scope opens none, logged as `[Cloud] Slack did not list
+  a linked person’s private channels`; any other failure, such as `ratelimited`, is unknown, never "not a
+  member": the listing, and a `watches` call that names such a channel, answer 502 `SlackFailed` and change
+  nothing, so the engine sends its list again). The bot's access alone never opens a private channel, as with linked
+  threads, so a teammate who links their machine gets no channel they could not read themselves. It replaces
+  the channels it watches (`POST /__remote/slack/watches`, `SlackStore.replaceMachineWatches`), which keeps
+  only channels of that same list, checked again on every call (502 `SlackFailed`, the rows as they were,
+  when Slack does not list them); the rows (`slack_channel_watches`,
+  `migrations/0003_slack_channel_watches.sql`: workspace, channel, machine, and for a private channel
+  `member_checked_at`, when a linked person was last confirmed a member) go with their workspace or machine,
+  and unlinking empties them. A `message` event (`message.channels`, `message.groups`, `MessageEnvelope`) that is
+  a new top-level message, not Shinsa's own and not a mention of it, is forwarded signed to `POST
+  /api/slack/messages` on every watching machine that is online and names `slack-channel-triggers`
+  (`handleChannelMessage`); a channel nobody watches costs one D1 read and no Slack call. A private channel's message goes to
+  a machine only while its membership was confirmed in the last five minutes (`MEMBERSHIP_WINDOW`,
+  `slack/membership.ts`); past that the Worker asks `conversations.info` as each linked person: a member is
+  confirmed again, one who is not loses the watch (`[Cloud] A private Slack channel is no longer watched`), and
+  an answer Slack does not give holds that message back and keeps the watch (`[Cloud] A private Slack channel
+  message was held back`). `member_left_channel` clears the confirmation of that channel's watches, so the next
+  message is checked at once. No message text is
+  stored. A failure after the acknowledgement is logged as `[Cloud] A Slack channel message could not be
+  forwarded` with its `teamId` and `eventId`, and a machine's refusal as `[Cloud] A machine refused a Slack
+  channel message`.
 - **Requests from a page.** Every signed-in route reads the session from `Authorization: Bearer` first, then the
   cookie (`PageSession`; a bearer that does not open a session is refused, never retried as the cookie). Every POST a page makes (sign-out, approve, connect, remove, accept, leave) needs an `Origin` of the
   Worker's own origin, unless it carries a bearer token (`PageSession`'s cookie half, `assertPageRequest`): a forged cross-site
@@ -411,7 +438,7 @@ model. The Worker's part of it:
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
   `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json`, with public distribution on
+  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json` (a change to its events or scopes is made again in the app's settings on api.slack.com, which no deploy does), with public distribution on
   (Manage Distribution) so other workspaces can add it, and the secrets
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
