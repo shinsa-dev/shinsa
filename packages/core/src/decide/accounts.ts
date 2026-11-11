@@ -1,6 +1,14 @@
 import { Option } from 'effect';
 import { resolvePlanKey } from '../accounts/plan.ts';
-import { CLAUDE_PROVIDER, resolveProviderLabel } from '../agent-models/index.ts';
+import { isModelMarkFor } from '../accounts/usage.ts';
+import {
+  CLAUDE_PROVIDER,
+  RUN_AGENT_ROLE,
+  resolveAgentModel,
+  resolveAgentProvider,
+  resolveModelFamilyLabel,
+  resolveProviderLabel,
+} from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -77,6 +85,8 @@ export function waitForUsageReset(decider: Decider, run: Run, failure: RunFailur
     autoResume,
     status: 'armed',
     provider: run.attempts?.at(-1)?.provider ?? run.provider,
+    model: failure.model ?? run.model,
+    limitScope: failure.limitScope ?? 'account',
   };
   decider.emit({ type: 'usage_wait.armed', taskId: task.id, wait });
   decider.stage(task.id, task.stage, autoResume ? WAITING : PAUSED_UNTIL_RESET);
@@ -108,10 +118,30 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
   moveWatchCheck(decider, wait.runId, next.id);
 }
 
+function isModelMoved(decider: Decider, wait: UsageWait) {
+  const { settings } = decider.state;
+  const role = RUN_AGENT_ROLE[wait.role];
+  const provider = resolveAgentProvider(settings, role);
+  if (provider !== (wait.provider ?? CLAUDE_PROVIDER)) return true;
+  return !isModelMarkFor(wait.model, resolveAgentModel(settings, role, provider));
+}
+
+export function releaseModelWaits(decider: Decider) {
+  for (const task of Object.values(decider.state.tasks)) {
+    const wait = task.usageWait;
+    if (wait?.status !== 'armed' || wait.cause === 'pace' || wait.limitScope !== 'model') continue;
+    if (RUN_STAGES.has(task.stage) && isModelMoved(decider, wait)) resumeFromWait(decider, task, wait);
+  }
+}
+
+function describeWaitLimit(wait: UsageWait) {
+  if (wait.limitScope === 'model' && wait.model) return `${resolveModelFamilyLabel(wait.model)} limit`;
+  return `${resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER)} usage limit`;
+}
+
 function describeReset(wait: UsageWait) {
   const account = wait.account?.email ? ` on ${wait.account.email}` : '';
-  const provider = resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER);
-  return `The agent stopped at the ${provider} usage limit${account}. The limit has reset. Retry to carry on, or cancel the task.`;
+  return `The agent stopped at the ${describeWaitLimit(wait)}${account}. The limit has reset. Retry to carry on, or cancel the task.`;
 }
 
 export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait.resume'>) {

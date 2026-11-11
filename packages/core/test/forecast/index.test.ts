@@ -245,6 +245,44 @@ describe('resolveForecastAccount', () => {
   });
 });
 
+describe('the forecast for one model', () => {
+  function withFable(usedPercent: number, resetsAt: number | null): AccountUsage {
+    const reading = weekly(40, NOW + 50 * HOUR_MS);
+    return {
+      ...reading,
+      windows: [
+        ...reading.windows,
+        { id: 'weekly:fable', kind: 'model', label: 'Fable', model: 'Fable', usedPercent, resetsAt },
+      ],
+    };
+  }
+
+  test('counts the model’s own weekly window when it leaves less than the all-models one', () => {
+    const usage = withFable(90, NOW + 20 * HOUR_MS);
+    const forecast = (model: string | null) =>
+      Option.getOrNull(resolveForecastAccount('work', 'Work', usage, null, NOW, { model }));
+    expect(forecast('claude-fable-5-2')).toMatchObject({ left: 10, resetsAt: NOW + 20 * HOUR_MS });
+    expect(forecast('opus')).toMatchObject({ left: 60, resetsAt: NOW + 50 * HOUR_MS });
+    expect(forecast(null)).toMatchObject({ left: 60 });
+  });
+
+  test('keeps the all-models window when the model’s own one leaves more', () => {
+    const usage = withFable(10, NOW + 20 * HOUR_MS);
+    expect(
+      Option.getOrNull(resolveForecastAccount('work', 'Work', usage, null, NOW, { model: 'fable' }))
+    ).toMatchObject({ left: 60, resetsAt: NOW + 50 * HOUR_MS });
+  });
+
+  test('a mark for one model empties the account only for that model', () => {
+    const spent = summary({ spentUntil: NOW + 20 * HOUR_MS, spentModel: 'fable' });
+    const left = (model: string | null) =>
+      listForecastAccounts([spent], NOW, { model }).map((entry) => entry.left);
+    expect(left('fable')).toEqual([0]);
+    expect(left('opus')).toEqual([40]);
+    expect(left(null)).toEqual([0]);
+  });
+});
+
 describe('listForecastAccounts', () => {
   test('counts only accounts agents can use', () => {
     const accounts = listForecastAccounts(
@@ -410,15 +448,16 @@ describe('the forecast of each provider in a snapshot', () => {
     const resets = [grant({ endsAt }), grant({ id: 'open' })];
     const [claude] = listProviderPaces(
       snapshot({ accounts: [summary({ usage: { ...out, resetGrants: resets } })] }),
-      NOW
+      NOW,
+      null
     );
-    const [plain] = listProviderPaces(snapshot({ accounts: [summary({ usage: out })] }), NOW);
+    const [plain] = listProviderPaces(snapshot({ accounts: [summary({ usage: out })] }), NOW, null);
     expect(plain).toEqual({ provider: 'claude', pace: 0, resetPace: 0, endingPace: 0, resetEndsAt: null });
     expect(claude?.pace).toBe(0);
     expect(claude?.resetPace ?? 0).toBeGreaterThan(10);
     expect(claude?.endingPace).toBe(0);
     expect(claude?.resetEndsAt).toBe(endsAt);
-    expect(listProviderPaces(snapshot({}), NOW)).toEqual([
+    expect(listProviderPaces(snapshot({}), NOW, null)).toEqual([
       { provider: 'claude', pace: null, resetPace: null, endingPace: null, resetEndsAt: null },
     ]);
   });
@@ -435,11 +474,13 @@ describe('the forecast of each provider in a snapshot', () => {
     const later = grant({ id: 'later', endsAt: NOW + 100 * DAY_MS });
     const [claude] = listProviderPaces(
       snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [soon, later] } })] }),
-      NOW
+      NOW,
+      null
     );
     const [onlySoon] = listProviderPaces(
       snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [soon] } })] }),
-      NOW
+      NOW,
+      null
     );
     expect(claude?.endingPace ?? 0).toBeGreaterThan(claude?.pace ?? Number.POSITIVE_INFINITY);
     expect(claude?.endingPace).toBe(onlySoon?.resetPace ?? Number.NaN);
@@ -451,5 +492,19 @@ describe('the forecast of each provider in a snapshot', () => {
     expect(isResetEnding(NOW + 4 * DAY_MS, NOW)).toBe(false);
     expect(isResetEnding(NOW - 1, NOW)).toBe(false);
     expect(isResetEnding(null, NOW)).toBe(false);
+  });
+
+  test('paces Claude against the agent model’s own weekly window', () => {
+    const resetsAt = NOW + 144 * HOUR_MS;
+    const fableOut: AccountUsage = {
+      ...weekly(20, resetsAt),
+      windows: [
+        ...weekly(20, resetsAt).windows,
+        { id: 'weekly:fable', kind: 'model', label: 'Fable', model: 'Fable', usedPercent: 100, resetsAt },
+      ],
+    };
+    const accounts = snapshot({ accounts: [summary({ usage: fableOut })] });
+    expect(listProviderPaces(accounts, NOW, 'fable')[0]?.pace).toBe(0);
+    expect(listProviderPaces(accounts, NOW, 'opus')[0]?.pace ?? 0).toBeGreaterThan(10);
   });
 });

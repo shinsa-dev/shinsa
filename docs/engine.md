@@ -2271,7 +2271,9 @@ checks it ran.
   under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
 - **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
   readings are, so the engine's account roster works out two safe paces for each provider on every accounts refresh
-  (`listProviderPaces`): `pace`, the forecast without usage resets, and `resetPace`, the forecast with each usable
+  (`listProviderPaces`; for Claude it runs for the agent model, so an account's weekly budget is the tighter of its
+  all-models weekly window and that model's own weekly window, and Settings' forecast does the same): `pace`, the
+  forecast without usage resets, and `resetPace`, the forecast with each usable
   reset as a budget of its own (The usage forecast, below), `endingPace`, the same with only the resets that end within
   3 days (`isResetEnding`, `FORECAST_LIMITS.resetEndingMs`), and `resetEndsAt`, when the soonest of those resets ends.
   It records them when any pace moved by a whole point (`isProviderPaceMoved`, `isPaceMoved`,
@@ -6988,7 +6990,17 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   (`run.attempted` `account`), and an attempt on another account than the task's last one writes an
   `account_switched` notice.
 - **Rotation on a rejection** (`accounts/rotation/service.ts`). A usage limit marks the account spent until its reset (15
-  minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too); a
+  minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too). A mark
+  is for the whole account or for one model family: Claude reports a cap on one model (Fable's weekly limit) with the
+  same `seven_day` type as the all-models one, so on a usage rejection the rotation reads the account's usage again
+  at once and asks core's `resolveLimitScope` with the last reading a read returned (`UsageTable.measured`, never
+  a pushed notice, which puts the weekly window at 100% on any rejection; kept in `data/usage-reads.json` and
+  `data/provider-usage-reads.json` so a restart keeps it): with a fresh reading where neither the 5-hour nor the all-models weekly
+  window is at 100% and the run's model has a window of its own at least as full as both, it is a model limit
+  (`limitScope: 'model'` with the run's `model` on the `RunFailure`); Claude's own `seven_day_opus` and
+  `seven_day_sonnet` types are model limits without the read. A model mark only counts for runs on that family
+  (`isModelMarkFor`): `pickAccount`, the pool's reset and the snapshot's `spentUntil` (with `spentModel`, for the agent
+  model) still offer the account to other models. An account keeps one mark per family and one for the whole account; a
   signed-out account is marked signed out (a dead token is read again first: A login Claude could not refresh,
   below). The spent marks are kept in `data/account-marks.json` (written on every
   mark and every sign-in that clears one; read at start without the marks that have run out, and an unreadable file
@@ -7044,7 +7056,11 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   limit, with `settings.snoozeLimited` on) opens a failure gate at the reset instead; with both off the limit opens
   the failure gate at once. A usage limit never fails a task on its own: a reset that is unknown or already past
   waits 15 minutes (`ESTIMATED_RESET_MS`), and a resumed step that hits a window no later than the one it waited for
-  waits at least 15 minutes more instead of looping at once. The web titles the wait "Waiting for usage: continues at
+  waits at least 15 minutes more instead of looping at once. The wait keeps the failure's `model` and `limitScope`:
+  a wait on a model limit is resumed at once by a settings change that moves its role to another model family or
+  provider (`releaseModelWaits` in `changeSettings`, auto-resume or not), on the new model, and its copy names the
+  model ("The agent stopped at the Fable limit on a@b.com"); a wait on an all-models limit waits for its reset
+  whatever the model. The web titles the wait "Waiting for usage: continues at
   3:40 PM on a@b.com" (`docs/design.md` → Waiting for the usage limit). `usage_wait.change` (auto-resume on or off) replaces the
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
   cancelling or any new step end the wait. A daily or project limit arms the same wait with `cause: pace` before
@@ -7153,8 +7169,8 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
-- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
-  `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
+- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `usage-reads.json`, `provider-usage.json`,
+  `provider-usage-reads.json` and `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
   that breaks it is dropped, a broken `accounts.json` is kept aside, and a cache or a mark that cannot be written is
   logged. `AccountFolders` makes and removes each account's `CLAUDE_CONFIG_DIR`: the folder, its seeded `.claude.json`,
   the links to the shared entries and the `.credentials.json` read back. `UsageApi` reads Claude's usage over Effect's
@@ -7288,7 +7304,9 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── terminals/     Your terminals (`terminals.json`), each one's last screen (`<id>.screen`), so a restarted
     │                  engine shows how each ended, and your services (`services.json`, mode 600; Terminals, above)
     ├── usage-limits.json  The last usage reading per account
+    ├── usage-reads.json   The last reading a usage read returned per account, without pushed notices
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
+    ├── provider-usage-reads.json  The last reading a usage read returned per provider, without pushed notices
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
     ├── eunoe/         eunoe's folder (`EUNOE_DIR`): the request log (requests.jsonl) and thread state (threads/)

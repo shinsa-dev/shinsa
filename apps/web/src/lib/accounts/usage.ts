@@ -12,6 +12,8 @@ import {
   resolveAgentModel,
   resolveAgentProvider,
   resolveCandidateSpentUntil,
+  selectCandidateSpentModel,
+  resolveModelFamilyLabel,
   resolvePlanLabel,
   resolveSpentUntil,
   type Settings,
@@ -237,6 +239,13 @@ export function describeResetsIn(resetsAt: number, now: number) {
   return resetsAt <= now ? 'Resets now' : formatUntil('Resets', resetsAt, now);
 }
 
+function describeSpentLabel(account: AccountSummary, model: string | null, now: number) {
+  return Option.match(selectCandidateSpentModel(account, model, now), {
+    onNone: () => 'Out of usage',
+    onSome: (spent) => `Out of ${resolveModelFamilyLabel(spent)} usage`,
+  });
+}
+
 export function resolveAccountStatus(
   account: AccountSummary,
   model: string | null,
@@ -246,7 +255,7 @@ export function resolveAccountStatus(
   if (account.paused) return { label: 'Paused', tone: 'neutral', until: null };
   return Option.getOrNull(
     Option.map(resolveCandidateSpentUntil(account, model, now), (until) => ({
-      label: 'Out of usage',
+      label: describeSpentLabel(account, model, now),
       tone: 'red' as const,
       until,
     }))

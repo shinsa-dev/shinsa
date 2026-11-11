@@ -69,6 +69,7 @@ export interface AccountSummary {
   signInDetail: string | null;
   usage: AccountUsage;
   spentUntil: number | null;
+  spentModel?: string | null;
   runs: number;
 }
 

@@ -103,7 +103,12 @@ export function listAccountFiles(data: string): Record<string, string> {
       },
     },
   };
+  const marks = {
+    version: 2,
+    marks: { [PERSONAL.id]: [{ until: NOW + 3 * 24 * HOUR, at: NOW - 4 * MINUTE, model: 'fable' }] },
+  };
   return {
+    'account-marks.json': `${JSON.stringify(marks, null, 2)}\n`,
     'accounts.json': `${JSON.stringify(registry, null, 2)}\n`,
     'usage-limits.json': `${JSON.stringify(limits, null, 2)}\n`,
   };
@@ -360,6 +365,37 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
           },
         },
         ...listSchedules().map((written) => ({ type: 'schedule.written' as const, schedule: written })),
+      ],
+    },
+    {
+      id: 'task-model-wait',
+      request: 'Retry the webhook deliveries that failed during the outage',
+      title: 'Retry failed webhook deliveries',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'waiting for the usage limit to reset',
+      branch: 'fix/retry-webhook-deliveries',
+      ageHours: 0.5,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 6, summary: 'Hit the Fable limit.', failed: true }],
+      extra: [
+        {
+          type: 'usage_wait.armed',
+          taskId: 'task-model-wait',
+          wait: {
+            id: 'wait-model',
+            runId: 'task-model-wait-run-0',
+            role: 'agent',
+            phaseIndex: null,
+            account: PERSONAL,
+            resetAt: NOW + 13 * HOUR,
+            armedAt: NOW - 4 * MINUTE,
+            autoResume: true,
+            status: 'armed',
+            model: 'fable',
+            limitScope: 'model',
+          },
+        },
       ],
     },
     {

@@ -272,7 +272,11 @@ export const CachedUsage = Schema.Struct({ windows: Schema.Array(Schema.Unknown)
 
 export const UsageCacheFields = Schema.Struct({ accounts: LenientRecord });
 
-export const SpentMark = Schema.Struct({ until: Schema.NullOr(Schema.Finite), at: Schema.Finite });
+export const SpentMark = Schema.Struct({
+  until: Schema.NullOr(Schema.Finite),
+  at: Schema.Finite,
+  model: Schema.optionalKey(Schema.String),
+});
 export type SpentMark = typeof SpentMark.Type;
 
 export const SpentMarksFields = Schema.Struct({ marks: LenientRecord });
