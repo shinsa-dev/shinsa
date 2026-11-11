@@ -27,6 +27,7 @@ import {
 } from '@/lib/command/registry.ts';
 import { listTaskActionCommands } from '@/lib/command/task-actions.ts';
 import { connection, selectEngineCommands } from '@/lib/connection/socket.ts';
+import { listFocusTeams } from '@/lib/focus.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
 import { BUNDLE_ICON, listStackChoices, STACK_LABEL, toggleStack, unstackTask } from '@/lib/tasks/bundles.ts';
 import {
@@ -144,7 +145,10 @@ function listThisTaskCommands(state: ShinsaState, task: Task, accounts: Accounts
     ...listProcessCommands(state, task, Date.now()),
     ...listUsageWaitCommands(task),
     ...listDependencyCommands(state, task),
-    ...listTaskInitiativeCommands(state, task, selectEngineCommands(connection.selectEngine(task.id))),
+    ...listTaskInitiativeCommands(state, task, selectEngineCommands(connection.selectEngine(task.id)), {
+      feed: connection.selectTeams(),
+      teams: listFocusTeams(connection.selectRemote()),
+    }),
     ...listAccountBindingCommands(accounts, task),
     ...listRerunCommands(state, accounts, task),
     ...listTaskActionCommands(state, task),

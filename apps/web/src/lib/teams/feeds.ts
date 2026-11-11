@@ -9,9 +9,11 @@ import {
   type ShareMessage,
   type ShinsaState,
   selectTeamSnapshotSigner,
+  type TeamFeedInitiative,
   type TeamFeedMachine,
   type TeamFeedSnapshot,
   type TeamFeedTask,
+  type TeamInitiative,
   type TeamSnapshot,
   type TeamTask,
   type TeamViewTarget,
@@ -61,6 +63,10 @@ function resolveTaskKey(task: TeamFeedTask) {
   return `${resolveMachineKey(task)} ${task.task.id}`;
 }
 
+function resolveInitiativeKey(initiative: TeamFeedInitiative) {
+  return `${resolveMachineKey(initiative)} ${initiative.id}`;
+}
+
 function isBetterMachine(machine: TeamFeedMachine, known: TeamFeedMachine) {
   const rank = MACHINE_RANK[machine.status] - MACHINE_RANK[known.status];
   return rank < 0 || (rank === 0 && (machine.updatedAt ?? -1) > (known.updatedAt ?? -1));
@@ -86,7 +92,13 @@ export function selectTeamTaskHeldAt(
 export function mergeTeamFeeds(feeds: readonly TeamFeedSnapshot[]): TeamFeedSnapshot {
   const machines = new Map<string, TeamFeedMachine>();
   const tasks = new Map<string, TeamFeedTask>();
+  const initiatives = new Map<string, TeamFeedInitiative>();
   for (const feed of feeds) {
+    for (const initiative of feed.initiatives ?? []) {
+      const key = resolveInitiativeKey(initiative);
+      const known = initiatives.get(key);
+      if (!known || known.updatedAt < initiative.updatedAt) initiatives.set(key, initiative);
+    }
     for (const machine of feed.machines) {
       const key = resolveMachineKey(machine);
       const known = machines.get(key);
@@ -98,8 +110,9 @@ export function mergeTeamFeeds(feeds: readonly TeamFeedSnapshot[]): TeamFeedSnap
       if (!known || known.task.updatedAt < task.task.updatedAt) tasks.set(key, task);
     }
   }
-  if (machines.size === 0 && tasks.size === 0) return NO_TEAM_FEED;
-  return { machines: [...machines.values()], tasks: [...tasks.values()] };
+  if (machines.size === 0 && tasks.size === 0 && initiatives.size === 0) return NO_TEAM_FEED;
+  const merged = { machines: [...machines.values()], tasks: [...tasks.values()] };
+  return initiatives.size === 0 ? merged : { ...merged, initiatives: [...initiatives.values()] };
 }
 
 export function listHeldTaskIds(state: Pick<ShinsaState, 'tasks' | 'teammateTasks'> | null) {
@@ -196,6 +209,7 @@ interface HostedFeed {
   machine: TeamFeedMachine;
   signingKey: string | null;
   tasks: TeamTask[];
+  initiatives: TeamInitiative[];
   updatedAt: number | null;
   attempt: number;
   stop: (() => void) | null;
@@ -244,6 +258,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
               },
               signingKey: machine.signingKey ?? null,
               tasks: [],
+              initiatives: [],
               updatedAt: null,
               attempt: 0,
               stop: null,
@@ -286,6 +301,16 @@ export class HostedTeamFeeds implements TeamFeedSource {
           : []
       ),
     };
+    const initiatives = this.#feeds.flatMap((feed) =>
+      this.#isShown(feed, now)
+        ? feed.initiatives.map((initiative) => ({
+            ...initiative,
+            teamId: feed.target.teamId,
+            instanceId: feed.target.instanceId,
+          }))
+        : []
+    );
+    if (initiatives.length > 0) this.#snapshot = { ...this.#snapshot, initiatives };
     this.#signal.publish();
   }
 
@@ -308,6 +333,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
         const now = yield* readNow(this.#options);
         if (isTeamSnapshotExpired(body.updatedAt, now) || (feed.updatedAt ?? -1) >= body.updatedAt) continue;
         feed.tasks = body.tasks;
+        feed.initiatives = body.initiatives ?? [];
         feed.updatedAt = body.updatedAt;
         adopted = true;
       }
@@ -328,6 +354,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
         if (Option.isNone(view)) return;
         const now = yield* readNow(this.#options);
         feed.tasks = view.value.tasks;
+        feed.initiatives = view.value.initiatives ?? [];
         feed.updatedAt = view.value.updatedAt ?? now;
         feed.attempt = 0;
         this.#mark(feed, 'live', null);
@@ -344,6 +371,7 @@ export class HostedTeamFeeds implements TeamFeedSource {
       Effect.gen({ self: this }, function* () {
         if (end.gone) {
           feed.tasks = [];
+          feed.initiatives = [];
           feed.updatedAt = null;
         }
         this.#mark(feed, end.gone ? 'refused' : 'offline', end.reason);

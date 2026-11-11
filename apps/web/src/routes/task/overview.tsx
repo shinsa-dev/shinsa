@@ -12,7 +12,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { EvidencePointer } from '@/components/evidence/evidence-pointer.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
-import { InitiativeOverview } from '@/components/initiatives/sheet.tsx';
+import { InitiativeOverview, TeamInitiativeOverview } from '@/components/initiatives/sheet.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
@@ -32,7 +32,9 @@ import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
+import { useTeamFeed } from '@/lib/connection/socket.ts';
 import { selectLedInitiative } from '@/lib/initiatives/lead.ts';
+import { selectLeadTeamInitiative } from '@/lib/initiatives/team.ts';
 import { listInitiativeActivity } from '@/lib/initiatives/view.ts';
 import { listActivityNewestFirst, mergeActivity, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { selectShownReply } from '@/lib/overview/exchanges.ts';
@@ -179,16 +181,19 @@ export function OverviewTab({
   const fade = useTaskScrollFade();
   const led = selectLedInitiative(state, task);
   const sheet = led ? resolveInitiativeSheet(state, led.id, Date.now()) : null;
+  const feed = useTeamFeed();
+  const shared = !led && readOnly ? selectLeadTeamInitiative(feed, task) : null;
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <PageScroll fade={fade}>
         <TaskScrollHeader />
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <PostMergePanel state={state} task={task} gate={gate} />
-          {(!sheet || gate || task.stage !== 'leading') && (
+          {((!sheet && !shared) || gate || task.stage !== 'leading') && (
             <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
           )}
           {sheet && <InitiativeOverview state={state} sheet={sheet} />}
+          {shared && <TeamInitiativeOverview initiative={shared} />}
           <RequestsPanel task={task} shownId={resolveShownReplyId(state, task, gate)} />
           <SuggestionsPanel task={task} />
           <WatchdogsPanel state={state} task={task} />
