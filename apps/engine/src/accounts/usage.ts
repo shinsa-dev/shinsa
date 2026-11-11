@@ -8,7 +8,7 @@ export {
   parseUsageWindows,
   resolveClaudeFastMode,
 } from './usage/answer.ts';
-export { type KeyedWindow, PROVIDER_WINDOWS, USAGE_URL, type UsageRead } from './schema.ts';
+export { type KeyedWindow, PROVIDER_WINDOWS, type UsageRead } from './schema.ts';
 
 export type UsageRequester = (url: string, init: RequestInit) => Promise<Response>;
 
