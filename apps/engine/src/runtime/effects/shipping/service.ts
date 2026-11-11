@@ -205,17 +205,18 @@ export class Shipping extends Context.Service<
 
       const connectOrigin = Effect.fn('Shipping.connectOrigin')(function* (repo: Repo) {
         return yield* registry.connectOrigin(repo).pipe(
-          Effect.mapError((error) =>
-            error._tag === 'OriginNotConnected'
-              ? new ShippingFailed({
-                  step: 'pushing',
-                  message: error.message,
-                  detail: error.message,
-                  retryable: false,
-                  delayMs: null,
-                })
-              : asShipping('pushing')(error)
-          )
+          Effect.catchTag('OriginNotConnected', (error) =>
+            Effect.fail(
+              new ShippingFailed({
+                step: 'pushing',
+                message: error.message,
+                detail: error.message,
+                retryable: false,
+                delayMs: null,
+              })
+            )
+          ),
+          Effect.mapError(asShipping('pushing'))
         );
       });
 
