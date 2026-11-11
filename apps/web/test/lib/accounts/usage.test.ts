@@ -351,6 +351,46 @@ describe('account status', () => {
     });
   });
 
+  it('names the model when only that model’s limit keeps an account from work', () => {
+    const marked = createAccount({ id: 'a', spentUntil: NOW + HOUR, spentModel: 'fable' });
+    expect(resolveAccountStatus(marked, 'fable', NOW)).toEqual({
+      label: 'Out of Fable usage',
+      tone: 'red',
+      until: NOW + HOUR,
+    });
+    expect(resolveAccountStatus(marked, 'opus', NOW)).toBeNull();
+    expect(resolveAccountStatus({ ...marked, spentUntil: NOW - 1 }, 'fable', NOW)).toBeNull();
+    const fable = createWindow({
+      id: 'f',
+      kind: 'model',
+      model: 'fable',
+      usedPercent: 100,
+      resetsAt: NOW + HOUR,
+    });
+    const shared = createWindow({ id: 'w', kind: 'weekly', usedPercent: 100, resetsAt: NOW + 2 * HOUR });
+    const measured = createAccount({ id: 'b', usage: usage(fable) });
+    expect(resolveAccountStatus(measured, 'fable', NOW)?.label).toBe('Out of Fable usage');
+    const both = createAccount({
+      id: 'c',
+      spentUntil: NOW + HOUR,
+      spentModel: 'fable',
+      usage: usage(fable, shared),
+    });
+    expect(resolveAccountStatus(both, 'fable', NOW)?.label).toBe('Out of usage');
+    const stale = { ...usage(fable), checkedAt: NOW - 7 * HOUR };
+    expect(
+      resolveAccountStatus(
+        createAccount({ id: 'd', spentUntil: NOW + HOUR, spentModel: 'fable', usage: stale }),
+        'fable',
+        NOW
+      )?.label
+    ).toBe('Out of Fable usage');
+    expect(
+      resolveAccountStatus(createAccount({ id: 'e', spentUntil: NOW + HOUR, usage: stale }), 'fable', NOW)
+        ?.label
+    ).toBe('Out of usage');
+  });
+
   it('says how long until a reset later today, and the moment of one on a later day', () => {
     const morning = new Date(NOW).setHours(9, 0, 0, 0);
     const out = (until: number) => ({ label: 'Out of usage', tone: 'red' as const, until });
