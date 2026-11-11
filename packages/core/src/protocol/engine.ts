@@ -26,6 +26,7 @@ export const ENGINE_FEATURES = [
   'focus.projects',
   'browser',
   'slack-channel-triggers',
+  'models.routing',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

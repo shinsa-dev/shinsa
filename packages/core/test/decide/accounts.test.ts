@@ -915,7 +915,9 @@ describe('the automatic model', () => {
     expect(recordRoom(harness, [{ ...ROOMY[0]!, left: 42 }, ROOMY[1]!]).events).toHaveLength(0);
     expect(recordRoom(harness, [{ ...ROOMY[0]!, left: 30 }, ROOMY[1]!]).events).toHaveLength(1);
     expect(recordRoom(harness, [{ ...ROOMY[0]!, left: null }, ROOMY[1]!]).events).toHaveLength(1);
-    expect(recordRoom(harness, [{ ...ROOMY[0]!, left: null, usable: false }, ROOMY[1]!]).events).toHaveLength(1);
+    expect(recordRoom(harness, [{ ...ROOMY[0]!, left: null, usable: false }, ROOMY[1]!]).events).toHaveLength(
+      1
+    );
     expect(recordRoom(harness, [ROOMY[1]!]).events).toHaveLength(1);
     expect(harness.state.modelRoom.fable).toBeUndefined();
     expect(recordRoom(harness, [{ ...ROOMY[1]!, family: 'sonnet' }]).events).toHaveLength(1);

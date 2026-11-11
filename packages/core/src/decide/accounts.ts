@@ -1,5 +1,6 @@
 import { Option } from 'effect';
 import { resolvePlanKey } from '../accounts/plan.ts';
+import { isModelRoomMoved } from '../accounts/room.ts';
 import { isModelMarkFor } from '../accounts/usage.ts';
 import {
   CLAUDE_PROVIDER,
@@ -13,8 +14,6 @@ import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
   type Gate,
-  type ModelRoom,
-  type ModelRoomReading,
   isTaskClosed,
   MINUTE_MS,
   OWNER_SIGNED_OUT_CODE,
@@ -46,8 +45,6 @@ const SIGNED_OUT_CODES: ReadonlySet<string> = new Set([
   'authentication_failed',
   'api_error_401',
 ]);
-
-const MODEL_ROOM_STEP = 5;
 
 function isSameAccount(a: RunAccount | null | undefined, b: RunAccount | null | undefined) {
   return (a?.id ?? null) === (b?.id ?? null) && (a?.email ?? null) === (b?.email ?? null);
@@ -300,18 +297,8 @@ export function recordUsagePace(decider: Decider, command: CommandOf<'usage.pace
   });
 }
 
-function isRoomMoved(known: Readonly<Record<string, ModelRoom>>, models: readonly ModelRoomReading[]) {
-  if (Object.keys(known).length !== models.length) return true;
-  return models.some((model) => {
-    const before = known[model.family];
-    if (!before || before.usable !== model.usable) return true;
-    if (before.left === null || model.left === null) return before.left !== model.left;
-    return Math.abs(before.left - model.left) >= MODEL_ROOM_STEP;
-  });
-}
-
 export function recordModelRoom(decider: Decider, command: CommandOf<'usage.models_recorded'>) {
-  if (!isRoomMoved(decider.state.modelRoom, command.models)) return;
+  if (!isModelRoomMoved(decider.state.modelRoom, command.models)) return;
   decider.emit({ type: 'usage.models_recorded', models: command.models });
   releaseModelWaits(decider);
 }
