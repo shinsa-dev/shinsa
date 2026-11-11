@@ -1,4 +1,5 @@
 import {
+  type AutopilotLesson,
   createState,
   type Evidence,
   type Gate,
@@ -115,6 +116,21 @@ export function createEvidence(overrides: Partial<Evidence> & { id: string; task
 
 function byId<T extends { id: string }>(items: T[] = []) {
   return Object.fromEntries(items.map((item) => [item.id, item]));
+}
+
+export function createLesson(overrides: Partial<AutopilotLesson> & { id: string }): AutopilotLesson {
+  return {
+    at: NOW,
+    taskId: 'task-1',
+    gateId: `gate-${overrides.id}`,
+    gate: 'review',
+    kind: 'acted',
+    answer: 'approved',
+    reason: 'Clear and small.',
+    note: null,
+    facts: { urgent: false, watchdog: false, confidence: 'high', risk: 'low', scope: null },
+    ...overrides,
+  };
 }
 
 export function createShinsaState(parts: {

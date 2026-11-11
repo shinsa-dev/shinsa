@@ -19,17 +19,22 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckMark } from '@/components/status/check-mark.tsx';
 import {
+  AUTO_MERGE_DESCRIPTION,
   AUTO_MERGE_ITEMS,
   AUTOPILOT_BLOCKS,
   AUTOPILOT_ENABLED_ITEMS,
+  AUTOPILOT_ESCALATE_DESCRIPTION,
   AUTOPILOT_ESCALATE_ITEMS,
   AUTOPILOT_GATE_ITEMS,
   AUTOPILOT_GATE_ROWS,
+  AUTOPILOT_LEARNED_EMPTY,
+  AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
   AUTOPILOT_OFF,
   AUTOPILOT_ROWS,
   AUTOPILOT_TITLE,
   AUTOPILOT_TURN_ON,
+  AUTOPILOT_USAGE_DESCRIPTION,
   AUTOPILOT_USAGE_ITEMS,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
@@ -38,6 +43,7 @@ import {
   hasTeamProject,
   isAskWaiting,
   isSlackTestSent,
+  listAutopilotLearnedRows,
   listContactOptions,
   listSlackWorkspaceItems,
   resolveAutopilotValue,
@@ -54,8 +60,8 @@ import { sendSlackTests, useSlack, useSlackDirectory } from '@/lib/connection/sl
 import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { updateSettings } from '@/lib/settings.ts';
 import {
+  DescribedRow,
   SETTING_ROW,
-  SettingRow,
   SettingsBlock,
   SettingsEmpty,
   SettingsGroup,
@@ -244,6 +250,23 @@ function AskBlock({
   );
 }
 
+function LearnedBlock() {
+  const lessons = useShinsaSelector((state) => state.autopilotLessons);
+  const rows = listAutopilotLearnedRows({ autopilotLessons: lessons ?? [] });
+  return (
+    <SettingsBlock
+      header={<BlockHeader icon={AUTOPILOT_BLOCKS.learned.icon} title={AUTOPILOT_BLOCKS.learned.title} />}
+    >
+      {rows.length === 0 && <SettingsEmpty>{AUTOPILOT_LEARNED_EMPTY}</SettingsEmpty>}
+      {rows.map((row) => (
+        <DescribedRow key={row.gate} title={row.title} description={row.paused ?? row.detail}>
+          {row.paused && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>Paused</span>}
+        </DescribedRow>
+      ))}
+    </SettingsBlock>
+  );
+}
+
 export function AutopilotSettings({ settings }: { settings: Settings }) {
   const available = useEngineFeature('autopilot');
   const projects = useShinsaSelector((state) => state.projects);
@@ -284,16 +307,19 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
           <SettingsBlock
             header={<BlockHeader icon={AUTOPILOT_BLOCKS.acting.icon} title={AUTOPILOT_BLOCKS.acting.title} />}
           >
-            <SettingRow title={AUTOPILOT_ROWS.level}>
+            <DescribedRow
+              title={AUTOPILOT_ROWS.level}
+              description={AUTOPILOT_LEVEL_DESCRIPTION[policy.level]}
+            >
               <SelectField
                 label={AUTOPILOT_ROWS.level}
                 items={AUTOPILOT_LEVEL_ITEMS}
                 value={policy.level}
                 onValueChange={(level) => updateAutopilot({ level })}
               />
-            </SettingRow>
+            </DescribedRow>
             {AUTOPILOT_GATE_ROWS.map((row) => (
-              <SettingRow key={row.gate} title={row.title}>
+              <DescribedRow key={row.gate} title={row.title} description={row.description}>
                 <SelectField
                   label={row.title}
                   items={AUTOPILOT_GATE_ITEMS}
@@ -302,7 +328,7 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
                     updateAutopilot({ gates: toggleAutopilotGate(policy.gates, row.gate, value === 'on') })
                   }
                 />
-              </SettingRow>
+              </DescribedRow>
             ))}
           </SettingsBlock>
           <SettingsBlock
@@ -310,15 +336,19 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
               <BlockHeader icon={AUTOPILOT_BLOCKS.merging.icon} title={AUTOPILOT_BLOCKS.merging.title} />
             }
           >
-            <SettingRow title={AUTOPILOT_ROWS.autoMerge}>
+            <DescribedRow
+              title={AUTOPILOT_ROWS.autoMerge}
+              description={AUTO_MERGE_DESCRIPTION[policy.autoMerge]}
+            >
               <SelectField
                 label={AUTOPILOT_ROWS.autoMerge}
                 items={AUTO_MERGE_ITEMS}
                 value={policy.autoMerge}
                 onValueChange={(autoMerge) => updateAutopilot({ autoMerge })}
               />
-            </SettingRow>
-            <SettingRow
+            </DescribedRow>
+            <DescribedRow
+              description={AUTOPILOT_ESCALATE_DESCRIPTION[policy.escalate ? 'on' : 'off']}
               title={
                 <>
                   {AUTOPILOT_ROWS.escalate}
@@ -336,21 +366,25 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
                 value={policy.escalate ? 'on' : 'off'}
                 onValueChange={(value) => updateAutopilot({ escalate: value === 'on' })}
               />
-            </SettingRow>
-            <SettingRow title={AUTOPILOT_ROWS.usage}>
+            </DescribedRow>
+            <DescribedRow
+              title={AUTOPILOT_ROWS.usage}
+              description={AUTOPILOT_USAGE_DESCRIPTION[policy.ignoreUsageLimits ? 'on' : 'off']}
+            >
               <SelectField
                 label={AUTOPILOT_ROWS.usage}
                 items={AUTOPILOT_USAGE_ITEMS}
                 value={policy.ignoreUsageLimits ? 'on' : 'off'}
                 onValueChange={(value) => updateAutopilot({ ignoreUsageLimits: value === 'on' })}
               />
-            </SettingRow>
+            </DescribedRow>
           </SettingsBlock>
           <AskBlock
             contacts={policy.contacts}
             team={team}
             onContactsChange={(contacts) => updateAutopilot({ contacts })}
           />
+          <LearnedBlock />
         </>
       )}
     </SettingsGroup>

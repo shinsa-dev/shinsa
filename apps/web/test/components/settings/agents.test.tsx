@@ -4,7 +4,10 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
 import {
+  AUTO_MERGE_DESCRIPTION,
   AUTOPILOT_BLOCKS,
+  AUTOPILOT_LEARNED_EMPTY,
+  AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_OFF,
   AUTOPILOT_ROWS,
   AUTOPILOT_TURN_ON,
@@ -23,7 +26,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createProject, createShinsaState } from '../../support/state.ts';
+import { createLesson, createProject, createShinsaState } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -267,6 +270,8 @@ describe('Settings → Agents → Autopilot', () => {
     renderAgents(ESCALATING);
     await settle();
     expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.level }).textContent).toBe('Balanced');
+    expect(screen.getByText(AUTOPILOT_LEVEL_DESCRIPTION.balanced)).toBeTruthy();
+    expect(screen.getByText(AUTO_MERGE_DESCRIPTION.low_risk)).toBeTruthy();
     await choose(AUTOPILOT_ROWS.level, /^Most things/);
     await choose('Agent questions', 'Always ask me');
     await choose(AUTOPILOT_ROWS.autoMerge, 'Off, I merge');
@@ -278,6 +283,31 @@ describe('Settings → Agents → Autopilot', () => {
       },
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, autoMerge: 'off' } } },
     ]);
+  });
+
+  it('shows what it learned, or that it has learned nothing yet', async () => {
+    spyOnEngine();
+    const { unmount } = renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(AUTOPILOT_LEARNED_EMPTY)).toBeTruthy();
+    unmount();
+    pushState(
+      createShinsaState({
+        patch: {
+          autopilotLessons: [
+            createLesson({ id: 'a', answer: 'revised' }),
+            createLesson({ id: 'b', answer: 'rejected' }),
+          ],
+        },
+      })
+    );
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.queryByText(AUTOPILOT_LEARNED_EMPTY)).toBeNull();
+    expect(
+      screen.getByText('You changed its last few reviews, so it brings reviews to you for now.')
+    ).toBeTruthy();
+    expect(screen.getByText('Paused')).toBeTruthy();
   });
 
   it('warns when nobody can be asked, and stops warning once your team is never contacted', async () => {

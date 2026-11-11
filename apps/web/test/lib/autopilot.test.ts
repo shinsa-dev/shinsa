@@ -8,8 +8,12 @@ import {
   type SlackSnapshot,
 } from '@shinsa/core';
 import {
+  AUTO_MERGE_DESCRIPTION,
   AUTO_MERGE_ITEMS,
+  AUTOPILOT_GATE_ROWS,
+  AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
+  listAutopilotLearnedRows,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
   describeContactPickerEmpty,
@@ -34,7 +38,7 @@ import {
   resolveEscalationFact,
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
-import { createGate, createShinsaState, createTask, NOW } from '../support/state.ts';
+import { createGate, createLesson, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
@@ -233,6 +237,40 @@ describe('the Autopilot settings', () => {
     ]);
     expect(AUTOPILOT_LEVEL_ITEMS.every((item) => (item.hint ?? '').endsWith('.'))).toBe(true);
     expect(AUTO_MERGE_ITEMS.map((item) => item.value)).toEqual(['off', 'low_risk', 'approved']);
+  });
+
+  it('gives every level, gate and Auto merge choice one sentence on what happens', () => {
+    const sentences = [
+      ...Object.values(AUTOPILOT_LEVEL_DESCRIPTION),
+      ...AUTOPILOT_GATE_ROWS.map((row) => row.description),
+      ...Object.values(AUTO_MERGE_DESCRIPTION),
+    ];
+    for (const sentence of sentences) expect(sentence).toMatch(/^[A-Z][^.]*\.$/);
+  });
+
+  it('says what it learned per gate, and which gates it paused after your corrections', () => {
+    expect(listAutopilotLearnedRows({ autopilotLessons: [] })).toEqual([]);
+    const lessons = [
+      createLesson({ id: 'a', gate: 'plan', kind: 'acted', answer: 'approved' }),
+      createLesson({ id: 'b', gate: 'plan', kind: 'forwarded', answer: 'approved' }),
+      createLesson({ id: 'c', gate: 'plan', kind: 'forwarded', answer: 'revised' }),
+      createLesson({ id: 'd', gate: 'review', kind: 'acted', answer: 'revised' }),
+      createLesson({ id: 'e', gate: 'review', kind: 'acted', answer: 'rejected' }),
+    ];
+    expect(listAutopilotLearnedRows({ autopilotLessons: lessons })).toEqual([
+      {
+        gate: 'plan',
+        title: 'Plans',
+        detail: 'Did 1 for you: you kept 1. Brought you 2, you approved 1 as they were.',
+        paused: null,
+      },
+      {
+        gate: 'review',
+        title: 'Reviews',
+        detail: 'Did 2 for you: you kept 0, you changed 2.',
+        paused: 'You changed its last few reviews, so it brings reviews to you for now.',
+      },
+    ]);
   });
 
   it('adds or drops one gate and keeps the others', () => {

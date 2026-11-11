@@ -3,6 +3,7 @@ import {
   type AutopilotContactKind,
   type AutopilotDone,
   type AutopilotGateKind,
+  type AutopilotGateLessons,
   type AutopilotGate,
   type AutopilotLevel,
   type AutoMerge,
@@ -15,6 +16,7 @@ import {
   type AutopilotPolicy,
   type Project,
   type ReviewRating,
+  resolveAutopilotLessonSummary,
   resolveAutopilotPolicy,
   type Settings,
   type ShinsaState,
@@ -34,7 +36,7 @@ import { describeTeamTaskOwner, resolveTeamTaskPath, resolveTeamTaskTarget } fro
 export const AUTOPILOT_TITLE = 'Autopilot';
 
 export const AUTOPILOT_OFF =
-  'Approves and merges changes the reviewer is highly confident in. While it is off, every change waits for you.';
+  'Acts for you on the plans, questions, reviews and merges it is sure about, and brings you the rest. While it is off, everything waits for you.';
 
 export const AUTOPILOT_TURN_ON = 'Turn on';
 
@@ -64,10 +66,28 @@ export const AUTOPILOT_LEVEL_ITEMS: SettingItem<AutopilotLevel>[] = [
   },
 ];
 
-export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string }[] = [
-  { gate: 'plans', title: 'Plans' },
-  { gate: 'questions', title: 'Agent questions' },
-  { gate: 'reviews', title: 'Reviews' },
+export const AUTOPILOT_LEVEL_DESCRIPTION: Record<AutopilotLevel, string> = {
+  ask_first: 'Autopilot acts alone only on small, low-risk work and brings you everything else.',
+  balanced: 'Autopilot acts alone on clear, low-risk work, and on medium risk when it is urgent.',
+  most: 'Autopilot acts alone on most work, and on urgent work of any risk once you are away.',
+};
+
+export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string; description: string }[] = [
+  {
+    gate: 'plans',
+    title: 'Plans',
+    description: 'Approves a small, clear plan for you, so the agent starts building.',
+  },
+  {
+    gate: 'questions',
+    title: 'Agent questions',
+    description: 'Answers an agent’s question only when it is sure, otherwise the question waits for you.',
+  },
+  {
+    gate: 'reviews',
+    title: 'Reviews',
+    description: 'Approves a change the reviewer is highly confident in, so its pull request opens.',
+  },
 ];
 
 export const AUTOPILOT_GATE_ITEMS: SettingItem<'on' | 'off'>[] = [
@@ -86,6 +106,22 @@ export const AUTO_MERGE_ITEMS: SettingItem<AutoMerge>[] = [
   { value: 'approved', label: 'Every change it approved', icon: 'IconMerged' },
 ];
 
+export const AUTO_MERGE_DESCRIPTION: Record<AutoMerge, string> = {
+  off: 'You merge every pull request yourself, even ones Autopilot approved.',
+  low_risk: 'Merges a low-risk change for you once its pull request is clean.',
+  approved: 'Merges every change it approved once its pull request is clean.',
+};
+
+export const AUTOPILOT_ESCALATE_DESCRIPTION: Record<'on' | 'off', string> = {
+  on: 'Asks your team only when you are away and the change is urgent and high risk, never while you are active.',
+  off: 'Never asks your team; urgent work waits for you.',
+};
+
+export const AUTOPILOT_USAGE_DESCRIPTION: Record<'on' | 'off', string> = {
+  on: 'An urgent task you marked yourself keeps running past your usage and cost limits.',
+  off: 'Urgent tasks stop at your usage and cost limits like any other task.',
+};
+
 export const AUTOPILOT_ESCALATE_ITEMS: SettingItem<'on' | 'off'>[] = [
   {
     value: 'on',
@@ -100,7 +136,58 @@ export const AUTOPILOT_BLOCKS = {
   acting: { title: 'Acting for you', icon: 'IconShieldCheck' },
   merging: { title: 'Merging', icon: 'IconMerged' },
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
+  learned: { title: 'What it learned', icon: 'IconLightbulbGlow' },
 } as const;
+
+export const AUTOPILOT_LEARNED_EMPTY =
+  'Nothing yet. It learns each time you approve, change or reject what it did or brought to you.';
+
+const LEARNED_TITLE: Record<AutopilotGateKind, string> = {
+  plan: 'Plans',
+  question: 'Agent questions',
+  review: 'Reviews',
+  merge: 'Merges',
+};
+
+const LEARNED_PAUSED: Record<AutopilotGateKind, string> = {
+  plan: 'You changed its last few plans, so it brings plans to you for now.',
+  question: 'You changed its last few answers, so it brings questions to you for now.',
+  review: 'You changed its last few reviews, so it brings reviews to you for now.',
+  merge: 'You changed its last few merges, so it brings merges to you for now.',
+};
+
+export interface AutopilotLearnedRow {
+  gate: AutopilotGateKind;
+  title: string;
+  detail: string;
+  paused: string | null;
+}
+
+function describeLearned(lessons: AutopilotGateLessons) {
+  const parts = [];
+  if (lessons.acted > 0) {
+    const changed = lessons.corrected > 0 ? `, you changed ${lessons.corrected}` : '';
+    parts.push(`Did ${lessons.acted} for you: you kept ${lessons.kept}${changed}.`);
+  }
+  if (lessons.forwarded > 0) {
+    const could = lessons.couldHaveActed > 0 ? `, you approved ${lessons.couldHaveActed} as they were` : '';
+    parts.push(`Brought you ${lessons.forwarded}${could}.`);
+  }
+  return parts.join(' ');
+}
+
+export function listAutopilotLearnedRows(
+  state: Pick<ShinsaState, 'autopilotLessons'>
+): AutopilotLearnedRow[] {
+  return resolveAutopilotLessonSummary(state)
+    .gates.filter((lessons) => lessons.acted + lessons.forwarded > 0)
+    .map((lessons) => ({
+      gate: lessons.gate,
+      title: LEARNED_TITLE[lessons.gate],
+      detail: describeLearned(lessons),
+      paused: lessons.paused ? LEARNED_PAUSED[lessons.gate] : null,
+    }));
+}
 
 export const AUTOPILOT_ROWS = {
   level: 'On its own',
@@ -481,7 +568,7 @@ const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
 const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
   plan: { icon: 'IconChecklist', tone: 'purple' },
   question: { icon: 'IconBubbleCheck', tone: 'blue' },
-  review: { icon: 'IconCheckCircle2', tone: 'green' },
+  review: { icon: 'IconCheckCircle2', tone: 'blue' },
   merge: { icon: 'IconMerged', tone: 'green' },
 };
 
