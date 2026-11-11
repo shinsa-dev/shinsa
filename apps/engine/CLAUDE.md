@@ -627,7 +627,7 @@ src/
 │                        setup runs (commands/: SetupCommands on Shell, a simulated machine's under SHINSA_SIMULATE_MISSING,
 │                        simulate.ts), the prerequisite checks
 │                        (prerequisites/: Prerequisites in service.ts on SetupCommands, git, gh, claude, bun when a
-│                        repository uses it, Homebrew when a fix needs it, and codex and its sign-in as optional, each
+│                        repository uses it and Homebrew when a fix needs it (never Codex, which comes in only when you sign in to it), each
 │                        with the command that fixes it, the commands and labels in schema.ts, the pure lookups and
 │                        isBunUsed in catalog.ts; prerequisites.ts the re-exports;
 │                        install.ts: that command run in a terminal of your own), the setup steps: the fixed list, what each shows and saves

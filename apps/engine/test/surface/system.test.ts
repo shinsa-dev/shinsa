@@ -122,6 +122,7 @@ describe('accounts', () => {
       '/api/accounts/import': SNAPSHOT,
       '/api/accounts/update': SNAPSHOT,
       '/api/accounts/remove': createAccountsSnapshot({ accounts: [] }),
+      '/api/accounts/provider': SNAPSHOT,
     });
     await runSpec(fake, ['accounts', 'import', 'swap@example.com']);
     await runSpec(fake, [
@@ -138,6 +139,7 @@ describe('accounts', () => {
     await runSpec(fake, ['accounts', 'update', 'acc-1', '--switch-at', '90']);
     await runSpec(fake, ['accounts', 'update', 'acc-1', '--paused']);
     expect((await runSpec(fake, ['accounts', 'remove', 'me@example.com'])).text).toBe('No Claude accounts.');
+    await runSpec(fake, ['accounts', 'provider', 'codex', '--choice', 'removed']);
     expect(fake.posts).toEqual([
       { path: '/api/accounts/import', body: { origin: 'cswap', email: 'swap@example.com' } },
       {
@@ -147,6 +149,7 @@ describe('accounts', () => {
       { path: '/api/accounts/update', body: { accountId: 'acc-1', patch: { switchAt: 90 } } },
       { path: '/api/accounts/update', body: { accountId: 'acc-1', patch: { paused: true } } },
       { path: '/api/accounts/remove', body: { accountId: 'acc-1' } },
+      { path: '/api/accounts/provider', body: { provider: 'codex', choice: 'removed' } },
     ]);
   });
 });

@@ -9,6 +9,7 @@ import {
   type VersionsSnapshot,
 } from '@shinsa/core';
 import { DateTime, Effect } from 'effect';
+import { ProviderChoice } from '../config/machine/schema.ts';
 import { describeVersion, type ServerHealth } from '../instance/index.ts';
 import {
   type Display,
@@ -288,6 +289,34 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     act: Effect.fn('Surface.accountsRemove')(function* (client, values) {
       const account = yield* findAccount(client, readValue(values, 'account'));
       const data = yield* client.api.accounts.remove({ payload: { accountId: account.id } });
+      return { data, text: formatAccounts(data) };
+    }),
+  }),
+  defineAction({
+    path: ['accounts', 'provider'],
+    summary:
+      'Remove a provider such as Codex from Shinsa, or add it back. Its own sign-in is never signed out.',
+    humanOnly: true,
+    fields: [
+      {
+        name: 'provider',
+        kind: 'text',
+        positional: 'one',
+        required: true,
+        description: 'The provider, such as codex.',
+      },
+      {
+        name: 'choice',
+        kind: 'choice',
+        choices: ProviderChoice.literals,
+        required: true,
+        description: 'removed forgets it; added shows it again.',
+      },
+    ],
+    act: Effect.fn('Surface.accountsProvider')(function* (client, values) {
+      const data = yield* client.api.accounts.provider({
+        payload: { provider: readValue(values, 'provider'), choice: readValue(values, 'choice') },
+      });
       return { data, text: formatAccounts(data) };
     }),
   }),

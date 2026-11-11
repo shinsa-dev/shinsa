@@ -336,7 +336,11 @@ class AccountsGroup extends HttpApiGroup.make('accounts')
     HttpApiEndpoint.post('remove', '/api/accounts/remove', {
       payload: Schema.Struct({ accountId: Field }),
       success: AccountsAnswer,
-    })
+    }),
+    HttpApiEndpoint.post('provider', '/api/accounts/provider', {
+      payload: Schema.Struct({ provider: Field, choice: Field }),
+      success: AccountsAnswer,
+    }).annotate(EngineFeatureRoute, 'accounts.provider_choice')
   )
   .annotateEndpoints(OwnerOnlyRoute, true)
   .annotateEndpoints(SharedMemberRoute, true)
