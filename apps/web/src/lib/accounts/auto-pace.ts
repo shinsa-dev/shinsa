@@ -1,8 +1,8 @@
 import {
   ADMISSION_LIMITS,
   CLAUDE_PROVIDER,
-  DAY_MS,
   describeCount,
+  isResetEnding,
   type RecordedPace,
   resolveAdmissionRoom,
   resolveAutoPaceResets,
@@ -10,6 +10,7 @@ import {
 } from '@shinsa/core';
 import { Option } from 'effect';
 import { isAdmissionWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
+import { describeEndsIn } from '@/lib/accounts/usage.ts';
 
 export const AUTO_PACE_LABEL = {
   title: 'Auto pace',
@@ -19,7 +20,7 @@ export const AUTO_PACE_LABEL = {
   noPace: 'Auto pace waits for the first usage reading of these accounts.',
   resets: 'Count on usage resets',
   resetsHint:
-    'Lets urgent and high-priority builds run past the safe pace while you have a usable reset, and every build while one ends within 3 days. You still use the reset yourself in Claude.',
+    'Lets urgent and high-priority builds run past the safe pace while you have a usable reset, and every build on a reset that ends within 3 days. You still use the reset yourself in Claude.',
   resetsToggled: {
     on: 'Auto pace counts on usage resets.',
     off: 'Auto pace no longer counts on usage resets.',
@@ -48,16 +49,15 @@ function countWaitingBuilds(state: ShinsaState, provider: string) {
 
 const PACE_STEP = 0.5;
 
-function describeEndsIn(endsAt: number, now: number) {
-  const days = Math.floor((endsAt - now) / DAY_MS);
-  return days >= 1 ? `in ${describeCount(days, 'day')}` : 'within a day';
-}
-
 function describeResetPlan(state: ShinsaState, recorded: RecordedPace, now: number) {
   if (!resolveAutoPaceResets(state.settings) || recorded.resetPace - recorded.pace < PACE_STEP) return '';
   const { resetEndsAt } = recorded;
-  if (resetEndsAt !== null && resetEndsAt > now && resetEndsAt - now <= ADMISSION_LIMITS.resetEndingMs) {
-    return `. A usage reset ends ${describeEndsIn(resetEndsAt, now)}, so every build counts on you using it in Claude`;
+  if (
+    resetEndsAt !== null &&
+    isResetEnding(resetEndsAt, now) &&
+    recorded.endingPace - recorded.pace >= PACE_STEP
+  ) {
+    return `. A usage reset ends ${describeEndsIn(resetEndsAt, now)}, so every build may use up to ${formatShare(recorded.endingPace)}, counting on you using it in Claude`;
   }
   return `. Urgent and high-priority builds may use up to ${formatShare(recorded.resetPace)}, counting on you using a reset in Claude`;
 }

@@ -34,10 +34,16 @@ export const FORECAST_LIMITS = {
   paceScale: 10,
   weeklyClear: 'seven_day',
   paceStep: 1,
+  resetEndingMs: 3 * DAY_MS,
 } as const;
 
 export interface ForecastOptions {
   grants?: boolean;
+  endingOnly?: boolean;
+}
+
+export function isResetEnding(endsAt: number | null, now: number) {
+  return endsAt !== null && endsAt > now && endsAt - now <= FORECAST_LIMITS.resetEndingMs;
 }
 
 export function resolveGrantRefill(grant: UsageResetGrant) {
@@ -46,18 +52,24 @@ export function resolveGrantRefill(grant: UsageResetGrant) {
   return Math.min(FORECAST_LIMITS.fullPercent, Math.max(0, grant.weeklyShare ?? 0));
 }
 
-function listUsableGrants(usage: AccountUsage, now: number) {
+function listUsableGrants(usage: AccountUsage, now: number, options: ForecastOptions) {
   return (usage.resetGrants ?? []).filter(
     (grant) =>
       grant.usableNow &&
       grant.left > 0 &&
       resolveGrantRefill(grant) > 0 &&
-      (grant.endsAt === null || grant.endsAt > now)
+      (options.endingOnly ? isResetEnding(grant.endsAt, now) : grant.endsAt === null || grant.endsAt > now)
   );
 }
 
-function listGrantAccounts(id: string, label: string, usage: AccountUsage, now: number): ForecastAccount[] {
-  return listUsableGrants(usage, now).map((grant) => ({
+function listGrantAccounts(
+  id: string,
+  label: string,
+  usage: AccountUsage,
+  now: number,
+  options: ForecastOptions
+): ForecastAccount[] {
+  return listUsableGrants(usage, now, options).map((grant) => ({
     id: `${id}:${grant.id}`,
     label,
     left: grant.left * resolveGrantRefill(grant),
@@ -76,7 +88,9 @@ function listAccountBudgets(
 ) {
   const weekly = resolveForecastAccount(id, label, usage, spentUntil, now);
   if (Option.isNone(weekly)) return [];
-  return options.grants ? [weekly.value, ...listGrantAccounts(id, label, usage, now)] : [weekly.value];
+  return options.grants
+    ? [weekly.value, ...listGrantAccounts(id, label, usage, now, options)]
+    : [weekly.value];
 }
 
 interface Simulation {
@@ -171,13 +185,18 @@ export function isPaceMoved(known: number | null, pace: number | null) {
 export function isProviderPaceMoved(known: RecordedPace | undefined, next: Omit<ProviderPace, 'provider'>) {
   if (isPaceMoved(known?.pace ?? null, next.pace)) return true;
   if (!known || Option.isNone(resolveRecordablePace(next.pace))) return false;
-  return isPaceMoved(known.resetPace, next.resetPace ?? next.pace) || known.resetEndsAt !== next.resetEndsAt;
+  return (
+    isPaceMoved(known.resetPace, next.resetPace ?? next.pace) ||
+    isPaceMoved(known.endingPace, next.endingPace ?? next.pace) ||
+    known.resetEndsAt !== next.resetEndsAt
+  );
 }
 
 export interface ProviderPace {
   provider: string;
   pace: number | null;
   resetPace: number | null;
+  endingPace: number | null;
   resetEndsAt: number | null;
 }
 
@@ -196,12 +215,16 @@ export function listProviderPaces(snapshot: AccountsSnapshot, now: number): Prov
   return listForecastProviders(snapshot).map((provider) => {
     const plain = listProviderForecastAccounts(snapshot, provider, now);
     const withResets = listProviderForecastAccounts(snapshot, provider, now, { grants: true });
+    const withEnding = listProviderForecastAccounts(snapshot, provider, now, {
+      grants: true,
+      endingOnly: true,
+    });
     const pace = resolveProviderSafePace(plain, now);
-    const counted = withResets.length > plain.length;
     return {
       provider,
       pace,
-      resetPace: counted ? resolveProviderSafePace(withResets, now) : pace,
+      resetPace: withResets.length > plain.length ? resolveProviderSafePace(withResets, now) : pace,
+      endingPace: withEnding.length > plain.length ? resolveProviderSafePace(withEnding, now) : pace,
       resetEndsAt: resolveResetEndsAt(withResets),
     };
   });

@@ -96,6 +96,7 @@ type EventBody =
       provider: string;
       pace: number | null;
       resetPace: number | null;
+      endingPace: number | null;
       resetEndsAt: number | null;
     }
   | { type: 'settings.changed'; settings: Settings }

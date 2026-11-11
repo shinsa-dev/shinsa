@@ -585,7 +585,7 @@ describe('event log migrations', () => {
     expect(readVersion(path)).toBe(LOG_BASELINE + 9);
   });
 
-  test('reset-paces gives an older recorded pace the same pace with resets and no reset end, and keeps a cleared one', () => {
+  test('reset-paces gives an older recorded pace the same pace with resets and with ending resets, and keeps a cleared one', () => {
     const path = createLogPath();
     writeLog(path, LOG_BASELINE + 8);
     const db = new Database(path);
@@ -611,6 +611,7 @@ describe('event log migrations', () => {
         provider: 'claude',
         pace: 45,
         resetPace: 45,
+        endingPace: 45,
         resetEndsAt: null,
         seq: 2,
         at: 1,
@@ -620,6 +621,7 @@ describe('event log migrations', () => {
         provider: 'codex',
         pace: null,
         resetPace: null,
+        endingPace: null,
         resetEndsAt: null,
         seq: 3,
         at: 1,
@@ -629,6 +631,7 @@ describe('event log migrations', () => {
         provider: 'claude',
         pace: 40,
         resetPace: 90,
+        endingPace: 40,
         resetEndsAt: 7,
         seq: 4,
         at: 1,

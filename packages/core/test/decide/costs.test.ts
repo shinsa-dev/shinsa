@@ -775,13 +775,14 @@ describe('a project’s usage limit', () => {
 function recordPace(
   harness: Harness,
   pace: number | null,
-  resets: { resetPace?: number; resetEndsAt?: number | null } = {}
+  resets: { resetPace?: number; endingPace?: number; resetEndsAt?: number | null } = {}
 ) {
   harness.send({
     type: 'usage.pace_recorded',
     provider: 'claude',
     pace,
     resetPace: resets.resetPace ?? pace,
+    endingPace: resets.endingPace ?? pace,
     resetEndsAt: resets.resetEndsAt ?? null,
   });
 }
@@ -911,13 +912,24 @@ describe('Auto pace', () => {
     harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
     const low = plannedTask(harness, { priority: 'low' });
     const resetPace = paceFitting(harness, needOf(harness, low.taskId)) * 2;
-    recordPace(harness, 0.01, { resetPace, resetEndsAt: harness.now + 4 * DAY_MS });
+    recordPace(harness, 0.01, { resetPace, endingPace: resetPace, resetEndsAt: harness.now + 4 * DAY_MS });
     expect(isAdmissionHeld(harness, low.taskId)).toBe(true);
     expect(Option.getOrThrow(resolveAdmissionRoom(harness.state, 'claude', harness.now))).toBeLessThan(0);
     expect(
       Option.getOrThrow(resolveAdmissionRoom(harness.state, 'claude', harness.now, 'high'))
     ).toBeGreaterThan(0);
-    recordPace(harness, 0.01, { resetPace, resetEndsAt: harness.now + 2 * DAY_MS });
+    recordPace(harness, 0.01, { resetPace, endingPace: resetPace, resetEndsAt: harness.now + 2 * DAY_MS });
+    expect(isHeldStepStarted(harness, low.run.id)).toBe(true);
+  });
+
+  test('lets a normal or low build count only on the resets that end within three days, never on the others', () => {
+    const harness = autoPaced(0.01);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    const low = plannedTask(harness, { priority: 'low' });
+    const resetPace = paceFitting(harness, needOf(harness, low.taskId)) * 2;
+    recordPace(harness, 0.01, { resetPace, endingPace: 0.01, resetEndsAt: harness.now + 2 * DAY_MS });
+    expect(isAdmissionHeld(harness, low.taskId)).toBe(true);
+    recordPace(harness, 0.01, { resetPace, endingPace: resetPace, resetEndsAt: harness.now + 2 * DAY_MS });
     expect(isHeldStepStarted(harness, low.run.id)).toBe(true);
   });
 

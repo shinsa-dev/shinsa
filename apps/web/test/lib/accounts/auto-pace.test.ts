@@ -30,8 +30,15 @@ describe('Auto pace in Settings', () => {
       ],
       patch: {
         usagePaces: {
-          codex: { provider: 'codex', pace: 50, resetPace: 50, resetEndsAt: null, at: NOW },
-          claude: { provider: 'claude', pace: 140, resetPace: 140, resetEndsAt: null, at: NOW },
+          codex: { provider: 'codex', pace: 50, resetPace: 50, endingPace: 50, resetEndsAt: null, at: NOW },
+          claude: {
+            provider: 'claude',
+            pace: 140,
+            resetPace: 140,
+            endingPace: 140,
+            resetEndsAt: null,
+            at: NOW,
+          },
         },
       },
     });
@@ -50,7 +57,9 @@ describe('Auto pace in Settings', () => {
     expect(selectPaceBudget(state, 'gemini', NOW)).toBeNull();
     const idle = createShinsaState({
       patch: {
-        usagePaces: { claude: { provider: 'claude', pace: 2, resetPace: 2, resetEndsAt: null, at: NOW } },
+        usagePaces: {
+          claude: { provider: 'claude', pace: 2, resetPace: 2, endingPace: 2, resetEndsAt: null, at: NOW },
+        },
       },
     });
     expect(selectPaceBudget(idle, 'claude', NOW)?.detail).toBe(
@@ -59,8 +68,8 @@ describe('Auto pace in Settings', () => {
   });
 
   it('says builds count on you using a reset only while the resets setting is on', () => {
-    const paces = (resetEndsAt: number | null) => ({
-      claude: { provider: 'claude', pace: 100, resetPace: 160, resetEndsAt, at: NOW },
+    const paces = (resetEndsAt: number | null, endingPace = 130) => ({
+      claude: { provider: 'claude', pace: 100, resetPace: 160, endingPace, resetEndsAt, at: NOW },
     });
     const off = createShinsaState({ patch: { usagePaces: paces(null) } });
     expect(selectPaceBudget(off, 'claude', NOW)?.detail).toBe(
@@ -74,15 +83,27 @@ describe('Auto pace in Settings', () => {
     const ending = createShinsaState({ patch: { usagePaces: paces(NOW + 2 * DAY_MS + HOUR_MS) } });
     ending.settings = { ...ending.settings, autoPaceResets: true };
     expect(selectPaceBudget(ending, 'claude', NOW)?.detail).toBe(
-      'Of 100% of a weekly limit, with 10% kept for urgent tasks. A usage reset ends in 2 days, so every build counts on you using it in Claude'
+      'Of 100% of a weekly limit, with 10% kept for urgent tasks. A usage reset ends in 2 days, so every build may use up to 130%, counting on you using it in Claude'
     );
     const today = createShinsaState({ patch: { usagePaces: paces(NOW + 5 * HOUR_MS) } });
     today.settings = { ...today.settings, autoPaceResets: true };
-    expect(selectPaceBudget(today, 'claude', NOW)?.detail).toContain('A usage reset ends within a day');
+    expect(selectPaceBudget(today, 'claude', NOW)?.detail).toContain('A usage reset ends in 5h');
+    const worthless = createShinsaState({ patch: { usagePaces: paces(NOW + 2 * DAY_MS, 100) } });
+    worthless.settings = { ...worthless.settings, autoPaceResets: true };
+    expect(selectPaceBudget(worthless, 'claude', NOW)?.detail).toContain(
+      'Urgent and high-priority builds may use up to 160%'
+    );
     const same = createShinsaState({
       patch: {
         usagePaces: {
-          claude: { provider: 'claude', pace: 100, resetPace: 100.2, resetEndsAt: null, at: NOW },
+          claude: {
+            provider: 'claude',
+            pace: 100,
+            resetPace: 100.2,
+            endingPace: 100,
+            resetEndsAt: null,
+            at: NOW,
+          },
         },
       },
     });

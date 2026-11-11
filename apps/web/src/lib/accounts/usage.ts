@@ -1,11 +1,11 @@
 import {
   type AccountSummary,
   type AccountsSnapshot,
-  ADMISSION_LIMITS,
   type AccountUsage,
   CLAUDE_PROVIDER,
   DAY_MS,
   describeCount,
+  isResetEnding,
   listRelevantWindows,
   MINUTE_MS,
   type ProviderLogin,
@@ -300,16 +300,10 @@ function describeCleared(clears: string[]) {
 }
 
 function isGrantEnding(grant: UsageResetGrant, now: number) {
-  return (
-    grant.usableNow &&
-    grant.left > 0 &&
-    grant.endsAt !== null &&
-    grant.endsAt > now &&
-    grant.endsAt - now <= ADMISSION_LIMITS.resetEndingMs
-  );
+  return grant.usableNow && grant.left > 0 && isResetEnding(grant.endsAt, now);
 }
 
-function describeEndsIn(endsAt: number, now: number) {
+export function describeEndsIn(endsAt: number, now: number) {
   const days = Math.floor((endsAt - now) / DAY_MS);
   if (days >= 1) return `in ${describeCount(days, 'day')}`;
   return `in ${formatDuration(Math.max(MINUTE_MS, endsAt - now))}`;

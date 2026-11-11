@@ -286,10 +286,10 @@ export class Accounts extends Context.Service<
         const moved = listProviderPaces(next, now).filter((paces) =>
           isProviderPaceMoved(state.usagePaces[paces.provider], paces)
         );
-        for (const { provider, pace, resetPace, resetEndsAt } of moved) {
+        for (const { provider, pace, resetPace, endingPace, resetEndsAt } of moved) {
           yield* dispatch(
-            { type: 'usage.pace_recorded', provider, pace, resetPace, resetEndsAt },
-            `usage-pace:${provider}:${pace ?? 'none'}:${resetPace ?? 'none'}:${resetEndsAt ?? 'none'}:${state.seq}`
+            { type: 'usage.pace_recorded', provider, pace, resetPace, endingPace, resetEndsAt },
+            `usage-pace:${provider}:${pace ?? 'none'}:${resetPace ?? 'none'}:${endingPace ?? 'none'}:${resetEndsAt ?? 'none'}:${state.seq}`
           ).pipe(
             Effect.catch((failure) =>
               Effect.logWarning('[Accounts] Could not record the safe usage pace').pipe(

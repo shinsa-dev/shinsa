@@ -322,6 +322,7 @@ type SystemCommand =
       provider: string;
       pace: number | null;
       resetPace: number | null;
+      endingPace: number | null;
       resetEndsAt: number | null;
     }
   | { type: 'onboarding.welcome'; body: string }

@@ -86,7 +86,16 @@ describe('Auto pace settings', () => {
     await settle();
     renderForecast(
       { autoPace: true },
-      { claude: { provider: 'claude', pace: 140, resetPace: 140, resetEndsAt: null, at: Date.now() } }
+      {
+        claude: {
+          provider: 'claude',
+          pace: 140,
+          resetPace: 140,
+          endingPace: 140,
+          resetEndsAt: null,
+          at: Date.now(),
+        },
+      }
     );
     expect(screen.getByText(/^Starts each build only when it fits your usage/)).toBeTruthy();
     expect(screen.getByText('Left for Claude builds in the next 24 hours')).toBeTruthy();
@@ -112,7 +121,16 @@ describe('Auto pace settings', () => {
     await settle();
     renderForecast(
       { autoPace: true, autoPaceResets: true },
-      { claude: { provider: 'claude', pace: 100, resetPace: 160, resetEndsAt: null, at: Date.now() } }
+      {
+        claude: {
+          provider: 'claude',
+          pace: 100,
+          resetPace: 160,
+          endingPace: 100,
+          resetEndsAt: null,
+          at: Date.now(),
+        },
+      }
     );
     expect(screen.getByRole('switch', { name: 'Count on usage resets' }).getAttribute('aria-checked')).toBe(
       'true'
@@ -151,7 +169,16 @@ describe('Auto pace settings', () => {
     await settle();
     renderForecast(
       { autoPace: true },
-      { claude: { provider: 'claude', pace: 140, resetPace: 140, resetEndsAt: null, at: Date.now() } }
+      {
+        claude: {
+          provider: 'claude',
+          pace: 140,
+          resetPace: 140,
+          endingPace: 140,
+          resetEndsAt: null,
+          at: Date.now(),
+        },
+      }
     );
     expect(screen.getByText('Forecast')).toBeTruthy();
     expect(screen.queryByRole('switch', { name: 'Auto pace' })).toBeNull();

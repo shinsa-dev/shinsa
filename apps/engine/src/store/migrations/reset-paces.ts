@@ -9,9 +9,10 @@ export const RESET_PACES: LogMigration = {
     yield* sql`UPDATE events
       SET payload = json_set(
         payload,
-        '$.resetPace', json_extract(payload, '$.pace'),
-        '$.resetEndsAt', json('null')
+        '$.resetPace', coalesce(json_extract(payload, '$.resetPace'), json_extract(payload, '$.pace')),
+        '$.endingPace', json_extract(payload, '$.pace'),
+        '$.resetEndsAt', json_extract(payload, '$.resetEndsAt')
       )
-      WHERE type = 'usage.pace_recorded' AND json_type(payload, '$.resetPace') IS NULL`;
+      WHERE type = 'usage.pace_recorded' AND json_type(payload, '$.endingPace') IS NULL`;
   }),
 };

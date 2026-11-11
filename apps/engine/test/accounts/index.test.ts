@@ -650,6 +650,7 @@ describe('recording the safe usage pace', () => {
         provider: 'claude',
         pace: pace ?? 0,
         resetPace: recorded?.type === 'usage.pace_recorded' ? (recorded.resetPace ?? 0) : 0,
+        endingPace: recorded?.type === 'usage.pace_recorded' ? (recorded.endingPace ?? 0) : 0,
         resetEndsAt: null,
         at: 1,
       };

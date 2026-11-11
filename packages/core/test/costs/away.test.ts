@@ -89,6 +89,7 @@ function nightHarness(options: { autoPace?: boolean; pace?: number | null } = {}
       provider: 'claude',
       pace: options.pace ?? 50,
       resetPace: options.pace ?? 50,
+      endingPace: options.pace ?? 50,
       resetEndsAt: null,
     });
   }

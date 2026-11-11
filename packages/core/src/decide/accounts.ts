@@ -263,6 +263,7 @@ export function recordUsagePace(decider: Decider, command: CommandOf<'usage.pace
     provider: command.provider,
     pace,
     resetPace: pace === null ? null : (Option.getOrNull(resolveRecordablePace(command.resetPace)) ?? pace),
+    endingPace: pace === null ? null : (Option.getOrNull(resolveRecordablePace(command.endingPace)) ?? pace),
     resetEndsAt: pace === null ? null : command.resetEndsAt,
   });
 }

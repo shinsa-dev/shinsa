@@ -12,6 +12,7 @@ import {
 } from '../domain/index.ts';
 import { isOfCurrentRound } from '../domain/rounds.ts';
 import { resolveAutoPaceResets } from '../domain/settings.ts';
+import { isResetEnding } from '../forecast/index.ts';
 import { resolveFocusProjects } from '../queue/rank.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveBuildEstimate } from './estimate.ts';
@@ -20,7 +21,6 @@ import { resolveRecentUsage, resolveRecentUsageFreesAt } from './window.ts';
 export const ADMISSION_LIMITS = {
   reserve: 0.1,
   recheckMs: 30 * MINUTE_MS,
-  resetEndingMs: 3 * DAY_MS,
 } as const;
 
 const RESET_PRIORITIES: ReadonlySet<TaskPriority> = new Set(['urgent', 'high']);
@@ -151,11 +151,6 @@ function resolveCommitted(state: ShinsaState, provider: string, skip: string | n
   return committed;
 }
 
-function isResetEnding(state: ShinsaState, provider: string, now: number) {
-  const endsAt = state.usagePaces[provider]?.resetEndsAt ?? null;
-  return endsAt !== null && endsAt > now && endsAt - now <= ADMISSION_LIMITS.resetEndingMs;
-}
-
 function resolveAdmissionPace(
   state: ShinsaState,
   provider: string,
@@ -164,8 +159,9 @@ function resolveAdmissionPace(
 ): Option.Option<number> {
   return Option.map(Option.fromNullishOr(state.usagePaces[provider]), (recorded) => {
     if (!resolveAutoPaceResets(state.settings)) return recorded.pace;
-    const counts = RESET_PRIORITIES.has(priority) || isResetEnding(state, provider, now);
-    return counts ? Math.max(recorded.pace, recorded.resetPace) : recorded.pace;
+    if (RESET_PRIORITIES.has(priority)) return Math.max(recorded.pace, recorded.resetPace);
+    if (isResetEnding(recorded.resetEndsAt, now)) return Math.max(recorded.pace, recorded.endingPace);
+    return recorded.pace;
   });
 }
 

@@ -35,6 +35,7 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
     provider: 'claude',
     pace: 45,
     resetPace: 72,
+    endingPace: 58,
     resetEndsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
   });
   for (const task of tasks) pushTask(task, push);

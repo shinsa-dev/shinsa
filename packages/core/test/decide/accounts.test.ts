@@ -780,13 +780,14 @@ describe('recording the safe pace of each provider', () => {
     harness: Harness,
     pace: number | null,
     provider = 'claude',
-    resets: { resetPace?: number | null; resetEndsAt?: number | null } = {}
+    resets: { resetPace?: number | null; endingPace?: number | null; resetEndsAt?: number | null } = {}
   ) {
     return harness.send({
       type: 'usage.pace_recorded',
       provider,
       pace,
       resetPace: resets.resetPace ?? pace,
+      endingPace: resets.endingPace ?? pace,
       resetEndsAt: resets.resetEndsAt ?? null,
     });
   }
@@ -800,8 +801,15 @@ describe('recording the safe pace of each provider', () => {
     expect(harness.state.usagePaces.claude?.resetPace).toBe(120);
     recordPace(harness, 40, 'claude', { resetPace: 120, resetEndsAt: 9_000 });
     expect(harness.state.usagePaces.claude?.resetEndsAt).toBe(9_000);
-    recordPace(harness, 60, 'claude', { resetPace: Number.NaN });
-    expect(harness.state.usagePaces.claude).toMatchObject({ pace: 60, resetPace: 60, resetEndsAt: null });
+    recordPace(harness, 40, 'claude', { resetPace: 120, endingPace: 70, resetEndsAt: 9_000 });
+    expect(harness.state.usagePaces.claude?.endingPace).toBe(70);
+    recordPace(harness, 60, 'claude', { resetPace: Number.NaN, endingPace: Number.NaN });
+    expect(harness.state.usagePaces.claude).toMatchObject({
+      pace: 60,
+      resetPace: 60,
+      endingPace: 60,
+      resetEndsAt: null,
+    });
   });
 
   test('records a provider’s pace, and again only once it moves by a whole point', () => {

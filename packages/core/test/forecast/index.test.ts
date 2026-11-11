@@ -5,7 +5,9 @@ import {
   type AccountUsage,
   type ForecastAccount,
   FORECAST_LIMITS,
+  DAY_MS,
   HOUR_MS,
+  isResetEnding,
   type AccountsSnapshot,
   listForecastAccounts,
   listForecastProviders,
@@ -404,19 +406,50 @@ describe('the forecast of each provider in a snapshot', () => {
 
   test('gives each provider its safe pace without and with usable resets, and when the soonest reset ends', () => {
     const out = weekly(100, NOW + 144 * HOUR_MS);
-    const endsAt = NOW + 72 * HOUR_MS;
+    const endsAt = NOW + 96 * HOUR_MS;
     const resets = [grant({ endsAt }), grant({ id: 'open' })];
     const [claude] = listProviderPaces(
       snapshot({ accounts: [summary({ usage: { ...out, resetGrants: resets } })] }),
       NOW
     );
     const [plain] = listProviderPaces(snapshot({ accounts: [summary({ usage: out })] }), NOW);
-    expect(plain).toEqual({ provider: 'claude', pace: 0, resetPace: 0, resetEndsAt: null });
+    expect(plain).toEqual({ provider: 'claude', pace: 0, resetPace: 0, endingPace: 0, resetEndsAt: null });
     expect(claude?.pace).toBe(0);
     expect(claude?.resetPace ?? 0).toBeGreaterThan(10);
+    expect(claude?.endingPace).toBe(0);
     expect(claude?.resetEndsAt).toBe(endsAt);
     expect(listProviderPaces(snapshot({}), NOW)).toEqual([
-      { provider: 'claude', pace: null, resetPace: null, resetEndsAt: null },
+      { provider: 'claude', pace: null, resetPace: null, endingPace: null, resetEndsAt: null },
     ]);
+  });
+
+  test('counts only the resets that end within three days in the ending pace', () => {
+    const out = weekly(90, NOW + 144 * HOUR_MS);
+    const soon = grant({
+      id: 'soon',
+      endsAt: NOW + 48 * HOUR_MS,
+      clears: [],
+      givesBackWeekly: true,
+      weeklyShare: 5,
+    });
+    const later = grant({ id: 'later', endsAt: NOW + 100 * DAY_MS });
+    const [claude] = listProviderPaces(
+      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [soon, later] } })] }),
+      NOW
+    );
+    const [onlySoon] = listProviderPaces(
+      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [soon] } })] }),
+      NOW
+    );
+    expect(claude?.endingPace ?? 0).toBeGreaterThan(claude?.pace ?? Number.POSITIVE_INFINITY);
+    expect(claude?.endingPace).toBe(onlySoon?.resetPace ?? Number.NaN);
+    expect(claude?.resetPace ?? 0).toBeGreaterThan(claude?.endingPace ?? 0);
+  });
+
+  test('tells a reset that ends within three days from one that ended or ends later', () => {
+    expect(isResetEnding(NOW + 2 * DAY_MS, NOW)).toBe(true);
+    expect(isResetEnding(NOW + 4 * DAY_MS, NOW)).toBe(false);
+    expect(isResetEnding(NOW - 1, NOW)).toBe(false);
+    expect(isResetEnding(null, NOW)).toBe(false);
   });
 });

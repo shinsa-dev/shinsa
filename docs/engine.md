@@ -2272,10 +2272,11 @@ checks it ran.
 - **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
   readings are, so the engine's account roster works out two safe paces for each provider on every accounts refresh
   (`listProviderPaces`): `pace`, the forecast without usage resets, and `resetPace`, the forecast with each usable
-  reset as a budget of its own (The usage forecast, below), with `resetEndsAt`, when the soonest of those resets ends.
-  It records them when either pace moved by a whole point (`isProviderPaceMoved`, `isPaceMoved`,
+  reset as a budget of its own (The usage forecast, below), `endingPace`, the same with only the resets that end within
+  3 days (`isResetEnding`, `FORECAST_LIMITS.resetEndingMs`), and `resetEndsAt`, when the soonest of those resets ends.
+  It records them when any pace moved by a whole point (`isProviderPaceMoved`, `isPaceMoved`,
   `FORECAST_LIMITS.paceStep`), `resetEndsAt` changed, or the pace appeared or went away. A log migration
-  (`reset-paces.ts`) gave older records `resetPace` equal to their pace and `resetEndsAt` null. Settings' own forecast
+  (`reset-paces.ts`) gave older records `resetPace` and `endingPace` equal to their pace and `resetEndsAt` null. Settings' own forecast
   still leaves resets out, since you use them in the Claude app.
 - **Auto pace** (`autoPace`, off by default, only yours, in
   `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
@@ -2289,11 +2290,11 @@ checks it ran.
     estimated rest of every build already started (`resolveAdmission`). The safe pace is `pace`, without resets,
     unless you switched on **Count on usage resets** (`autoPaceResets`, off by default, only yours, in
     `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace_resets`): then an urgent or high build
-    uses `resetPace`, and every build does while a usable reset ends within 3 days (`ADMISSION_LIMITS.resetEndingMs`),
-    so a reset is not left to end unused (`resolveAdmissionPace`). Normal and low builds otherwise never count on a
-    reset. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Agent usage → Auto pace
+    uses `resetPace`, and while a usable reset ends within 3 days a normal or low build uses `endingPace`, which counts
+    only those ending resets, so none is left to end unused (`resolveAdmissionPace`). Normal and low builds never count
+    on a reset that ends later. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Agent usage → Auto pace
     says so under the provider's budget ("Urgent and high-priority builds may use up to 160%, counting on you using a
-    reset in Claude", or "A usage reset ends in 2 days, so every build counts on you using it in Claude"). A build fits when its estimate does; one
+    reset in Claude", or "A usage reset ends in 2 days, so every build may use up to 130%, counting on you using it in Claude"). A build fits when its estimate does; one
     larger than the whole budget counts as the budget, so it starts once nothing else is using it.
   - **The queue** (`sortAdmissionQueue`), with nothing to set: task priority (urgent first), then the focus project,
     then the projects you act on most, learned as the median time from a gate opening to your answer over the last 14
