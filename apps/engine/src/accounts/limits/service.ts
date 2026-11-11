@@ -17,9 +17,11 @@ import {
 import { resolveWindowId } from '../usage/answer.ts';
 import { resolveReadUsage } from './read.ts';
 import {
+  ACCOUNT_READS_FILE,
   ACCOUNT_USAGE_FILE,
   NO_PROVIDER_WINDOWS,
   NO_WINDOWS,
+  PROVIDER_READS_FILE,
   PROVIDER_USAGE_FILE,
   type RateLimitNotice,
   type UsageTable,
@@ -47,6 +49,7 @@ export class UsageLimits extends Context.Service<
 
       const makeTable = Effect.fn('UsageLimits.makeTable')(function* (table: {
         readonly path: string;
+        readonly readsPath: string;
         readonly read: (id: string) => Effect.Effect<UsageRead, AccountStepFailed>;
         readonly windows: Record<string, KeyedWindow>;
         readonly emptyDetail: string;
@@ -55,7 +58,7 @@ export class UsageLimits extends Context.Service<
           yield* registry.readUsage(table.path)
         );
         const lastRead = yield* Ref.make<ReadonlyMap<string, AccountUsage>>(
-          new Map([...(yield* Ref.get(entries))].filter(([, usage]) => usage.source !== 'push'))
+          yield* registry.readUsage(table.readsPath)
         );
         const reading = yield* Ref.make<ReadonlyMap<string, Deferred.Deferred<void>>>(new Map());
 
@@ -72,6 +75,12 @@ export class UsageLimits extends Context.Service<
           yield* changes.notify;
         });
 
+        const keepRead = Effect.fn('UsageLimits.keepRead')(function* (
+          update: (all: ReadonlyMap<string, AccountUsage>) => ReadonlyMap<string, AccountUsage>
+        ) {
+          yield* registry.keepUsage(table.readsPath, yield* Ref.updateAndGet(lastRead, update));
+        });
+
         const store = Effect.fn('UsageLimits.store')(function* (id: string, usage: AccountUsage) {
           yield* Ref.update(entries, (all) => new Map(all).set(id, usage));
           yield* persist;
@@ -84,12 +93,13 @@ export class UsageLimits extends Context.Service<
             rest.delete(id);
             return [true, rest];
           });
-          yield* Ref.update(lastRead, (all) => {
+          if (!removed) return;
+          yield* keepRead((all) => {
             const rest = new Map(all);
             rest.delete(id);
             return rest;
           });
-          if (removed) yield* persist;
+          yield* persist;
         });
 
         const isFresh = Effect.fn('UsageLimits.isFresh')(function* (id: string) {
@@ -116,7 +126,7 @@ export class UsageLimits extends Context.Service<
           const now = yield* Clock.currentTimeMillis;
           if (result.ok) {
             const fresh = resolveReadUsage(result, previous, now, table.emptyDetail);
-            yield* Ref.update(lastRead, (all) => new Map(all).set(id, fresh));
+            yield* keepRead((all) => new Map(all).set(id, fresh));
             return yield* store(id, fresh);
           }
           yield* store(id, {
@@ -187,12 +197,14 @@ export class UsageLimits extends Context.Service<
 
       const claude = yield* makeTable({
         path: join(dataDir, ACCOUNT_USAGE_FILE),
+        readsPath: join(dataDir, ACCOUNT_READS_FILE),
         read: readings.readAccount,
         windows: KEYED_WINDOWS,
         emptyDetail: NO_WINDOWS,
       });
       const providers = yield* makeTable({
         path: join(dataDir, PROVIDER_USAGE_FILE),
+        readsPath: join(dataDir, PROVIDER_READS_FILE),
         read: readings.readProvider,
         windows: PROVIDER_WINDOWS,
         emptyDetail: NO_PROVIDER_WINDOWS,

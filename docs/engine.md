@@ -6964,7 +6964,9 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too). A mark
   is for the whole account or for one model family: Claude reports a cap on one model (Fable's weekly limit) with the
   same `seven_day` type as the all-models one, so on a usage rejection the rotation reads the account's usage again
-  at once and asks core's `resolveLimitScope`: with a fresh reading where neither the 5-hour nor the all-models weekly
+  at once and asks core's `resolveLimitScope` with the last reading a read returned (`UsageTable.measured`, never
+  a pushed notice, which puts the weekly window at 100% on any rejection; kept in `data/usage-reads.json` and
+  `data/provider-usage-reads.json` so a restart keeps it): with a fresh reading where neither the 5-hour nor the all-models weekly
   window is at 100% and the run's model has a window of its own at least as full as both, it is a model limit
   (`limitScope: 'model'` with the run's `model` on the `RunFailure`); Claude's own `seven_day_opus` and
   `seven_day_sonnet` types are model limits without the read. A model mark only counts for runs on that family
@@ -7138,7 +7140,7 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
-- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
+- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `usage-reads.json`, `provider-usage.json` and
   `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
   that breaks it is dropped, a broken `accounts.json` is kept aside, and a cache or a mark that cannot be written is
   logged. `AccountFolders` makes and removes each account's `CLAUDE_CONFIG_DIR`: the folder, its seeded `.claude.json`,
@@ -7273,6 +7275,7 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── terminals/     Your terminals (`terminals.json`), each one's last screen (`<id>.screen`), so a restarted
     │                  engine shows how each ended, and your services (`services.json`, mode 600; Terminals, above)
     ├── usage-limits.json  The last usage reading per account
+    ├── usage-reads.json   The last reading a usage read returned per account, without pushed notices
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
