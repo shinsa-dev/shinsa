@@ -7,7 +7,6 @@ import {
   parseSlackChannelMessage,
   parseSlackDecision,
   parseSlackEvaluation,
-  parseSlackFilter,
   parseSlackMention,
   resolveSlackConnectUrl,
   resolveSlackPostMessage,
@@ -22,9 +21,6 @@ import {
   SLACK_ENGINE_MESSAGES_PATH,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
-  SLACK_FILTER_SCHEMA,
-  SLACK_FILTER_SKIPPED,
-  SLACK_FILTER_SYSTEM,
   SLACK_FORWARD_HEADERS,
   SLACK_LIMITS,
   SLACK_NOT_CONNECTED,
@@ -43,10 +39,11 @@ import {
   serializeSlackChannelDelivery,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
-  serializeSlackFilterPrompt,
   serializeSlackNoAccess,
   verifySlackForwardSignature,
   type SlackLink,
+  resolveSlackFilterSubject,
+  SCHEDULE_FILTER_SKIPPED,
 } from '@shinsa/core';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
 import {
@@ -67,6 +64,7 @@ import { describeError } from '../log/redact.ts';
 import { RELAY_FAILED_CODE } from '../remote/client/schema.ts';
 import { RemoteClient } from '../remote/client/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
+import { ScheduleFilter } from '../schedules/filter/service.ts';
 import { resolvePromptProblem } from '../schedules/prompt.ts';
 import { FRAME_ID_BYTES, RATE_WINDOW_MS, WEBHOOK_RATE_LIMIT_PER_MINUTE } from '../schedules/schema.ts';
 import {
@@ -126,6 +124,7 @@ export class Slack extends Context.Service<
       Effect.gen(function* () {
         const engine = yield* EngineCore;
         const quick = yield* QuickCalls;
+        const filter = yield* ScheduleFilter;
         const relay = (yield* RemoteClient).slack;
         const statusInterval = yield* SlackStatusInterval;
         const token = (machineToken: string) => Redacted.make(machineToken);
@@ -293,18 +292,13 @@ export class Slack extends Context.Service<
           );
           const problem = resolvePromptProblem(prompt);
           if (problem) return yield* fail(problem);
-          const said = yield* quick.classify<unknown>(
-            SLACK_FILTER_SYSTEM,
-            serializeSlackFilterPrompt(schedule.text, message, randomBytes(FRAME_ID_BYTES).toString('hex')),
-            SLACK_FILTER_SCHEMA
-          );
-          if (Option.contains(parseSlackFilter(said), 'skip')) {
+          if (!(yield* filter.applies(schedule, resolveSlackFilterSubject(message)))) {
             yield* dispatch(
               {
                 type: 'schedule.skip',
                 scheduleId: schedule.id,
                 deliveryId: message.eventId,
-                detail: SLACK_FILTER_SKIPPED,
+                detail: SCHEDULE_FILTER_SKIPPED,
                 replayKey,
               },
               `${id}:skip`

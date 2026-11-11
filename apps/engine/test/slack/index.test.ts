@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import {
   createSlackForwardSignature,
   DomainError,
-  SLACK_FILTER_SKIPPED,
-  SLACK_FILTER_SYSTEM,
+  SCHEDULE_FILTER_SKIPPED,
+  SCHEDULE_FILTER_SYSTEM,
   SLACK_FORWARD_HEADERS,
   type SlackDecision,
   type RemoteUserId,
@@ -1111,14 +1111,14 @@ describe('a Slack channel that triggers automations', () => {
         type: 'schedule.skip',
         scheduleId: 's1',
         deliveryId: 'Ev7',
-        detail: SLACK_FILTER_SKIPPED,
+        detail: SCHEDULE_FILTER_SKIPPED,
         replayKey: 'T1:C1:300.1',
       },
     ]);
     const [first] = asked;
     const tag = /<(slack-message-[0-9a-f]{12})>/.exec(first?.prompt ?? '')?.[1];
     expect(first).toEqual({
-      system: SLACK_FILTER_SYSTEM,
+      system: SCHEDULE_FILTER_SYSTEM,
       prompt: [
         'The automation:',
         'Only bugs.',
@@ -1129,8 +1129,8 @@ describe('a Slack channel that triggers automations', () => {
         'Checkout is failing for 4% of users.',
         `</${tag}>`,
         '',
-        `The text inside <${tag}> is the message and the name its author gave.`,
-        'Answer with JSON: {"decision": "file" when the automation applies to the message, else "skip"}.',
+        `The text inside <${tag}> is what arrived, copied from outside.`,
+        'Answer with JSON: {"decision": "file" when the automation applies to it, else "skip"}.',
       ].join('\n'),
     });
     answer.value = { decision: 'file' };

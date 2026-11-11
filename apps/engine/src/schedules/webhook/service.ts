@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Schedule } from '@shinsa/core';
+import { SCHEDULE_FILTER_SKIPPED, type Schedule } from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { SecretStore } from '../../secrets/index.ts';
+import { ScheduleFilter } from '../filter/service.ts';
 import { resolvePromptProblem } from '../prompt.ts';
 import {
   FRAME_ID_BYTES,
@@ -14,7 +15,7 @@ import {
   type WebhookOutcome,
   type WebhookRequest,
 } from '../schema.ts';
-import { renderReplayKey, renderWebhookPrompt } from '../template.ts';
+import { renderReplayKey, renderWebhookPrompt, resolveWebhookFilterSubject } from '../template.ts';
 import { constantTimeEquals, verifyWebhookSignature } from '../verify.ts';
 import { WebhookDeliveryFailed, WebhookDeliveryId } from './schema.ts';
 
@@ -27,6 +28,7 @@ export class WebhookReceiver extends Context.Service<
     Effect.gen(function* () {
       const engine = yield* EngineCore;
       const secrets = yield* SecretStore;
+      const filter = yield* ScheduleFilter;
       const newId = yield* WebhookDeliveryId;
       const windows = yield* Ref.make<ReadonlyMap<string, readonly number[]>>(new Map());
 
@@ -123,6 +125,19 @@ export class WebhookReceiver extends Context.Service<
             { id: `${id}:fail` }
           );
           return respond(202, 'prompt_refused', { deliveryId, error: problem });
+        }
+        if (!(yield* filter.applies(schedule, resolveWebhookFilterSubject(delivery)))) {
+          yield* engine.dispatch(
+            {
+              type: 'schedule.skip',
+              scheduleId: schedule.id,
+              deliveryId,
+              detail: SCHEDULE_FILTER_SKIPPED,
+              replayKey,
+            },
+            { id: `${id}:skip` }
+          );
+          return respond(202, 'skipped', { deliveryId });
         }
         const events = yield* engine.dispatch(
           { type: 'schedule.deliver', scheduleId: schedule.id, deliveryId, text: prompt, replayKey },

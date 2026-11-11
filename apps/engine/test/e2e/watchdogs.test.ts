@@ -6,6 +6,7 @@ import { Schedules, SchedulesLayer } from '../../src/schedules/index.ts';
 import { ScheduleTimeZone } from '../../src/schedules/schema.ts';
 import { SecretStore } from '../../src/secrets/index.ts';
 import { openTestSecrets } from '../helpers/secrets.ts';
+import { createTestFilter } from '../schedules/fixtures.ts';
 import type { AgentContext } from './harness.ts';
 import { World } from './harness.ts';
 
@@ -49,6 +50,7 @@ async function merged() {
       }).pipe(
         Layer.provide(
           Layer.mergeAll(
+            createTestFilter(),
             Layer.succeed(EngineCore, engine.core),
             Layer.succeed(SecretStore, (await openTestSecrets(join(current.root, 'secrets.json'))).store),
             Layer.succeed(ScheduleTimeZone, 'UTC')

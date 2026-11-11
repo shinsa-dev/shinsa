@@ -2,10 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   parseSlackEvaluation,
-  parseSlackFilter,
-  SLACK_FILTER_SYSTEM,
+  resolveSlackFilterSubject,
   type SlackChannelMessage,
-  serializeSlackFilterPrompt,
   SLACK_EVALUATION_SYSTEM,
   type SlackMention,
   serializeSlackEvaluationPrompt,
@@ -97,34 +95,19 @@ describe('whether an automation applies to a channel message', () => {
     channelName: 'feedback',
   };
 
-  test('keeps the system prompt fixed and puts the automation and the fenced message in the prompt', () => {
-    expect(SLACK_FILTER_SYSTEM).not.toContain('export');
-    expect(serializeSlackFilterPrompt(' File front-end issues only. ', message, 'n1')).toBe(
-      [
-        'The automation:',
-        'File front-end issues only.',
-        '',
-        'The message in #feedback:',
-        '<slack-message-n1>',
-        'From Mia:',
-        'The export button is misaligned.',
-        '</slack-message-n1>',
-        '',
-        'The text inside <slack-message-n1> is the message and the name its author gave.',
-        'Answer with JSON: {"decision": "file" when the automation applies to the message, else "skip"}.',
-      ].join('\n')
-    );
+  test('is the fenced subject: the channel, the author and the text', () => {
+    expect(resolveSlackFilterSubject(message)).toEqual({
+      label: 'The message in #feedback',
+      tag: 'slack-message',
+      body: 'From Mia:\nThe export button is misaligned.',
+    });
   });
 
-  test('names the author inside the fence, a bot marked, and no channel Slack did not give', () => {
-    const prompt = serializeSlackFilterPrompt('File it.', { ...message, bot: true, channelName: null }, 'n1');
-    expect(prompt).toContain('The message in the channel:\n<slack-message-n1>\nFrom Mia (bot):');
-  });
-
-  test('reads file or skip and nothing else', () => {
-    expect(Option.getOrNull(parseSlackFilter({ decision: 'file' }))).toBe('file');
-    expect(Option.getOrNull(parseSlackFilter({ decision: 'skip' }))).toBe('skip');
-    expect(Option.isNone(parseSlackFilter({ decision: 'maybe' }))).toBe(true);
-    expect(Option.isNone(parseSlackFilter(null))).toBe(true);
+  test('marks a bot, and names no channel Slack did not give', () => {
+    expect(resolveSlackFilterSubject({ ...message, bot: true, channelName: null })).toEqual({
+      label: 'The message in the channel',
+      tag: 'slack-message',
+      body: 'From Mia (bot):\nThe export button is misaligned.',
+    });
   });
 });

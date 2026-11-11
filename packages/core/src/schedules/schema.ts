@@ -195,3 +195,13 @@ export const SecretRequestInput = HandOverRecord({
   label: Required(SCHEDULE_LIMITS.secretLabel),
   reason: Required(SCHEDULE_LIMITS.secretReason),
 });
+
+export const ScheduleFilterReply = Schema.Struct({ decision: Schema.Literals(['file', 'skip']) });
+
+export type ScheduleFilterDecision = (typeof ScheduleFilterReply.Type)['decision'];
+
+export interface ScheduleFilterSubject {
+  label: string;
+  tag: string;
+  body: string;
+}

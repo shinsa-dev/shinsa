@@ -2596,8 +2596,27 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   headers and query values (authorization, cookies, anything naming a token, secret, key, signature or password)
   are redacted whether the template names one or takes them all. An optional `replay_key` template, which reads
   the values as they are because only its hash is kept, dedupes deliveries for a week (500 keys per schedule): a
-  repeat answers 202 `duplicate` and starts nothing. A delivery is `schedule.deliver` with command id
+  repeat answers 202 `duplicate` and starts nothing. A request the automation's text does not cover (the filter,
+  below) answers 202 `skipped` and starts nothing. A delivery is `schedule.deliver` with command id
   `webhook:<id>:<delivery>`; the answer is 202 with the delivery id.
+- **The automation decides whether to act: the filter** (`packages/core/src/schedules/filter.ts`,
+  `apps/engine/src/schedules/filter/`: `ScheduleFilter`). It is a rule of every automation that reacts to
+  something arriving, not of one trigger: before a webhook request or a Slack channel message runs a schedule,
+  the engine asks the classifier quick call whether the schedule's text applies to what arrived
+  (`SCHEDULE_FILTER_SYSTEM`, a fixed system prompt; in the user prompt the text, then what arrived fenced in a
+  nonce-tagged element as data, `serializeScheduleFilterPrompt`: a Slack message under "From <author>:", a bot's
+  name with "(bot)", so a text limited to one author can be judged (`resolveSlackFilterSubject`), or the webhook
+  request with credentials redacted (`resolveWebhookFilterSubject`), cut to 8,000 characters; the answer `file`
+  or `skip`, `parseScheduleFilter`). `skip` only when the text plainly limits itself to a kind this one is not
+  ("only bugs", "only failed deploys", "only the web app") or what arrived is plainly nothing to act on, a
+  report that all is well included; `file` when it sets no limit or the model is unsure. A skip is
+  `schedule.skip`, which records a skipped run ("The automation did not apply to this, so nothing was
+  started.") with the delivery's replay key and does nothing else: no task, no message, no run count, nothing in
+  Slack. A classifier that does not answer within 8 seconds (`FILTER_TIMEOUT`, inside what a webhook's sender
+  waits for), or answers anything else, files, so an outage never drops an alert. The call is a few hundred
+  tokens a delivery. A watch is never asked: its read is what decides which reports become tasks (below), which
+  is also how an automation on a clock files nothing when all is well. A schedule on a clock with no `source`
+  has nothing to judge before it runs, so it runs each time.
 - **Slack channel triggers** (`packages/core/src/slack/channels.ts`, `apps/engine/src/slack/service.ts`; the flow
   and what app.shinsa.dev keeps are in Slack, below). A schedule whose trigger is `{kind: 'slack', teamId,
   teamName, channelId, channelName, threadUpdates}` runs once for each new top-level message in that channel
@@ -2627,19 +2646,11 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   minute, the webhook's own limit; the first message over it is recorded as a failed run ("More than 60
   messages a minute were posted, so the rest of this minute's were skipped.") and the rest of that minute are
   dropped. A delivery core refuses is a failed run with its reason (`schedule.fail`).
-  **The automation's text decides whether a message is acted on.** Before a delivery the engine asks the
-  classifier quick call whether the schedule's text applies to the message (`SLACK_FILTER_SYSTEM`, a fixed system
-  prompt; the text, then the message under "From <author>:" (a bot's name with "(bot)"), both fenced in a
-  nonce-tagged element as data, in the user prompt, so a text limited to one author can be judged,
-  `serializeSlackFilterPrompt`; the answer `file` or `skip`, `parseSlackFilter`): `skip` only when the text plainly
-  limits itself to messages of a kind this one is not ("only bugs", "only the web app") or the message is plainly
-  nothing to act on, and `file` when it sets no limit or the model is unsure. A skip is `schedule.skip` (command id
-  `slack-message:<schedule>:<event id>:skip`), which records a skipped run ("The automation did not apply to this
-  message, so nothing was started.") with the message's replay key and does nothing else: no task, no run count,
-  nothing in Slack. A classifier that does not answer, or answers anything else, files, so an outage never drops
-  an alert. A message whose replay key the schedule already holds is dropped before the rate limit and the
-  classifier, so a Slack retry costs no call. The call is a few hundred tokens a message. The engine answers
-  the forward 202 as soon as the message is read and checked, and each schedule's delivery, the classifier
+  **The automation's text decides whether a message is acted on** (the filter, below): a message it does not
+  cover is `schedule.skip` (command id `slack-message:<schedule>:<event id>:skip`) with the message's replay key,
+  and nothing reaches Slack. A message whose replay key the schedule already holds is dropped before the rate
+  limit and the filter, so a Slack retry costs no call. The engine answers
+  the forward 202 as soon as the message is read and checked, and each schedule's delivery, the filter's
   call included, runs after it on a fiber of the Slack service (`Slack.settle` waits for them), so a slow
   classifier never holds app.shinsa.dev's forward to the next machine; a delivery still waiting on the
   classifier when the engine stops is lost, as a forward to a stopped engine is.

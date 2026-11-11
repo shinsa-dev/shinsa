@@ -223,7 +223,7 @@ src/
 │   ├── orchestration.ts  Routing the delegation commands
 │   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook and Slack channel deliveries
 │   │                (a new task from a channel message linked to its thread when the trigger's `threadUpdates` is
-│   │                on; `schedule.skip` for a message the automation's text did not apply to)
+│   │                on; `schedule.skip` for a delivery the automation's text did not apply to)
 │   ├── intake.ts    A watch (a schedule that reads an integration): its hidden home (createWatchHome, closeWatchHome),
 │   │                a read as a read-only `intake` turn, ending one (endIntakeRead), a read that gives up
 │   ├── reads.ts     What a watch and a watchdog share: file_report (dedupe by the project's filed reports, a watch's
@@ -269,7 +269,10 @@ src/
 │                    gitignored
 ├── schedules/       Schedule times (time.ts: next run, DST-safe daily, time zones), describing a schedule
 │                    (describe.ts), validating set_schedule and request_secret (validate.ts, over one schema
-│                    per tool input in schema.ts, read with HandOverReader)
+│                    per tool input in schema.ts, read with HandOverReader), and the filter every automation
+│                    that reacts to a delivery asks first, whether its text applies to what arrived
+│                    (filter.ts: SCHEDULE_FILTER_SYSTEM, serializeScheduleFilterPrompt over a
+│                    ScheduleFilterSubject, parseScheduleFilter, file or skip)
 ├── queue/           Needs you (rank.ts), the one table of gate words (reasons.ts), stepping through decisions
 │                    (step.ts), the stalled leaf of a chain (stalls.ts), silent runs (silence.ts), the `shinsa status`
 │                    summary (summary.ts)
@@ -376,8 +379,7 @@ src/
 │                    thread as text with its budget, the request of a task from Slack with the thread fenced as
 │                    untrusted data, and a mention sent to a linked task (thread.ts), whether a mention is work
 │                    or not, task or none (evaluation.ts: SLACK_EVALUATION_SYSTEM, parseSlackEvaluation; and
-│                    whether an automation's text applies to a channel message, SLACK_FILTER_SYSTEM,
-│                    serializeSlackFilterPrompt, parseSlackFilter), and
+│                    a channel message as the subject of an automation's filter, resolveSlackFilterSubject), and
 │                    what is posted as a new message (posts.ts: SlackPost, only tripped); deciding a gate
 │                    from Slack (decisions.ts: SLACK_DECIDABLE, the action ids, the button value, the form
 │                    (serializeSlackDecisionModal) and the decided line; schema.ts: SlackDecisionValue,

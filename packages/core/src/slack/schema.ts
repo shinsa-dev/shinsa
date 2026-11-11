@@ -125,10 +125,6 @@ export const SlackEvaluationReply = Schema.Struct({ decision: Schema.Literals(['
 
 export type SlackEvaluation = (typeof SlackEvaluationReply.Type)['decision'];
 
-export const SlackFilterReply = Schema.Struct({ decision: Schema.Literals(['file', 'skip']) });
-
-export type SlackFilterDecision = (typeof SlackFilterReply.Type)['decision'];
-
 export const SLACK_DECISION_LIMITS = { choices: 100, reason: 500, decided: 300 } as const;
 
 export const SlackDecisionValue = Schema.Struct({
