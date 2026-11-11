@@ -4,7 +4,10 @@ import {
   DELEGATION_LIMITS,
   DomainError,
   isDelegatedRun,
+  resolveCurrentRound,
+  resolveRoundStamp,
   type Run,
+  selectPlanSplit,
   type Task,
   type TaskCreator,
   type TeammateFork,
@@ -150,9 +153,7 @@ export function splitTask(decider: Decider, command: CommandOf<'agent.split_task
 }
 
 function hasSplitPlan(task: Task) {
-  const version = task.plan?.version ?? 0;
-  const proposedAt = task.plan?.proposedAt ?? 0;
-  return (task.splits ?? []).some((split) => split.planVersion === version && split.at >= proposedAt);
+  return Option.isSome(selectPlanSplit(task));
 }
 
 interface SplitPiece {
@@ -168,7 +169,7 @@ function spawnSplit<Item>(
   resolvePiece: (item: Item, taskIds: string[]) => SplitPiece
 ) {
   const version = task.plan?.version ?? 0;
-  const requestKey = `plan:${version}`;
+  const requestKey = `plan:${resolveCurrentRound(task).number}:${version}`;
   const taskIds: string[] = [];
   for (const item of items) {
     const { request, options } = resolvePiece(item, taskIds);
@@ -185,7 +186,7 @@ function spawnSplit<Item>(
   decider.emit({
     type: 'task.split',
     taskId: task.id,
-    split: { planVersion: version, runId, taskIds, at: decider.context.now },
+    split: { planVersion: version, ...resolveRoundStamp(task), runId, taskIds, at: decider.context.now },
   });
   return taskIds;
 }
