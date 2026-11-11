@@ -71,7 +71,7 @@ export class RepoOrigins extends Context.Service<
             branch,
             `gh could not tell which GitHub account to use: ${describeReason(login.stderr)}.`
           );
-        const orgs = yield* gh.attempt(['api', 'user/orgs', '--jq', '.[].login'], target.path);
+        const orgs = yield* gh.attempt(['api', 'user/orgs', '--paginate', '--jq', '.[].login'], target.path);
         if (!orgs.ok)
           return yield* refuse(
             target,

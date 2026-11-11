@@ -72,6 +72,15 @@ describe('connectOrigin', () => {
     expect(existsSync(join(remotes, 'acme/app'))).toBe(false);
   });
 
+  test('an organization past the first page of 30 is still searched', async () => {
+    const many = Array.from({ length: 31 }, (_, index) => `org-${index}`);
+    process.env.FAKE_GH_ORGS = many.join(',');
+    const folder = await createRemote('org-30/app');
+    const { target } = await createLocalRepo();
+    expect(await connectOrigin(target)).toBe(folder);
+    expect(existsSync(join(remotes, 'octo/app'))).toBe(false);
+  });
+
   test("the project's owner comes before your login, both to find a match and to create one", async () => {
     await createRemote('octo/app');
     const preferred = await createRemote('acme/app');
