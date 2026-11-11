@@ -128,7 +128,14 @@ describe('the next run', () => {
     expect(
       Option.getOrNull(
         resolveNextRun(
-          { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+          {
+            kind: 'slack',
+            teamId: 'T1',
+            teamName: 'Acme',
+            channelId: 'C1',
+            channelName: 'alerts',
+            threadUpdates: true,
+          },
           friday,
           'UTC'
         )
