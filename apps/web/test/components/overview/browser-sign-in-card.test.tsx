@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BrowserSignInCard } from '@/components/overview/browser-sign-in-card.tsx';
 import { NowCard } from '@/components/overview/now-card.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
-import { BROWSER_REMOTE_NOTE, SIGN_IN_WINDOW_NOTE } from '@/lib/browser.ts';
+import { BROWSER_REMOTE_NOTE, LOCAL_SIGN_IN_HINT, SIGN_IN_WINDOW_NOTE } from '@/lib/browser.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { spyOnEngine } from '../../support/engine.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
@@ -37,7 +37,10 @@ const SITES = [
   { site: 'stripe.com', cookies: 3, signedIn: true },
 ];
 
-function createSignIn(site: string, { projectId = 'p-1' as string | null } = {}) {
+function createSignIn(
+  site: string,
+  { projectId = 'p-1' as string | null, url = `https://${site}/login` } = {}
+) {
   const task = createTask({ id: 't-1', projectId, repoId: projectId ? null : 'r-1' });
   const gate = createGate({
     id: 'g-1',
@@ -45,7 +48,7 @@ function createSignIn(site: string, { projectId = 'p-1' as string | null } = {})
     type: 'browser_sign_in',
     title: `Sign in to ${site}`,
     body: 'To check the new setting on the dashboard.',
-    browserSignIn: { site, url: `https://${site}/login` },
+    browserSignIn: { site, url },
   });
   const state = createShinsaState({
     tasks: [task],
@@ -59,14 +62,14 @@ function createSignIn(site: string, { projectId = 'p-1' as string | null } = {})
 function renderCard(
   site: string,
   routes: FakeRoutes,
-  { supported = true, projectId = 'p-1' as string | null } = {}
+  { supported = true, projectId = 'p-1' as string | null, url = `https://${site}/login` } = {}
 ) {
   const engine = resolveEngineInfo('1.0.0');
   spyOnEngine(
     supported ? engine : { ...engine, features: engine.features.filter((feature) => feature !== 'browser') }
   );
   fake = startFakeOnboarding(routes);
-  const { task, gate, state } = createSignIn(site, { projectId });
+  const { task, gate, state } = createSignIn(site, { projectId, url });
   const onReply = mock(async () => true);
   render(
     <TooltipProvider>
@@ -74,6 +77,15 @@ function renderCard(
     </TooltipProvider>
   );
   return onReply;
+}
+
+const ACTION_NAMES: ReadonlySet<string> = new Set(['Copy from Dia', 'Open sign-in window']);
+
+function listActionNames() {
+  return screen
+    .getAllByRole('button')
+    .map((button) => button.textContent ?? '')
+    .filter((name) => ACTION_NAMES.has(name));
 }
 
 function sentBodies(path: string) {
@@ -96,6 +108,41 @@ describe('the browser sign-in card', () => {
     await waitFor(() => expect(onReply).toHaveBeenCalledWith('signedIn'));
     expect(sentBodies(`${PROJECT}/copy`)).toEqual([{ source: 'dia', sites: ['stripe.com'] }]);
     expect(toasts.success).toHaveBeenCalledWith('Copied 3 cookies.');
+  });
+
+  it('keeps copying first for a public site, with no local hint', async () => {
+    renderCard('app.stripe.com', { 'GET /api/browser/sources': { answer: { sources: [DIA] } } });
+    await screen.findByRole('button', { name: 'Copy from Dia' });
+    expect(listActionNames()).toEqual(['Copy from Dia', 'Open sign-in window']);
+    expect(screen.queryByText(LOCAL_SIGN_IN_HINT)).toBeNull();
+  });
+
+  it('puts the sign-in window first for a local address, says why, and hides the hint once it opens', async () => {
+    renderCard(
+      'localhost',
+      {
+        'GET /api/browser/sources': { answer: { sources: [DIA] } },
+        [`POST ${PROJECT}/window`]: { answer: { mode: 'window', sites: [] } },
+      },
+      { url: 'http://localhost:64892/' }
+    );
+    await screen.findByRole('button', { name: 'Copy from Dia' });
+    expect(listActionNames()).toEqual(['Open sign-in window', 'Copy from Dia']);
+    expect(screen.getByText(LOCAL_SIGN_IN_HINT)).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Open sign-in window' }));
+    await screen.findByRole('button', { name: 'Done' });
+    expect(screen.queryByText(LOCAL_SIGN_IN_HINT)).toBeNull();
+    expect(sentBodies(`${PROJECT}/window`)).toEqual([{ url: 'http://localhost:64892/' }]);
+  });
+
+  it('puts the sign-in window first for a public host on its own port', async () => {
+    renderCard(
+      'staging.example.com',
+      { 'GET /api/browser/sources': { answer: { sources: [DIA] } } },
+      { url: 'https://staging.example.com:8443/login' }
+    );
+    await screen.findByRole('button', { name: 'Copy from Dia' });
+    expect(listActionNames()).toEqual(['Open sign-in window', 'Copy from Dia']);
   });
 
   it('says so when your browser is not signed in to the site, and does not answer', async () => {
