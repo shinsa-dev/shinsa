@@ -345,7 +345,11 @@ src/
 ├── schedules/           Schedules: the clock (clock/: ScheduleClock on makeEngineClock, ScheduleClockTimings), the
 │                        agent tools (tools/: ScheduleTools, its layer taking the base and hook URLs only the
 │                        composition root knows), the webhook receiver (webhook/: WebhookReceiver, the rate windows in
-│                        a Ref, WebhookDeliveryId; path.ts isWebhookPath), signature checks (verify.ts), the prompt
+│                        a Ref, WebhookDeliveryId, a taken request answered 202 before the filter and delivered in a
+│                        FiberSet its settle waits for; path.ts isWebhookPath), the filter (filter/: ScheduleFilter on
+│                        QuickCalls' classifier, whether a schedule's text applies to a webhook request or a Slack
+│                        channel message, asked before either delivers, a watch never asked, no answer in
+│                        FILTER_TIMEOUT delivering; a skip is schedule.skip), signature checks (verify.ts), the prompt
 │                        template and redaction (template.ts: a JSON body decoded by WebhookBodyText), the writer's
 │                        wording of a suggested watch (suggest.ts: createWatchWriter, an Effect over a QuickJson, its
 │                        answer decoded by WatchAnswer in answer.ts), the Schedules service (service.ts: start, stop,
@@ -446,7 +450,9 @@ src/
 │                        recorded (slack.record_merge), then edited in place and only when it changes; GET
 │                        /api/slack and POST /api/slack/disconnect); a watched channel's message
 │                        (handleMessages, POST /api/slack/messages) as schedule.deliver for each enabled schedule
-│                        on it, 60 a minute a schedule; channels, what the bot is in, for `slack_channel`; the
+│                        on it, 60 a minute a schedule, after ScheduleFilter says its text applies (else
+│                        schedule.skip; no answer delivers), with the message's thread so a filed task is linked, answered 202 at
+│                        once with the deliveries on fibers `settle` waits for; channels, what the bot is in, for `slack_channel`; the
 │                        watched channels sent to app.shinsa.dev on start and on each change (start, stop); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)
