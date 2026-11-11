@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveQueue } from '@shinsa/core';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import {
+  countGroupTasks,
+  countSectionEntries,
   describeNeedsCount,
   isQueueButtonShown,
   listQueueSections,
+  type QueueEntry,
+  type QueueGroup,
   type QueueSection,
+  resolveGroupDefault,
+  resolveGroupId,
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
@@ -184,5 +191,165 @@ describe('initiative members on Home', () => {
       expect(listKeys(sections, 'waiting')).toEqual(['later']);
       expect(listKeys(sections, 'snoozed')).toEqual([]);
     }
+  });
+});
+
+describe('groups of a bundle or an initiative', () => {
+  function createGroupWorld() {
+    return createShinsaState({
+      initiatives: [
+        createInitiative({
+          id: 'split',
+          name: 'Chat split',
+          leadTaskId: 'lead',
+          phases: [{ id: 'p1', name: 'Dock host' }],
+        }),
+      ],
+      tasks: [
+        createTask({
+          id: 'lead',
+          title: 'Chat split',
+          pipeline: ['lead'],
+          stage: 'leading',
+          initiativeId: 'split',
+        }),
+        createTask({
+          id: 'dock',
+          stage: 'building',
+          initiativeId: 'split',
+          initiativePhaseId: 'p1',
+          createdAt: NOW - 60_000,
+        }),
+        createTask({
+          id: 'panel',
+          stage: 'planning',
+          initiativeId: 'split',
+          initiativePhaseId: 'p1',
+          createdAt: NOW - 40_000,
+        }),
+        createTask({ id: 'shipped', stage: 'merged', initiativeId: 'split', initiativePhaseId: 'p1' }),
+        createTask({ id: 'dropped', stage: 'cancelled', initiativeId: 'split' }),
+        createTask({ id: 'solo', stage: 'building', createdAt: NOW - 50_000 }),
+        createTask({ id: 'root', title: 'Schema', stage: 'shipping', bundleReady: { commit: 'abc' } }),
+        createTask({
+          id: 'api',
+          title: 'API',
+          stage: 'waiting_on_tasks',
+          stacksOn: ['root'],
+          createdAt: NOW - 40_000,
+        }),
+        createTask({
+          id: 'screen',
+          title: 'Screen',
+          stage: 'waiting_on_tasks',
+          stacksOn: ['api'],
+          createdAt: NOW - 30_000,
+        }),
+        createTask({
+          id: 'lone',
+          title: 'Lone',
+          stage: 'waiting_on_tasks',
+          stacksOn: ['other'],
+          createdAt: NOW - 20_000,
+        }),
+        createTask({ id: 'other', title: 'Other', stage: 'awaiting_review' }),
+        createTask({
+          id: 'both',
+          title: 'Both',
+          stage: 'waiting_on_tasks',
+          stacksOn: ['root'],
+          initiativeId: 'split',
+        }),
+      ],
+      gates: [createGate({ id: 'g-other', taskId: 'other', type: 'review' })],
+    });
+  }
+
+  function sectionsOf() {
+    const state = createGroupWorld();
+    return listQueueSections(state, resolveQueue(state, NOW));
+  }
+
+  function sectionNamed(key: QueueSection['key']) {
+    const section = sectionsOf().find((candidate) => candidate.key === key);
+    if (!section) throw new Error(`No ${key} section`);
+    return section;
+  }
+
+  function describeEntry(entry: QueueEntry) {
+    if (entry.kind === 'item') return entry.item.key;
+    const { group } = entry;
+    return [group.kind, group.title, group.root?.key ?? null, group.members.map((item) => item.key)];
+  }
+
+  function groupIn(key: QueueSection['key']): QueueGroup {
+    const entry = sectionNamed(key).entries.find((candidate) => candidate.kind === 'group');
+    if (entry?.kind !== 'group') throw new Error(`No group in ${key}`);
+    return entry.group;
+  }
+
+  it('puts two tasks of one initiative under its name, where the first of them sat', () => {
+    const working = sectionNamed('working');
+    expect(working.items.map((item) => item.key)).toEqual(['dock', 'solo', 'panel']);
+    expect(working.entries.map(describeEntry)).toEqual([
+      ['initiative', 'Chat split', null, ['dock', 'panel']],
+      'solo',
+    ]);
+  });
+
+  it('opens the lead task from an initiative, with how far its tasks have shipped', () => {
+    const group = groupIn('working');
+    expect(group.opens?.id).toBe('lead');
+    expect(group.progress).toBe('1 of 4 shipped · 1 dropped');
+    expect(countGroupTasks(group)).toBe(2);
+  });
+
+  it('puts a bundle under the first of its tasks in bundle order, with how many are ready', () => {
+    const waiting = sectionNamed('waiting');
+    const bundle = waiting.entries
+      .map(describeEntry)
+      .find((entry) => Array.isArray(entry) && entry[0] === 'bundle');
+    expect(bundle).toEqual(['bundle', 'Schema', 'root', ['api', 'screen']]);
+    const group = waiting.entries.flatMap((entry) =>
+      entry.kind === 'group' && entry.group.kind === 'bundle' ? [entry.group] : []
+    )[0];
+    expect(group?.opens?.id).toBe('root');
+    expect(group?.progress).toBe('1 of 4 ready');
+    expect(group && countGroupTasks(group)).toBe(3);
+  });
+
+  it('leaves a single task of a bundle or an initiative as a plain row', () => {
+    const waiting = sectionNamed('waiting').entries.map(describeEntry);
+    expect(waiting).toContain('lone');
+    expect(waiting).toContain('both');
+  });
+
+  it('never groups what needs you', () => {
+    expect(sectionNamed('needs').entries).toEqual(
+      sectionNamed('needs').items.map((item) => ({ kind: 'item', item }))
+    );
+  });
+
+  it('counts a folded group once and an open one by its tasks', () => {
+    const { entries } = sectionNamed('working');
+    expect(countSectionEntries(entries, () => false)).toBe(2);
+    expect(countSectionEntries(entries, () => true)).toBe(3);
+  });
+
+  it('keeps each group open or folded per place and section, open in In progress or around the task on screen', () => {
+    const working = sectionNamed('working');
+    const waiting = sectionNamed('waiting');
+    const group = groupIn('working');
+    const bundle = groupIn('waiting');
+    expect(resolveGroupId('home', working, group)).toEqual(
+      createDisclosureId('home', 'group', 'working', 'initiative', 'split')
+    );
+    expect(resolveGroupId('queue', waiting, bundle)).toEqual(
+      createDisclosureId('queue', 'group', 'waiting', 'bundle', 'root')
+    );
+    expect(resolveGroupDefault(working, group, null)).toBe(true);
+    expect(resolveGroupDefault(waiting, bundle, null)).toBe(false);
+    expect(resolveGroupDefault(waiting, bundle, 'screen')).toBe(true);
+    expect(resolveGroupDefault(waiting, bundle, 'api')).toBe(true);
   });
 });
