@@ -360,8 +360,8 @@ export class Accounts extends Context.Service<
       const refreshProviderUsage = (force: boolean) =>
         Effect.flatMap(listShownProviderIds, (ids) => providerLimits.refresh(ids, force));
 
-      const isProviderHidden = (provider: string) =>
-        Effect.map(listHiddenProviders, (hidden) => hidden.has(provider));
+      const isProviderRemoved = (provider: string) =>
+        Effect.map(machine.config, (config) => config.providerLogins[provider] === 'removed');
 
       const writeProviderChoices = Effect.fn('Accounts.writeProviderChoices')(function* (
         choices: ProviderChoices
@@ -583,7 +583,7 @@ export class Accounts extends Context.Service<
         provider: string,
         force: boolean
       ) {
-        if (!providerIds.has(provider) || (yield* isProviderHidden(provider))) return null;
+        if (!providerIds.has(provider) || (yield* isProviderRemoved(provider))) return null;
         const pushed = (yield* providerLimits.snapshot(provider)).source === 'push';
         yield* providerLimits.refresh([provider], force || pushed);
         return Option.getOrNull(resolveWeeklyReading(yield* providerLimits.snapshot(provider)));
@@ -595,7 +595,7 @@ export class Accounts extends Context.Service<
       ) {
         const unknown: FastModeAvailability = 'unknown';
         if (accountId === null && providerIds.has(provider)) {
-          if (yield* isProviderHidden(provider)) return unknown;
+          if (yield* isProviderRemoved(provider)) return unknown;
           yield* providerLimits.refresh([provider], false);
           return (yield* providerLimits.snapshot(provider)).fastMode ?? unknown;
         }
@@ -673,7 +673,7 @@ export class Accounts extends Context.Service<
             notice.kind === 'rate_limit' &&
             latest &&
             providerIds.has(latest.provider) &&
-            !(yield* isProviderHidden(latest.provider))
+            !(yield* isProviderRemoved(latest.provider))
           )
             yield* providerLimits.recordPush(latest.provider, notice);
           return;

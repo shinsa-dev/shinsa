@@ -2493,9 +2493,28 @@ describe('choosing whether Shinsa uses a provider', () => {
     await world.accounts.refresh();
     expect(world.accounts.snapshot().providers).toEqual([]);
     expect(codex.count()).toBe(0);
-    expect(await world.accounts.readProviderWeeklyReading('codex', true)).toBeNull();
-    expect(await world.accounts.readFastMode('codex', null)).toBe('unknown');
     expect([...(await world.accounts.listHiddenProviders())]).toEqual(['codex']);
+  });
+
+  test('a step already running on a Codex it never saw signed in still keeps the limits Codex reports', async () => {
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [createCodexSource([codexReading(40)]).source],
+      providerLogins: () => Promise.resolve([{ ...CODEX_LOGIN, status: 'signed_out' }]),
+    });
+    await world.accounts.refresh();
+    world.stub.update((state) => {
+      state.runs['run-1'] = { attempts: [{ provider: 'codex', account: null }] } as never;
+    });
+    await world.accounts.onNotice('run-1', {
+      kind: 'rate_limit',
+      status: 'rejected',
+      limit: 'seven_day',
+      resetsAt: 9_000_000,
+      utilization: 1,
+    } as never);
+    expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
+    expect(world.accounts.snapshot().providers).toEqual([]);
   });
 
   test('a sign-in is kept in config.json, so signing out later still shows the row', async () => {
@@ -2546,6 +2565,8 @@ describe('choosing whether Shinsa uses a provider', () => {
     } as never);
     expect(codex.count()).toBe(reads);
     expect(world.accounts.snapshot().providers).toEqual([]);
+    expect(await world.accounts.readProviderWeeklyReading('codex', true)).toBeNull();
+    expect(await world.accounts.readFastMode('codex', null)).toBe('unknown');
   });
 
   test('removing it again changes no setting, and a default provider on it moves to Claude', async () => {

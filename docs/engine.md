@@ -6827,8 +6827,9 @@ tools check no longer lists codex. **Which providers Shinsa uses** is `config.js
 (`{ codex: 'added' | 'removed' }`, decoded leniently): with no entry a provider shows only while it is signed in, and
 the first time it is seen signed in it is recorded as `added`, so a lapsed sign-in keeps its row and its Sign in gate;
 `removed` hides it even while `codex login` is still signed in. A hidden provider drops out of the snapshot's
-`providers`, its usage is no longer read, and `GET /api/providers` leaves its models out (`isProviderShown`,
-`accounts/providers.ts`). `POST /api/accounts/provider { provider, choice }` (feature `accounts.provider_choice`,
+`providers`, its usage is no longer polled, and `GET /api/providers` leaves its models out (`isProviderShown`,
+`accounts/providers.ts`); a step already running on it still keeps the limits it reports and is metered against
+them, unless it is `removed`. `POST /api/accounts/provider { provider, choice }` (feature `accounts.provider_choice`,
 human-only, `shinsa accounts provider`) records the choice: removing moves every role and the default provider that
 used it back to Claude (`resolveProviderReset`, one `settings.change`) and never runs `codex logout`; adding reads its
 sign-in and usage again at once. In Settings the provider's row menu has Remove Codex, behind a confirm dialog, and
