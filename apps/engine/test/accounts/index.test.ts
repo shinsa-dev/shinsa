@@ -2531,6 +2531,27 @@ describe('choosing whether Shinsa uses a provider', () => {
     expect(world.accounts.snapshot().providers?.map((login) => login.status)).toEqual(['signed_out']);
   });
 
+  test('a config.json that cannot be written is logged on a sign-in and refused on a choice', async () => {
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [createCodexSource([codexReading(40)]).source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    mkdirSync(join(world.root, 'config.json'), { recursive: true });
+    const logs = captureLogs();
+    try {
+      await world.accounts.syncProviderLogins();
+    } finally {
+      logs.restore();
+    }
+    expect(logs.entries.map((entry) => entry.message)).toContain(
+      '[Accounts] Could not keep a provider sign-in in config.json'
+    );
+    await expect(world.accounts.chooseProvider('codex', 'removed')).rejects.toMatchObject({
+      _tag: 'AccountStepFailed',
+    });
+  });
+
   test('removing it forgets it, stops its reads and pushes, and moves the roles on it back to Claude', async () => {
     const codex = createCodexSource([codexReading(40)]);
     const world = await createWorld({
