@@ -100,7 +100,7 @@ export function describeTeamEscalation(escalation: TeamEscalation): DecisionNoti
   };
 }
 
-export function describeDoneForYou(row: DoneForYouRow): DecisionNotice {
+function describeDoneForYou(row: DoneForYouRow): DecisionNotice {
   return {
     tag: resolveDoneForYouTag(row.gateId),
     taskId: row.taskId,

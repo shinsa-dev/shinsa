@@ -1,9 +1,9 @@
+import { applyPowerEvent, type AwayStep, NO_INPUT_YET, observeInput, type PowerEvent } from '@shinsa/core';
 import { Clock, Effect, Layer, Ref, Stream } from 'effect';
 import { CHANNELS } from '../bridge/schema.ts';
 import { PowerMonitor } from '../power-monitor/service.ts';
 import { AppWindow } from '../window/service.ts';
-import { AWAY_POLL_SCHEDULE, type AwayStep, NO_INPUT_YET, type PowerEvent } from './schema.ts';
-import { applyPowerEvent, observeInput } from './tracker.ts';
+import { AWAY_POLL_SCHEDULE } from './schema.ts';
 
 export const AwayWatch = Layer.effectDiscard(
   Effect.gen(function* () {

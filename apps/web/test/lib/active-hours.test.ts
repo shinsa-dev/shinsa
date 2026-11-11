@@ -3,6 +3,8 @@ import { type ActiveHours, DAY_HOURS, WEEK_SLOTS } from '@shinsa/core';
 import {
   ACTIVE_HOURS_LABEL,
   describeActiveHoursSource,
+  describeNow,
+  describeWeekTotal,
   describeRanges,
   formatHour,
   listActiveHourRows,
@@ -10,6 +12,7 @@ import {
   listToItems,
   readFromValue,
   resolveFromValue,
+  resolveNowMark,
   resolveOverrideDays,
   updateOverrideDay,
 } from '@/lib/active-hours.ts';
@@ -166,5 +169,34 @@ describe('your hours, set by hand', () => {
     expect(readFromValue('10', span)).toEqual({ from: 10, to: 17 });
     expect(readFromValue('18', span)).toEqual({ from: 18, to: 24 });
     expect(readFromValue('6', null)).toEqual({ from: 6, to: 14 });
+  });
+});
+
+describe('the week timeline', () => {
+  const MONDAY_NOON_BERLIN = Date.UTC(2026, 3, 13, 10, 30);
+
+  test('totals the hours, and marks now on its weekday at its share of the day', () => {
+    expect(describeWeekTotal(createHours({ 1: [[9, 10]] }))).toBe('1 hour a week');
+    expect(describeWeekTotal(createHours({ 1: [[9, 17]], 2: [[9, 13]] }))).toBe('12 hours a week');
+    expect(resolveNowMark(createHours({}), MONDAY_NOON_BERLIN)).toEqual({ weekday: 1, share: 12.5 / 24 });
+  });
+
+  test('says whether you are usually active now, and until when', () => {
+    expect(describeNow(createHours({ 1: [[9, 17]] }), MONDAY_NOON_BERLIN)).toMatch(
+      /^You are usually active now, until /
+    );
+    expect(describeNow(createHours({ 1: [[14, 17]] }), MONDAY_NOON_BERLIN)).toMatch(
+      /^You are usually away now, until /
+    );
+    expect(describeNow(createHours({}), MONDAY_NOON_BERLIN)).toBe('You are not usually active.');
+    const always = { ...createHours({}), week: Array<boolean>(WEEK_SLOTS).fill(true) };
+    expect(describeNow(always, MONDAY_NOON_BERLIN)).toBe('You are usually active at any hour.');
+  });
+
+  test('gives each run its place on the day and a label', () => {
+    const [monday] = listActiveHourRows(createHours({ 1: [[6, 12]] }), null);
+    expect(monday?.runs).toEqual([
+      { from: 6, to: 12, start: 0.25, width: 0.25, label: 'Monday, 06:00 to 12:00' },
+    ]);
   });
 });

@@ -86,7 +86,7 @@ import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import { pauseTask } from './pause.ts';
-import { recordAway, recordClock } from './presence.ts';
+import { recordAway, recordClock, recordIdle } from './presence.ts';
 import {
   recordBundleCheck,
   recordClosedPullRequests,
@@ -223,6 +223,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return markAutopilotSeen(decider, command);
     case 'clock.record':
       return recordClock(decider, command);
+    case 'idle.record':
+      return recordIdle(decider, command);
     case 'settings.change':
       return changeSettings(decider, command);
     case 'task.create':

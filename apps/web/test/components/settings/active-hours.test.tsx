@@ -68,11 +68,17 @@ describe('Settings → Your hours', () => {
     ]);
   });
 
-  it('shows the learned hours per weekday', () => {
+  it('draws the learned hours as a week timeline, with today marked now', () => {
     spyOnEngine();
-    renderHours(learnWorkdays);
+    const { container } = renderHours(learnWorkdays);
     expect(screen.getByText(/^Learned from what you did over/)).toBeTruthy();
-    expect(screen.getAllByText('09:00 to 17:00').length).toBeGreaterThan(0);
+    expect(screen.getByText('56 hours a week')).toBeTruthy();
+    expect(screen.getByText(/^You are usually (active|away) now, until/)).toBeTruthy();
+    const runs = container.querySelectorAll('[data-run="9-17"]');
+    expect(runs).toHaveLength(7);
+    expect((runs[0] as HTMLElement).style.left).toBe('37.5%');
+    expect(container.querySelectorAll('[data-now]')).toHaveLength(1);
+    expect(screen.getByText('Usually away')).toBeTruthy();
   });
 
   it('edits a day set by hand, and goes back to the learned hours', async () => {

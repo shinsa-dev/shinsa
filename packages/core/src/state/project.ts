@@ -908,6 +908,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'clock.recorded':
       state.timeZone = event.timeZone;
       break;
+    case 'mac.used':
+      recordPresence(state, event.usedAt);
+      break;
     case 'account.plan_recorded':
       applyAccountPlan(state, event);
       break;

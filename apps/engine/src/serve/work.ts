@@ -9,6 +9,7 @@ import { Extensions } from '../extensions/registry/service.ts';
 import { EngineServer } from '../http/server/service.ts';
 import { ServeLock } from '../instance/lock/service.ts';
 import { describeError } from '../log/redact.ts';
+import { IdleWatch } from '../presence/idle/service.ts';
 import { Remote, TeamFeeds } from '../remote/index.ts';
 import { ShareClock } from '../remote/share-clock/service.ts';
 import { AutopilotClock } from '../runtime/autopilot/service.ts';
@@ -41,6 +42,7 @@ export const WorkLayer = Layer.effectDiscard(
     const terminals = yield* Terminals;
     const extensions = yield* Extensions;
     const eunoe = yield* EunoeServer;
+    const idle = yield* IdleWatch;
     const clocks = [yield* MonitorClock, yield* WatchdogClock, yield* AutopilotClock, yield* ShareClock];
     const lock = yield* Effect.serviceOption(ServeLock);
     if (Option.isSome(lock)) yield* lock.value.update({ port: server.port, url: server.url });
@@ -62,6 +64,7 @@ export const WorkLayer = Layer.effectDiscard(
       yield* remote.stop;
       yield* terminals.stop;
       for (const clock of clocks) yield* clock.stop;
+      yield* idle.stop;
       yield* effects.stop;
       yield* Effect.logInfo('[Serve] Stopped the pull request syncs');
       yield* extensions.stop;
@@ -91,6 +94,7 @@ export const WorkLayer = Layer.effectDiscard(
     yield* effects.startWatching;
     yield* schedules.start;
     for (const clock of clocks) yield* clock.start;
+    yield* idle.start;
     yield* watchSilence(engine, transcripts);
     yield* usageResume.start;
     checking = yield* Effect.forkDetach(

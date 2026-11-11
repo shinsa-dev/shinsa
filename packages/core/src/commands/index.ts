@@ -322,6 +322,7 @@ type SystemCommand =
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
   | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
   | { type: 'clock.record'; timeZone: string }
+  | { type: 'idle.record'; inputAt: number; away: { from: number; to: number } | null }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand

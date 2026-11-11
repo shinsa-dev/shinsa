@@ -1,10 +1,19 @@
-import { type ActiveDay, type ActiveHours, ACTIVE_HOURS_LIMITS, DAY_HOURS } from '@shinsa/core';
+import {
+  type ActiveDay,
+  type ActiveHours,
+  ACTIVE_HOURS_LIMITS,
+  DAY_HOURS,
+  HOUR_MS,
+  isActiveAt,
+  resolveLocalSlot,
+  resolveNextActiveChange,
+} from '@shinsa/core';
 import type { SettingItem } from '@/lib/settings.ts';
 
 export const ACTIVE_HOURS_LABEL = {
   title: 'Your hours',
   description:
-    'When you usually use Shinsa, learned from when you are away from this Mac and what you do in Shinsa. Autopilot and auto pace plan around them.',
+    'When you are usually at your Mac, learned from when you use it and what you do in Shinsa. Autopilot and auto pace plan around them.',
   learning: `Shinsa has not seen enough of your days yet. It learns your hours after ${ACTIVE_HOURS_LIMITS.minDays} days.`,
   setByHand: 'Set by hand',
   useLearned: 'Use learned hours',
@@ -12,7 +21,16 @@ export const ACTIVE_HOURS_LABEL = {
   off: 'Off',
   split: 'This day has more than one span, so change it with shinsa settings set.',
   saved: { override: 'Your hours are set by hand.', learned: 'Shinsa learns your hours again.' },
+  byHand: 'Set by hand',
 } as const;
+
+export const ACTIVE_HOURS_LEGEND = [
+  { key: 'active', label: 'Usually active' },
+  { key: 'away', label: 'Usually away' },
+  { key: 'now', label: 'Now' },
+] as const;
+
+export const ACTIVE_HOURS_AXIS = [0, 6, 12, 18, 24].map((hour) => ({ hour, share: hour / DAY_HOURS }));
 
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 
@@ -27,8 +45,17 @@ export interface ActiveHourRow {
   name: string;
   cells: { hour: number; active: boolean }[];
   ranges: string;
+  runs: ActiveRun[];
   span: ActiveDay | null;
   split: boolean;
+}
+
+interface ActiveRun {
+  from: number;
+  to: number;
+  start: number;
+  width: number;
+  label: string;
 }
 
 export function formatHour(hour: number) {
@@ -67,6 +94,12 @@ export function listActiveHourRows(
       name: WEEKDAY_NAMES[weekday],
       cells: cells.map((active, hour) => ({ hour, active })),
       ranges: describeRanges(cells),
+      runs: listRuns(cells).map((run) => ({
+        ...run,
+        start: run.from / DAY_HOURS,
+        width: (run.to - run.from) / DAY_HOURS,
+        label: `${WEEKDAY_NAMES[weekday]}, ${formatHour(run.from)} to ${formatHour(run.to)}`,
+      })),
       span: override?.find((day) => day.weekday === weekday) ?? null,
       split: (override?.filter((day) => day.weekday === weekday).length ?? 0) > 1,
     };
@@ -123,4 +156,35 @@ export function readFromValue(value: string, span: ActiveDay | null): Omit<Activ
   const from = Number(value);
   const to = span && span.to > from ? span.to : Math.min(DAY_HOURS, from + (WORKDAY.to - WORKDAY.from));
   return { from, to };
+}
+
+export function describeWeekTotal(hours: ActiveHours) {
+  const total = hours.week.filter(Boolean).length;
+  return total === 1 ? '1 hour a week' : `${total} hours a week`;
+}
+
+export function resolveNowMark(hours: ActiveHours, now: number) {
+  const slot = resolveLocalSlot(hours.timeZone, now);
+  return { weekday: slot.weekday, share: (slot.hour + (now % HOUR_MS) / HOUR_MS) / DAY_HOURS };
+}
+
+function formatChange(hours: ActiveHours, now: number, at: number) {
+  const slot = resolveLocalSlot(hours.timeZone, at);
+  const time = new Intl.DateTimeFormat('en-GB', {
+    timeZone: hours.timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(at);
+  return slot.day === resolveLocalSlot(hours.timeZone, now).day
+    ? time
+    : `${WEEKDAY_NAMES[slot.weekday]} ${time}`;
+}
+
+export function describeNow(hours: ActiveHours, now: number) {
+  const active = isActiveAt(hours, now);
+  const change = resolveNextActiveChange(hours, now);
+  if (change === null) return active ? 'You are usually active at any hour.' : 'You are not usually active.';
+  const until = formatChange(hours, now, change);
+  return active ? `You are usually active now, until ${until}.` : `You are usually away now, until ${until}.`;
 }

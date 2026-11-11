@@ -1,5 +1,5 @@
+import type { PowerEvent } from '@shinsa/core';
 import { Context, type Effect, type Stream } from 'effect';
-import type { PowerEvent } from '../away/schema.ts';
 
 export class PowerMonitor extends Context.Service<
   PowerMonitor,

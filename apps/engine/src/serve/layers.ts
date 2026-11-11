@@ -39,6 +39,8 @@ import {
 } from '../instance/index.ts';
 import { ServeLock } from '../instance/lock/service.ts';
 import { createSummaryAccountSource, Onboarding, Prerequisites, SetupCommands } from '../onboarding/index.ts';
+import { IdleWatch } from '../presence/idle/service.ts';
+import { MacIdle } from '../presence/mac-idle/service.ts';
 import { ProjectChanges } from '../projects/changes/service.ts';
 import {
   createInstalledConnector,
@@ -301,7 +303,8 @@ function createClocksLayer(options: ShinsaOptions) {
     MonitorClock.layer,
     WatchdogClock.layer,
     AutopilotClock.layer,
-    ShareClock.layer
+    ShareClock.layer,
+    IdleWatch.layer.pipe(Layer.provide(MacIdle.layer))
   ).pipe(
     Layer.provide(
       Layer.mergeAll(

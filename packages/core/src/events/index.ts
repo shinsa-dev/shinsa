@@ -95,6 +95,7 @@ type EventBody =
   | { type: 'focus.changed'; focus: Focus }
   | { type: 'away.recorded'; from: number; to: number }
   | { type: 'clock.recorded'; timeZone: string }
+  | { type: 'mac.used'; usedAt: number }
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
   | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
   | { type: 'settings.changed'; settings: Settings }
