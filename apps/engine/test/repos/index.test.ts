@@ -22,6 +22,15 @@ import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index
 import { createTestMachine } from '../helpers/machine.ts';
 import { createStubEngine } from '../helpers/state.ts';
 
+const CLEAN_GH = {
+  FAKE_GH_STATE: undefined,
+  FAKE_GH_ORGS: undefined,
+  FAKE_GH_FAIL_ORGS: undefined,
+  FAKE_GH_FAIL_REPOS: undefined,
+  FAKE_GH_CREATE_HIDDEN: undefined,
+  FAKE_GH_GIT_PROTOCOL: undefined,
+};
+
 const machines = new WeakMap<Engine, Awaited<ReturnType<typeof createTestMachine>>>();
 
 async function openMachine(engine: Engine) {
@@ -227,7 +236,7 @@ describe('createProjectRepository', () => {
 
   test('connects the new repository to GitHub under the owner of the project’s other repositories, and records its remote', async () => {
     const remotes = createTempDir('shinsa-remotes-');
-    const restore = overrideEnv({ FAKE_GH_REMOTES: remotes, FAKE_GH_LOGIN: 'octo', FAKE_GH_ORGS: undefined });
+    const restore = overrideEnv({ ...CLEAN_GH, FAKE_GH_REMOTES: remotes, FAKE_GH_LOGIN: 'octo' });
     try {
       const folder = createTempDir();
       const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
@@ -249,8 +258,12 @@ describe('createProjectRepository', () => {
   });
 
   test('a new repository GitHub cannot connect is still created and registered, without a remote', async () => {
-    const restore = overrideEnv({ FAKE_GH_REMOTES: createTempDir(), FAKE_GH_LOGIN: 'octo' });
-    const failing = overrideEnv({ FAKE_GH_FAIL_ORGS: 'HTTP 502' });
+    const restore = overrideEnv({
+      ...CLEAN_GH,
+      FAKE_GH_REMOTES: createTempDir(),
+      FAKE_GH_LOGIN: 'octo',
+      FAKE_GH_FAIL_ORGS: 'HTTP 502',
+    });
     try {
       const folder = createTempDir();
       const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
@@ -259,7 +272,6 @@ describe('createProjectRepository', () => {
       expect(repo).toMatchObject({ name: 'islands', remote: null, projectId });
       expect((await git(repo.path, 'remote')).trim()).toBe('');
     } finally {
-      failing();
       restore();
     }
   });
