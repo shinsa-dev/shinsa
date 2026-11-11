@@ -197,6 +197,7 @@ async function createWorld(options: WorldOptions = {}) {
     requestHttp: (_url, init) => {
       const token = new Headers(init.headers).get('authorization')?.replace('Bearer ', '') ?? '';
       const body = usage.get(token);
+      if (body === LIMITED) return Promise.resolve(new Response('slow down', { status: 429 }));
       return Promise.resolve(body ? Response.json(body) : new Response('no', { status: 401 }));
     },
     spawnLogin,
@@ -249,6 +250,8 @@ async function createWorld(options: WorldOptions = {}) {
 }
 
 type World = Awaited<ReturnType<typeof createWorld>>;
+
+const LIMITED = 'limited';
 
 function windows(session: number, weekly: number, fable = 0, resetsAt = '2030-01-01T00:00:00Z') {
   return {
@@ -935,6 +938,28 @@ describe('moving a rejected attempt to another account', () => {
       state.settings = { ...state.settings, agentModels: { agent: 'opus' } };
     });
     expect(restarted.accounts.snapshot().accounts[0]).toMatchObject({ spentUntil: null, spentModel: null });
+  });
+
+  test('a model limit is still told apart while Claude holds back usage reads', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    world.usage.set('token-a@example.com', windows(10, 40, 96));
+    await world.accounts.limits.refresh([a.id], true);
+    world.usage.set('token-a@example.com', LIMITED);
+    await world.accounts.limits.refresh([a.id], true);
+    await world.accounts.limits.recordPush(a.id, {
+      kind: 'rate_limit',
+      status: 'rejected',
+      limit: 'seven_day',
+      utilization: null,
+      resetsAt: world.now + HOUR,
+    });
+    const verdict = await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(verdict.failure).toMatchObject({ limitScope: 'model', model: 'fable' });
   });
 
   test('a model limit leaves the account to runs on other models, and each model keeps its own mark', async () => {

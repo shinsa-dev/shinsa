@@ -39,14 +39,20 @@ export function resolveSpentUntil(
   model: string | null,
   now: number
 ): Option.Option<number> {
-  if (isStaleUsage(usage, now)) return Option.none();
-  const resets = listRelevantWindows(usage, model).flatMap((window) =>
-    window.usedPercent >= SPENT_PERCENT && window.resetsAt !== null && window.resetsAt > now
-      ? [window.resetsAt]
-      : []
-  );
+  const resets = listSpentWindows(usage, model, now).map((window) => window.resetsAt as number);
   if (resets.length === 0) return Option.none();
   return Option.some(Math.max(...resets));
+}
+
+export function isSharedWindow(window: UsageWindow) {
+  return SHARED_WINDOW_KINDS.has(window.kind);
+}
+
+export function listSpentWindows(usage: AccountUsage, model: string | null, now: number) {
+  if (isStaleUsage(usage, now)) return [];
+  return listRelevantWindows(usage, model).filter(
+    (window) => window.usedPercent >= SPENT_PERCENT && window.resetsAt !== null && window.resetsAt > now
+  );
 }
 
 function selectWeeklyWindow(usage: AccountUsage) {
@@ -92,7 +98,7 @@ export function resolveLimitScope(usage: AccountUsage, model: string | null, now
   if (usage.checkedAt === null || isStaleUsage(usage, now)) return 'account';
   const own = listOwnModelWindows(usage, model);
   if (own.length === 0) return 'account';
-  const shared = usage.windows.filter((window) => SHARED_WINDOW_KINDS.has(window.kind));
+  const shared = usage.windows.filter(isSharedWindow);
   if (shared.some((window) => window.usedPercent >= SPENT_PERCENT)) return 'account';
   const ownPercent = Math.max(...own.map((window) => window.usedPercent));
   return shared.every((window) => window.usedPercent <= ownPercent) ? 'model' : 'account';

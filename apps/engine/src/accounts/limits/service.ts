@@ -54,12 +54,18 @@ export class UsageLimits extends Context.Service<
         const entries = yield* Ref.make<ReadonlyMap<string, AccountUsage>>(
           yield* registry.readUsage(table.path)
         );
+        const lastRead = yield* Ref.make<ReadonlyMap<string, AccountUsage>>(
+          new Map([...(yield* Ref.get(entries))].filter(([, usage]) => usage.source !== 'push'))
+        );
         const reading = yield* Ref.make<ReadonlyMap<string, Deferred.Deferred<void>>>(new Map());
 
         const selectEntry = (id: string) => Effect.map(Ref.get(entries), (all) => all.get(id));
 
         const snapshot = (id: string) =>
           Effect.map(selectEntry(id), (usage) => usage ?? createUnknownUsage());
+
+        const measured = (id: string) =>
+          Effect.map(Ref.get(lastRead), (all) => all.get(id) ?? createUnknownUsage());
 
         const persist = Effect.gen(function* () {
           yield* registry.keepUsage(table.path, yield* Ref.get(entries));
@@ -77,6 +83,11 @@ export class UsageLimits extends Context.Service<
             const rest = new Map(all);
             rest.delete(id);
             return [true, rest];
+          });
+          yield* Ref.update(lastRead, (all) => {
+            const rest = new Map(all);
+            rest.delete(id);
+            return rest;
           });
           if (removed) yield* persist;
         });
@@ -103,7 +114,11 @@ export class UsageLimits extends Context.Service<
           const result = yield* attempt(id);
           const { retryAt: _retryAt, ...previous } = (yield* selectEntry(id)) ?? createUnknownUsage();
           const now = yield* Clock.currentTimeMillis;
-          if (result.ok) return yield* store(id, resolveReadUsage(result, previous, now, table.emptyDetail));
+          if (result.ok) {
+            const fresh = resolveReadUsage(result, previous, now, table.emptyDetail);
+            yield* Ref.update(lastRead, (all) => new Map(all).set(id, fresh));
+            return yield* store(id, fresh);
+          }
           yield* store(id, {
             ...previous,
             status: previous.windows.length > 0 ? previous.status : 'unavailable',
@@ -166,7 +181,7 @@ export class UsageLimits extends Context.Service<
           });
         });
 
-        const usage: UsageTable = { snapshot, isFresh, refresh, remove, recordPush };
+        const usage: UsageTable = { snapshot, measured, isFresh, refresh, remove, recordPush };
         return usage;
       });
 

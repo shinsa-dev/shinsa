@@ -7,6 +7,7 @@ export {
   pickAccount,
   resolveAccountCandidate,
   resolveCandidateSpentUntil,
+  selectCandidateSpentModel,
   resolvePoolResetAt,
   selectNextAccount,
 } from './pick.ts';

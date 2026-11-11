@@ -10,6 +10,7 @@ import {
   pickAccount,
   resolveCandidateSpentUntil,
   resolvePoolResetAt,
+  selectCandidateSpentModel,
   selectNextAccount,
   STALE_USAGE_MS,
   type UsageWindow,
@@ -65,6 +66,21 @@ const FABLE_SPENT = createUsage([
 ]);
 
 describe('spent accounts', () => {
+  test('the model an account is spent for comes from its mark or its own window, never with a shared window spent', () => {
+    const spentModel = (patch: Partial<AccountCandidate>, model: string | null) =>
+      Option.getOrNull(selectCandidateSpentModel(createCandidate('a', patch), model, NOW));
+    expect(spentModel({ spentUntil: NOW + 10_000, spentModel: 'fable' }, 'fable')).toBe('fable');
+    expect(spentModel({ spentUntil: NOW + 10_000, spentModel: 'fable' }, 'opus')).toBeNull();
+    expect(spentModel({ spentUntil: NOW - 1, spentModel: 'fable' }, 'fable')).toBeNull();
+    expect(spentModel({ spentUntil: NOW + 10_000 }, 'fable')).toBeNull();
+    expect(spentModel({ usage: FABLE_SPENT }, 'fable')).toBe('Fable');
+    expect(spentModel({ usage: FABLE_SPENT }, 'opus')).toBeNull();
+    const shared = createUsage([{ usedPercent: 100 }, { ...FABLE_SPENT.windows[1] }]);
+    expect(spentModel({ usage: shared, spentUntil: NOW + 10_000, spentModel: 'fable' }, 'fable')).toBeNull();
+    const stale = { ...FABLE_SPENT, checkedAt: NOW - STALE_USAGE_MS - 1 };
+    expect(spentModel({ usage: stale }, 'fable')).toBeNull();
+  });
+
   test('an account is spent until the later of its marked and its measured reset', () => {
     const marked = createCandidate('a', { spentUntil: NOW + 10_000 });
     expect(Option.getOrNull(resolveCandidateSpentUntil(marked, null, NOW))).toBe(NOW + 10_000);

@@ -1,7 +1,14 @@
 import { Option } from 'effect';
 import { type AccountSwitchReason, resolveAccountSwitchAt, type Settings } from '../domain/index.ts';
 import type { AccountSignIn, AccountSummary, AccountUsage } from '../protocol/accounts.ts';
-import { isModelMarkFor, resolveHeadroom, resolveSpentUntil, resolveUsedPercent } from './usage.ts';
+import {
+  isModelMarkFor,
+  isSharedWindow,
+  listSpentWindows,
+  resolveHeadroom,
+  resolveSpentUntil,
+  resolveUsedPercent,
+} from './usage.ts';
 
 export interface AccountCandidate {
   id: string;
@@ -42,6 +49,20 @@ export function resolveCandidateSpentUntil(
   return Option.isSome(marked) && Option.isSome(measured)
     ? Option.some(Math.max(marked.value, measured.value))
     : Option.orElse(marked, () => measured);
+}
+
+export function selectCandidateSpentModel(
+  candidate: Pick<AccountCandidate, 'spentUntil' | 'spentModel' | 'usage'>,
+  model: string | null,
+  now: number
+): Option.Option<string> {
+  const spent = listSpentWindows(candidate.usage, model, now);
+  if (spent.some(isSharedWindow)) return Option.none();
+  const { spentModel, spentUntil } = candidate;
+  if (spentModel && spentUntil !== null && spentUntil > now && isModelMarkFor(spentModel, model)) {
+    return Option.some(spentModel);
+  }
+  return Option.fromNullishOr(spent.find((window) => window.kind === 'model')?.model);
 }
 
 export function isUsableAccount(candidate: AccountCandidate, model: string | null, now: number) {

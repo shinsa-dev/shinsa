@@ -171,7 +171,7 @@ export class AccountRotation extends Context.Service<
         if (failure.limitScope) return failure.limitScope;
         if (model === null) return 'account' satisfies UsageLimitScope;
         yield* limits.refresh([accountId], true);
-        return resolveLimitScope(yield* limits.snapshot(accountId), model, yield* Clock.currentTimeMillis);
+        return resolveLimitScope(yield* limits.measured(accountId), model, yield* Clock.currentTimeMillis);
       });
 
       const recordFailureMark = Effect.fn('AccountRotation.recordFailureMark')(function* (

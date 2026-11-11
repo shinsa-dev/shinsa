@@ -13,6 +13,7 @@ export const PROVIDER_USAGE_FILE = 'provider-usage.json';
 
 export interface UsageTable {
   readonly snapshot: (id: string) => Effect.Effect<AccountUsage>;
+  readonly measured: (id: string) => Effect.Effect<AccountUsage>;
   readonly isFresh: (id: string) => Effect.Effect<boolean>;
   readonly refresh: (ids: readonly string[], force: boolean) => Effect.Effect<void>;
   readonly remove: (id: string) => Effect.Effect<void>;
