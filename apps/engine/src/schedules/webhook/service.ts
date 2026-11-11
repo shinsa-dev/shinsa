@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Schedule } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
+import { SCHEDULE_FILTER_SKIPPED, SCHEDULE_LIMITS, type Schedule } from '@shinsa/core';
+import { Clock, Context, Effect, FiberSet, Layer, Option, Ref } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { SecretStore } from '../../secrets/index.ts';
+import { ScheduleFilter } from '../filter/service.ts';
 import { resolvePromptProblem } from '../prompt.ts';
 import {
   FRAME_ID_BYTES,
@@ -14,21 +15,26 @@ import {
   type WebhookOutcome,
   type WebhookRequest,
 } from '../schema.ts';
-import { renderReplayKey, renderWebhookPrompt } from '../template.ts';
+import { renderReplayKey, renderWebhookPrompt, resolveWebhookFilterSubject } from '../template.ts';
 import { constantTimeEquals, verifyWebhookSignature } from '../verify.ts';
 import { WebhookDeliveryFailed, WebhookDeliveryId } from './schema.ts';
 
 export class WebhookReceiver extends Context.Service<
   WebhookReceiver,
-  { readonly handle: (request: Request, url: URL) => Effect.Effect<Response> }
+  {
+    readonly handle: (request: Request, url: URL) => Effect.Effect<Response>;
+    readonly settle: Effect.Effect<void>;
+  }
 >()('shinsa/engine/schedules/webhook/WebhookReceiver') {
   static readonly layer = Layer.effect(
     WebhookReceiver,
     Effect.gen(function* () {
       const engine = yield* EngineCore;
       const secrets = yield* SecretStore;
+      const filter = yield* ScheduleFilter;
       const newId = yield* WebhookDeliveryId;
       const windows = yield* Ref.make<ReadonlyMap<string, readonly number[]>>(new Map());
+      const deliveries = yield* FiberSet.make<void>();
 
       const respond = (status: number, outcome: WebhookOutcome, body: Record<string, string> = {}) =>
         Response.json(
@@ -99,6 +105,53 @@ export class WebhookReceiver extends Context.Service<
         });
       };
 
+      const run = Effect.fn('WebhookReceiver.run')(function* (
+        schedule: Schedule,
+        delivery: WebhookRequest,
+        taken: { id: string; deliveryId: string; prompt: string; replayKey: string | null }
+      ) {
+        const { id, deliveryId, replayKey } = taken;
+        const applies = yield* filter.applies(schedule, resolveWebhookFilterSubject(delivery));
+        const command = applies
+          ? ({
+              type: 'schedule.deliver',
+              scheduleId: schedule.id,
+              deliveryId,
+              text: taken.prompt,
+              replayKey,
+            } as const)
+          : ({
+              type: 'schedule.skip',
+              scheduleId: schedule.id,
+              deliveryId,
+              detail: SCHEDULE_FILTER_SKIPPED,
+              replayKey,
+            } as const);
+        const logFailure = (failure: { readonly message: string }) =>
+          Effect.logWarning('[Webhooks] A delivery could not be recorded').pipe(
+            Effect.annotateLogs({ scheduleId: schedule.id, deliveryId, error: failure.message })
+          );
+        yield* engine.dispatch(command, { id: applies ? id : `${id}:skip` }).pipe(
+          Effect.catchTag('DomainError', (refusal) =>
+            logFailure(refusal).pipe(
+              Effect.andThen(
+                engine.dispatch(
+                  {
+                    type: 'schedule.fail',
+                    scheduleId: schedule.id,
+                    dueAt: null,
+                    deliveryId,
+                    detail: refusal.message.slice(0, SCHEDULE_LIMITS.detail),
+                  },
+                  { id: `${id}:fail` }
+                )
+              )
+            )
+          ),
+          Effect.catch(logFailure)
+        );
+      });
+
       const deliver = Effect.fn('WebhookReceiver.deliver')(function* (
         schedule: Schedule,
         delivery: WebhookRequest
@@ -124,17 +177,8 @@ export class WebhookReceiver extends Context.Service<
           );
           return respond(202, 'prompt_refused', { deliveryId, error: problem });
         }
-        const events = yield* engine.dispatch(
-          { type: 'schedule.deliver', scheduleId: schedule.id, deliveryId, text: prompt, replayKey },
-          { id }
-        );
-        return respond(
-          202,
-          events.some((event) => event.type === 'schedule.fired') ? 'accepted' : 'duplicate',
-          {
-            deliveryId,
-          }
-        );
+        yield* FiberSet.run(deliveries, run(schedule, delivery, { id, deliveryId, prompt, replayKey }));
+        return respond(202, 'accepted', { deliveryId });
       });
 
       const receive = Effect.fn('WebhookReceiver.receive')(function* (
@@ -177,7 +221,7 @@ export class WebhookReceiver extends Context.Service<
         );
       });
 
-      return WebhookReceiver.of({ handle });
+      return WebhookReceiver.of({ handle, settle: FiberSet.awaitEmpty(deliveries) });
     })
   );
 }

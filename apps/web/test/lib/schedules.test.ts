@@ -61,7 +61,14 @@ describe('describing a schedule', () => {
     ).toBe('Trigger · Starts a new task · when its webhook is called');
     const slack = createSchedule({
       id: 'k',
-      trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+      trigger: {
+        kind: 'slack',
+        teamId: 'T1',
+        teamName: 'Acme',
+        channelId: 'C1',
+        channelName: 'alerts',
+        threadUpdates: true,
+      },
     });
     expect(describeScheduleSummary(state, slack)).toBe(
       'Trigger · Starts a new task · when a message is posted in #alerts'

@@ -1,4 +1,5 @@
 import type { ScheduleTrigger, TaskMode, TaskPriority } from '../domain/index.ts';
+import type { SlackMessageRef } from '../domain/slack.ts';
 
 export interface ReportFiling {
   title: string;
@@ -56,5 +57,13 @@ export type ScheduleSystemCommand =
       scheduleId: string;
       deliveryId: string;
       text: string;
+      replayKey: string | null;
+      slackMessage?: SlackMessageRef | null;
+    }
+  | {
+      type: 'schedule.skip';
+      scheduleId: string;
+      deliveryId: string;
+      detail: string;
       replayKey: string | null;
     };

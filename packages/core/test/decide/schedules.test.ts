@@ -616,6 +616,16 @@ describe('a Slack channel trigger', () => {
     teamName: 'Acme',
     channelId: 'C1',
     channelName: 'alerts',
+    threadUpdates: true,
+  };
+
+  const MESSAGE = {
+    teamId: 'T1',
+    channelId: 'C1',
+    messageTs: '100.1',
+    userId: 'B7',
+    permalink: 'https://acme.slack.com/archives/C1/p1001',
+    channelName: 'alerts',
   };
 
   function watching(input: Partial<CommandOf<'agent.set_schedule'>> = {}) {
@@ -676,6 +686,161 @@ describe('a Slack channel trigger', () => {
       detail: 'Too many.',
     });
     expect(only(harness).runs[0]).toMatchObject({ outcome: 'failed', deliveryId: 'd1', detail: 'Too many.' });
+  });
+
+  test('a task it files is linked to the message’s thread, which gets the status card', () => {
+    const { harness, id } = watching();
+    const decision = harness.send({
+      type: 'schedule.deliver',
+      scheduleId: id,
+      deliveryId: 'd1',
+      text: 'Look into it.',
+      replayKey: 'T1:C1:100.1',
+      slackMessage: MESSAGE,
+    });
+    const filed = only(harness).lastTaskId ?? '';
+    expect(harness.task(filed).slack).toEqual({
+      teamId: 'T1',
+      channelId: 'C1',
+      threadTs: '100.1',
+      userId: 'B7',
+      messageTs: '100.1',
+      permalink: MESSAGE.permalink,
+      channelName: 'alerts',
+      statusTs: null,
+      reaction: null,
+    });
+    expect(decision.effects.filter((effect) => effect.kind === 'slack.status')).toEqual([
+      {
+        kind: 'slack.status',
+        taskId: filed,
+        thread: expect.objectContaining({ teamId: 'T1', channelId: 'C1', threadTs: '100.1' }),
+      },
+    ]);
+  });
+
+  test('a second automation on the channel files its task without taking the thread from the first', () => {
+    const { harness, taskId, id } = watching();
+    schedule(harness, taskId, { target: newTaskTarget(), trigger: ALERTS, text: 'Triage it.' });
+    const other = Object.values(harness.state.schedules).find((entry) => entry.id !== id)?.id ?? '';
+    const send = (scheduleId: string) =>
+      harness.send({
+        type: 'schedule.deliver',
+        scheduleId,
+        deliveryId: 'd1',
+        text: 'Look into it.',
+        replayKey: null,
+        slackMessage: MESSAGE,
+      });
+    send(id);
+    const second = send(other);
+    const first = harness.state.schedules[id]?.lastTaskId ?? '';
+    const later = harness.state.schedules[other]?.lastTaskId ?? '';
+    expect(later).not.toBe(first);
+    expect(harness.task(first).slack?.threadTs).toBe('100.1');
+    expect(harness.task(later).slack).toBeUndefined();
+    expect(second.effects.some((effect) => effect.kind.startsWith('slack.'))).toBe(false);
+  });
+
+  test('a mention in that thread messages the filed task instead of starting another', () => {
+    const { harness, id } = watching();
+    harness.send({
+      type: 'schedule.deliver',
+      scheduleId: id,
+      deliveryId: 'd1',
+      text: 'Look into it.',
+      replayKey: null,
+      slackMessage: MESSAGE,
+    });
+    const filed = only(harness).lastTaskId ?? '';
+    const decision = harness.send({
+      type: 'slack.mention',
+      mention: {
+        eventId: 'Ev2',
+        teamId: 'T1',
+        channelId: 'C1',
+        threadTs: '100.1',
+        messageTs: '100.4',
+        userId: 'U1',
+        userName: 'Christo',
+        text: 'also check the logs',
+        permalink: null,
+        channelName: 'alerts',
+        thread: [],
+        linkedThreads: [],
+        linkedUserId: null,
+      },
+    });
+    expect(decision.effects.some((effect) => effect.kind === 'slack.evaluate')).toBe(false);
+    expect(decision.effects).toContainEqual(
+      expect.objectContaining({ kind: 'slack.react', messageTs: '100.4' })
+    );
+    expect(Object.values(harness.state.tasks).filter((task) => task.slack)).toHaveLength(1);
+    expect(harness.task(filed).slack?.threadTs).toBe('100.1');
+  });
+
+  test('files silently with updates off, without a Slack message, or when it messages a task', () => {
+    const quiet = watching({ trigger: { ...ALERTS, threadUpdates: false } });
+    const off = quiet.harness.send({
+      type: 'schedule.deliver',
+      scheduleId: quiet.id,
+      deliveryId: 'd1',
+      text: 'Look into it.',
+      replayKey: null,
+      slackMessage: MESSAGE,
+    });
+    expect(quiet.harness.task(only(quiet.harness).lastTaskId ?? '').slack).toBeUndefined();
+    expect(off.effects.some((effect) => effect.kind.startsWith('slack.'))).toBe(false);
+
+    const bare = watching();
+    deliver(bare.harness, bare.id, 'd1', null);
+    expect(bare.harness.task(only(bare.harness).lastTaskId ?? '').slack).toBeUndefined();
+
+    const messaging = watching({ target: null });
+    const told = messaging.harness.send({
+      type: 'schedule.deliver',
+      scheduleId: messaging.id,
+      deliveryId: 'd1',
+      text: 'Look into it.',
+      replayKey: null,
+      slackMessage: MESSAGE,
+    });
+    expect(messaging.harness.task(messaging.taskId).slack).toBeUndefined();
+    expect(told.effects.some((effect) => effect.kind.startsWith('slack.'))).toBe(false);
+  });
+
+  test('a message the automation does not apply to is a skipped run, once, with no task', () => {
+    const { harness, id } = watching({ maxRuns: 1 });
+    const skip = {
+      type: 'schedule.skip',
+      scheduleId: id,
+      deliveryId: 'd1',
+      detail: 'x'.repeat(SCHEDULE_LIMITS.detail + 5),
+      replayKey: 'T1:C1:100.1',
+    } as const;
+    const tasks = Object.keys(harness.state.tasks).length;
+    const decision = harness.send(skip);
+    expect(decision.effects).toHaveLength(0);
+    expect(Object.keys(harness.state.tasks)).toHaveLength(tasks);
+    expect(only(harness)).toMatchObject({ runCount: 0, stopped: null, enabled: true, lastTaskId: null });
+    expect(only(harness).runs).toEqual([
+      expect.objectContaining({ outcome: 'skipped', deliveryId: 'd1', taskId: null }),
+    ]);
+    expect(only(harness).runs[0]?.detail).toHaveLength(SCHEDULE_LIMITS.detail);
+    expect(harness.send({ ...skip, deliveryId: 'd2' }).events).toHaveLength(0);
+    expect(deliver(harness, id, 'd3', 'T1:C1:100.1').events).toHaveLength(0);
+    expect(harness.send({ ...skip, deliveryId: 'd4', replayKey: null }).events).not.toHaveLength(0);
+  });
+
+  test('a skip is ignored for a paused, unknown or timed automation', () => {
+    const { harness, taskId, id } = watching();
+    const skip = { type: 'schedule.skip', deliveryId: 'd1', detail: 'No.', replayKey: null } as const;
+    harness.send({ type: 'schedule.enable', scheduleId: id, enabled: false });
+    expect(harness.send({ ...skip, scheduleId: id }).events).toHaveLength(0);
+    expect(harness.send({ ...skip, scheduleId: 'nope' }).events).toHaveLength(0);
+    schedule(harness, taskId, { name: 'Timed' });
+    const timed = Object.values(harness.state.schedules).find((entry) => entry.trigger.kind === 'interval');
+    expect(harness.send({ ...skip, scheduleId: timed?.id ?? '' }).events).toHaveLength(0);
   });
 
   test.each<[string, Partial<Extract<ScheduleTrigger, { kind: 'slack' }>>, string]>([

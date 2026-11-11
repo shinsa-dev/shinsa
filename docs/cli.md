@@ -1183,7 +1183,7 @@ Every task agent's tool: `schedules_list` (reads).
 Create a schedule, or change one with --id: it starts a new task, messages a task or reads a data source, once, on an interval, daily, when its webhook is called or when a message is posted in a Slack channel.
 
 ```
-shinsa schedules write [--id <text>] [--name <text>] [--message <text>] [--in-minutes <integer>] [--run-at <text>] [--every-minutes <integer>] [--daily-at <text>] [--weekdays <list>] [--webhook] [--signature-header <text>] [--signature-encoding <hex|base64>] [--signature-prefix <text>] [--signature-secret-ref <text>] [--replay-key <text>] [--slack-channel <text>] [--slack-workspace <text>] [--new-task] [--repo <text>] [--priority <urgent|high|normal|low>] [--just-answer] [--task <text>] [--source <text>] [--project <text>] [--enabled] [--max-runs <integer>] [--time-zone <text>] [--json]
+shinsa schedules write [--id <text>] [--name <text>] [--message <text>] [--in-minutes <integer>] [--run-at <text>] [--every-minutes <integer>] [--daily-at <text>] [--weekdays <list>] [--webhook] [--signature-header <text>] [--signature-encoding <hex|base64>] [--signature-prefix <text>] [--signature-secret-ref <text>] [--replay-key <text>] [--slack-channel <text>] [--slack-workspace <text>] [--slack-updates] [--new-task] [--repo <text>] [--priority <urgent|high|normal|low>] [--just-answer] [--task <text>] [--source <text>] [--project <text>] [--enabled] [--max-runs <integer>] [--time-zone <text>] [--json]
 ```
 
 Every task agent's tool: `schedules_write`. Sends `schedule.write`.
@@ -1192,7 +1192,7 @@ Every task agent's tool: `schedules_write`. Sends `schedule.write`.
 | --- | --- | --- |
 | `--id` | text, optional | The schedule to change. Leave out to create one. |
 | `--name` | text, optional | A short name. |
-| `--message` | text, optional | What it sends: the request of the new task, or the message. A webhook may use {{body.path}}. |
+| `--message` | text, optional | What it sends: the request of the new task, or the message. A webhook may use {{body.path}}. For a webhook or a Slack channel, say here which requests or messages to act on, such as only bugs: the rest are skipped. |
 | `--in-minutes` | integer, optional | Once, this many minutes from now. |
 | `--run-at` | text, optional | Once, at this ISO 8601 time. |
 | `--every-minutes` | integer, optional | Repeatedly, every this many minutes. |
@@ -1206,6 +1206,7 @@ Every task agent's tool: `schedules_write`. Sends `schedule.write`.
 | `--replay-key` | text, optional | With --webhook: a template that names a delivery, so a repeat starts nothing. |
 | `--slack-channel` | text, optional | Run for each new message in this Slack channel, such as #alerts. Invite @Shinsa to the channel first. |
 | `--slack-workspace` | text, optional | With --slack-channel: the Slack workspace, when the channel is in several. |
+| `--slack-updates` | boolean, optional | With --slack-channel, or alone with --id: false (--no-slack-updates) files tasks without posting in Slack. Otherwise a filed task gets its status in the message’s thread. |
 | `--new-task` | boolean, optional | Start a new task on each run. |
 | `--repo` | text, optional | With --new-task: the repository (name or id). |
 | `--priority` | choice, optional | With --new-task: its priority. |

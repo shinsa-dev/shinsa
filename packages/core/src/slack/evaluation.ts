@@ -1,5 +1,11 @@
 import { Option, Schema } from 'effect';
-import { SlackEvaluationReply, type SlackEvaluation, type SlackMention } from './schema.ts';
+import type { ScheduleFilterSubject } from '../schedules/schema.ts';
+import {
+  type SlackChannelMessage,
+  SlackEvaluationReply,
+  type SlackEvaluation,
+  type SlackMention,
+} from './schema.ts';
 import { listSlackLinkedThreadLines, serializeSlackThread } from './thread.ts';
 
 const decodeSlackEvaluationReply = Schema.decodeUnknownOption(SlackEvaluationReply);
@@ -31,4 +37,12 @@ export function serializeSlackEvaluationPrompt(mention: SlackMention) {
 
 export function parseSlackEvaluation(value: unknown): Option.Option<SlackEvaluation> {
   return Option.map(decodeSlackEvaluationReply(value), ({ decision }) => decision);
+}
+
+export function resolveSlackFilterSubject(message: SlackChannelMessage): ScheduleFilterSubject {
+  return {
+    label: `The message in ${message.channelName ? `#${message.channelName}` : 'the channel'}`,
+    tag: 'slack-message',
+    body: `From ${message.bot ? `${message.userName} (bot)` : message.userName}:\n${message.text.trim()}`,
+  };
 }
