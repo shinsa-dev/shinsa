@@ -30,11 +30,12 @@ import {
   resolveUsageText,
   selectGlanceRow,
   type UsageGlance,
+  type UsageResetsNote,
   type UsageRow,
 } from '@/lib/accounts/usage.ts';
 import { openSettingsSection } from '@/lib/command/settings.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
-import { TONE_FILL } from '@/lib/format/tone.ts';
+import { TONE_FILL, TONE_TEXT } from '@/lib/format/tone.ts';
 
 function NextMark() {
   return (
@@ -61,7 +62,7 @@ function GlanceRow({
   status: AccountStatus | null;
   detail: string;
   next: boolean;
-  resets?: string | null;
+  resets?: UsageResetsNote | null;
 }) {
   return (
     <InfoSection>
@@ -95,7 +96,9 @@ function GlanceRow({
             {status && <AccountStatusText status={status} />}
           </span>
         )}
-        {resets && <span className='text-2xs text-fg-3'>{resets}</span>}
+        {resets && (
+          <span className={cn('text-2xs', resets.ending ? TONE_TEXT.amber : 'text-fg-3')}>{resets.text}</span>
+        )}
       </div>
     </InfoSection>
   );

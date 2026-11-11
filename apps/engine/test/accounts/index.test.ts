@@ -651,7 +651,14 @@ describe('recording the safe usage pace', () => {
     const pace = recorded?.type === 'usage.pace_recorded' ? recorded.pace : null;
     expect(pace).toBeGreaterThan(0);
     world.stub.update((state) => {
-      state.usagePaces.claude = { provider: 'claude', pace: pace ?? 0, at: 1 };
+      state.usagePaces.claude = {
+        provider: 'claude',
+        pace: pace ?? 0,
+        resetPace: recorded?.type === 'usage.pace_recorded' ? (recorded.resetPace ?? 0) : 0,
+        endingPace: recorded?.type === 'usage.pace_recorded' ? (recorded.endingPace ?? 0) : 0,
+        resetEndsAt: null,
+        at: 1,
+      };
     });
     const before = paceCommands(world).length;
     await world.accounts.store.update(world.accounts.store.list()[0]?.id ?? '', { switchAt: 80 });

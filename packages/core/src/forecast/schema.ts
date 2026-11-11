@@ -7,6 +7,7 @@ export const ForecastAccount = Schema.Struct({
   label: Schema.String,
   left: Schema.Number,
   resetsAt: Schema.NullOr(Time),
+  refills: Schema.optionalKey(Schema.Boolean),
 });
 
 export type ForecastAccount = typeof ForecastAccount.Type;
