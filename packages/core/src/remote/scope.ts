@@ -9,6 +9,7 @@ import type { AccessScopes, ActionScope } from '../scopes/schema.ts';
 import { isSharedLead, isTeamTask } from '../share/teams.ts';
 import type { StateChanges } from '../state/draft.ts';
 import { createState, type ShinsaState } from '../state/project.ts';
+import { listOpenGates } from '../state/queries.ts';
 import { OWNER_ONLY_MESSAGE } from './local-only.ts';
 
 type CommandScope = Exclude<ActionScope, 'services' | 'fork'>;
@@ -142,7 +143,9 @@ function resolveCommandScope(type: string): CommandScope {
 }
 
 function isLeadMessage(state: ShinsaState, teamId: string, command: ScopedCommand, task: Task | undefined) {
-  return command.type === 'task.message' && task !== undefined && isSharedLead(state, task, teamId);
+  if (command.type !== 'task.message' || !command.fromTeammateTask || command.kind) return false;
+  if (!task || task.stage !== 'leading' || listOpenGates(state, task.id).length > 0) return false;
+  return isSharedLead(state, task, teamId);
 }
 
 function resolveTeamRefusal(

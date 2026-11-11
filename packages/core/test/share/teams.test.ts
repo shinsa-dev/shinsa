@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  isSameTeamMembers,
   isTeamTask,
   listTeamInitiatives,
   listTeamProjectIds,
   listTeamTasks,
+  resolveTeamMembersKey,
   TEAM_SETTLED_LIMIT,
 } from '../../src/index.ts';
 import {
@@ -154,5 +156,33 @@ describe('an initiative shared with a team', () => {
     harness.send({ type: 'initiative.remove_from_team', initiativeId, teamId: 'team-1' });
     expect(listTeamInitiatives(harness.state, 'team-1')).toEqual([]);
     expect(isTeamTask(harness.state, harness.task(leadId), 'team-1')).toBe(false);
+  });
+});
+
+describe('comparing an initiative’s team members', () => {
+  const member = {
+    teamId: 'team-1',
+    instanceId: 'laptop',
+    taskId: 't1',
+    handle: 'KAI-1',
+    title: 'Sign webhooks',
+    owner: 'kai',
+    stage: 'building' as const,
+    phaseId: null,
+    gate: null,
+    closedAt: null,
+  };
+  const other = { ...member, taskId: 't2', title: 'Retry' };
+
+  test('the same members match in any order and with their fields in any order, and share a key', () => {
+    const reordered = Object.fromEntries(Object.entries(member).reverse()) as typeof member;
+    expect(isSameTeamMembers([member, other], [other, reordered])).toBe(true);
+    expect(resolveTeamMembersKey([member, other])).toBe(resolveTeamMembersKey([other, reordered]));
+  });
+
+  test('a changed stage is a different list with a different key', () => {
+    const moved = { ...member, stage: 'merged' as const };
+    expect(isSameTeamMembers([member], [moved])).toBe(false);
+    expect(resolveTeamMembersKey([member])).not.toBe(resolveTeamMembersKey([moved]));
   });
 });

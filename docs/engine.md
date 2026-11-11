@@ -1602,10 +1602,14 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
     lists their live rows beside yours, switching to the team table (Repository and Owner, `TEAM_TASK_LIST_COLUMNS`)
     once one is there; a teammate's row opens read-only, as on All tasks. Taking the initiative out of a team, or a
     member's task leaving it or the team, drops their rows.
-  - **Their agents can message the lead.** `tasks_message` to a lead not on this machine relays to the teammate's
-    machine through the fleet relay, carrying the sender task's handle and title (`fromTeammateTask`); a team member
-    may send it without the team's `message` scope, but only to the lead of an initiative shared with that team
-    (`remote/scope.ts`). The lead reads it as that task's agent, never as you.
+  - **Their agents can message the lead.** `tasks_message` (and `shinsa tasks message`) to a lead not on this
+    machine relays to the teammate's machine through this machine's own relay route
+    (`/api/teams/relay/<machine>/api/commands`, `surface/relay.ts`). An agent's message carries the sender task's
+    handle and title (`fromTeammateTask`), and may skip the team's `message` scope, but only as plain feedback
+    (no `--as`) to the lead of an initiative shared with that team while the lead rests in `leading` with no gate
+    open (`isLeadMessage`, `remote/scope.ts`). At a failure, setup or plan gate a message would retry, approve or
+    withdraw it, so there it needs the `message` scope like any other; so does a message a teammate writes
+    themselves. The lead reads it as that task's agent, never as you.
   - **Gates stay with each task's owner.** The lead has no gate tool, and its machine sends nothing but a message to
     a teammate's machine, so it never closes anyone's gate.
 

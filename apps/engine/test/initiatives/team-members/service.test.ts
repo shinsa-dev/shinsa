@@ -87,6 +87,20 @@ describe('teammates’ tasks in an initiative', () => {
     expect(listTeamMembersUpdates(leaderless.state, SELF, createFeed([createFeedTask('t1')]))).toEqual([]);
   });
 
+  test('the same members in another order, or with their fields written in another order, send nothing', () => {
+    const second = { ...MEMBER, taskId: 't2', handle: 'KAI-t2', title: 'Task t2' };
+    const reordered = Object.fromEntries(Object.entries(MEMBER).reverse()) as typeof MEMBER;
+    const recorded = createStubEngine((state) => {
+      state.initiatives = { chat: createInitiative({ teamMembers: [second, reordered] }) };
+    });
+    const feed = createFeed([createFeedTask('t1'), createFeedTask('t2')]);
+    expect(listTeamMembersUpdates(recorded.state, SELF, feed)).toEqual([]);
+    const forth = { initiativeId: 'chat', teamId: 'team-1', previous: [], members: [MEMBER, second] };
+    expect(resolveTeamMembersId(forth)).toBe(
+      resolveTeamMembersId({ ...forth, members: [second, reordered] })
+    );
+  });
+
   test('names a change by both sides, so going back to an earlier list is a new command', () => {
     const forth = { initiativeId: 'chat', teamId: 'team-1', previous: [], members: [MEMBER] };
     const back = { initiativeId: 'chat', teamId: 'team-1', previous: [MEMBER], members: [] };

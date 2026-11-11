@@ -1,3 +1,4 @@
+import { hashText } from '../domain/hash.ts';
 import {
   INITIATIVE_LIMITS,
   type Initiative,
@@ -167,4 +168,32 @@ export function listInitiativeTeamMembers(
     )
     .slice(0, INITIATIVE_LIMITS.teamMembers)
     .map((listing) => resolveTeamMember(feed.teamId, feed.instanceId, listing));
+}
+
+const TEAM_MEMBER_FIELDS = [
+  'teamId',
+  'instanceId',
+  'taskId',
+  'handle',
+  'title',
+  'owner',
+  'stage',
+  'phaseId',
+  'gate',
+  'closedAt',
+] as const satisfies readonly (keyof InitiativeTeamMember)[];
+
+function serializeTeamMembers(members: readonly InitiativeTeamMember[]) {
+  const rows = members.map((member) =>
+    JSON.stringify(TEAM_MEMBER_FIELDS.map((field) => member[field] ?? null))
+  );
+  return rows.sort().join('\n');
+}
+
+export function isSameTeamMembers(a: readonly InitiativeTeamMember[], b: readonly InitiativeTeamMember[]) {
+  return serializeTeamMembers(a) === serializeTeamMembers(b);
+}
+
+export function resolveTeamMembersKey(members: readonly InitiativeTeamMember[]) {
+  return hashText(serializeTeamMembers(members)).toString(36);
 }

@@ -93,7 +93,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   if (command.forkOf !== undefined && command.teammateFork !== undefined)
     throw new DomainError({ code: 'fork_twice', message: 'Fork one task at a time.' });
   const owner = resolveCreatedOwner(decider, lineage);
-  const membership = resolveCreatedMembership(decider, command, lineage);
+  const membership = resolveCreatedMembership(decider, command, lineage, projectId ?? null);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,

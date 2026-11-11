@@ -1,7 +1,9 @@
 import {
   type Initiative,
+  isSameTeamMembers,
   listInitiatives,
   listInitiativeTeamMembers,
+  resolveTeamMembersKey,
   type ShinsaState,
   type TeamFeedSnapshot,
   type TeamFeedTask,
@@ -36,13 +38,13 @@ export function listTeamMembersUpdates(
         .filter((group) => group.teamId === teamId)
         .flatMap((group) => listInitiativeTeamMembers(initiative, self, group));
       const previous = listTeamMembers(initiative, teamId);
-      if (JSON.stringify(previous) === JSON.stringify(members)) return [];
+      if (isSameTeamMembers(previous, members)) return [];
       return [{ initiativeId: initiative.id, teamId, previous, members }];
     });
   });
 }
 
 export function resolveTeamMembersId(update: TeamMembersUpdate) {
-  const digest = (value: unknown) => Bun.hash(JSON.stringify(value)).toString(36);
-  return `team-members:${update.initiativeId}:${update.teamId}:${digest(update.previous)}:${digest(update.members)}`;
+  const previous = resolveTeamMembersKey(update.previous);
+  return `team-members:${update.initiativeId}:${update.teamId}:${previous}:${resolveTeamMembersKey(update.members)}`;
 }

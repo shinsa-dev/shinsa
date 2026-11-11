@@ -281,14 +281,17 @@ interface CreatedMembership {
 export function resolveCreatedMembership(
   decider: Decider,
   command: CommandOf<'task.create'>,
-  lineage: CreatedLineage
+  lineage: CreatedLineage,
+  projectId: string | null
 ): CreatedMembership {
   const sourceId = lineage.parentTaskId ?? lineage.createdBy?.taskId ?? command.forkOf;
   const membership = resolveInheritedMembership(decider, command, sourceId);
   if (!membership?.initiativeId) {
     const teamInitiative =
       command.initiativeId === undefined && sourceId ? decider.state.tasks[sourceId]?.teamInitiative : null;
-    return teamInitiative ? { teamInitiative: { ...teamInitiative } } : {};
+    const project = projectId ? decider.state.projects[projectId] : undefined;
+    const seen = teamInitiative && (project?.teamIds ?? []).includes(teamInitiative.teamId);
+    return seen ? { teamInitiative: { ...teamInitiative } } : {};
   }
   return {
     initiativeId: membership.initiativeId,

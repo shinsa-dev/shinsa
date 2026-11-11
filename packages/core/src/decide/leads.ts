@@ -21,11 +21,11 @@ import {
   validateInitiativeReport,
 } from '../initiatives/index.ts';
 import { type LeadNote, resolveAgentPrompt, resolveLeadPrompt } from '../prompts/index.ts';
+import { isSameTeamMembers } from '../share/teams.ts';
 import { listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listActiveRuns, listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
-import { isSameValue } from './equality.ts';
 import {
   adoptDescendants,
   assertNotInInitiative,
@@ -376,7 +376,7 @@ export function recordTeamMembers(decider: Decider, command: CommandOf<'initiati
     .filter((member) => member.teamId === command.teamId)
     .slice(0, INITIATIVE_LIMITS.teamMembers);
   const previous = (initiative.teamMembers ?? []).filter((member) => member.teamId === command.teamId);
-  if (isSameValue(previous, members)) return;
+  if (isSameTeamMembers(previous, members)) return;
   decider.emit({
     type: 'initiative.team_members_recorded',
     initiativeId: initiative.id,

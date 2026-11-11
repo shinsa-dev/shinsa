@@ -208,6 +208,27 @@ describe('joining a teammate’s initiative', () => {
     expect(harness.task(plain).teamInitiative).toBeUndefined();
   });
 
+  test('a task a member files into a project the team does not see stays out of the teammate’s initiative', () => {
+    const harness = createHarness();
+    const repoId = teamRepo(harness);
+    const taskId = createTask(harness, { repoId });
+    joinTeam(harness, taskId, 'phase-2');
+    const privateRepo = registerRepo(harness, 'notes', 'Personal');
+    const before = new Set(Object.keys(harness.state.tasks));
+    harness.send({ type: 'task.create', request: 'Write notes', repoId: privateRepo, forkOf: taskId });
+    const child = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
+    expect(harness.task(child).teamInitiative).toBeUndefined();
+    harness.send({
+      type: 'task.create',
+      request: 'No project',
+      repoId: null,
+      projectId: null,
+      forkOf: taskId,
+    });
+    const loose = Object.keys(harness.state.tasks).find((id) => !before.has(id) && id !== child) ?? '';
+    expect(harness.task(loose).teamInitiative).toBeUndefined();
+  });
+
   test('a member stays out of adoption, and cannot be made an initiative while it is in one', () => {
     const harness = createHarness();
     const repoId = teamRepo(harness);
@@ -475,7 +496,15 @@ describe('a teammate writing to the lead', () => {
     harness.send(
       { type: 'task.message', taskId: leadId, text: 'Hi' },
       {
-        guest: { ...KAI, name: null, scope: { kind: 'team', teamId: 'team-1', scopes: DEFAULT_TEAM_SCOPES } },
+        guest: {
+          ...KAI,
+          name: null,
+          scope: {
+            kind: 'team',
+            teamId: 'team-1',
+            scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'message', true),
+          },
+        },
       }
     );
     const prompt = readInstruction(harness.activeRun(leadId));
@@ -494,12 +523,18 @@ describe('a teammate writing to the lead', () => {
         scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'message', false),
       },
     };
+    const fromTeammateTask = { handle: 'SW-7', title: 'Sign webhooks' };
+    const toLead = { type: 'task.message', taskId: leadId, text: 'Hi', fromTeammateTask } as const;
+    expect(resolveScopedRefusal(harness.state, muted, toLead)).toBeNull();
     expect(
       resolveScopedRefusal(harness.state, muted, { type: 'task.message', taskId: leadId, text: 'Hi' })
-    ).toBeNull();
-    expect(
-      resolveScopedRefusal(harness.state, muted, { type: 'task.message', taskId: shared, text: 'Hi' })
     ).toBe(TEAM_SCOPE_MESSAGES.message);
+    expect(resolveScopedRefusal(harness.state, muted, { ...toLead, kind: 'new_round' })).toBe(
+      TEAM_SCOPE_MESSAGES.message
+    );
+    expect(resolveScopedRefusal(harness.state, muted, { ...toLead, taskId: shared })).toBe(
+      TEAM_SCOPE_MESSAGES.message
+    );
     expect(
       resolveScopedRefusal(harness.state, muted, {
         type: 'round.send',
@@ -507,5 +542,39 @@ describe('a teammate writing to the lead', () => {
         roundId: 'r',
       } as never)
     ).toBe(TEAM_SCOPE_MESSAGES.message);
+  });
+
+  test('without the message scope, nothing reaches a lead that is not resting, so no gate moves', () => {
+    const { harness, leadId } = sharedLead();
+    const muted = {
+      ...KAI,
+      scope: {
+        kind: 'team' as const,
+        teamId: 'team-1',
+        scopes: toggleScope(DEFAULT_TEAM_SCOPES, 'message', false),
+      },
+    };
+    const toLead = {
+      type: 'task.message',
+      taskId: leadId,
+      text: 'Hi',
+      fromTeammateTask: { handle: 'SW-7', title: 'Sign webhooks' },
+    } as const;
+    const lead = harness.task(leadId);
+    const planning = {
+      ...harness.state,
+      tasks: { ...harness.state.tasks, [leadId]: { ...lead, stage: 'awaiting_plan' } },
+    };
+    expect(resolveScopedRefusal(planning as never, muted, toLead)).toBe(TEAM_SCOPE_MESSAGES.message);
+    const gate = {
+      id: 'gate-failure',
+      taskId: leadId,
+      type: 'failure',
+      status: 'open',
+      openedAt: 0,
+    };
+    const paused = { ...harness.state, gates: { ...harness.state.gates, [gate.id]: gate } };
+    expect(resolveScopedRefusal(paused as never, muted, toLead)).toBe(TEAM_SCOPE_MESSAGES.message);
+    expect(resolveScopedRefusal(harness.state, muted, toLead)).toBeNull();
   });
 });
