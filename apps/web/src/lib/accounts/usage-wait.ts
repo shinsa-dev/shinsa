@@ -94,7 +94,9 @@ export function describeUsageWaitNote(wait: UsageWait) {
     ? 'Shinsa resumes it by itself when the limit resets.'
     : 'When the limit resets it pauses for you to retry.';
   if (Option.isNone(selectLimitModel(wait))) return reset;
-  return `${reset} Switching to another model in Settings starts it again at once.`;
+  return wait.autoResume
+    ? 'Resumes at the reset, or at once if you switch models.'
+    : 'Pauses at the reset. Switch models to start it at once.';
 }
 
 export function describeUsageWaitToggle(wait: UsageWait) {

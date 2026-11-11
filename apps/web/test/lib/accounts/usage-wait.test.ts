@@ -68,7 +68,10 @@ describe('usage waits', () => {
       'The agent stopped at the Claude usage limit on a@example.com.'
     );
     expect(describeUsageWaitNote(wait({ model: 'fable', limitScope: 'model' }))).toBe(
-      'Shinsa resumes it by itself when the limit resets. Switching to another model in Settings starts it again at once.'
+      'Resumes at the reset, or at once if you switch models.'
+    );
+    expect(describeUsageWaitNote(wait({ model: 'fable', limitScope: 'model', autoResume: false }))).toBe(
+      'Pauses at the reset. Switch models to start it at once.'
     );
     expect(describeUsageWaitNote(wait())).toBe('Shinsa resumes it by itself when the limit resets.');
     expect(describeUsageWaitNote(wait({ autoResume: false }))).toBe(
