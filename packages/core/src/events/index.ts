@@ -44,6 +44,7 @@ import type {
   TaskSize,
   TaskStage,
   TaskSuggestion,
+  TeamInitiativeRef,
   TeammateFork,
   TriageDecisions,
   UsageWait,
@@ -118,6 +119,7 @@ type EventBody =
       teammateFork?: TeammateFork | null;
       initiativeId?: string | null;
       initiativePhaseId?: string | null;
+      teamInitiative?: TeamInitiativeRef | null;
     }
   | DelegationEventBody
   | ScheduleEventBody

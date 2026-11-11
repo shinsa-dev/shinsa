@@ -1,3 +1,5 @@
+import type { TaskStage } from './types.ts';
+
 export interface InitiativePhase {
   id: string;
   name: string;
@@ -11,11 +13,40 @@ export type InitiativeMilestoneKind =
   | 'done'
   | 'cancelled';
 
+export interface TeammateMilestoneTask {
+  instanceId: string;
+  handle: string | null;
+  title: string;
+  owner: string | null;
+}
+
 export interface InitiativeMilestone {
   taskId: string;
   kind: InitiativeMilestoneKind;
   text: string;
   at: number;
+  teammate?: TeammateMilestoneTask;
+}
+
+export interface TeamInitiativeRef {
+  teamId: string;
+  instanceId: string;
+  initiativeId: string;
+  phaseId: string | null;
+  name: string;
+}
+
+export interface InitiativeTeamMember {
+  teamId: string;
+  instanceId: string;
+  taskId: string;
+  handle: string | null;
+  title: string;
+  owner: string | null;
+  stage: TaskStage;
+  phaseId: string | null;
+  gate: string | null;
+  closedAt: number | null;
 }
 
 export interface InitiativeReport {
@@ -35,6 +66,7 @@ export interface Initiative {
   milestones?: InitiativeMilestone[];
   report?: InitiativeReport | null;
   teamIds?: string[];
+  teamMembers?: InitiativeTeamMember[];
 }
 
 export const INITIATIVE_LIMITS = {
@@ -45,6 +77,7 @@ export const INITIATIVE_LIMITS = {
   initiatives: 50,
   milestones: 40,
   narrative: 2_000,
+  teamMembers: 200,
 } as const;
 
 export function selectLeadInitiative<T extends Pick<Initiative, 'leadTaskId'>>(

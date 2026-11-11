@@ -19,6 +19,8 @@ type InitiativeEvent = Extract<
       | 'initiative.written'
       | 'initiative.removed'
       | 'task.initiative_changed'
+      | 'task.team_initiative_changed'
+      | 'initiative.team_members_recorded'
       | 'initiative.milestones_queued'
       | 'initiative.lead_woken'
       | 'initiative.reported';
@@ -49,6 +51,29 @@ function applyMembership(state: ShinsaState, event: EventOf<'task.initiative_cha
   if (text) record(state, event.taskId, event.at, { actor: 'you', kind: 'note', text });
 }
 
+function describeTeamMembership(task: Task, event: EventOf<'task.team_initiative_changed'>) {
+  const after = event.teamInitiative;
+  if (!after)
+    return task.teamInitiative ? `Removed from the teammate’s initiative ${task.teamInitiative.name}` : null;
+  if (task.teamInitiative?.initiativeId === after.initiativeId) return 'Moved to another phase';
+  return `Added to the teammate’s initiative ${after.name}`;
+}
+
+function applyTeamMembership(state: ShinsaState, event: EventOf<'task.team_initiative_changed'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const text = describeTeamMembership(task, event);
+  updateTask(state, event.taskId, event.at, { teamInitiative: event.teamInitiative });
+  if (text) record(state, event.taskId, event.at, { actor: 'you', kind: 'note', text });
+}
+
+function recordTeamMembers(state: ShinsaState, event: EventOf<'initiative.team_members_recorded'>) {
+  const others = (state.initiatives[event.initiativeId]?.teamMembers ?? []).filter(
+    (member) => member.teamId !== event.teamId
+  );
+  updateInitiative(state, event.initiativeId, { teamMembers: [...others, ...event.members] });
+}
+
 function updateInitiative(state: ShinsaState, initiativeId: string, patch: Partial<Initiative>) {
   const initiative = state.initiatives[initiativeId];
   if (!initiative) return;
@@ -72,6 +97,12 @@ export function applyInitiativeEvent(state: ShinsaState, event: InitiativeEvent)
       return;
     case 'task.initiative_changed':
       applyMembership(state, event);
+      return;
+    case 'task.team_initiative_changed':
+      applyTeamMembership(state, event);
+      return;
+    case 'initiative.team_members_recorded':
+      recordTeamMembers(state, event);
       return;
     case 'initiative.milestones_queued':
       queueMilestones(state, event);

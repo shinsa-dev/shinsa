@@ -96,10 +96,13 @@ const DESCRIPTIONS: Descriptions = {
   },
   'initiative.write': (_state, command) => `Changed the initiative ${quoteTitle(command.name.trim())}`,
   'initiative.adopt_task': (state, command) => `Made an initiative from ${quoteTask(state, command.taskId)}`,
-  'task.join_initiative': (state, command) =>
-    command.initiativeId
-      ? `Added ${quoteTask(state, command.taskId)} to the initiative ${quoteInitiative(state, command.initiativeId)}`
-      : `Took ${quoteTask(state, command.taskId)} out of its initiative`,
+  'task.join_initiative': (state, command) => {
+    if (!command.initiativeId) return `Took ${quoteTask(state, command.taskId)} out of its initiative`;
+    if (command.team) {
+      return `Added ${quoteTask(state, command.taskId)} to the teammate’s initiative ${quoteTitle(command.team.name)}`;
+    }
+    return `Added ${quoteTask(state, command.taskId)} to the initiative ${quoteInitiative(state, command.initiativeId)}`;
+  },
   'settings.change': (_state, command) => `Changed settings: ${Object.keys(command.patch).join(', ')}`,
   'task.prioritize': (state, command) =>
     `Set the priority of ${quoteTask(state, command.taskId)} to ${command.priority}`,

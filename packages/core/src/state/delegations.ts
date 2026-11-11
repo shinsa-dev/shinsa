@@ -257,6 +257,7 @@ export function resolveLineage(event: EventOf<'task.created'>): Partial<Task> {
     ...(event.watchHome ? { watchHome: true } : {}),
     ...(event.sourceReport ? { sourceReport: event.sourceReport } : {}),
     ...(event.initiativeId ? { initiativeId: event.initiativeId } : {}),
+    ...(event.teamInitiative ? { teamInitiative: event.teamInitiative } : {}),
     ...(event.initiativeId && event.initiativePhaseId ? { initiativePhaseId: event.initiativePhaseId } : {}),
   };
 }

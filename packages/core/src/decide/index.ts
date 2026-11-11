@@ -78,6 +78,7 @@ import {
   reportInitiative,
   syncCancelledLeads,
   syncInitiativeMilestones,
+  recordTeamMembers,
   wakeLead,
 } from './leads.ts';
 import { enforceLiveness } from './liveness.ts';
@@ -326,6 +327,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return removeInitiativeFromTeam(decider, command);
     case 'initiative.wake_lead':
       return wakeLead(decider, command);
+    case 'initiative.record_team_members':
+      return recordTeamMembers(decider, command);
     case 'task.join_initiative':
       return joinInitiative(decider, command);
     case 'memory.write':

@@ -1,7 +1,9 @@
 import {
+  INITIATIVE_LIMITS,
   type Initiative,
   type InitiativePhase,
   type InitiativeReport,
+  type InitiativeTeamMember,
   isInitiativeInTeam,
 } from '../domain/initiatives.ts';
 import { isTaskSettled } from '../domain/stages.ts';
@@ -21,9 +23,16 @@ export interface TeamTaskContext {
   machine: string | null;
 }
 
+export interface TeamTaskInitiative {
+  instanceId: string | null;
+  initiativeId: string;
+  phaseId: string | null;
+}
+
 export interface TeamTask extends SharedListing, Omit<TeamTaskContext, 'ownerProfile'> {
   ownerProfile?: SharedPerson | null;
   heldBy?: ActivityPerson | null;
+  initiative?: TeamTaskInitiative | null;
 }
 
 function resolveHolder(task: Task, teamId: string): ActivityPerson | null {
@@ -48,7 +57,7 @@ export interface TeamInitiative {
   updatedAt: number;
 }
 
-function isSharedLead(state: ShinsaState, task: Task, teamId: string) {
+export function isSharedLead(state: ShinsaState, task: Task, teamId: string) {
   const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
   return initiative?.leadTaskId === task.id && isInitiativeInTeam(initiative, teamId);
 }
@@ -59,6 +68,16 @@ export function isTeamTask(state: ShinsaState, task: Task, teamId: string) {
   const projectId = resolveTaskProject(state, task);
   const project = projectId ? state.projects[projectId] : undefined;
   return (project?.teamIds ?? []).includes(teamId);
+}
+
+function resolveTaskInitiative(state: ShinsaState, task: Task, teamId: string): TeamTaskInitiative | null {
+  const ref = task.teamInitiative;
+  if (ref?.teamId === teamId) {
+    return { instanceId: ref.instanceId, initiativeId: ref.initiativeId, phaseId: ref.phaseId };
+  }
+  const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
+  if (!initiative || !isInitiativeInTeam(initiative, teamId)) return null;
+  return { instanceId: null, initiativeId: initiative.id, phaseId: task.initiativePhaseId ?? null };
 }
 
 function listGatesByTask(state: ShinsaState) {
@@ -87,6 +106,7 @@ export function listTeamTasks(state: ShinsaState, teamId: string, context: TeamT
     ownerProfile: context.ownerProfile,
     machine: context.machine,
     heldBy: resolveHolder(task, teamId),
+    initiative: resolveTaskInitiative(state, task, teamId),
   }));
 }
 
@@ -109,4 +129,42 @@ export function listTeamInitiatives(state: ShinsaState, teamId: string): TeamIni
     if (!lead || !isInitiativeInTeam(initiative, teamId)) return [];
     return [resolveTeamInitiative(initiative, lead)];
   });
+}
+
+function resolveTeamMember(teamId: string, instanceId: string, listing: TeamTask): InitiativeTeamMember {
+  const { task } = listing;
+  const gate = listing.gates.find((entry) => entry.status === 'open');
+  return {
+    teamId,
+    instanceId,
+    taskId: task.id,
+    handle: task.handle ?? null,
+    title: task.title,
+    owner: listing.owner,
+    stage: task.stage,
+    phaseId: listing.initiative?.phaseId ?? null,
+    gate: gate?.title ?? null,
+    closedAt: task.closedAt ?? null,
+  };
+}
+
+export interface TeamFeedTasks {
+  teamId: string;
+  instanceId: string;
+  tasks: readonly TeamTask[];
+}
+
+export function listInitiativeTeamMembers(
+  initiative: Pick<Initiative, 'id' | 'teamIds'>,
+  instanceId: string,
+  feed: TeamFeedTasks
+): InitiativeTeamMember[] {
+  if (!isInitiativeInTeam(initiative, feed.teamId)) return [];
+  return feed.tasks
+    .filter(
+      (listing) =>
+        listing.initiative?.instanceId === instanceId && listing.initiative.initiativeId === initiative.id
+    )
+    .slice(0, INITIATIVE_LIMITS.teamMembers)
+    .map((listing) => resolveTeamMember(feed.teamId, feed.instanceId, listing));
 }

@@ -56,6 +56,7 @@ export function createHarness() {
       byTask?: string | null;
       guest?: ScopedActor | null;
       actor?: TaskOwner | null;
+      byTeammateTask?: { handle: string | null; title: string } | null;
     } = {}
   ) {
     clock += 1;

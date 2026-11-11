@@ -111,11 +111,14 @@ export {
   type InitiativeMilestoneKind,
   type InitiativePhase,
   type InitiativeReport,
+  type InitiativeTeamMember,
   isInitiativeInTeam,
   resolveInitiativeText,
   selectInitiativeByReference,
   selectInitiativePhase,
   selectLeadInitiative,
+  type TeamInitiativeRef,
+  type TeammateMilestoneTask,
 } from './initiatives.ts';
 export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {

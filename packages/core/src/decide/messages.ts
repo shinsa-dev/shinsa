@@ -23,6 +23,7 @@ import {
 import type { EventOf } from '../events/index.ts';
 import {
   describeReplyInstruction,
+  type LeadNote,
   resolveCommentedMessage,
   resolveHumanFixPrompt,
 } from '../prompts/index.ts';
@@ -179,8 +180,13 @@ function restartStep(decider: Decider, task: Task, text: string) {
   }
 }
 
-function resolveLeadNote(decider: Decider, text: string) {
+function resolveLeadNote(decider: Decider, text: string): LeadNote {
   const byAgent = decider.context.onBehalf === true;
+  const guest = decider.context.guest;
+  if (guest) {
+    const task = byAgent ? (decider.context.byTeammateTask ?? null) : null;
+    return { text, byAgent, fromTask: null, fromTeammate: { login: guest.login, name: guest.name, task } };
+  }
   const byTask = byAgent ? decider.context.byTask : null;
   return { text, byAgent, fromTask: byTask ? (decider.state.tasks[byTask] ?? null) : null };
 }

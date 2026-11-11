@@ -128,6 +128,12 @@ const InitiativePhaseInput = Strict(
   'phase'
 );
 
+const TeamInitiativeTarget = Strict(
+  { teamId: IdText, instanceId: IdText, name: Text(ID_LIMIT) },
+  'A teammate’s initiative',
+  'team'
+);
+
 const NamedAccount = OrNull(RunAccount, FIELD_MESSAGES.object).pipe(
   Schema.refine(Predicate.isNotNull, { message: 'account must name an account.' })
 );
@@ -268,6 +274,7 @@ export const UserCommand = Schema.Union([
     taskId: TaskId,
     initiativeId: OrNull(InitiativeId, FIELD_MESSAGES.text),
     phaseId: NullByDefault(IdText, FIELD_MESSAGES.text),
+    team: Optional(TeamInitiativeTarget, FIELD_MESSAGES.object),
   }),
   Command('memory.accept', { memoryId: MemoryId }),
   Command('memory.remove', { memoryId: MemoryId }),
