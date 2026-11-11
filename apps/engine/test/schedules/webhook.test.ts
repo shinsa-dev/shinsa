@@ -48,7 +48,12 @@ async function openReceiver(
   const harness = await openServices(layer, engine, clock);
   open.push(harness);
   const receiver = harness.service(WebhookReceiver);
-  return { ...harness, handle: (request: Request, url: URL) => harness.run(receiver.handle(request, url)) };
+  return {
+    ...harness,
+    answer: (request: Request, url: URL) => harness.run(receiver.handle(request, url)),
+    handle: (request: Request, url: URL) =>
+      harness.run(receiver.handle(request, url).pipe(Effect.tap(() => receiver.settle))),
+  };
 }
 
 type Receiver = Awaited<ReturnType<typeof openReceiver>>;
@@ -147,7 +152,7 @@ describe('receiving a webhook', () => {
       post(url, body, { 'x-github-delivery': 'ok1', authorization: 'k' })
     );
     expect(response.status).toBe(202);
-    expect(await readJson(response)).toEqual({ outcome: 'skipped', deliveryId: 'd1' });
+    expect(await readJson(response)).toEqual({ outcome: 'accepted', deliveryId: 'd1' });
     expect(runsOf(world, schedule.id)).toMatchObject([
       { outcome: 'skipped', taskId: null, deliveryId: 'd1', detail: SCHEDULE_FILTER_SKIPPED },
     ]);
@@ -182,6 +187,25 @@ describe('receiving a webhook', () => {
     await receiver.adjust(Duration.toMillis(FILTER_TIMEOUT));
     expect((await readJson(await waiting)).outcome).toBe('accepted');
     expect(runsOf(world, schedule.id).map((run) => run.outcome)).toEqual(['sent', 'sent', 'sent']);
+  });
+
+  test('answers at once, before the classifier does, so a sender with a short timeout never retries', async () => {
+    const said: { release: () => void } = { release: () => undefined };
+    const { world, schedule, receiver, url } = await hooked({
+      replayKey: null,
+      ask: <T>() =>
+        Effect.callback<T>((resume) => {
+          said.release = () => resume(Effect.succeed({ decision: 'file' } as T));
+        }),
+    });
+    const request = post(url, '{}');
+    const response = await receiver.answer(request, new URL(request.url));
+    expect(response.status).toBe(202);
+    expect(await readJson(response)).toEqual({ outcome: 'accepted', deliveryId: 'd1' });
+    expect(runsOf(world, schedule.id)).toEqual([]);
+    said.release();
+    await receiver.run(receiver.service(WebhookReceiver).settle);
+    expect(runsOf(world, schedule.id)).toMatchObject([{ outcome: 'sent', deliveryId: 'd1' }]);
   });
 
   test('a long request reaches the classifier cut to the limit', async () => {
@@ -309,16 +333,17 @@ describe('receiving a webhook', () => {
     expect(runsOf(world, schedule.id).map((run) => run.outcome)).toEqual(['failed', 'failed']);
   });
 
-  test('a delivery the log refuses answers with an error and is logged', async () => {
-    const { receiver, url, replaceDispatch } = await hooked();
+  test('a delivery the log refuses after the answer is logged', async () => {
+    const { world, schedule, receiver, url, replaceDispatch } = await hooked();
     replaceDispatch(() => Effect.fail(new EngineStopped({ message: 'disk full' })));
     const logs = captureLogs();
     const response = await send(receiver, post(url, '{}'));
     logs.restore();
-    expect(response.status).toBe(500);
+    expect((await readJson(response)).outcome).toBe('accepted');
     expect(logs.fieldsOf('[Webhooks] A delivery could not be recorded')).toEqual([
-      { scheduleId: expect.any(String), error: 'disk full' },
+      { scheduleId: schedule.id, deliveryId: 'd1', error: 'disk full' },
     ]);
+    expect(runsOf(world, schedule.id)).toEqual([]);
   });
 
   test('a body that cannot be read answers with an error and is logged', async () => {
@@ -331,12 +356,6 @@ describe('receiving a webhook', () => {
     logs.restore();
     expect(response.status).toBe(500);
     expect(logs.fieldsOf('[Webhooks] A delivery could not be recorded')).toHaveLength(1);
-  });
-
-  test('a delivery the schedule no longer takes is reported as a duplicate', async () => {
-    const { receiver, url, replaceDispatch } = await hooked();
-    replaceDispatch(() => Effect.succeed([]));
-    expect((await readJson(await send(receiver, post(url, '{}')))).outcome).toBe('duplicate');
   });
 
   test('knows its own paths', () => {

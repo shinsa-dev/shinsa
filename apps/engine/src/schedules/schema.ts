@@ -15,7 +15,6 @@ export const WebhookBodyText = Schema.fromJsonString(Schema.Unknown);
 export const WebhookOutcome = Schema.Literals([
   'accepted',
   'duplicate',
-  'skipped',
   'prompt_refused',
   'not_found',
   'disabled',

@@ -2596,9 +2596,14 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   headers and query values (authorization, cookies, anything naming a token, secret, key, signature or password)
   are redacted whether the template names one or takes them all. An optional `replay_key` template, which reads
   the values as they are because only its hash is kept, dedupes deliveries for a week (500 keys per schedule): a
-  repeat answers 202 `duplicate` and starts nothing. A request the automation's text does not cover (the filter,
-  below) answers 202 `skipped` and starts nothing. A delivery is `schedule.deliver` with command id
-  `webhook:<id>:<delivery>`; the answer is 202 with the delivery id.
+  repeat answers 202 `duplicate` and starts nothing. Every other request that passes those checks is answered
+  202 `accepted` with the delivery id at once, before the filter (below) is asked, so a sender with a short
+  timeout never retries a request that is still being judged; the filter and the delivery then run in a fiber
+  of their own (`WebhookReceiver.settle` waits for them). The answer therefore says the request was taken, not
+  what came of it: the schedule's run says that, as a sent run, or a skipped one for a request its text does not
+  cover. A delivery is `schedule.deliver` with command id `webhook:<id>:<delivery>`; one the log refuses after
+  the answer is logged ("[Webhooks] A delivery could not be recorded"), and one still waiting on the filter when
+  the engine stops is lost.
 - **The automation decides whether to act: the filter** (`packages/core/src/schedules/filter.ts`,
   `apps/engine/src/schedules/filter/`: `ScheduleFilter`). It is a rule of every automation that reacts to
   something arriving, not of one trigger: before a webhook request or a Slack channel message runs a schedule,
@@ -2612,8 +2617,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   report that all is well included; `file` when it sets no limit or the model is unsure. A skip is
   `schedule.skip`, which records a skipped run ("The automation did not apply to this, so nothing was
   started.") with the delivery's replay key and does nothing else: no task, no message, no run count, nothing in
-  Slack. A classifier that does not answer within 8 seconds (`FILTER_TIMEOUT`, inside what a webhook's sender
-  waits for), or answers anything else, files, so an outage never drops an alert. The call is a few hundred
+  Slack. A classifier that does not answer within 8 seconds (`FILTER_TIMEOUT`), or answers anything else, files, so an outage never drops an alert. The call is a few hundred
   tokens a delivery. A watch is never asked: its read is what decides which reports become tasks (below), which
   is also how an automation on a clock files nothing when all is well. A schedule on a clock with no `source`
   has nothing to judge before it runs, so it runs each time.

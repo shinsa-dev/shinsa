@@ -345,7 +345,8 @@ src/
 ├── schedules/           Schedules: the clock (clock/: ScheduleClock on makeEngineClock, ScheduleClockTimings), the
 │                        agent tools (tools/: ScheduleTools, its layer taking the base and hook URLs only the
 │                        composition root knows), the webhook receiver (webhook/: WebhookReceiver, the rate windows in
-│                        a Ref, WebhookDeliveryId; path.ts isWebhookPath), the filter (filter/: ScheduleFilter on
+│                        a Ref, WebhookDeliveryId, a taken request answered 202 before the filter and delivered in a
+│                        FiberSet its settle waits for; path.ts isWebhookPath), the filter (filter/: ScheduleFilter on
 │                        QuickCalls' classifier, whether a schedule's text applies to a webhook request or a Slack
 │                        channel message, asked before either delivers, a watch never asked, no answer in
 │                        FILTER_TIMEOUT delivering; a skip is schedule.skip), signature checks (verify.ts), the prompt

@@ -1192,7 +1192,7 @@ Every task agent's tool: `schedules_write`. Sends `schedule.write`.
 | --- | --- | --- |
 | `--id` | text, optional | The schedule to change. Leave out to create one. |
 | `--name` | text, optional | A short name. |
-| `--message` | text, optional | What it sends: the request of the new task, or the message. A webhook may use {{body.path}}. |
+| `--message` | text, optional | What it sends: the request of the new task, or the message. A webhook may use {{body.path}}. For a webhook or a Slack channel, say here which requests or messages to act on, such as only bugs: the rest are skipped. |
 | `--in-minutes` | integer, optional | Once, this many minutes from now. |
 | `--run-at` | text, optional | Once, at this ISO 8601 time. |
 | `--every-minutes` | integer, optional | Repeatedly, every this many minutes. |

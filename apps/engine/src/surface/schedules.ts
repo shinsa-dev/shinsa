@@ -206,7 +206,7 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
         name: 'message',
         kind: 'text',
         description:
-          'What it sends: the request of the new task, or the message. A webhook may use {{body.path}}.',
+          'What it sends: the request of the new task, or the message. A webhook may use {{body.path}}. For a webhook or a Slack channel, say here which requests or messages to act on, such as only bugs: the rest are skipped.',
       },
       { name: 'inMinutes', kind: 'integer', description: 'Once, this many minutes from now.' },
       { name: 'runAt', kind: 'text', description: 'Once, at this ISO 8601 time.' },
