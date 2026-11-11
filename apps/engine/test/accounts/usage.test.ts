@@ -237,6 +237,8 @@ const SPENT_FABLE_GRANT = {
   unavailable_reason: 'unavailable',
 };
 
+const SCOPED_SHARES = [{ limit_index: 1, used_percent_of_weekly: 12, allowance_percent_of_weekly: 50 }];
+
 const RESET_STATUS = {
   eligible: true,
   ineligible_reason: null,
@@ -343,7 +345,7 @@ describe('parseExtraUsage', () => {
 
 describe('parseResetGrants', () => {
   test('reads the weekly and the Fable reset under cedar_ember and drops the spent one', () => {
-    expect(parseResetGrants({ cedar_ember: RESET_STATUS })).toEqual([
+    expect(parseResetGrants({ cedar_ember: RESET_STATUS, weekly_scoped_shares: SCOPED_SHARES })).toEqual([
       {
         id: 'full-reset-2611',
         label: 'One full limit reset (November 2026)',
@@ -352,6 +354,8 @@ describe('parseResetGrants', () => {
         clears: ['seven_day', 'seven_day_overage_included'],
         usableNow: true,
         endsAt: Date.parse('2026-12-10T22:00:00+00:00'),
+        givesBackWeekly: false,
+        weeklyShare: null,
       },
       {
         id: 'launch-2610-fable-6mo',
@@ -361,6 +365,8 @@ describe('parseResetGrants', () => {
         clears: ['seven_day_overage_included'],
         usableNow: true,
         endsAt: Date.parse('2027-03-09T07:59:00+00:00'),
+        givesBackWeekly: true,
+        weeklyShare: 12,
       },
     ]);
   });
@@ -375,8 +381,37 @@ describe('parseResetGrants', () => {
 
   test('a grant with only the required fields reads with defaults', () => {
     expect(parseResetGrants({ cedar_ember: { grants: [{ id: 'bare', resets_left: 1 }] } })).toEqual([
-      { id: 'bare', label: null, left: 1, total: 1, clears: [], usableNow: false, endsAt: null },
+      {
+        id: 'bare',
+        label: null,
+        left: 1,
+        total: 1,
+        clears: [],
+        usableNow: false,
+        endsAt: null,
+        givesBackWeekly: false,
+        weeklyShare: null,
+      },
     ]);
+  });
+
+  test('a Fable reset gives back the sum of the scoped shares of the weekly limit', () => {
+    const fable = (shares: unknown) =>
+      parseResetGrants({ cedar_ember: { grants: [FABLE_GRANT] }, weekly_scoped_shares: shares })[0];
+    expect(
+      fable([{ limit_index: 1, used_percent_of_weekly: 4 }, { used_percent_of_weekly: 3 }])
+    ).toMatchObject({
+      givesBackWeekly: true,
+      weeklyShare: 7,
+    });
+    expect(fable([{ limit_index: 1 }, 'share'])?.weeklyShare).toBeNull();
+    expect(fable(undefined)?.weeklyShare).toBeNull();
+  });
+
+  test('a reset that gives nothing back keeps no share, whatever the answer holds', () => {
+    expect(
+      parseResetGrants({ cedar_ember: { grants: [WEEKLY_GRANT] }, weekly_scoped_shares: SCOPED_SHARES })[0]
+    ).toMatchObject({ givesBackWeekly: false, weeklyShare: null });
   });
 
   test('a paused grant is not usable now, whatever usable_now says', () => {

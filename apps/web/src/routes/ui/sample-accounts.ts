@@ -86,6 +86,8 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
               clears: ['seven_day', 'seven_day_overage_included'],
               usableNow: true,
               endsAt: now + 29 * 24 * HOUR,
+              givesBackWeekly: false,
+              weeklyShare: null,
             },
             {
               id: 'launch-2610-fable-6mo',
@@ -95,6 +97,8 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
               clears: ['seven_day_overage_included'],
               usableNow: true,
               endsAt: now + 118 * 24 * HOUR,
+              givesBackWeekly: true,
+              weeklyShare: 4,
             },
           ],
         },

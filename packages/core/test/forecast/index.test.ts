@@ -297,6 +297,8 @@ function grant(overrides: Partial<UsageResetGrant>): UsageResetGrant {
     clears: ['five_hour', 'seven_day'],
     usableNow: true,
     endsAt: null,
+    givesBackWeekly: false,
+    weeklyShare: null,
     ...overrides,
   };
 }

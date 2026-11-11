@@ -69,6 +69,8 @@ export function listAccountFiles(data: string): Record<string, string> {
             clears: ['five_hour', 'seven_day'],
             usableNow: true,
             endsAt: NOW + 14 * 24 * HOUR,
+            givesBackWeekly: false,
+            weeklyShare: null,
           },
         ],
       },

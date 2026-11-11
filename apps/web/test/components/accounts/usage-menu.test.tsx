@@ -119,6 +119,8 @@ describe('the usage menu', () => {
       clears: ['five_hour'],
       usableNow: true,
       endsAt: null,
+      givesBackWeekly: false,
+      weeklyShare: null,
     };
     pushAccounts(
       createSnapshot({

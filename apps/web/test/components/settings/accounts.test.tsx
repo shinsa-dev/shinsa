@@ -234,6 +234,8 @@ describe('the Accounts settings', () => {
                   clears: ['five_hour'],
                   usableNow: true,
                   endsAt: null,
+                  givesBackWeekly: false,
+                  weeklyShare: null,
                 },
               ],
             },

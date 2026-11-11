@@ -139,6 +139,7 @@ export const UsageBody = Schema.Struct({
   extra_usage: Schema.optionalKey(Schema.Unknown),
   spend: Schema.optionalKey(Schema.Unknown),
   cedar_ember: Schema.optionalKey(Schema.Unknown),
+  weekly_scoped_shares: LenientList,
   five_hour: Schema.optionalKey(Schema.Unknown),
   seven_day: Schema.optionalKey(Schema.Unknown),
   seven_day_opus: Schema.optionalKey(Schema.Unknown),
@@ -195,7 +196,10 @@ export const UsageResetGrantEntry = Schema.Struct({
   usable_now: Schema.optionalKey(Schema.Unknown),
   paused: Schema.optionalKey(Schema.Unknown),
   ends_at: Schema.optionalKey(Schema.Unknown),
+  gives_back_weekly: Schema.optionalKey(Schema.Unknown),
 });
+
+export const UsageScopedShareEntry = Schema.Struct({ used_percent_of_weekly: Schema.Finite });
 
 export const DEFAULT_CREDIT_CURRENCY = 'USD';
 

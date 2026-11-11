@@ -376,6 +376,8 @@ describe('extra usage, credit and usage resets', () => {
     clears: ['five_hour', 'seven_day'],
     usableNow: true,
     endsAt: null,
+    givesBackWeekly: false,
+    weeklyShare: null,
     ...extra,
   });
   const notes = (extra: Partial<AccountUsage>) => listUsageNotes({ ...usage(), ...extra }, NOW);

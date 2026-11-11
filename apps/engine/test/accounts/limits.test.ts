@@ -114,6 +114,8 @@ const GRANT: UsageResetGrant = {
   clears: ['five_hour', 'seven_day'],
   usableNow: true,
   endsAt: 90_000,
+  givesBackWeekly: false,
+  weeklyShare: null,
 };
 
 async function createLimits(reads: UsageRead[], options: { path?: string; ttlMs?: number } = {}) {
