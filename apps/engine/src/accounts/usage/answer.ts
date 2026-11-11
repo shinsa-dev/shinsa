@@ -13,7 +13,6 @@ import {
   KEYED_WINDOWS,
   type KeyedWindow,
   LIMIT_KINDS,
-  RESET_PROGRAM_KEYS,
   UsageBody,
   UsageKeyedEntry,
   UsageLimitEntry,
@@ -168,12 +167,10 @@ function readGrant(value: unknown): UsageResetGrant[] {
 export function parseResetGrants(value: unknown): UsageResetGrant[] {
   const body = Option.getOrUndefined(decodeBody(value));
   if (!body) return [];
-  const grants = RESET_PROGRAM_KEYS.flatMap((key) =>
-    Option.match(decodeProgram(body[key]), {
-      onNone: () => [],
-      onSome: (program) => (program.grants ?? []).flatMap(readGrant),
-    })
-  );
+  const grants = Option.match(decodeProgram(body.cedar_ember), {
+    onNone: () => [],
+    onSome: (program) => (program.grants ?? []).flatMap(readGrant),
+  });
   const seen = new Set<string>();
   return grants.filter((grant) => {
     if (seen.has(grant.id)) return false;
