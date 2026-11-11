@@ -7140,8 +7140,8 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
-- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `usage-reads.json`, `provider-usage.json` and
-  `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
+- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `usage-reads.json`, `provider-usage.json`,
+  `provider-usage-reads.json` and `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
   that breaks it is dropped, a broken `accounts.json` is kept aside, and a cache or a mark that cannot be written is
   logged. `AccountFolders` makes and removes each account's `CLAUDE_CONFIG_DIR`: the folder, its seeded `.claude.json`,
   the links to the shared entries and the `.credentials.json` read back. `UsageApi` reads Claude's usage over Effect's
@@ -7277,6 +7277,7 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── usage-limits.json  The last usage reading per account
     ├── usage-reads.json   The last reading a usage read returned per account, without pushed notices
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
+    ├── provider-usage-reads.json  The last reading a usage read returned per provider, without pushed notices
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
     ├── eunoe/         eunoe's folder (`EUNOE_DIR`): the request log (requests.jsonl) and thread state (threads/)
