@@ -1,6 +1,7 @@
 import type { AccountUsage, Settings, UsageRate } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { cn } from '@shinsa/ui/lib/utils';
 import { PercentDialog } from '@/components/accounts/percent-dialog.tsx';
 import { ResetTime, UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { UsagePercent } from '@/components/accounts/usage-percent.tsx';
@@ -29,6 +30,7 @@ import {
 } from '@/lib/accounts/usage.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
   COST_LIMIT_TITLE,
   DAILY_LIMIT_TITLE,
@@ -84,7 +86,9 @@ function NoteRow({ row }: { row: UsageNoteRow }) {
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 flex-col'>
         <Truncate className='text-xs text-fg-4'>{row.label}</Truncate>
-        {row.detail && <span className='text-2xs text-fg-2'>{row.detail}</span>}
+        {row.detail && (
+          <span className={cn('text-2xs', row.ending ? TONE_TEXT.amber : 'text-fg-2')}>{row.detail}</span>
+        )}
       </div>
       <span className='shrink-0 text-xs text-fg-3 tabular-nums'>{row.value}</span>
     </div>

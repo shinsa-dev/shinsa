@@ -22,6 +22,7 @@ export const ENGINE_FEATURES = [
   'share.scopes',
   'suggestion.bundle',
   'usage.auto_pace',
+  'usage.auto_pace_resets',
   'shared-machine',
   'focus.projects',
   'browser',

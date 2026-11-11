@@ -12,6 +12,7 @@ import { startFakeOnboarding } from '../../support/onboarding.ts';
 import { pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 
 const CODEX_SIGNED_OUT: ProviderLogin = {
   provider: 'codex',
@@ -234,6 +235,19 @@ describe('the Accounts settings', () => {
                   clears: ['five_hour'],
                   usableNow: true,
                   endsAt: null,
+                  givesBackWeekly: false,
+                  weeklyShare: null,
+                },
+                {
+                  id: 'fable',
+                  label: null,
+                  left: 1,
+                  total: 1,
+                  clears: ['seven_day_overage_included'],
+                  usableNow: true,
+                  endsAt: Date.now() + 2 * DAY + HOUR,
+                  givesBackWeekly: true,
+                  weeklyShare: 12,
                 },
               ],
             },
@@ -259,7 +273,11 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('$12.40')).toBeTruthy();
     expect(screen.getByText('Usage reset')).toBeTruthy();
     expect(screen.getByText('1 of 2 left')).toBeTruthy();
-    expect(screen.getByText('Clears the 5-hour limit')).toBeTruthy();
+    expect(screen.getByText('Clears the 5-hour limit').className).toContain('text-fg-2');
+    expect(screen.getByText('Fable reset')).toBeTruthy();
+    expect(screen.getByText('Clears the weekly Fable limit · ends in 2 days').className).toContain(
+      'text-amber-text'
+    );
     expect(screen.queryByRole('button', { name: /claim/i })).toBeNull();
   });
 

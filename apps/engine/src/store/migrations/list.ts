@@ -1,5 +1,6 @@
 import { FOCUS_PROJECTS } from './focus-projects.ts';
 import { PROPOSAL_RECOMMEND } from './proposal-recommend.ts';
+import { RESET_PACES } from './reset-paces.ts';
 import { REVIEW_SEEN } from './review-seen.ts';
 import { LOG_BASELINE, type LogMigration } from './schema.ts';
 import { SHARE_SCOPES } from './share-scopes.ts';
@@ -17,6 +18,7 @@ export const LOG_MIGRATIONS: readonly LogMigration[] = [
   TASK_AUTO_PROJECT,
   FOCUS_PROJECTS,
   SLACK_THREAD_UPDATES,
+  RESET_PACES,
 ];
 
 export function resolveLogVersion(migrations: readonly LogMigration[] = LOG_MIGRATIONS) {
