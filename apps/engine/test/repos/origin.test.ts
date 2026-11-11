@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { createState } from '@shinsa/core';
+import { listProjectOwners } from '../../src/repos/origin/owners.ts';
 import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
 import { runCommandOrThrow } from '../helpers/shell.ts';
+import { createRepo } from '../helpers/state.ts';
 import { connectOrigin } from './harness.ts';
 
 let remotes = '';
@@ -167,5 +170,23 @@ describe('connectOrigin', () => {
       'is not a branch name Shinsa will pass to git.'
     );
     expect(existsSync(join(remotes, 'octo/app'))).toBe(false);
+  });
+});
+
+describe('listProjectOwners', () => {
+  test("lists the GitHub owners of the project's other repositories, most used first, once each", () => {
+    const state = createState();
+    const add = (id: string, projectId: string | null, remote: string | null) => {
+      state.repos[id] = createRepo({ id, projectId, remote });
+    };
+    add('self', 'p1', 'github.com/self/app');
+    add('a', 'p1', 'github.com/acme/site');
+    add('b', 'p1', 'github.com/Octo/docs');
+    add('c', 'p1', 'github.com/octo/api');
+    add('d', 'p1', 'gitlab.com/elsewhere/app');
+    add('e', 'p1', null);
+    add('f', 'p2', 'github.com/other/app');
+    expect(listProjectOwners(state, { id: 'self', projectId: 'p1' })).toEqual(['octo', 'acme']);
+    expect(listProjectOwners(state, { id: 'self', projectId: null })).toEqual([]);
   });
 });

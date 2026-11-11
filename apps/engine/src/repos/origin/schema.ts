@@ -22,3 +22,5 @@ export const MISSING_REPOSITORY = /Could not resolve to a Repository/i;
 export const ORIGIN_PUSH_TIMEOUT = Duration.minutes(1);
 
 export const UNKNOWN_OWNER = '<owner>';
+
+export const GITHUB_REMOTE_OWNER = /^github\.com\/([^/]+)\/[^/]+$/i;

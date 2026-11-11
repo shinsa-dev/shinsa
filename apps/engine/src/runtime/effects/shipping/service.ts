@@ -15,9 +15,10 @@ import { PullRequestDescriber } from '../../../github/description/service.ts';
 import { serializeMachineLoginNote } from '../../../github/identity/resolve.ts';
 import { TaskGitHub } from '../../../github/identity/schema.ts';
 import { PullRequests } from '../../../github/pulls/service.ts';
+import { RepoRegistry } from '../../../repos/registry/service.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { createEffectFailed, resolveEffectFailure, resolveShippingFailure } from '../../failures/classify.ts';
-import type { EffectFailure, ShippingFailed, ShippingStepKind } from '../../failures/schema.ts';
+import { type EffectFailure, ShippingFailed, type ShippingStepKind } from '../../failures/schema.ts';
 import { EditCommits } from '../edits/service.ts';
 import { PullRequestSync } from '../pull-requests/service.ts';
 import { HookRejected, NOT_CREATED } from '../schema.ts';
@@ -39,6 +40,7 @@ export class Shipping extends Context.Service<
       const remote = yield* Remote;
       const pulls = yield* PullRequests;
       const describer = yield* PullRequestDescriber;
+      const registry = yield* RepoRegistry;
       const withFiles = Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem);
 
       const asShipping =
@@ -201,8 +203,26 @@ export class Shipping extends Context.Service<
         return created;
       });
 
+      const connectOrigin = Effect.fn('Shipping.connectOrigin')(function* (repo: Repo) {
+        return yield* registry.connectOrigin(repo).pipe(
+          Effect.mapError((error) =>
+            error._tag === 'OriginNotConnected'
+              ? new ShippingFailed({
+                  step: 'pushing',
+                  message: error.message,
+                  detail: error.message,
+                  retryable: false,
+                  delayMs: null,
+                })
+              : asShipping('pushing')(error)
+          )
+        );
+      });
+
       const open = Effect.fn('Shipping.open')(function* (taskId: string, attempt: EffectAttempt) {
-        const { task, repo } = yield* world.findCheckout(taskId).pipe(Effect.mapError(asShipping('pushing')));
+        const checkout = yield* world.findCheckout(taskId).pipe(Effect.mapError(asShipping('pushing')));
+        const { task } = checkout;
+        const repo = yield* connectOrigin(checkout.repo);
         if (!(yield* pushHead(task, repo, attempt))) return;
         yield* recordStep(taskId, { kind: 'opening' }, attempt);
         const read = yield* createOpened(taskId, task, repo, attempt).pipe(

@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  realpathSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import { Context, Effect } from 'effect';
@@ -215,6 +223,45 @@ describe('createProjectRepository', () => {
       remote: null,
     });
     expect((await git(path, 'log', '--format=%s', 'main')).trim()).toBe('chore: start the repository');
+  });
+
+  test('connects the new repository to GitHub under the owner of the project’s other repositories, and records its remote', async () => {
+    const remotes = createTempDir('shinsa-remotes-');
+    const restore = overrideEnv({ FAKE_GH_REMOTES: remotes, FAKE_GH_LOGIN: 'octo', FAKE_GH_ORGS: undefined });
+    try {
+      const folder = createTempDir();
+      const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
+      const projectId = await createProject(engine, [folder]);
+      const site = await createGitRepo({ root: folder, name: 'site', remote: false });
+      await git(site.path, 'remote', 'add', 'origin', 'https://github.com/Acme/site.git');
+      await upsertRepo(engine, site.path, projectId);
+      const repo = await createProjectRepository(engine, projectId, 'islands');
+      const remote = join(remotes, 'acme/islands');
+      expect(repo.remote).toBe(remote);
+      expect(engine.state.repos[repo.id]?.remote).toBe(remote);
+      expect(await git(remote, 'rev-parse', 'refs/heads/main')).toBe(
+        await git(repo.path, 'rev-parse', 'main')
+      );
+      expect(existsSync(join(remotes, 'octo/islands'))).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  test('a new repository GitHub cannot connect is still created and registered, without a remote', async () => {
+    const restore = overrideEnv({ FAKE_GH_REMOTES: createTempDir(), FAKE_GH_LOGIN: 'octo' });
+    const failing = overrideEnv({ FAKE_GH_FAIL_ORGS: 'HTTP 502' });
+    try {
+      const folder = createTempDir();
+      const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
+      const projectId = await createProject(engine, [folder]);
+      const repo = await createProjectRepository(engine, projectId, 'islands');
+      expect(repo).toMatchObject({ name: 'islands', remote: null, projectId });
+      expect((await git(repo.path, 'remote')).trim()).toBe('');
+    } finally {
+      failing();
+      restore();
+    }
   });
 
   test('starts on the branch git is set to begin with', async () => {
