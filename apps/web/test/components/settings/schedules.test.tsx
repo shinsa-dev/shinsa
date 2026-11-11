@@ -97,7 +97,14 @@ describe('Settings → Schedules', () => {
       createSchedule({
         id: 'd',
         name: 'Alerts',
-        trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'C1',
+          channelName: 'alerts',
+          threadUpdates: true,
+        },
         nextRunAt: null,
       }),
     ]);

@@ -29,7 +29,14 @@ const TRIGGERS: ScheduleTrigger[] = [
   { kind: 'interval', everyMinutes: 1 },
   { kind: 'daily', time: '00:30', weekdays: [] },
   { kind: 'webhook', signature: null, replayKey: '{{body.id}}' },
-  { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+  {
+    kind: 'slack',
+    teamId: 'T1',
+    teamName: 'Acme',
+    channelId: 'C1',
+    channelName: 'alerts',
+    threadUpdates: true,
+  },
 ];
 
 const REF = `secret-ref:${'f'.repeat(32)}`;
@@ -95,6 +102,14 @@ function listClockCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           deliveryId: `d-${state.seq}`,
           text: 'A request came in.',
           replayKey: pick(random, [null, 'k1', 'k2']) ?? null,
+          slackMessage: {
+            teamId: 'T1',
+            channelId: 'C1',
+            messageTs: `${state.seq}.1`,
+            userId: 'U1',
+            permalink: null,
+            channelName: 'alerts',
+          },
         },
         { type: 'schedule.fail', scheduleId, dueAt: null, deliveryId: `d-${state.seq}`, detail: 'Too long.' }
       );

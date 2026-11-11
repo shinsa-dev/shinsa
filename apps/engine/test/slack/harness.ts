@@ -7,6 +7,7 @@ import { JsonLogger } from '../../src/log/service.ts';
 import { RemoteOrigin } from '../../src/remote/client/schema.ts';
 import { RemoteClient } from '../../src/remote/client/service.ts';
 import { EngineCore } from '../../src/runtime/engine/service.ts';
+import { ScheduleFilter } from '../../src/schedules/filter/service.ts';
 import { Slack, SlackStatusInterval } from '../../src/slack/index.ts';
 import { createFixedClock } from '../helpers/clock.ts';
 import type { Engine } from '../helpers/engine.ts';
@@ -48,6 +49,7 @@ export function createTestSlackService(options: TestSlackOptions) {
     resolveActor: (userId) => Effect.succeed(options.actors?.[userId] ?? null),
     isOwner: (userId) => Effect.succeed(userId === OWNER_ACCOUNT),
   }).pipe(
+    Layer.provide(ScheduleFilter.layer),
     Layer.provide(
       Layer.mergeAll(
         client,
