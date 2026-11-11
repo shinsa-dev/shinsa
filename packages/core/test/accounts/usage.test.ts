@@ -2,7 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   type AccountUsage,
+  isModelMarkFor,
   listRelevantWindows,
+  listWeeklyWindows,
+  resolveLimitScope,
   resolveHeadroom,
   resolveSpentUntil,
   STALE_USAGE_MS,
@@ -119,5 +122,52 @@ describe('the weekly window a task budget counts', () => {
     expect(Option.getOrNull(resolveWeeklyReading({ ...read, source: 'push' }))).toBeNull();
     expect(Option.getOrNull(resolveWeeklyReading({ ...read, checkedAt: null }))).toBeNull();
     expect(Option.getOrNull(resolveWeeklyReading({ ...read, windows: [SESSION] }))).toBeNull();
+  });
+});
+
+describe('which limit stopped a run', () => {
+  const NOW = 2_000;
+
+  test('a run stopped while only its model’s own window is the fullest hit that model’s limit', () => {
+    const all = usage([SESSION, WEEKLY, FABLE]);
+    expect(resolveLimitScope(all, 'claude-fable-5-2', 'seven_day', NOW)).toBe('model');
+    expect(resolveLimitScope(all, 'fable', 'seven_day_overage_included', NOW)).toBe('model');
+  });
+
+  test('Claude’s own model limit types are a model limit whatever the reading says', () => {
+    expect(resolveLimitScope(usage([]), 'opus', 'seven_day_opus', NOW)).toBe('model');
+    expect(resolveLimitScope(usage([]), 'sonnet', 'seven_day_sonnet', NOW)).toBe('model');
+  });
+
+  test('a full shared window, or one fuller than the model’s own, is the whole account’s limit', () => {
+    const fullWeek = usage([window({ ...WEEKLY, usedPercent: 100 }), FABLE]);
+    expect(resolveLimitScope(fullWeek, 'fable', 'seven_day', NOW)).toBe('account');
+    const fullSession = usage([window({ usedPercent: 100 }), FABLE]);
+    expect(resolveLimitScope(fullSession, 'fable', 'five_hour', NOW)).toBe('account');
+    const fullerWeek = usage([window({ ...WEEKLY, usedPercent: 90 }), FABLE]);
+    expect(resolveLimitScope(fullerWeek, 'fable', null, NOW)).toBe('account');
+  });
+
+  test('without a model, a model window or a fresh reading it is the whole account’s limit', () => {
+    const all = usage([SESSION, WEEKLY, FABLE]);
+    expect(resolveLimitScope(all, null, 'seven_day', NOW)).toBe('account');
+    expect(resolveLimitScope(all, 'opus', 'seven_day', NOW)).toBe('account');
+    expect(resolveLimitScope({ ...all, checkedAt: null }, 'fable', null, NOW)).toBe('account');
+    expect(resolveLimitScope(all, 'fable', null, 1_000 + STALE_USAGE_MS + 1)).toBe('account');
+  });
+
+  test('a mark for one model applies to that model, and a mark without one to every model', () => {
+    expect(isModelMarkFor('fable', 'claude-fable-5-2')).toBe(true);
+    expect(isModelMarkFor('fable', 'opus')).toBe(false);
+    expect(isModelMarkFor('fable', null)).toBe(true);
+    expect(isModelMarkFor(null, 'opus')).toBe(true);
+    expect(isModelMarkFor(undefined, 'opus')).toBe(true);
+  });
+
+  test('the weekly windows of a model are the all-models one and its own', () => {
+    const all = usage([SESSION, WEEKLY, FABLE, SPEND]);
+    expect(listWeeklyWindows(all, 'fable').map((item) => item.id)).toEqual(['seven_day', 'weekly:fable']);
+    expect(listWeeklyWindows(all, 'opus').map((item) => item.id)).toEqual(['seven_day']);
+    expect(listWeeklyWindows(all, null).map((item) => item.id)).toEqual(['seven_day']);
   });
 });

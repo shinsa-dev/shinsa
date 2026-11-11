@@ -84,6 +84,17 @@ describe('spent accounts', () => {
     expect(Option.getOrNull(resolveCandidateSpentUntil(account, 'claude-opus-4-1', NOW))).toBeNull();
   });
 
+  test('a mark for one model keeps the account out only for that model', () => {
+    const marked = createCandidate('a', { spentUntil: NOW + 10_000, spentModel: 'fable' });
+    expect(Option.getOrNull(resolveCandidateSpentUntil(marked, 'claude-fable-5-2', NOW))).toBe(NOW + 10_000);
+    expect(Option.getOrNull(resolveCandidateSpentUntil(marked, null, NOW))).toBe(NOW + 10_000);
+    expect(isUsableAccount(marked, 'opus', NOW)).toBe(true);
+    const picked = pickAccount(createRequest([marked], { model: 'opus' }));
+    expect(Option.getOrNull(picked)?.usable).toBe(true);
+    expect(Option.getOrNull(resolvePoolResetAt([marked], 'opus', NOW))).toBeNull();
+    expect(Option.getOrNull(resolvePoolResetAt([marked], 'fable', NOW))).toBe(NOW + 10_000);
+  });
+
   test('a paused, signed-out or spent account is not usable', () => {
     expect(isUsableAccount(createCandidate('a'), null, NOW)).toBe(true);
     expect(isUsableAccount(createCandidate('a', { signIn: 'unknown' }), null, NOW)).toBe(true);

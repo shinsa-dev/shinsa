@@ -1,12 +1,16 @@
 import { Option } from 'effect';
 import { resolveModelFamily } from '../agent-models/index.ts';
-import type { WeeklyReading } from '../domain/index.ts';
+import type { UsageLimitScope, WeeklyReading } from '../domain/index.ts';
 import { HOUR_MS } from '../domain/time.ts';
 import type { AccountUsage, UsageWindow } from '../protocol/accounts.ts';
 
 const SPENT_PERCENT = 100;
 
 export const STALE_USAGE_MS = 6 * HOUR_MS;
+
+const MODEL_LIMIT_TYPES: ReadonlySet<string> = new Set(['seven_day_opus', 'seven_day_sonnet']);
+
+const SHARED_WINDOW_KINDS: ReadonlySet<UsageWindow['kind']> = new Set(['session', 'weekly']);
 
 export function isStaleUsage(usage: AccountUsage, now: number) {
   return usage.checkedAt !== null && now - usage.checkedAt > STALE_USAGE_MS;
@@ -63,4 +67,41 @@ export function resolveWeeklyReading(usage: AccountUsage): Option.Option<WeeklyR
     at: checkedAt,
     resetsAt: window.resetsAt,
   }));
+}
+
+function isSameFamily(a: string, b: string) {
+  return resolveModelFamily(a).toLowerCase() === resolveModelFamily(b).toLowerCase();
+}
+
+export function isModelMarkFor(markModel: string | null | undefined, model: string | null) {
+  if (!markModel || model === null) return true;
+  return isSameFamily(markModel, model);
+}
+
+function listOwnModelWindows(usage: AccountUsage, model: string | null) {
+  if (model === null) return [];
+  return usage.windows.filter(
+    (window) => window.kind === 'model' && window.model !== null && isSameFamily(window.model, model)
+  );
+}
+
+export function listWeeklyWindows(usage: AccountUsage, model: string | null) {
+  return [...Option.toArray(selectWeeklyWindow(usage)), ...listOwnModelWindows(usage, model)];
+}
+
+export function resolveLimitScope(
+  usage: AccountUsage,
+  model: string | null,
+  limitType: string | null,
+  now: number
+): UsageLimitScope {
+  if (model === null) return 'account';
+  if (limitType !== null && MODEL_LIMIT_TYPES.has(limitType)) return 'model';
+  if (usage.checkedAt === null || isStaleUsage(usage, now)) return 'account';
+  const own = listOwnModelWindows(usage, model);
+  if (own.length === 0) return 'account';
+  const shared = usage.windows.filter((window) => SHARED_WINDOW_KINDS.has(window.kind));
+  if (shared.some((window) => window.usedPercent >= SPENT_PERCENT)) return 'account';
+  const ownPercent = Math.max(...own.map((window) => window.usedPercent));
+  return shared.every((window) => window.usedPercent <= ownPercent) ? 'model' : 'account';
 }

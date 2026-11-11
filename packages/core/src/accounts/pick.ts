@@ -1,7 +1,7 @@
 import { Option } from 'effect';
 import { type AccountSwitchReason, resolveAccountSwitchAt, type Settings } from '../domain/index.ts';
 import type { AccountSignIn, AccountSummary, AccountUsage } from '../protocol/accounts.ts';
-import { resolveHeadroom, resolveSpentUntil, resolveUsedPercent } from './usage.ts';
+import { isModelMarkFor, resolveHeadroom, resolveSpentUntil, resolveUsedPercent } from './usage.ts';
 
 export interface AccountCandidate {
   id: string;
@@ -10,6 +10,7 @@ export interface AccountCandidate {
   signIn: AccountSignIn;
   usage: AccountUsage;
   spentUntil: number | null;
+  spentModel?: string | null;
   switchAt: number;
 }
 
@@ -29,11 +30,14 @@ export interface PickedAccount {
 }
 
 export function resolveCandidateSpentUntil(
-  candidate: Pick<AccountCandidate, 'spentUntil' | 'usage'>,
+  candidate: Pick<AccountCandidate, 'spentUntil' | 'spentModel' | 'usage'>,
   model: string | null,
   now: number
 ) {
-  const marked = Option.filter(Option.fromNullOr(candidate.spentUntil), (until) => until > now);
+  const marked = Option.filter(
+    Option.fromNullOr(candidate.spentUntil),
+    (until) => until > now && isModelMarkFor(candidate.spentModel, model)
+  );
   const measured = resolveSpentUntil(candidate.usage, model, now);
   return Option.isSome(marked) && Option.isSome(measured)
     ? Option.some(Math.max(marked.value, measured.value))
@@ -153,6 +157,7 @@ export function resolveAccountCandidate(account: AccountSummary, settings: Setti
     signIn: account.signIn,
     usage: account.usage,
     spentUntil: account.spentUntil,
+    spentModel: account.spentModel ?? null,
     switchAt: account.switchAt ?? resolveAccountSwitchAt(settings),
   };
 }

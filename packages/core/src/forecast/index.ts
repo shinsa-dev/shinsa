@@ -1,4 +1,5 @@
 import { Option } from 'effect';
+import { isModelMarkFor, listWeeklyWindows } from '../accounts/usage.ts';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import { DAY_MS } from '../domain/time.ts';
 import type { AccountSummary, AccountsSnapshot, AccountUsage } from '../protocol/accounts.ts';
@@ -32,6 +33,7 @@ export const FORECAST_LIMITS = {
 
 export interface ForecastOptions {
   grants?: boolean;
+  model?: string | null;
 }
 
 export function resolveGrantRefill(usage: AccountUsage, now: number) {
@@ -70,8 +72,11 @@ export function resolveForecastAccount(
   now: number,
   options: ForecastOptions = {}
 ): Option.Option<ForecastAccount> {
-  const weekly = usage.windows.find((window) => window.kind === 'weekly');
-  if (!weekly) return Option.none();
+  const windows = listWeeklyWindows(usage, options.model ?? null);
+  if (windows.length === 0) return Option.none();
+  const weekly = windows.reduce((tightest, window) =>
+    window.usedPercent > tightest.usedPercent ? window : tightest
+  );
   const spent =
     spentUntil !== null && spentUntil > now && (weekly.resetsAt === null || spentUntil >= weekly.resetsAt);
   let left = spent ? 0 : Math.max(0, FORECAST_LIMITS.fullPercent - weekly.usedPercent);
@@ -97,7 +102,7 @@ export function listForecastAccounts(
           account.id,
           account.email ?? account.id,
           account.usage,
-          account.spentUntil,
+          isModelMarkFor(account.spentModel, options.model ?? null) ? account.spentUntil : null,
           now,
           options
         )

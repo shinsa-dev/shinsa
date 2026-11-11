@@ -12,7 +12,10 @@ export {
 } from './pick.ts';
 export { resolvePlanKey, resolvePlanLabel } from './plan.ts';
 export {
+  isModelMarkFor,
   listRelevantWindows,
+  listWeeklyWindows,
+  resolveLimitScope,
   resolveHeadroom,
   resolveSpentUntil,
   STALE_USAGE_MS,
