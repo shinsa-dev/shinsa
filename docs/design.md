@@ -250,10 +250,10 @@ Only these, and they win over anything below:
    need: Needs you (every open decision in focus, in `resolveQueue` order, which `docs/engine.md` →
    Scheduling owns: priority, then what it unblocks, then the kind of decision, then age), In progress,
    and Waiting on another task (in chain order, collapsed). In In progress, Waiting and Snoozed, two or more tasks of
-   one initiative sit under a header row with a fold chevron, the initiative's name (which opens its lead task) and
-   "‹n› tasks here · ‹progress›", and two or more of one bundle under the first of them, its own row with the
-   chevron and "‹n› of ‹m› ready"; the rest are indented `ps-7.5` below through `ListRow`'s `indent` and `fold`, no
-   other row. A group in In progress, or one that holds the task on screen, starts open; one in Waiting or Snoozed
+   one initiative sit under a header row, the initiative's name (which opens its lead task) and
+   "‹n› tasks here · ‹progress›", and two or more of one bundle under the first of them, its own row with
+   "‹n› of ‹m› ready"; each header's fold chevron is the row's last item, after its age, and the rest are indented
+   `ps-8.5` below, each tile under the header's title, through `ListRow`'s `indent` and `fold`, no other row. A group in In progress, or one that holds the task on screen, starts open; one in Waiting or Snoozed
    starts folded; each remembers its state per place and section (`lib/preferences/disclosure.ts`). A section's count
    counts a folded group once. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their

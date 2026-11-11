@@ -15,7 +15,7 @@ export const LIST_ROW_META = 'text-2xs text-fg-2';
 
 export const LIST_ROW_FOLD = 'flex h-5 w-4 shrink-0 items-center justify-center';
 
-const LIST_ROW_INDENT = 'ps-7.5';
+const LIST_ROW_INDENT = 'ps-8.5';
 
 export function ListRow({
   fold,
@@ -57,13 +57,12 @@ export function ListRow({
     className: cn(
       LIST_ROW,
       meta || summary ? LIST_ROW_LINES : LIST_ROW_LINE,
-      leading || fold ? 'px-1.5' : 'px-2.5',
+      leading ? 'px-1.5' : 'px-2.5',
       indent && LIST_ROW_INDENT
     ),
   };
   const content = (
     <>
-      {fold && <span className={LIST_ROW_FOLD}>{fold}</span>}
       {leading}
       <span className='flex min-w-0 flex-1 flex-col'>
         {mark ? (
@@ -78,6 +77,7 @@ export function ListRow({
         {summary && <span className={cn(LIST_ROW_META, 'flex h-4 min-w-0 items-center')}>{summary}</span>}
       </span>
       {trailing && <span className='shrink-0 text-2xs leading-5 text-fg-2 tabular-nums'>{trailing}</span>}
+      {fold && <span className={LIST_ROW_FOLD}>{fold}</span>}
     </>
   );
   if (holdsLinks)
