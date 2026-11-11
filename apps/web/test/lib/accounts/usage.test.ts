@@ -457,7 +457,7 @@ describe('extra usage, credit and usage resets', () => {
     expect(notes({ resetGrants: [grant({ endsAt: ends })] })).toEqual([
       {
         id: 'reset:g',
-        label: 'Usage reset',
+        label: 'Weekly reset',
         value: '1 of 2 left',
         detail: `Clears the 5-hour and weekly limits · ends ${formatMoment(ends, NOW)}`,
       },
@@ -468,7 +468,30 @@ describe('extra usage, credit and usage resets', () => {
       label: 'Launch reset',
       detail: 'Clears the 5-hour limit',
     });
-    expect(notes({ resetGrants: [grant({ clears: ['something_new'] })] })[0]?.detail).toBeNull();
+    expect(
+      notes({
+        resetGrants: [
+          grant({
+            label: 'One full limit reset (November 2026)',
+            clears: ['seven_day', 'seven_day_overage_included'],
+          }),
+        ],
+      })[0]
+    ).toMatchObject({ label: 'Weekly reset', detail: 'Clears the weekly and weekly Fable limits' });
+    expect(
+      notes({
+        resetGrants: [
+          grant({
+            label: 'New model launch: one more Fable reset at 6 months’ tenure',
+            clears: ['seven_day_overage_included'],
+          }),
+        ],
+      })[0]
+    ).toMatchObject({ label: 'Fable reset', detail: 'Clears the weekly Fable limit' });
+    expect(notes({ resetGrants: [grant({ clears: ['something_new'] })] })[0]).toMatchObject({
+      label: 'Usage reset',
+      detail: null,
+    });
     expect(notes({ resetGrants: [grant({ clears: [], endsAt: ends })] })[0]?.detail).toBe(
       `Ends ${formatMoment(ends, NOW)}`
     );

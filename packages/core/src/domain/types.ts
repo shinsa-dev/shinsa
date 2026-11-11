@@ -421,7 +421,7 @@ export interface Activity {
 export interface UntoldMessage {
   at: number;
   text: string;
-  sender: 'agent' | 'schedule';
+  sender: 'agent' | 'schedule' | 'slack';
   comments?: ReviewComment[];
 }
 

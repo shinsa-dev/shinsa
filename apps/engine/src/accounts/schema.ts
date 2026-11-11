@@ -139,7 +139,6 @@ export const UsageBody = Schema.Struct({
   extra_usage: Schema.optionalKey(Schema.Unknown),
   spend: Schema.optionalKey(Schema.Unknown),
   cedar_ember: Schema.optionalKey(Schema.Unknown),
-  juniper_tide: Schema.optionalKey(Schema.Unknown),
   five_hour: Schema.optionalKey(Schema.Unknown),
   seven_day: Schema.optionalKey(Schema.Unknown),
   seven_day_opus: Schema.optionalKey(Schema.Unknown),
@@ -198,8 +197,6 @@ export const UsageResetGrantEntry = Schema.Struct({
   ends_at: Schema.optionalKey(Schema.Unknown),
 });
 
-export const RESET_PROGRAM_KEYS = ['cedar_ember', 'juniper_tide'] as const;
-
 export const DEFAULT_CREDIT_CURRENCY = 'USD';
 
 export const DEFAULT_CREDIT_EXPONENT = 2;
@@ -254,9 +251,12 @@ export const LIMIT_KINDS: Record<string, string> = { session: 'five_hour', weekl
 export const EXPIRED_DETAIL =
   'This login expired. Shinsa refreshes it at its next check. Sign in again if this message stays.';
 
-export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
+export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage?cedar_ember=1';
 
-export const USAGE_HEADERS = { 'anthropic-beta': 'oauth-2025-04-20', 'User-Agent': 'shinsa' };
+export const USAGE_HEADERS = {
+  'anthropic-beta': 'oauth-2025-04-20',
+  'User-Agent': 'shinsa claude-cli/2.1.321',
+};
 
 export const USAGE_TIMEOUT = Duration.seconds(5);
 
