@@ -62,7 +62,12 @@ describe('what Autopilot did for you', () => {
     const harness = createHarness();
     const taskId = reviewed(harness);
     expect(listAutopilotDone(harness.state)).toEqual([]);
-    harness.send({ type: 'gate.answer', gateId: harness.openGate(taskId).id, decision: 'approve' });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
     expect(listAutopilotDone(harness.state)).toEqual([]);
   });
 
