@@ -428,6 +428,12 @@ describe('extra usage, credit and usage resets', () => {
       label: 'Launch reset',
       detail: 'Clears the 5-hour limit',
     });
+    expect(
+      notes({ resetGrants: [grant({ clears: ['seven_day', 'seven_day_overage_included'] })] })[0]?.detail
+    ).toBe('Clears the weekly and weekly Fable limits');
+    expect(notes({ resetGrants: [grant({ clears: ['seven_day_overage_included'] })] })[0]?.detail).toBe(
+      'Clears the weekly Fable limit'
+    );
     expect(notes({ resetGrants: [grant({ clears: ['something_new'] })] })[0]?.detail).toBeNull();
     expect(notes({ resetGrants: [grant({ clears: [], endsAt: ends })] })[0]?.detail).toBe(
       `Ends ${formatMoment(ends, NOW)}`

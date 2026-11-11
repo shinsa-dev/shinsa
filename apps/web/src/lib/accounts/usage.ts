@@ -43,6 +43,7 @@ const USAGE_EXTRA_LABEL = {
 const CLEARED_LIMITS: Record<string, string> = {
   five_hour: '5-hour',
   seven_day: 'weekly',
+  seven_day_overage_included: 'weekly Fable',
   seven_day_opus: 'weekly Opus',
   seven_day_sonnet: 'weekly Sonnet',
 };
