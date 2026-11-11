@@ -2819,8 +2819,10 @@ and the run supervisor.
   repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them; `stack_on` stacks it on other tasks of the bundle too, by id or handle (a task that joins several parallel pieces). `backlog` files it for the backlog (Scheduling → The
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
-  `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
-  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
+  `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per round
+  and plan version, recorded on the task (`splits`, `round` and `planVersion`: a new round's plan starts again at
+  version 1, so the round tells its split from an earlier round's, which the task keeps); a second call in the same
+  round returns the same tasks. With `stacked` the
   parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
   merging together, Scheduling → Bundles), the usual choice whenever the parts serve one goal; it is refused next to
   `this_task_waits`. Without it each part starts at once and ships on its own, only for parts with different goals. These are the only
