@@ -11,10 +11,9 @@ import type { SlackPost } from '../slack/posts.ts';
 import type { SlackDecision, SlackMention } from '../slack/schema.ts';
 import { serializeSlackMessage, serializeSlackRequest } from '../slack/thread.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { answerGate } from './gates.ts';
-import { messageTask, recordHeldMessage } from './messages.ts';
+import { isHeldForYou, messageTask, recordHeldMessage } from './messages.ts';
 import { createTask } from './tasks.ts';
 
 function selectThreadTask(decider: Decider, thread: SlackThreadRef): Task | null {
@@ -31,7 +30,7 @@ function requestPost(decider: Decider, thread: SlackThreadRef, taskId: string, p
 
 function forwardMention(decider: Decider, task: Task, mention: SlackMention) {
   const text = serializeSlackMessage(mention, decider.context.newId());
-  const held = listOpenGates(decider.state, task.id).length > 0;
+  const held = isHeldForYou(decider.state, task);
   if (held) recordHeldMessage(decider, task.id, text);
   else messageTask(decider, { type: 'task.message', taskId: task.id, text });
   decider.run({

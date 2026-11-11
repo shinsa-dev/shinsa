@@ -311,6 +311,7 @@ export function describeRounds(task: Task) {
 const SENT_BY = {
   agent: 'Sent by an agent on the human’s behalf: ',
   schedule: 'Sent by a schedule: ',
+  slack: '',
 } as const;
 
 function describeSender(entry: Activity) {

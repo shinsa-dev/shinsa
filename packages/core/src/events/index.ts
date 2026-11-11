@@ -171,6 +171,7 @@ type EventBody =
       round?: number;
       suggestionId?: string;
       kept?: true;
+      sender?: 'slack';
       comments?: ReviewComment[];
     }
   | {
