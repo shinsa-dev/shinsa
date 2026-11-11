@@ -23,6 +23,7 @@ import {
 import { isPlacementPoliciesValid } from '../remote/placement.ts';
 import { PLACEMENT_POLICY_LIMITS } from '../remote/schema.ts';
 import { findProject, findRepo } from '../state/queries.ts';
+import { releaseModelWaits } from './accounts.ts';
 import { syncAutopilotDeadlines } from './autopilot.ts';
 import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
@@ -373,5 +374,6 @@ export function changeSettings(decider: Decider, command: CommandOf<'settings.ch
   decider.emit({ type: 'settings.changed', settings });
   releaseBudgetHolds(decider);
   releasePaceHolds(decider);
+  releaseModelWaits(decider);
   syncAutopilotDeadlines(decider);
 }

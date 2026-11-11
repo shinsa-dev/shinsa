@@ -1632,7 +1632,7 @@ suggestion too, queues its round, which starts once you close the answer): core 
 Agent, an answerer, an investigator or a researcher; never the reviewer, a watchdog's check or a watch's read,
 which can only report) is told it once, at the tail of its prompt
 after your own words ("While this task waited for the human, these messages were left for you…", each "Sent by an
-agent on the human’s behalf: …" or "Sent by a schedule: …"; `Decider.startRun`, `task.messages_told`). The tail
+agent on the human’s behalf: …", "Sent by a schedule: …" or a Slack mention's own "<name> in Slack: …"; `Decider.startRun`, `task.messages_told`). The tail
 comes after the house rules, so a resumed session that already holds them gets it too: the fix your reply at a
 review or merge gate starts, a retry at a failure gate, the next phase. Until it is told, `resolveLaterMessages`
 leaves it out, so no brief repeats it; after, the round's brief lists it with the rest. The on-your-behalf record
@@ -2349,8 +2349,9 @@ action it takes is recorded with its reason. The rules are core's (`decide/autop
   under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
 - **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
   readings are, so the engine's account roster works out each provider's safe pace (`listProviderPaces`, the forecast
-  with every usable reset grant that clears the weekly limit counted as a full refill) on every accounts refresh and
-  records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
+  with every usable reset grant that clears the weekly limit counted as a full refill; for Claude it runs for the agent
+  model, so an account's weekly budget is the tighter of its all-models weekly window and that model's own weekly
+  window, and Settings' forecast does the same) on every accounts refresh and records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
   own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
 - **Auto pace** (`autoPace`, off by default, only yours, in
   `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
@@ -2947,8 +2948,10 @@ and the run supervisor.
   repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them; `stack_on` stacks it on other tasks of the bundle too, by id or handle (a task that joins several parallel pieces). `backlog` files it for the backlog (Scheduling → The
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
-  `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
-  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
+  `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per round
+  and plan version, recorded on the task (`splits`, `round` and `planVersion`: a new round's plan starts again at
+  version 1, so the round tells its split from an earlier round's, which the task keeps); a second call in the same
+  round returns the same tasks. With `stacked` the
   parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
   merging together, Scheduling → Bundles), the usual choice whenever the parts serve one goal; it is refused next to
   `this_task_waits`. Without it each part starts at once and ships on its own, only for parts with different goals. These are the only
@@ -4737,7 +4740,8 @@ Slack ──event──► app.shinsa.dev /slack/events
                                              /api/slack/events
                                                └─ slack.mention
    thread holds an open task ──► task.message, 👀 on the mention
-                  └─ a gate open ──► kept in its chat, 📥 on the mention
+                  └─ a gate open but the result ──► kept for its next
+                     agent, 📥 on the mention
    otherwise ──► slack.evaluate: ⏳ on the mention at once,
                   the model reads the thread
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
@@ -4918,10 +4922,13 @@ engine ──its watched channels, on every change──►
   write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
   as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
   work a new round. The bot posts nothing: it puts 👀 `eyes` on that mention (`slack.react`,
-  `SLACK_MENTION_REACTIONS.forwarded`). While the task has a gate open (a question, a plan, a review, a failure), the
-  mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes nothing, so it never
-  answers a question, revises a plan or sends a review back; it gets 📥 `inbox_tray` instead (`held`). Decide the
-  gate with the card's buttons, or in Shinsa.
+  `SLACK_MENTION_REACTIONS.forwarded`). A task resting at its result (Read the answer, Read the diagnosis, Read the
+  report) takes the mention as a follow-up, as it takes yours. While the task has any other gate open (a question, a
+  plan, a review, a merge, a failure; `isHeldForYou`, the rule a message sent on your behalf follows), the mention
+  closes nothing, so it never answers a question, revises a plan or sends a review back: it is recorded in its chat
+  and kept for its next agent (`recordHeldMessage`, `task.messaged` with `kept` and `sender: 'slack'`), which is told
+  it once, as its author wrote it ("<name> in Slack: …", Messages, above), and it gets 📥 `inbox_tray` instead
+  (`held`). Decide the gate with the card's buttons, or in Shinsa.
 - **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the mention gets
   ⏳ at once (`hourglass_flowing_sand`, Reactions below), so you see it was picked up, and the machine asks
   the classifier model, under a fixed system prompt with the thread as data (`SLACK_EVALUATION_SYSTEM`,
@@ -6976,16 +6983,18 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the kept account, and the
   kept account is the default when the duplicate is. Shinsa never signs a duplicate out, which could revoke the
   login it shares. Once the logins differ again, both are accounts as before, with their own settings.
-- **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage` with the
+- **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage?cedar_ember=1` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
-  `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
+  `.credentials.json`), `anthropic-beta: oauth-2025-04-20` and `User-Agent: shinsa claude-cli/2.1.321`. Claude fills
+  `cedar_ember`, an account's reset status, only when the query asks for it and the client name holds a
+  `claude-cli/<version>` token (any version; with `shinsa` alone it answers `ineligible_reason: "surface"` and no
+  grants), so the name keeps `shinsa` and adds that token. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
   window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
   codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
   malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
   on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
-  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember`, then
-  `juniper_tide` (each with its resets left and total, the windows it clears, whether it is usable now and when it
+  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember` (each with its resets left and total, the windows it clears, whether it is usable now and when it
   ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
   credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
   Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
@@ -7040,7 +7049,17 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   (`run.attempted` `account`), and an attempt on another account than the task's last one writes an
   `account_switched` notice.
 - **Rotation on a rejection** (`accounts/rotation/service.ts`). A usage limit marks the account spent until its reset (15
-  minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too); a
+  minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too). A mark
+  is for the whole account or for one model family: Claude reports a cap on one model (Fable's weekly limit) with the
+  same `seven_day` type as the all-models one, so on a usage rejection the rotation reads the account's usage again
+  at once and asks core's `resolveLimitScope` with the last reading a read returned (`UsageTable.measured`, never
+  a pushed notice, which puts the weekly window at 100% on any rejection; kept in `data/usage-reads.json` and
+  `data/provider-usage-reads.json` so a restart keeps it): with a fresh reading where neither the 5-hour nor the all-models weekly
+  window is at 100% and the run's model has a window of its own at least as full as both, it is a model limit
+  (`limitScope: 'model'` with the run's `model` on the `RunFailure`); Claude's own `seven_day_opus` and
+  `seven_day_sonnet` types are model limits without the read. A model mark only counts for runs on that family
+  (`isModelMarkFor`): `pickAccount`, the pool's reset and the snapshot's `spentUntil` (with `spentModel`, for the agent
+  model) still offer the account to other models. An account keeps one mark per family and one for the whole account; a
   signed-out account is marked signed out (a dead token is read again first: A login Claude could not refresh,
   below). The spent marks are kept in `data/account-marks.json` (written on every
   mark and every sign-in that clears one; read at start without the marks that have run out, and an unreadable file
@@ -7096,7 +7115,11 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   limit, with `settings.snoozeLimited` on) opens a failure gate at the reset instead; with both off the limit opens
   the failure gate at once. A usage limit never fails a task on its own: a reset that is unknown or already past
   waits 15 minutes (`ESTIMATED_RESET_MS`), and a resumed step that hits a window no later than the one it waited for
-  waits at least 15 minutes more instead of looping at once. The web titles the wait "Waiting for usage: continues at
+  waits at least 15 minutes more instead of looping at once. The wait keeps the failure's `model` and `limitScope`:
+  a wait on a model limit is resumed at once by a settings change that moves its role to another model family or
+  provider (`releaseModelWaits` in `changeSettings`, auto-resume or not), on the new model, and its copy names the
+  model ("The agent stopped at the Fable limit on a@b.com"); a wait on an all-models limit waits for its reset
+  whatever the model. The web titles the wait "Waiting for usage: continues at
   3:40 PM on a@b.com" (`docs/design.md` → Waiting for the usage limit). `usage_wait.change` (auto-resume on or off) replaces the
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
   cancelling or any new step end the wait. A daily or project limit arms the same wait with `cause: pace` before
@@ -7205,8 +7228,8 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
-- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
-  `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
+- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `usage-reads.json`, `provider-usage.json`,
+  `provider-usage-reads.json` and `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
   that breaks it is dropped, a broken `accounts.json` is kept aside, and a cache or a mark that cannot be written is
   logged. `AccountFolders` makes and removes each account's `CLAUDE_CONFIG_DIR`: the folder, its seeded `.claude.json`,
   the links to the shared entries and the `.credentials.json` read back. `UsageApi` reads Claude's usage over Effect's
@@ -7340,7 +7363,9 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── terminals/     Your terminals (`terminals.json`), each one's last screen (`<id>.screen`), so a restarted
     │                  engine shows how each ended, and your services (`services.json`, mode 600; Terminals, above)
     ├── usage-limits.json  The last usage reading per account
+    ├── usage-reads.json   The last reading a usage read returned per account, without pushed notices
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
+    ├── provider-usage-reads.json  The last reading a usage read returned per provider, without pushed notices
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
     ├── eunoe/         eunoe's folder (`EUNOE_DIR`): the request log (requests.jsonl) and thread state (threads/)

@@ -15,7 +15,7 @@ import type {
 } from '../report/types.ts';
 import type { ViewScope } from '../scopes/schema.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
-import type { UsageWait, WeeklyReading } from './accounts.ts';
+import type { UsageLimitScope, UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
@@ -109,6 +109,8 @@ export interface RunFailure {
   resetAt: number | null;
   account?: RunAccount | null;
   login?: ProviderSignIn | null;
+  model?: string | null;
+  limitScope?: UsageLimitScope;
 }
 
 export interface ProviderSignIn {
@@ -420,7 +422,7 @@ export interface Activity {
 export interface UntoldMessage {
   at: number;
   text: string;
-  sender: 'agent' | 'schedule';
+  sender: 'agent' | 'schedule' | 'slack';
   comments?: ReviewComment[];
 }
 

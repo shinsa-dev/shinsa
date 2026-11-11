@@ -21,8 +21,8 @@ export class AccountRegistry extends Context.Service<
     writeAccounts(path: string, registry: Registry): Effect.Effect<void>;
     readUsage(path: string): Effect.Effect<Map<string, AccountUsage>>;
     keepUsage(path: string, entries: ReadonlyMap<string, AccountUsage>): Effect.Effect<void>;
-    readMarks(path: string, now: number): Effect.Effect<Map<string, SpentMark>>;
-    keepMarks(path: string, marks: ReadonlyMap<string, SpentMark>): Effect.Effect<void>;
+    readMarks(path: string, now: number): Effect.Effect<Map<string, readonly SpentMark[]>>;
+    keepMarks(path: string, marks: ReadonlyMap<string, readonly SpentMark[]>): Effect.Effect<void>;
   }
 >()('shinsa/engine/accounts/registry/AccountRegistry') {
   static readonly layer = Layer.effect(
@@ -35,6 +35,7 @@ export class AccountRegistry extends Context.Service<
       const isCachedUsage = Schema.is(CachedUsage);
       const decodeMarks = Schema.decodeUnknownOption(SpentMarksFields);
       const decodeMark = Schema.decodeUnknownOption(SpentMarkSchema);
+      const decodeMarkList = Schema.decodeUnknownOption(Schema.Array(Schema.Unknown));
       const unknownResetMs = Duration.toMillis(UNKNOWN_RESET);
 
       const readAccount = (value: unknown): StoredAccount[] =>
@@ -130,22 +131,23 @@ export class AccountRegistry extends Context.Service<
               )
             )
           );
-        const marks = new Map<string, SpentMark>();
+        const marks = new Map<string, readonly SpentMark[]>();
         const listed = Option.getOrUndefined(Option.flatMap(stored, decodeMarks))?.marks ?? {};
         for (const [accountId, value] of Object.entries(listed)) {
-          for (const mark of Option.toArray(decodeMark(value))) {
-            if ((mark.until ?? mark.at + unknownResetMs) > now) marks.set(accountId, mark);
-          }
+          const kept = Option.getOrElse(decodeMarkList(value), () => [])
+            .flatMap((entry) => Option.toArray(decodeMark(entry)))
+            .filter((mark) => (mark.until ?? mark.at + unknownResetMs) > now);
+          if (kept.length > 0) marks.set(accountId, kept);
         }
         return marks;
       });
 
       const keepMarks = Effect.fn('AccountRegistry.keepMarks')(function* (
         path: string,
-        marks: ReadonlyMap<string, SpentMark>
+        marks: ReadonlyMap<string, readonly SpentMark[]>
       ) {
         yield* files
-          .write(path, { version: 1, marks: Object.fromEntries(marks) })
+          .write(path, { version: 2, marks: Object.fromEntries(marks) })
           .pipe(
             Effect.catchTag('JsonFileWriteFailed', (failed) =>
               Effect.logWarning('[Accounts] Could not keep the spent accounts').pipe(

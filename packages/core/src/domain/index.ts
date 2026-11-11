@@ -36,6 +36,7 @@ export {
   type RunDelegation,
   type RunWait,
   resolveDelegationStatus,
+  selectPlanSplit,
   type TaskCreator,
   type TaskCreatorKind,
   type TaskSplit,

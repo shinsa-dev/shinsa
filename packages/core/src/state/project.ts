@@ -633,7 +633,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
 function keepMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
   const task = state.tasks[event.taskId];
   if (!task) return;
-  const sender = event.scheduleId ? 'schedule' : 'agent';
+  const sender = event.sender ?? (event.scheduleId ? 'schedule' : 'agent');
   const kept: UntoldMessage = {
     at: event.at,
     text: event.text,

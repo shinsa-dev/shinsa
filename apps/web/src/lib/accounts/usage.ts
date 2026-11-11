@@ -9,6 +9,8 @@ import {
   resolveAgentModel,
   resolveAgentProvider,
   resolveCandidateSpentUntil,
+  selectCandidateSpentModel,
+  resolveModelFamilyLabel,
   resolvePlanLabel,
   resolveSpentUntil,
   type Settings,
@@ -37,12 +39,15 @@ const USAGE_EXTRA_LABEL = {
   noLimit: 'On, no monthly limit',
   credit: 'Credit left',
   reset: 'Usage reset',
+  weeklyReset: 'Weekly reset',
+  fableReset: 'Fable reset',
   notUsable: 'Not usable yet',
 };
 
 const CLEARED_LIMITS: Record<string, string> = {
   five_hour: '5-hour',
   seven_day: 'weekly',
+  seven_day_overage_included: 'weekly Fable',
   seven_day_opus: 'weekly Opus',
   seven_day_sonnet: 'weekly Sonnet',
 };
@@ -225,6 +230,13 @@ export function describeResetsIn(resetsAt: number, now: number) {
   return resetsAt <= now ? 'Resets now' : formatUntil('Resets', resetsAt, now);
 }
 
+function describeSpentLabel(account: AccountSummary, model: string | null, now: number) {
+  return Option.match(selectCandidateSpentModel(account, model, now), {
+    onNone: () => 'Out of usage',
+    onSome: (spent) => `Out of ${resolveModelFamilyLabel(spent)} usage`,
+  });
+}
+
 export function resolveAccountStatus(
   account: AccountSummary,
   model: string | null,
@@ -234,7 +246,7 @@ export function resolveAccountStatus(
   if (account.paused) return { label: 'Paused', tone: 'neutral', until: null };
   return Option.getOrNull(
     Option.map(resolveCandidateSpentUntil(account, model, now), (until) => ({
-      label: 'Out of usage',
+      label: describeSpentLabel(account, model, now),
       tone: 'red' as const,
       until,
     }))
@@ -294,10 +306,16 @@ function describeGrantDetail(grant: UsageResetGrant, now: number) {
   return reach === null ? `Ends ${ends}` : `${reach} · ends ${ends}`;
 }
 
+function resolveGrantLabel(grant: UsageResetGrant) {
+  if (grant.clears.includes('seven_day')) return USAGE_EXTRA_LABEL.weeklyReset;
+  if (grant.clears.includes('seven_day_overage_included')) return USAGE_EXTRA_LABEL.fableReset;
+  return grant.label ?? USAGE_EXTRA_LABEL.reset;
+}
+
 function createGrantRow(grant: UsageResetGrant, now: number): UsageNoteRow {
   return {
     id: `reset:${grant.id}`,
-    label: grant.label ?? USAGE_EXTRA_LABEL.reset,
+    label: resolveGrantLabel(grant),
     value: `${grant.left} of ${grant.total} left`,
     detail: describeGrantDetail(grant, now),
   };
