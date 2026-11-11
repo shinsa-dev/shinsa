@@ -134,6 +134,32 @@ describe('the usage menu', () => {
     await hover(screen.getByRole('button', { name: 'Agent usage' }));
     expect(await screen.findByText('1 usage reset available')).toBeTruthy();
     expect(screen.getAllByText(/usage resets? available/)).toHaveLength(1);
+    expect(screen.getByText('1 usage reset available').className).toContain('text-fg-3');
+  });
+
+  it('warns in the usage menu when a usable reset ends within 3 days', async () => {
+    const grant = {
+      id: 'g',
+      label: null,
+      left: 1,
+      total: 1,
+      clears: ['seven_day_overage_included'],
+      usableNow: true,
+      endsAt: Date.now() + 2 * 86_400_000 + 3_600_000,
+      givesBackWeekly: true,
+      weeklyShare: 12,
+    };
+    pushAccounts(
+      createSnapshot({
+        accounts: [
+          createAccount({ id: 'a', isDefault: true, usage: { ...usage(20), resetGrants: [grant] } }),
+        ],
+      })
+    );
+    renderMenu();
+    await hover(screen.getByRole('button', { name: 'Agent usage' }));
+    const warning = await screen.findByText('1 usage reset ends in 2 days');
+    expect(warning.className).toContain('text-amber-text');
   });
 
   it('reads usage again by itself while its popover is open, and only then', async () => {

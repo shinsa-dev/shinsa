@@ -72,6 +72,17 @@ export function listAccountFiles(data: string): Record<string, string> {
             givesBackWeekly: false,
             weeklyShare: null,
           },
+          {
+            id: 'seed-fable-grant',
+            label: null,
+            left: 1,
+            total: 1,
+            clears: ['seven_day_overage_included'],
+            usableNow: true,
+            endsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
+            givesBackWeekly: true,
+            weeklyShare: 27,
+          },
         ],
       },
       [OPS.id]: {

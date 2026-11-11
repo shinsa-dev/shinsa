@@ -415,13 +415,14 @@ describe('extra usage, credit and usage resets', () => {
   });
 
   it('lists each reset with how many are left, the limits it clears and when it ends', () => {
-    const ends = NOW + 2 * HOUR;
+    const ends = NOW + 10 * 24 * HOUR;
     expect(notes({ resetGrants: [grant({ endsAt: ends })] })).toEqual([
       {
         id: 'reset:g',
         label: 'Weekly reset',
         value: '1 of 2 left',
         detail: `Clears the 5-hour and weekly limits · ends ${formatMoment(ends, NOW)}`,
+        ending: false,
       },
     ]);
     expect(
@@ -461,9 +462,10 @@ describe('extra usage, credit and usage resets', () => {
   });
 
   it('counts only the resets usable now for the usage menu', () => {
-    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant()] }, NOW)).toBe(
-      '1 usage reset available'
-    );
+    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant()] }, NOW)).toEqual({
+      text: '1 usage reset available',
+      ending: false,
+    });
     expect(
       describeResetsAvailable(
         {
@@ -476,7 +478,7 @@ describe('extra usage, credit and usage resets', () => {
         },
         NOW
       )
-    ).toBe('3 usage resets available');
+    ).toEqual({ text: '3 usage resets available', ending: false });
     expect(
       describeResetsAvailable({ ...usage(), resetGrants: [grant({ usableNow: false })] }, NOW)
     ).toBeNull();
@@ -486,8 +488,42 @@ describe('extra usage, credit and usage resets', () => {
     const ended = grant({ endsAt: NOW - HOUR });
     expect(notes({ resetGrants: [ended] })).toEqual([]);
     expect(describeResetsAvailable({ ...usage(), resetGrants: [ended] }, NOW)).toBeNull();
-    expect(describeResetsAvailable({ ...usage(), resetGrants: [grant({ endsAt: NOW + HOUR })] }, NOW)).toBe(
-      '1 usage reset available'
-    );
+    expect(
+      describeResetsAvailable({ ...usage(), resetGrants: [grant({ endsAt: NOW + 10 * 24 * HOUR })] }, NOW)
+    ).toEqual({ text: '1 usage reset available', ending: false });
+  });
+
+  it('warns about a usable reset that ends within 3 days, so it is not wasted', () => {
+    const inTwoDays = NOW + 2 * 24 * HOUR + HOUR;
+    const soon = grant({ id: 'soon', endsAt: inTwoDays, clears: ['seven_day_overage_included'] });
+    expect(notes({ resetGrants: [soon] })[0]).toMatchObject({
+      label: 'Fable reset',
+      detail: 'Clears the weekly Fable limit · ends in 2 days',
+      ending: true,
+    });
+    expect(notes({ resetGrants: [grant({ clears: [], endsAt: NOW + 3 * HOUR })] })[0]).toMatchObject({
+      detail: 'Ends in 3h',
+      ending: true,
+    });
+    expect(notes({ resetGrants: [grant({ usableNow: false, endsAt: inTwoDays })] })[0]).toMatchObject({
+      detail: `Not usable yet · ends ${formatMoment(inTwoDays, NOW)}`,
+      ending: false,
+    });
+    expect(
+      describeResetsAvailable(
+        {
+          ...usage(),
+          resetGrants: [
+            soon,
+            grant({ id: 'sooner', endsAt: NOW + 24 * HOUR + HOUR }),
+            grant({ id: 'later', endsAt: NOW + 10 * 24 * HOUR }),
+          ],
+        },
+        NOW
+      )
+    ).toEqual({ text: '2 usage resets end in 1 day', ending: true });
+    expect(
+      describeResetsAvailable({ ...usage(), resetGrants: [grant({ endsAt: NOW + 4 * 24 * HOUR })] }, NOW)
+    ).toEqual({ text: '1 usage reset available', ending: false });
   });
 });

@@ -85,7 +85,7 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
               total: 1,
               clears: ['seven_day', 'seven_day_overage_included'],
               usableNow: true,
-              endsAt: now + 29 * 24 * HOUR,
+              endsAt: now + 2 * 24 * HOUR + 3 * HOUR,
               givesBackWeekly: false,
               weeklyShare: null,
             },

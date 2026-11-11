@@ -1,4 +1,4 @@
-import { MINUTE_MS, resolveAutoPace, type ShinsaState } from '@shinsa/core';
+import { MINUTE_MS, resolveAutoPace, resolveAutoPaceResets, type ShinsaState } from '@shinsa/core';
 import { Switch } from '@shinsa/ui/components/switch';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
@@ -16,7 +16,7 @@ function PaceBudgets({ state }: { state: ShinsaState }) {
   const rows = React.useMemo(() => {
     const now = minute * MINUTE_MS;
     return listProviderForecasts(snapshot, state, now).flatMap((entry) => {
-      const row = selectPaceBudget(state, entry.provider, now, entry.forecast.safePace, entry.title);
+      const row = selectPaceBudget(state, entry.provider, now, entry.title);
       return row ? [row] : [];
     });
   }, [snapshot, state, minute]);
@@ -30,6 +30,29 @@ function PaceBudgets({ state }: { state: ShinsaState }) {
       <span className='shrink-0 text-xs text-fg-3 tabular-nums'>{row.value}</span>
     </div>
   ));
+}
+
+function ResetsRow({ state }: { state: ShinsaState }) {
+  const available = useEngineFeature('usage.auto_pace_resets');
+  if (!available) return null;
+  return (
+    <div className={SETTING_ROW}>
+      <div className='flex min-w-0 flex-1 flex-col'>
+        <span className='text-xs text-fg-4'>{AUTO_PACE_LABEL.resets}</span>
+        <span className='text-2xs text-fg-2'>{AUTO_PACE_LABEL.resetsHint}</span>
+      </div>
+      <Switch
+        checked={resolveAutoPaceResets(state.settings)}
+        aria-label={AUTO_PACE_LABEL.resets}
+        onCheckedChange={(autoPaceResets) =>
+          void updateSettings(
+            { autoPaceResets },
+            autoPaceResets ? AUTO_PACE_LABEL.resetsToggled.on : AUTO_PACE_LABEL.resetsToggled.off
+          )
+        }
+      />
+    </div>
+  );
 }
 
 export function AutoPaceSettings({ state }: { state: ShinsaState }) {
@@ -50,6 +73,7 @@ export function AutoPaceSettings({ state }: { state: ShinsaState }) {
           }
         />
       </SettingRow>
+      {on && <ResetsRow state={state} />}
       {on && <PaceBudgets state={state} />}
     </SettingsGroup>
   );

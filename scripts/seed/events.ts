@@ -27,14 +27,15 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
       ...createSettings(),
       taskUsageLimit: 10,
       autoPace: true,
+      autoPaceResets: true,
     },
   });
   push(NOW - HOUR, {
     type: 'usage.pace_recorded',
     provider: 'claude',
     pace: 45,
-    resetPace: 45,
-    resetEndsAt: null,
+    resetPace: 72,
+    resetEndsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
   });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);

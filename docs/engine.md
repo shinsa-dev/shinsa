@@ -2270,10 +2270,13 @@ checks it ran.
   meter's window, else the best learned rate, and stays in dollars with none. The task's cost popover shows it
   under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
 - **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
-  readings are, so the engine's account roster works out each provider's safe pace (`listProviderPaces`, the forecast
-  with every usable reset grant that clears the weekly limit counted as a full refill) on every accounts refresh and
-  records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
-  own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
+  readings are, so the engine's account roster works out two safe paces for each provider on every accounts refresh
+  (`listProviderPaces`): `pace`, the forecast without usage resets, and `resetPace`, the forecast with each usable
+  reset as a budget of its own (The usage forecast, below), with `resetEndsAt`, when the soonest of those resets ends.
+  It records them when either pace moved by a whole point (`isProviderPaceMoved`, `isPaceMoved`,
+  `FORECAST_LIMITS.paceStep`), `resetEndsAt` changed, or the pace appeared or went away. A log migration
+  (`reset-paces.ts`) gave older records `resetPace` equal to their pace and `resetEndsAt` null. Settings' own forecast
+  still leaves resets out, since you use them in the Claude app.
 - **Auto pace** (`autoPace`, off by default, only yours, in
   `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
   as above. With it on, a task's first build run in a round waits for admission (`holdForAdmission` in
@@ -2283,7 +2286,14 @@ checks it ran.
   with no recorded pace or no estimate does not wait either.
   - **The budget** is the recorded safe pace for the next 24 hours, less 10% kept for urgent tasks
     (`ADMISSION_LIMITS.reserve`; an urgent build may use all of it), minus the provider's last 24 hours and the
-    estimated rest of every build already started (`resolveAdmission`). A build fits when its estimate does; one
+    estimated rest of every build already started (`resolveAdmission`). The safe pace is `pace`, without resets,
+    unless you switched on **Count on usage resets** (`autoPaceResets`, off by default, only yours, in
+    `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace_resets`): then an urgent or high build
+    uses `resetPace`, and every build does while a usable reset ends within 3 days (`ADMISSION_LIMITS.resetEndingMs`),
+    so a reset is not left to end unused (`resolveAdmissionPace`). Normal and low builds otherwise never count on a
+    reset. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Agent usage → Auto pace
+    says so under the provider's budget ("Urgent and high-priority builds may use up to 160%, counting on you using a
+    reset in Claude", or "A usage reset ends in 2 days, so every build counts on you using it in Claude"). A build fits when its estimate does; one
     larger than the whole budget counts as the budget, so it starts once nothing else is using it.
   - **The queue** (`sortAdmissionQueue`), with nothing to set: task priority (urgent first), then the focus project,
     then the projects you act on most, learned as the median time from a gate opening to your answer over the last 14
@@ -2317,7 +2327,12 @@ checks it ran.
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
   every reset gives 100% for another week (an account with no known reset keeps what it has for the whole
-  horizon). For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
+  horizon). With resets counted (`ForecastOptions.grants`, for `resetPace`), each usable reset with some left is one
+  more budget that ends at its `endsAt` and never refills (`ForecastAccount.refills` false), worth what it gives
+  back to the weekly limit (`resolveGrantRefill`): 100% for each left if it clears `seven_day`, Fable's share of the
+  weekly limit (`weeklyShare`) if it only clears the Fable limit and gives that back (`givesBackWeekly`), else
+  nothing. Spending the soonest to end first means the reset that ends soonest is the first planned on.
+  For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
   from the account that resets soonest, which is the best order for budgets that expire. A binary search finds
   the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
   the recommendation, which Auto pace builds within; the forecast also names the tightest reset (the one
@@ -3679,7 +3694,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
+  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `usage.auto_pace_resets` for `autoPaceResets` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
   `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
@@ -6914,8 +6929,12 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
   on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
   and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember` (each with its resets left and total, the windows it clears, whether it is usable now and when it
-  ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  ends, and `givesBackWeekly` from `gives_back_weekly` with `weeklyShare`, the percent of the weekly limit the
+  scoped limits used, summed from `weekly_scoped_shares[].used_percent_of_weekly`, only on a grant that gives back;
+  a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
   credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
+  A usable reset that ends within 3 days (`ADMISSION_LIMITS.resetEndingMs`) is said in amber, on its row ("Clears the
+  weekly Fable limit · ends in 2 days") and in the usage menu ("1 usage reset ends in 2 days"), so none ends unused.
   Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
   the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
