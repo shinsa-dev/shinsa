@@ -6833,16 +6833,18 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the kept account, and the
   kept account is the default when the duplicate is. Shinsa never signs a duplicate out, which could revoke the
   login it shares. Once the logins differ again, both are accounts as before, with their own settings.
-- **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage` with the
+- **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage?cedar_ember=1` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
-  `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
+  `.credentials.json`), `anthropic-beta: oauth-2025-04-20` and `User-Agent: shinsa claude-cli/2.1.321`. Claude fills
+  `cedar_ember`, an account's reset status, only when the query asks for it and the client name holds a
+  `claude-cli/<version>` token (any version; with `shinsa` alone it answers `ineligible_reason: "surface"` and no
+  grants), so the name keeps `shinsa` and adds that token. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
   window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
   codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
   malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
   on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
-  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember`, then
-  `juniper_tide` (each with its resets left and total, the windows it clears, whether it is usable now and when it
+  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember` (each with its resets left and total, the windows it clears, whether it is usable now and when it
   ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
   credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
   Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
