@@ -10,7 +10,12 @@ import {
   type QueueEntry,
   type QueueGroup,
   type QueueSection,
+  describeGroupHidden,
+  describeGroupSummary,
+  describeGroupToggle,
   resolveGroupDefault,
+  resolveGroupOpen,
+  resolveGroupPrefix,
   resolveGroupId,
   resolveSectionDefault,
   resolveSectionId,
@@ -351,5 +356,26 @@ describe('groups of a bundle or an initiative', () => {
     expect(resolveGroupDefault(waiting, bundle, null)).toBe(false);
     expect(resolveGroupDefault(waiting, bundle, 'screen')).toBe(true);
     expect(resolveGroupDefault(waiting, bundle, 'api')).toBe(true);
+  });
+  it('says how many of a group’s tasks are here and how far it has come, and what a fold hides', () => {
+    const initiative = groupIn('working');
+    const bundle = groupIn('waiting');
+    expect(describeGroupSummary(initiative)).toBe('2 tasks here · 1 of 4 shipped · 1 dropped');
+    expect(describeGroupHidden(bundle)).toBe('2 more tasks · 1 of 4 ready');
+    expect(describeGroupToggle(bundle, true)).toBe('Collapse Schema');
+    expect(describeGroupToggle(initiative, false)).toBe('Expand Chat split');
+  });
+
+  it('reads a group’s remembered choice under its section, and its default when it has none', () => {
+    const working = sectionNamed('working');
+    const group = groupIn('working');
+    expect(`${resolveGroupPrefix('home', working)}:initiative:split`).toBe(
+      resolveGroupId('home', working, group)
+    );
+    const key = new Set(['initiative:split']);
+    const none = new Set<string>();
+    expect(resolveGroupOpen(group, key, none, false)).toBe(true);
+    expect(resolveGroupOpen(group, none, key, true)).toBe(false);
+    expect(resolveGroupOpen(group, none, none, true)).toBe(true);
   });
 });

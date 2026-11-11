@@ -6,21 +6,35 @@ import type * as React from 'react';
 import { CompactSection, CompactSections } from '@/components/layout/compact-section.tsx';
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
+import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
+import { StatusTile } from '@/components/status/tile.tsx';
 import { BundleMark } from '@/components/task/bundle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useOwnQueue } from '@/hooks/use-own-queue.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
-import { type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
+import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
+import { type DisclosureId, useDisclosure, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
 import {
+  countSectionEntries,
+  describeGroupHidden,
+  describeGroupSummary,
+  describeGroupToggle,
   listQueueSections,
+  type QueueEntry,
+  type QueueGroup,
   type QueueItem,
   type QueueSection,
+  resolveGroupDefault,
+  resolveGroupId,
+  resolveGroupOpen,
+  resolveGroupPrefix,
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
@@ -94,14 +108,15 @@ export function WideSections({ children }: { children: React.ReactNode }) {
 
 function QueueCompactSection({
   section,
+  count,
   activeTaskId,
   children,
 }: {
   section: QueueSection;
+  count: number;
   activeTaskId: string | null;
   children: React.ReactNode;
 }) {
-  const count = section.items.length;
   return (
     <CompactSection
       persistId={resolveSectionId(section)}
@@ -121,6 +136,167 @@ function QueueCompactSection({
   );
 }
 
+interface RowContext {
+  state: ShinsaState;
+  variant: Variant;
+  activeTaskId: string | null;
+  onNavigate: () => void;
+}
+
+function openTask(context: RowContext, task: Task) {
+  navigate(resolveTaskPath(task));
+  context.onNavigate();
+}
+
+function QueueItemRow({
+  context,
+  item,
+  fold,
+  indent = false,
+  extraMark,
+}: {
+  context: RowContext;
+  item: QueueItem;
+  fold?: React.ReactNode;
+  indent?: boolean;
+  extraMark?: React.ReactNode;
+}) {
+  const { state, variant } = context;
+  const marks = renderMarks(state, item.task);
+  return (
+    <ListRow
+      fold={fold}
+      indent={indent}
+      holdsLinks={fold !== undefined}
+      leading={<QueueItemGlyph state={state} item={item} />}
+      active={item.task.id === context.activeTaskId}
+      revealWhenActive={variant === 'compact'}
+      title={item.task.title}
+      mark={
+        marks || extraMark ? (
+          <>
+            {marks}
+            {extraMark}
+          </>
+        ) : undefined
+      }
+      summary={
+        <RowSummary
+          state={state}
+          task={item.task}
+          gate={item.kind === 'gate' ? item.gate : null}
+          detail={variant === 'wide'}
+        />
+      }
+      trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
+      onClick={() => openTask(context, item.task)}
+    />
+  );
+}
+
+function GroupFold({ group, open, onToggle }: { group: QueueGroup; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type='button'
+      aria-expanded={open}
+      aria-label={describeGroupToggle(group, open)}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      className='corner-superellipse/1.125 grid size-4 cursor-pointer place-items-center rounded-control-sm text-fg-2 outline-none hover:text-fg-4 active:text-fg-4'
+    >
+      <SectionChevron open={open} />
+    </button>
+  );
+}
+
+function QueueGroupRows({
+  context,
+  scope,
+  section,
+  group,
+  open,
+}: {
+  context: RowContext;
+  scope: 'home' | 'queue';
+  section: QueueSection;
+  group: QueueGroup;
+  open: boolean;
+}) {
+  const disclosure = useDisclosure(resolveGroupId(scope, section, group), open);
+  const fold = <GroupFold group={group} open={open} onToggle={() => disclosure.replaceOpen(!open)} />;
+  const members = open
+    ? group.members.map((item) => <QueueItemRow key={item.key} context={context} item={item} indent />)
+    : null;
+  if (group.root) {
+    const hidden = open ? undefined : (
+      <Hint label={describeGroupHidden(group)}>
+        <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>+{group.members.length}</span>
+      </Hint>
+    );
+    return (
+      <>
+        <QueueItemRow context={context} item={group.root} fold={fold} extraMark={hidden} />
+        {members}
+      </>
+    );
+  }
+  const lead = group.opens;
+  return (
+    <>
+      <ListRow
+        fold={fold}
+        holdsLinks
+        leading={<StatusTile icon={INITIATIVE_ICON} tone='neutral' label='Initiative' />}
+        active={lead !== null && lead.id === context.activeTaskId}
+        revealWhenActive={context.variant === 'compact'}
+        title={group.title}
+        summary={<span className='truncate'>{describeGroupSummary(group)}</span>}
+        onClick={() => (lead ? openTask(context, lead) : disclosure.replaceOpen(!open))}
+      />
+      {members}
+    </>
+  );
+}
+
+function useGroupOpen(scope: 'home' | 'queue', section: QueueSection, activeTaskId: string | null) {
+  const prefix = resolveGroupPrefix(scope, section);
+  const [opened] = useDisclosureSet(prefix, true);
+  const [folded] = useDisclosureSet(prefix, false);
+  return (group: QueueGroup) =>
+    resolveGroupOpen(group, opened, folded, resolveGroupDefault(section, group, activeTaskId));
+}
+
+function QueueEntryRows({
+  context,
+  scope,
+  section,
+  entry,
+  isOpen,
+}: {
+  context: RowContext;
+  scope: 'home' | 'queue';
+  section: QueueSection;
+  entry: QueueEntry;
+  isOpen: (group: QueueGroup) => boolean;
+}) {
+  if (entry.kind === 'item') return <QueueItemRow context={context} item={entry.item} />;
+  return (
+    <QueueGroupRows
+      context={context}
+      scope={scope}
+      section={section}
+      group={entry.group}
+      open={isOpen(entry.group)}
+    />
+  );
+}
+
+function resolveEntryKey(entry: QueueEntry) {
+  return entry.kind === 'item' ? entry.item.key : entry.group.key;
+}
+
 function QueueSectionView({
   state,
   section,
@@ -134,34 +310,27 @@ function QueueSectionView({
   activeTaskId: string | null;
   onNavigate: () => void;
 }) {
-  const shown = useProgressiveCount(section.items.length, FIRST_ROWS);
+  const scope = variant === 'compact' ? 'queue' : 'home';
+  const isOpen = useGroupOpen(scope, section, activeTaskId);
+  const shown = useProgressiveCount(section.entries.length, FIRST_ROWS);
   if (section.items.length === 0 && section.empty === null) return null;
-  const rows = section.items.slice(0, shown).map((item) => (
-    <ListRow
-      key={item.key}
-      leading={<QueueItemGlyph state={state} item={item} />}
-      active={item.task.id === activeTaskId}
-      revealWhenActive={variant === 'compact'}
-      title={item.task.title}
-      mark={renderMarks(state, item.task)}
-      summary={
-        <RowSummary
-          state={state}
-          task={item.task}
-          gate={item.kind === 'gate' ? item.gate : null}
-          detail={variant === 'wide'}
-        />
-      }
-      trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
-      onClick={() => {
-        navigate(resolveTaskPath(item.task));
-        onNavigate();
-      }}
-    />
-  ));
+  const context = { state, variant, activeTaskId, onNavigate };
+  const count = countSectionEntries(section.entries, isOpen);
+  const rows = section.entries
+    .slice(0, shown)
+    .map((entry) => (
+      <QueueEntryRows
+        key={resolveEntryKey(entry)}
+        context={context}
+        scope={scope}
+        section={section}
+        entry={entry}
+        isOpen={isOpen}
+      />
+    ));
   if (variant === 'compact') {
     return (
-      <QueueCompactSection section={section} activeTaskId={activeTaskId}>
+      <QueueCompactSection section={section} count={count} activeTaskId={activeTaskId}>
         {rows}
       </QueueCompactSection>
     );
@@ -169,7 +338,7 @@ function QueueSectionView({
   return (
     <WideSection
       title={section.title}
-      count={section.items.length}
+      count={count}
       empty={section.empty}
       persistId={resolveHomeSectionId(section.key)}
       defaultOpen={section.opensOnHome}

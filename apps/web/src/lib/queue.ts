@@ -1,4 +1,5 @@
 import {
+  describeCount,
   describePhaseProgress,
   type Gate,
   type Initiative,
@@ -140,6 +141,34 @@ export function countSectionEntries(entries: QueueEntry[], isOpen: (group: Queue
     if (entry.kind === 'item') return count + 1;
     return count + (isOpen(entry.group) ? countGroupTasks(entry.group) : 1);
   }, 0);
+}
+
+export function describeGroupSummary(group: QueueGroup) {
+  return `${describeCount(countGroupTasks(group), 'task')} here · ${group.progress}`;
+}
+
+export function describeGroupHidden(group: QueueGroup) {
+  return `${describeCount(group.members.length, 'more task')} · ${group.progress}`;
+}
+
+export function describeGroupToggle(group: QueueGroup, open: boolean) {
+  return `${open ? 'Collapse' : 'Expand'} ${group.title}`;
+}
+
+export function resolveGroupPrefix(scope: Extract<DisclosureScope, 'home' | 'queue'>, section: QueueSection) {
+  return createDisclosureId(scope, 'group', section.key);
+}
+
+export function resolveGroupOpen(
+  group: QueueGroup,
+  opened: ReadonlySet<string>,
+  folded: ReadonlySet<string>,
+  fallback: boolean
+) {
+  const key = `${group.kind}:${group.id}`;
+  if (opened.has(key)) return true;
+  if (folded.has(key)) return false;
+  return fallback;
 }
 
 export function resolveGroupId(

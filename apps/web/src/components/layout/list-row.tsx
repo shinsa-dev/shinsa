@@ -13,7 +13,13 @@ export const LIST_ROW_TITLE = 'text-fg-4 text-xs';
 
 export const LIST_ROW_META = 'text-2xs text-fg-2';
 
+export const LIST_ROW_FOLD = 'flex h-5 w-4 shrink-0 items-center justify-center';
+
+const LIST_ROW_INDENT = 'ps-7.5';
+
 export function ListRow({
+  fold,
+  indent = false,
   leading,
   title,
   mark,
@@ -25,6 +31,8 @@ export function ListRow({
   holdsLinks = false,
   onClick,
 }: {
+  fold?: React.ReactNode;
+  indent?: boolean;
   leading?: React.ReactNode;
   title: React.ReactNode;
   mark?: React.ReactNode;
@@ -46,10 +54,16 @@ export function ListRow({
     'aria-current': active || undefined,
     'data-active': active,
     'data-highlight-item': '',
-    className: cn(LIST_ROW, meta || summary ? LIST_ROW_LINES : LIST_ROW_LINE, leading ? 'px-1.5' : 'px-2.5'),
+    className: cn(
+      LIST_ROW,
+      meta || summary ? LIST_ROW_LINES : LIST_ROW_LINE,
+      leading || fold ? 'px-1.5' : 'px-2.5',
+      indent && LIST_ROW_INDENT
+    ),
   };
   const content = (
     <>
+      {fold && <span className={LIST_ROW_FOLD}>{fold}</span>}
       {leading}
       <span className='flex min-w-0 flex-1 flex-col'>
         {mark ? (

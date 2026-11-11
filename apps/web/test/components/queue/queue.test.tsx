@@ -9,6 +9,7 @@ import { createRound } from '../../support/rounds.ts';
 import { pushTranscript, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import {
   createGate,
+  createInitiative,
   createProject,
   createRepo,
   createRun,
@@ -208,6 +209,79 @@ describe('wide queue', () => {
     view.unmount();
     renderQueue();
     expect(screen.getByRole('button', { name: /Review the login fix/ }).querySelector('time')).toBeNull();
+  });
+});
+
+describe('groups of a bundle or an initiative', () => {
+  const GROUPED = createShinsaState({
+    initiatives: [createInitiative({ id: 'split', name: 'Chat split', leadTaskId: 'lead' })],
+    tasks: [
+      createTask({
+        id: 'lead',
+        title: 'Chat split',
+        pipeline: ['lead'],
+        stage: 'leading',
+        initiativeId: 'split',
+      }),
+      createTask({ id: 'dock', title: 'Dock host', stage: 'building', initiativeId: 'split' }),
+      createTask({ id: 'panel', title: 'Side panel', stage: 'planning', initiativeId: 'split' }),
+      createTask({ id: 'root', title: 'Add the schema', stage: 'shipping', bundleReady: { commit: 'a' } }),
+      createTask({ id: 'api', title: 'Add the API', stage: 'waiting_on_tasks', stacksOn: ['root'] }),
+      createTask({ id: 'screen', title: 'Add the screen', stage: 'waiting_on_tasks', stacksOn: ['api'] }),
+    ],
+  });
+
+  function titles() {
+    return [...document.querySelectorAll('[data-highlight-item]')].map(
+      (row) => row.querySelector('[class*="text-xs"]')?.textContent
+    );
+  }
+
+  it('lists an open initiative under its name in In progress, its tasks indented below', () => {
+    renderQueue({ state: GROUPED, variant: 'wide' });
+    expect(titles().slice(0, 3)).toEqual(['Chat split', 'Dock host', 'Side panel']);
+    expect(screen.getByText('2 tasks here · 0 of 2 shipped')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Collapse Chat split' }).getAttribute('aria-expanded')).toBe(
+      'true'
+    );
+    expect(sectionTitles()).toContain('In progress2');
+  });
+
+  it('folds a group into one counted row and remembers it per place', () => {
+    const view = renderQueue({ state: GROUPED, variant: 'wide' });
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Collapse Chat split' })));
+    expect(screen.queryByText('Dock host')).toBeNull();
+    expect(sectionTitles()).toContain('In progress1');
+    expect(readDisclosure(createDisclosureId('home', 'group', 'working', 'initiative', 'split'))).toBe(false);
+    expect(location.pathname).not.toBe('/tasks/lead');
+    view.unmount();
+    renderQueue({ state: GROUPED });
+    expect(screen.getByText('Dock host')).toBeTruthy();
+  });
+
+  it('opens the lead task from the initiative’s name', () => {
+    renderQueue({ state: GROUPED, variant: 'wide' });
+    act(() => fireEvent.click(screen.getByText('Chat split')));
+    expect(location.pathname).toBe('/tasks/lead');
+  });
+
+  it('folds a bundle under its first task while it waits, and opens it from its chevron', () => {
+    renderQueue({ state: GROUPED, variant: 'wide' });
+    expect(screen.queryByText('Add the API')).toBeNull();
+    expect(screen.queryByText('Add the screen')).toBeNull();
+    expect(screen.getByText('+2')).toBeTruthy();
+    expect(sectionTitles()).toContain('Waiting on another task1');
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Expand Add the schema' })));
+    expect(screen.getByText('Add the screen')).toBeTruthy();
+    expect(screen.queryByText('+2')).toBeNull();
+    expect(sectionTitles()).toContain('Waiting on another task3');
+    expect(readDisclosure(createDisclosureId('home', 'group', 'waiting', 'bundle', 'root'))).toBe(true);
+  });
+
+  it('opens a folded group that holds the task on screen in the queue', () => {
+    writeDisclosure(createDisclosureId('queue', 'section', 'waiting'), true);
+    renderQueue({ state: GROUPED, activeTaskId: 'screen' });
+    expect(screen.getByRole('button', { name: /Add the screen/ }).getAttribute('aria-current')).toBe('true');
   });
 });
 
