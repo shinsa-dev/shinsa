@@ -6,6 +6,7 @@ import {
   RUN_AGENT_ROLE,
   resolveAgentModel,
   resolveAgentProvider,
+  resolveModelFamilyLabel,
   resolveProviderLabel,
 } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
@@ -133,10 +134,14 @@ export function releaseModelWaits(decider: Decider) {
   }
 }
 
+function describeWaitLimit(wait: UsageWait) {
+  if (wait.limitScope === 'model' && wait.model) return `${resolveModelFamilyLabel(wait.model)} limit`;
+  return `${resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER)} usage limit`;
+}
+
 function describeReset(wait: UsageWait) {
   const account = wait.account?.email ? ` on ${wait.account.email}` : '';
-  const provider = resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER);
-  return `The agent stopped at the ${provider} usage limit${account}. The limit has reset. Retry to carry on, or cancel the task.`;
+  return `The agent stopped at the ${describeWaitLimit(wait)}${account}. The limit has reset. Retry to carry on, or cancel the task.`;
 }
 
 export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait.resume'>) {

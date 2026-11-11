@@ -591,6 +591,17 @@ describe('waits on one model’s own limit', () => {
     expect(harness.task(taskId).usageWait).toMatchObject({ status: 'armed', limitScope: 'account' });
   });
 
+  test('a model wait without auto-resume names the model at the reset', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { autoResume: false } });
+    const { taskId } = waitingOnModel(harness);
+    harness.advance(resetAtOf(harness, taskId));
+    fire(harness, taskId);
+    expect(harness.openGate(taskId).body).toBe(
+      'The agent stopped at the Fable limit on work@example.com. The limit has reset. Retry to carry on, or cancel the task.'
+    );
+  });
+
   test('a model wait on a task that no longer runs stays as it is', () => {
     const harness = createHarness();
     const { taskId } = waitingOnModel(harness);

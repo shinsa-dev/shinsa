@@ -3,12 +3,15 @@ import {
   type AccountsSnapshot,
   type AccountUsage,
   CLAUDE_PROVIDER,
+  isModelMarkFor,
+  isStaleUsage,
   listRelevantWindows,
   MINUTE_MS,
   type ProviderLogin,
   resolveAgentModel,
   resolveAgentProvider,
   resolveCandidateSpentUntil,
+  resolveModelFamilyLabel,
   resolvePlanLabel,
   resolveSpentUntil,
   type Settings,
@@ -225,6 +228,39 @@ export function describeResetsIn(resetsAt: number, now: number) {
   return resetsAt <= now ? 'Resets now' : formatUntil('Resets', resetsAt, now);
 }
 
+const SPENT_PERCENT = 100;
+
+function isSpentWindow(window: UsageWindow, now: number) {
+  return window.usedPercent >= SPENT_PERCENT && window.resetsAt !== null && window.resetsAt > now;
+}
+
+function isSharedSpent(usage: AccountUsage, now: number) {
+  if (isStaleUsage(usage, now)) return false;
+  return usage.windows.some(
+    (window) => (window.kind === 'session' || window.kind === 'weekly') && isSpentWindow(window, now)
+  );
+}
+
+function selectSpentModel(account: AccountSummary, model: string | null, now: number) {
+  if (isSharedSpent(account.usage, now)) return Option.none();
+  const marked = account.spentModel;
+  if (marked && account.spentUntil !== null && account.spentUntil > now && isModelMarkFor(marked, model)) {
+    return Option.some(marked);
+  }
+  if (isStaleUsage(account.usage, now)) return Option.none();
+  const window = listRelevantWindows(account.usage, model).find(
+    (entry) => entry.kind === 'model' && isSpentWindow(entry, now)
+  );
+  return Option.fromNullishOr(window?.model);
+}
+
+function describeSpentLabel(account: AccountSummary, model: string | null, now: number) {
+  return Option.match(selectSpentModel(account, model, now), {
+    onNone: () => 'Out of usage',
+    onSome: (spent) => `Out of ${resolveModelFamilyLabel(spent)} usage`,
+  });
+}
+
 export function resolveAccountStatus(
   account: AccountSummary,
   model: string | null,
@@ -234,7 +270,7 @@ export function resolveAccountStatus(
   if (account.paused) return { label: 'Paused', tone: 'neutral', until: null };
   return Option.getOrNull(
     Option.map(resolveCandidateSpentUntil(account, model, now), (until) => ({
-      label: 'Out of usage',
+      label: describeSpentLabel(account, model, now),
       tone: 'red' as const,
       until,
     }))

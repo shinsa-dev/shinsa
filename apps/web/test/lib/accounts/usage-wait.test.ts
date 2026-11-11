@@ -58,6 +58,18 @@ describe('usage waits', () => {
     expect(describeUsageWaitBody(wait({ account: null, provider: 'codex' }))).toBe(
       'The agent stopped at the Codex usage limit.'
     );
+    expect(describeUsageWaitBody(wait({ model: 'fable', limitScope: 'model' }))).toBe(
+      'The agent stopped at the Fable limit on a@example.com.'
+    );
+    expect(
+      describeUsageWaitBody(wait({ model: 'claude-opus-4-8', limitScope: 'model', account: null }))
+    ).toBe('The agent stopped at the Opus limit.');
+    expect(describeUsageWaitBody(wait({ model: 'fable', limitScope: 'account' }))).toBe(
+      'The agent stopped at the Claude usage limit on a@example.com.'
+    );
+    expect(describeUsageWaitNote(wait({ model: 'fable', limitScope: 'model' }))).toBe(
+      'Shinsa resumes it by itself when the limit resets. Switching to another model in Settings starts it again at once.'
+    );
     expect(describeUsageWaitNote(wait())).toBe('Shinsa resumes it by itself when the limit resets.');
     expect(describeUsageWaitNote(wait({ autoResume: false }))).toBe(
       'When the limit resets it pauses for you to retry.'
