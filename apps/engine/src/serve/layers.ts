@@ -70,6 +70,7 @@ import { EngineCore } from '../runtime/engine/service.ts';
 import { MonitorClock } from '../runtime/monitors/service.ts';
 import { WatchdogClock } from '../runtime/watchdogs/service.ts';
 import { ScheduleClockTimings } from '../schedules/clock/schema.ts';
+import { ScheduleFilter } from '../schedules/filter/service.ts';
 import { SchedulesLayer } from '../schedules/layers.ts';
 import { ScheduleTimeZone } from '../schedules/schema.ts';
 import { Schedules } from '../schedules/service.ts';
@@ -469,6 +470,7 @@ function createServeLayer(
       Layer.mergeAll(createTriageLayer(), createClocksLayer(options), createTerminalsLayer(instance))
     ),
     Layer.provideMerge(createSlackLayer(config)),
+    Layer.provideMerge(ScheduleFilter.layer),
     Layer.provideMerge(
       Layer.mergeAll(
         createRemoteLayer(config, options, instance),

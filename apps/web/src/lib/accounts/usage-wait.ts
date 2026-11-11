@@ -3,6 +3,7 @@ import {
   CLAUDE_PROVIDER,
   isActiveAt,
   type Project,
+  resolveModelFamilyLabel,
   resolveProviderLabel,
   type Task,
   type UsagePace,
@@ -19,6 +20,10 @@ export function isUsageWaitArmed(task: Task): task is Task & { usageWait: UsageW
 
 export function isPaceWait(wait: UsageWait): wait is UsageWait & { pace: UsagePace } {
   return wait.cause === 'pace' && wait.pace !== undefined;
+}
+
+function selectLimitModel(wait: UsageWait) {
+  return wait.limitScope === 'model' && wait.model ? Option.some(wait.model) : Option.none();
 }
 
 export function isAdmissionWait(wait: UsageWait): wait is UsageWait & { pace: UsagePace } {
@@ -71,8 +76,11 @@ export function describeUsageWaitBody(wait: UsageWait, project: Project | null =
     return `The last 24 hours used ${formatLimit(wait.pace.percent)}, which reached ${describePaceLimit(wait.pace, project)}, so the next step did not start.`;
   }
   const account = wait.account?.email ? ` on ${wait.account.email}` : '';
-  const provider = resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER);
-  return `The agent stopped at the ${provider} usage limit${account}.`;
+  const limit = Option.match(selectLimitModel(wait), {
+    onNone: () => `${resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER)} usage limit`,
+    onSome: (model) => `${resolveModelFamilyLabel(model)} limit`,
+  });
+  return `The agent stopped at the ${limit}${account}.`;
 }
 
 export function describeUsageWaitNote(wait: UsageWait) {
@@ -82,9 +90,13 @@ export function describeUsageWaitNote(wait: UsageWait) {
   if (isPaceWait(wait)) {
     return 'Starts by itself as older usage drops out. Resume now ignores the limits for this task.';
   }
-  return wait.autoResume
+  const reset = wait.autoResume
     ? 'Shinsa resumes it by itself when the limit resets.'
     : 'When the limit resets it pauses for you to retry.';
+  if (Option.isNone(selectLimitModel(wait))) return reset;
+  return wait.autoResume
+    ? 'Resumes at the reset, or at once if you switch models.'
+    : 'Pauses at the reset. Switch models to start it at once.';
 }
 
 export function describeUsageWaitToggle(wait: UsageWait) {

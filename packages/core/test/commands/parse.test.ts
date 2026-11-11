@@ -954,9 +954,28 @@ describe('writing a schedule from Settings', () => {
     });
     expect(
       parsed({
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'C1',
+          channelName: 'alerts',
+          threadUpdates: true,
+        },
+      }).trigger
+    ).toEqual({
+      kind: 'slack',
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+      threadUpdates: true,
+    });
+    expect(
+      parsed({
         trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
       }).trigger
-    ).toEqual({ kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' });
+    ).toMatchObject({ threadUpdates: true });
     expect(parsed({ trigger: { kind: 'webhook' } }).trigger).toEqual({
       kind: 'webhook',
       signature: null,

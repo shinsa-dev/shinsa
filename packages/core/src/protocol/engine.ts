@@ -24,6 +24,7 @@ export const ENGINE_FEATURES = [
   'suggestion.bundle',
   'usage.auto_pace',
   'autopilot-slack',
+  'usage.auto_pace_resets',
   'shared-machine',
   'focus.projects',
   'browser',

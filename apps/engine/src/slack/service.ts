@@ -51,15 +51,30 @@ import {
   serializeSlackNoAccess,
   verifySlackForwardSignature,
   type SlackLink,
+  resolveSlackFilterSubject,
+  SCHEDULE_FILTER_SKIPPED,
 } from '@shinsa/core';
 import type { SlackTestOutcome } from '@shinsa/core/engine-api/schema';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
-import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Ref, Schema, Semaphore } from 'effect';
+import {
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  FiberSet,
+  Layer,
+  Option,
+  Redacted,
+  Ref,
+  Schema,
+  Semaphore,
+} from 'effect';
 import { QuickCalls } from '../agents/quick/service.ts';
 import { describeError } from '../log/redact.ts';
 import { RELAY_FAILED_CODE } from '../remote/client/schema.ts';
 import { RemoteClient } from '../remote/client/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
+import { ScheduleFilter } from '../schedules/filter/service.ts';
 import { resolvePromptProblem } from '../schedules/prompt.ts';
 import { FRAME_ID_BYTES, RATE_WINDOW_MS, WEBHOOK_RATE_LIMIT_PER_MINUTE } from '../schedules/schema.ts';
 import {
@@ -119,6 +134,7 @@ export class Slack extends Context.Service<
     readonly channels: Effect.Effect<readonly SlackChannel[], DomainError>;
     readonly start: Effect.Effect<void>;
     readonly stop: Effect.Effect<void>;
+    readonly settle: Effect.Effect<void>;
   }
 >()('shinsa/engine/slack/Slack') {
   static readonly layer = (input: SlackInput) =>
@@ -127,6 +143,7 @@ export class Slack extends Context.Service<
       Effect.gen(function* () {
         const engine = yield* EngineCore;
         const quick = yield* QuickCalls;
+        const filter = yield* ScheduleFilter;
         const relay = (yield* RemoteClient).slack;
         const statusInterval = yield* SlackStatusInterval;
         const token = (machineToken: string) => Redacted.make(machineToken);
@@ -238,6 +255,7 @@ export class Slack extends Context.Service<
             })
           );
 
+        const deliveries = yield* FiberSet.make<void>();
         const runFork = Effect.runForkWith(yield* Effect.context<never>());
         yield* engine.observe(() => {
           runFork(Effect.when(syncWatches(false), Ref.get(active)));
@@ -280,6 +298,9 @@ export class Slack extends Context.Service<
               },
               `${id}:fail`
             );
+          const replayKey = resolveSlackMessageKey(message);
+          const now = yield* Clock.currentTimeMillis;
+          if ((schedule.replayKeys[replayKey] ?? 0) > now) return;
           const slot = yield* takeSlot(schedule.id);
           if (slot === 'skipped') return;
           if (slot === 'limited') return yield* fail(SLACK_MESSAGE_RATE_LIMITED);
@@ -290,13 +311,34 @@ export class Slack extends Context.Service<
           );
           const problem = resolvePromptProblem(prompt);
           if (problem) return yield* fail(problem);
+          if (!(yield* filter.applies(schedule, resolveSlackFilterSubject(message)))) {
+            yield* dispatch(
+              {
+                type: 'schedule.skip',
+                scheduleId: schedule.id,
+                deliveryId: message.eventId,
+                detail: SCHEDULE_FILTER_SKIPPED,
+                replayKey,
+              },
+              `${id}:skip`
+            );
+            return;
+          }
           yield* dispatch(
             {
               type: 'schedule.deliver',
               scheduleId: schedule.id,
               deliveryId: message.eventId,
               text: prompt,
-              replayKey: resolveSlackMessageKey(message),
+              replayKey,
+              slackMessage: {
+                teamId: message.teamId,
+                channelId: message.channelId,
+                messageTs: message.messageTs,
+                userId: message.userId,
+                permalink: message.permalink,
+                channelName: message.channelName,
+              },
             },
             id
           ).pipe(
@@ -321,9 +363,11 @@ export class Slack extends Context.Service<
             yield* Ref.set(watched, '');
             yield* syncWatches(false);
           }
-          yield* Effect.forEach(schedules, (schedule) => deliverMessage(schedule, message), {
-            discard: true,
-          });
+          yield* Effect.forEach(
+            schedules,
+            (schedule) => FiberSet.run(deliveries, deliverMessage(schedule, message)),
+            { discard: true }
+          );
           return Response.json({ ok: true, delivered: schedules.length }, { status: 202 });
         });
 
@@ -828,6 +872,7 @@ export class Slack extends Context.Service<
           channels,
           start,
           stop,
+          settle: FiberSet.awaitEmpty(deliveries),
           handleInteractions,
           handleTunnel,
           evaluate,

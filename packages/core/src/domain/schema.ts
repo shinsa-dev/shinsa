@@ -171,6 +171,7 @@ export const SettingsPatch = Strict(
     autopilot: Schema.optionalKey(AutopilotPatch),
     watchdogsIgnoreUsageLimits: Schema.optionalKey(Bool),
     autoPace: Schema.optionalKey(Bool),
+    autoPaceResets: Schema.optionalKey(Bool),
     sharedTeams: Schema.optionalKey(List(Id())),
     activeHours: Schema.optionalKey(OrNull(List(ActiveDayPatch, ACTIVE_DAY_LIMIT), FIELD_MESSAGES.list)),
   } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
@@ -263,6 +264,7 @@ export const ScheduleTrigger = Tagged('kind', SCHEDULE_TRIGGER_KINDS, [
     teamName: Id(),
     channelId: Id(),
     channelName: Id(),
+    threadUpdates: ByDefault(Bool, FIELD_MESSAGES.boolean, () => true),
   }),
 ]);
 

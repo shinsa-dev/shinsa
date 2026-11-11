@@ -7,6 +7,7 @@ import {
   resolveNextRun,
   type Schedule,
   type ScheduleRun,
+  SCHEDULE_FILTER_SKIPPED,
   type UsageWindow,
 } from '../../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../../kit/time.ts';
@@ -68,6 +69,19 @@ export function listAccountFiles(data: string): Record<string, string> {
             clears: ['five_hour', 'seven_day'],
             usableNow: true,
             endsAt: NOW + 14 * 24 * HOUR,
+            givesBackWeekly: false,
+            weeklyShare: null,
+          },
+          {
+            id: 'seed-fable-grant',
+            label: null,
+            left: 1,
+            total: 1,
+            clears: ['seven_day_overage_included'],
+            usableNow: true,
+            endsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
+            givesBackWeekly: true,
+            weeklyShare: 27,
           },
         ],
       },
@@ -89,7 +103,12 @@ export function listAccountFiles(data: string): Record<string, string> {
       },
     },
   };
+  const marks = {
+    version: 2,
+    marks: { [PERSONAL.id]: [{ until: NOW + 3 * 24 * HOUR, at: NOW - 4 * MINUTE, model: 'fable' }] },
+  };
   return {
+    'account-marks.json': `${JSON.stringify(marks, null, 2)}\n`,
     'accounts.json': `${JSON.stringify(registry, null, 2)}\n`,
     'usage-limits.json': `${JSON.stringify(limits, null, 2)}\n`,
   };
@@ -174,12 +193,33 @@ function listSchedules(): Schedule[] {
         teamName: 'Superwall',
         channelId: 'C07ALERTS',
         channelName: 'alerts',
+        threadUpdates: true,
       },
       runCount: 3,
       runs: [
         scheduleRun('sent', 30 * HOUR),
-        scheduleRun('skipped', 9 * HOUR, 'The last task is still open.'),
+        scheduleRun('skipped', 9 * HOUR, SCHEDULE_FILTER_SKIPPED),
         scheduleRun('sent', 2 * HOUR),
+      ],
+      createdBy: { kind: 'you' },
+    }),
+    schedule({
+      id: 'schedule-feedback',
+      name: 'Front-end feedback',
+      text: 'Feedback was posted in #feedback. File a task only when it is about the web app’s interface; leave billing and API feedback alone.',
+      trigger: {
+        kind: 'slack',
+        teamId: 'T04SUPERWALL',
+        teamName: 'Superwall',
+        channelId: 'C07FEEDBACK',
+        channelName: 'feedback',
+        threadUpdates: false,
+      },
+      runCount: 1,
+      runs: [
+        scheduleRun('sent', 20 * HOUR),
+        scheduleRun('skipped', 6 * HOUR, SCHEDULE_FILTER_SKIPPED),
+        scheduleRun('skipped', 90 * MINUTE, SCHEDULE_FILTER_SKIPPED),
       ],
       createdBy: { kind: 'you' },
     }),
@@ -325,6 +365,37 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
           },
         },
         ...listSchedules().map((written) => ({ type: 'schedule.written' as const, schedule: written })),
+      ],
+    },
+    {
+      id: 'task-model-wait',
+      request: 'Retry the webhook deliveries that failed during the outage',
+      title: 'Retry failed webhook deliveries',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'waiting for the usage limit to reset',
+      branch: 'fix/retry-webhook-deliveries',
+      ageHours: 0.5,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 6, summary: 'Hit the Fable limit.', failed: true }],
+      extra: [
+        {
+          type: 'usage_wait.armed',
+          taskId: 'task-model-wait',
+          wait: {
+            id: 'wait-model',
+            runId: 'task-model-wait-run-0',
+            role: 'agent',
+            phaseIndex: null,
+            account: PERSONAL,
+            resetAt: NOW + 13 * HOUR,
+            armedAt: NOW - 4 * MINUTE,
+            autoResume: true,
+            status: 'armed',
+            model: 'fable',
+            limitScope: 'model',
+          },
+        },
       ],
     },
     {

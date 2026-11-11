@@ -154,7 +154,7 @@ export interface SlackSnapshot {
 export function resolveSlackLastUsedAt(state: ShinsaState, link: Pick<SlackLink, 'teamId' | 'userId'>) {
   let lastUsedAt: number | null = null;
   for (const task of Object.values(state.tasks)) {
-    if (task.slack?.teamId !== link.teamId || task.slack.userId !== link.userId) continue;
+    if (task.scheduleId || task.slack?.teamId !== link.teamId || task.slack.userId !== link.userId) continue;
     lastUsedAt = Math.max(lastUsedAt ?? task.createdAt, task.createdAt);
   }
   return lastUsedAt;

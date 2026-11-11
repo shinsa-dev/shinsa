@@ -318,7 +318,9 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   in them, turns Slack's markup into text, adds the linked account (`linkedUserId`, whose task it starts) and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
   machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
-  through `/__remote/slack/post` with its machine token, only in a thread it was sent and only editing what it
+  through `/__remote/slack/post` with its machine token, only in a thread it was sent, or a thread of a channel it
+  watches (`SlackStore.hasWatch`; the first post, reaction or status there records the thread, so a task filed from
+  a channel message keeps its thread after the watch ends), and only editing what it
   posted (`slack_threads`, `slack_posts`, kept until their workspace or machine is removed), `/__remote/slack/react` moves the one reaction on a mention it was sent (`reactions.remove` then `reactions.add`, best effort),
   `/__remote/slack/notify` posts an Autopilot escalation to a channel or a person's direct message, and edits it
   once it clears (`chat.postMessage` with the user's id opens the app's direct message, which the manifest's Messages

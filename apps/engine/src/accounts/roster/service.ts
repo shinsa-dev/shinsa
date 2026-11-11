@@ -6,7 +6,7 @@ import {
   type ChatNotice,
   DomainError,
   type FastModeAvailability,
-  isPaceMoved,
+  isProviderPaceMoved,
   isSharedMachine,
   listActiveRuns,
   listOpenGates,
@@ -207,7 +207,7 @@ export class Accounts extends Context.Service<
         for (const account of yield* store.listDistinct) {
           const signIn = yield* signIns.select(account.id);
           const accountUsage = yield* limits.snapshot(account.id);
-          const marked = yield* rotation.resolveSpentUntil(account.id, false);
+          const marked = yield* rotation.resolveSpent(account.id, false, model);
           accounts.push({
             id: account.id,
             email: account.email,
@@ -222,8 +222,13 @@ export class Accounts extends Context.Service<
             signInDetail: signIn?.detail ?? null,
             usage: accountUsage,
             spentUntil: Option.getOrNull(
-              resolveCandidateSpentUntil({ spentUntil: marked, usage: accountUsage }, model, now)
+              resolveCandidateSpentUntil(
+                { spentUntil: marked?.until ?? null, usage: accountUsage },
+                model,
+                now
+              )
             ),
+            spentModel: marked?.model ?? null,
             runs: runs.get(account.id) ?? 0,
           });
         }
@@ -283,13 +288,14 @@ export class Accounts extends Context.Service<
         if (inspect) return;
         const state = yield* engine.state;
         const now = yield* Clock.currentTimeMillis;
-        const moved = listProviderPaces(next, now).filter(({ provider, pace }) =>
-          isPaceMoved(state.usagePaces[provider]?.pace ?? null, pace)
+        const model = resolveAgentModel(state.settings, 'agent', CLAUDE_PROVIDER);
+        const moved = listProviderPaces(next, now, model).filter((paces) =>
+          isProviderPaceMoved(state.usagePaces[paces.provider], paces)
         );
-        for (const { provider, pace } of moved) {
+        for (const { provider, pace, resetPace, endingPace, resetEndsAt } of moved) {
           yield* dispatch(
-            { type: 'usage.pace_recorded', provider, pace },
-            `usage-pace:${provider}:${pace ?? 'none'}:${state.seq}`
+            { type: 'usage.pace_recorded', provider, pace, resetPace, endingPace, resetEndsAt },
+            `usage-pace:${provider}:${pace ?? 'none'}:${resetPace ?? 'none'}:${endingPace ?? 'none'}:${resetEndsAt ?? 'none'}:${state.seq}`
           ).pipe(
             Effect.catch((failure) =>
               Effect.logWarning('[Accounts] Could not record the safe usage pace').pipe(

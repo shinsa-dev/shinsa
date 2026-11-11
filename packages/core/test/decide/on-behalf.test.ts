@@ -374,6 +374,7 @@ describe('acting for the human', () => {
       autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },
       watchdogsIgnoreUsageLimits: false,
       autoPace: true,
+      autoPaceResets: true,
       sharedTeams: ['team-1'],
       activeHours: [{ weekday: 1, from: 9, to: 17 }],
     };

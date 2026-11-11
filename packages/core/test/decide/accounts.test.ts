@@ -526,6 +526,91 @@ describe('usage-limit waits', () => {
   });
 });
 
+describe('waits on one model’s own limit', () => {
+  function modelLimit(harness: Harness, model = 'fable'): RunFailure {
+    return { ...limit(harness.state.seq + 1_000 + HOUR), model, limitScope: 'model' };
+  }
+
+  function waitingOnModel(harness: Harness, failure = modelLimit(harness)) {
+    harness.send({ type: 'settings.change', patch: { agentModels: { agent: 'fable' } } });
+    const taskId = createTask(harness);
+    linkSession(harness, taskId, 'plan-session');
+    const run = fail(harness, taskId, failure);
+    return { taskId, run };
+  }
+
+  test('the wait keeps the model and the scope of the limit', () => {
+    const harness = createHarness();
+    const { taskId } = waitingOnModel(harness);
+    expect(harness.task(taskId).usageWait).toMatchObject({ model: 'fable', limitScope: 'model' });
+  });
+
+  test('a wait on an all-models limit keeps the run’s model and an account scope', () => {
+    const harness = createHarness();
+    const { taskId, run } = waitingTask(harness);
+    expect(harness.task(taskId).usageWait).toMatchObject({ model: run.model, limitScope: 'account' });
+  });
+
+  test('switching the agent to another model starts the step again at once, on the new model', () => {
+    const harness = createHarness();
+    const { taskId, run } = waitingOnModel(harness);
+    const waitId = harness.task(taskId).usageWait?.id;
+    harness.send({ type: 'settings.change', patch: { agentModels: { agent: 'opus' } } });
+    const resumed = harness.activeRun(taskId);
+    expect(resumed).toMatchObject({ model: 'opus', usageWaitId: waitId, continues: run.id });
+    expect(harness.task(taskId).usageWait?.status).toBe('resumed');
+  });
+
+  test('a settings change that keeps the model, or moves another role, leaves the wait armed', () => {
+    const harness = createHarness();
+    const { taskId } = waitingOnModel(harness);
+    harness.send({ type: 'settings.change', patch: { agentModels: { agent: 'claude-fable-5-2' } } });
+    harness.send({
+      type: 'settings.change',
+      patch: { agentModels: { agent: 'fable', reviewer: 'sonnet' } },
+    });
+    expect(harness.task(taskId).usageWait?.status).toBe('armed');
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('switching the agent to another provider starts the step again too', () => {
+    const harness = createHarness();
+    const { taskId } = waitingOnModel(harness);
+    harness.send({ type: 'settings.change', patch: { agentProviders: { agent: 'codex' } } });
+    expect(harness.task(taskId).usageWait?.status).toBe('resumed');
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(1);
+  });
+
+  test('an all-models limit still waits for its reset after a model change', () => {
+    const harness = createHarness();
+    const { taskId } = waitingOnModel(harness, {
+      ...limit(harness.state.seq + 1_000 + HOUR),
+      model: 'fable',
+    });
+    harness.send({ type: 'settings.change', patch: { agentModels: { agent: 'opus' } } });
+    expect(harness.task(taskId).usageWait).toMatchObject({ status: 'armed', limitScope: 'account' });
+  });
+
+  test('a model wait without auto-resume names the model at the reset', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { autoResume: false } });
+    const { taskId } = waitingOnModel(harness);
+    harness.advance(resetAtOf(harness, taskId));
+    fire(harness, taskId);
+    expect(harness.openGate(taskId).body).toBe(
+      'The agent stopped at the Fable limit on work@example.com. The limit has reset. Retry to carry on, or cancel the task.'
+    );
+  });
+
+  test('a model wait on a task that no longer runs stays as it is', () => {
+    const harness = createHarness();
+    const { taskId } = waitingOnModel(harness);
+    harness.send({ type: 'task.cancel', taskId });
+    harness.send({ type: 'settings.change', patch: { agentModels: { agent: 'opus' } } });
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+  });
+});
+
 describe('the sign-in gate', () => {
   test('a signed-out account opens a sign-in gate for that account instead of failing', () => {
     const harness = createHarness();
@@ -776,9 +861,41 @@ describe('recording the plan each account is on', () => {
 });
 
 describe('recording the safe pace of each provider', () => {
-  function recordPace(harness: Harness, pace: number | null, provider = 'claude') {
-    return harness.send({ type: 'usage.pace_recorded', provider, pace });
+  function recordPace(
+    harness: Harness,
+    pace: number | null,
+    provider = 'claude',
+    resets: { resetPace?: number | null; endingPace?: number | null; resetEndsAt?: number | null } = {}
+  ) {
+    return harness.send({
+      type: 'usage.pace_recorded',
+      provider,
+      pace,
+      resetPace: resets.resetPace ?? pace,
+      endingPace: resets.endingPace ?? pace,
+      resetEndsAt: resets.resetEndsAt ?? null,
+    });
   }
+
+  test('records the pace that counts resets and when the soonest reset ends, and again when either moves', () => {
+    const harness = createHarness();
+    recordPace(harness, 40, 'claude', { resetPace: 90, resetEndsAt: 5_000 });
+    expect(harness.state.usagePaces.claude).toMatchObject({ pace: 40, resetPace: 90, resetEndsAt: 5_000 });
+    expect(recordPace(harness, 40, 'claude', { resetPace: 90.5, resetEndsAt: 5_000 }).events).toHaveLength(0);
+    recordPace(harness, 40, 'claude', { resetPace: 120, resetEndsAt: 5_000 });
+    expect(harness.state.usagePaces.claude?.resetPace).toBe(120);
+    recordPace(harness, 40, 'claude', { resetPace: 120, resetEndsAt: 9_000 });
+    expect(harness.state.usagePaces.claude?.resetEndsAt).toBe(9_000);
+    recordPace(harness, 40, 'claude', { resetPace: 120, endingPace: 70, resetEndsAt: 9_000 });
+    expect(harness.state.usagePaces.claude?.endingPace).toBe(70);
+    recordPace(harness, 60, 'claude', { resetPace: Number.NaN, endingPace: Number.NaN });
+    expect(harness.state.usagePaces.claude).toMatchObject({
+      pace: 60,
+      resetPace: 60,
+      endingPace: 60,
+      resetEndsAt: null,
+    });
+  });
 
   test('records a provider’s pace, and again only once it moves by a whole point', () => {
     const harness = createHarness();

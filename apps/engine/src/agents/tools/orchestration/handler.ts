@@ -9,6 +9,7 @@ import {
   resolveDelegationStatus,
   SHAPE_LIMITS,
   resolveTaskProject,
+  selectPlanSplit,
   selectProjectByReference,
   type ShinsaState,
   serializeReference,
@@ -310,8 +311,8 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     });
     const state = yield* call.state;
     const task = yield* findTaskOf(parent);
-    const split = task.splits?.find((entry) => entry.planVersion === (task.plan?.version ?? 0));
-    const tasks = (split?.taskIds ?? []).flatMap((id) => state.tasks[id] ?? []);
+    const taskIds = Option.getOrNull(selectPlanSplit(task))?.taskIds ?? [];
+    const tasks = taskIds.flatMap((id) => state.tasks[id] ?? []);
     return `The plan is split into these tasks. Link them for the human with:\n${listLinks(tasks)}`;
   });
 
