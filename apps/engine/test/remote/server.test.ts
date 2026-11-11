@@ -829,8 +829,8 @@ describe('the remote service', () => {
 
   test('reports its state, starts only when enabled and forgets its credentials when revoked', async () => {
     const { remote, plane, connectors } = await start();
-    const changes: number[] = [];
-    const unsubscribe = remote.subscribe(() => changes.push(1));
+    const changes: boolean[] = [];
+    const unsubscribe = remote.subscribe(() => changes.push(remote.snapshot().paired));
     expect(remote.snapshot()).toMatchObject({
       paired: true,
       enabled: true,
@@ -842,7 +842,7 @@ describe('the remote service', () => {
     plane.answers.set('/__remote/machine/heartbeat', () => refuse(Revoked));
     await remote.start();
     const deadline = performance.now() + 2_000;
-    while (remote.snapshot().paired && performance.now() < deadline) await Bun.sleep(1);
+    while (!changes.includes(false) && performance.now() < deadline) await Bun.sleep(1);
     expect(remote.snapshot()).toMatchObject({ paired: false, enabled: false, status: 'revoked' });
     expect(connectors[0]?.stopped).toBe(true);
     expect(changes.length).toBeGreaterThan(0);
