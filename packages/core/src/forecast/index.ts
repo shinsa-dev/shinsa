@@ -150,9 +150,14 @@ export interface ProviderPace {
   pace: number | null;
 }
 
-export function listProviderPaces(snapshot: AccountsSnapshot, now: number): ProviderPace[] {
+export function listProviderPaces(
+  snapshot: AccountsSnapshot,
+  now: number,
+  claudeModel: string | null
+): ProviderPace[] {
   return listForecastProviders(snapshot).map((provider) => {
-    const accounts = listProviderForecastAccounts(snapshot, provider, now, { grants: true });
+    const model = provider === CLAUDE_PROVIDER ? claudeModel : null;
+    const accounts = listProviderForecastAccounts(snapshot, provider, now, { grants: true, model });
     const forecast = resolveUsageForecast(accounts, now);
     return { provider, pace: Option.isSome(forecast) ? forecast.value.safePace : null };
   });

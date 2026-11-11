@@ -130,30 +130,25 @@ describe('which limit stopped a run', () => {
 
   test('a run stopped while only its model’s own window is the fullest hit that model’s limit', () => {
     const all = usage([SESSION, WEEKLY, FABLE]);
-    expect(resolveLimitScope(all, 'claude-fable-5-2', 'seven_day', NOW)).toBe('model');
-    expect(resolveLimitScope(all, 'fable', 'seven_day_overage_included', NOW)).toBe('model');
-  });
-
-  test('Claude’s own model limit types are a model limit whatever the reading says', () => {
-    expect(resolveLimitScope(usage([]), 'opus', 'seven_day_opus', NOW)).toBe('model');
-    expect(resolveLimitScope(usage([]), 'sonnet', 'seven_day_sonnet', NOW)).toBe('model');
+    expect(resolveLimitScope(all, 'claude-fable-5-2', NOW)).toBe('model');
+    expect(resolveLimitScope(all, 'fable', NOW)).toBe('model');
   });
 
   test('a full shared window, or one fuller than the model’s own, is the whole account’s limit', () => {
     const fullWeek = usage([window({ ...WEEKLY, usedPercent: 100 }), FABLE]);
-    expect(resolveLimitScope(fullWeek, 'fable', 'seven_day', NOW)).toBe('account');
+    expect(resolveLimitScope(fullWeek, 'fable', NOW)).toBe('account');
     const fullSession = usage([window({ usedPercent: 100 }), FABLE]);
-    expect(resolveLimitScope(fullSession, 'fable', 'five_hour', NOW)).toBe('account');
+    expect(resolveLimitScope(fullSession, 'fable', NOW)).toBe('account');
     const fullerWeek = usage([window({ ...WEEKLY, usedPercent: 90 }), FABLE]);
-    expect(resolveLimitScope(fullerWeek, 'fable', null, NOW)).toBe('account');
+    expect(resolveLimitScope(fullerWeek, 'fable', NOW)).toBe('account');
   });
 
   test('without a model, a model window or a fresh reading it is the whole account’s limit', () => {
     const all = usage([SESSION, WEEKLY, FABLE]);
-    expect(resolveLimitScope(all, null, 'seven_day', NOW)).toBe('account');
-    expect(resolveLimitScope(all, 'opus', 'seven_day', NOW)).toBe('account');
-    expect(resolveLimitScope({ ...all, checkedAt: null }, 'fable', null, NOW)).toBe('account');
-    expect(resolveLimitScope(all, 'fable', null, 1_000 + STALE_USAGE_MS + 1)).toBe('account');
+    expect(resolveLimitScope(all, null, NOW)).toBe('account');
+    expect(resolveLimitScope(all, 'opus', NOW)).toBe('account');
+    expect(resolveLimitScope({ ...all, checkedAt: null }, 'fable', NOW)).toBe('account');
+    expect(resolveLimitScope(all, 'fable', 1_000 + STALE_USAGE_MS + 1)).toBe('account');
   });
 
   test('a mark for one model applies to that model, and a mark without one to every model', () => {

@@ -32,6 +32,8 @@ const CONTEXT_FULL = 'Claude stopped: the conversation no longer fits the modelâ
 
 const SYNTHETIC_MODEL = '<synthetic>';
 
+const MODEL_LIMIT_TYPES: ReadonlySet<string> = new Set(['seven_day_opus', 'seven_day_sonnet']);
+
 const STDERR_MARK = '. stderr: ';
 
 const HOOK_NOISE = /^\s*[\w:-]+ hook \[[\s\S]*\] failed: /;
@@ -221,6 +223,14 @@ function resolveUsageLimitReset(evidence: TurnEvidence) {
   return Math.max(...(times as number[]));
 }
 
+function resolveNamedScope(evidence: TurnEvidence): Partial<RunFailure> {
+  const types = [...evidence.rejectedLimits.keys()];
+  const limit = evidence.assistantLimit;
+  if (limit && !evidence.rejectedLimits.has(limit.type)) types.push(limit.type);
+  const named = types.length > 0 && types.every((type) => MODEL_LIMIT_TYPES.has(type));
+  return named ? { limitScope: 'model' } : {};
+}
+
 function hasLimitEvidence(evidence: TurnEvidence) {
   return evidence.rejectedLimits.size > 0 || evidence.assistantLimit !== null;
 }
@@ -281,6 +291,7 @@ function resolveApiFailure(message: SDKResultMessage, evidence: TurnEvidence, no
     return createFailure('usage_limit', 'Claudeâ€™s usage limit is reached.', code ?? 'rate_limit', {
       retryable: true,
       resetAt: resolveUsageLimitReset(evidence),
+      ...resolveNamedScope(evidence),
     });
   }
   const textLimit = resolveTextLimit(resolveResultText(message));
