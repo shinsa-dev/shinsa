@@ -209,6 +209,25 @@ describe('a signed team snapshot', () => {
     expect(await Effect.runPromise(verifyTeamSnapshot('nope', snapshot))).toBeNull();
   });
 
+  test('keeps the team’s initiatives in what it signed', async () => {
+    const signer = await createSigner();
+    const initiatives = [
+      {
+        id: 'initiative-1',
+        name: 'Chat split',
+        description: '',
+        phases: [],
+        leadTaskId: 'lead',
+        report: null,
+        finished: false,
+        updatedAt: 1,
+      },
+    ];
+    const body = { ...BODY, initiatives };
+    const snapshot = await Effect.runPromise(signTeamSnapshot(signer.privateKey, body));
+    expect(await Effect.runPromise(verifyTeamSnapshot(signer.signingKey, snapshot))).toEqual(body);
+  });
+
   test('refuses a signed body that is not a snapshot', async () => {
     const signer = await createSigner();
     for (const body of [{ ...BODY, tasks: 'none' }, { ...BODY, updatedAt: 'now' }, []]) {

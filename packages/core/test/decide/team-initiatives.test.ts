@@ -439,23 +439,23 @@ describe('a teammate writing to the lead', () => {
   function sendAsTeammate(
     harness: Harness,
     leadId: string,
-    onBehalf: boolean,
-    byTeammateTask = null as { handle: string | null; title: string } | null
+    fromTeammateTask: { handle: string | null; title: string } | null = null
   ) {
     harness.send(
-      { type: 'task.message', taskId: leadId, text: 'SW-120 should wait for me.' },
       {
-        onBehalf,
-        guest: { ...KAI, scope: { kind: 'team', teamId: 'team-1', scopes: DEFAULT_TEAM_SCOPES } },
-        byTeammateTask,
-      }
+        type: 'task.message',
+        taskId: leadId,
+        text: 'SW-120 should wait for me.',
+        ...(fromTeammateTask ? { fromTeammateTask } : {}),
+      },
+      { guest: { ...KAI, scope: { kind: 'team', teamId: 'team-1', scopes: DEFAULT_TEAM_SCOPES } } }
     );
     return readInstruction(harness.activeRun(leadId));
   }
 
   test('their agent’s message reaches the lead as that task’s agent, by its owner, never as the human', () => {
     const { harness, leadId } = sharedLead();
-    const prompt = sendAsTeammate(harness, leadId, true, { handle: 'SW-7', title: 'Sign webhooks' });
+    const prompt = sendAsTeammate(harness, leadId, { handle: 'SW-7', title: 'Sign webhooks' });
     expect(prompt).toContain(
       'The agent of a teammate’s task wrote to you about the initiative “Chat split”.'
     );
@@ -468,7 +468,9 @@ describe('a teammate writing to the lead', () => {
 
   test('a message with no task named, and one a teammate writes themselves, say who sent them', () => {
     const { harness, leadId } = sharedLead();
-    expect(sendAsTeammate(harness, leadId, true)).toContain('The agent of a task, Kai Lane (@kai)’s task');
+    expect(sendAsTeammate(harness, leadId, { handle: null, title: 'Retry' })).toContain(
+      'The agent of Retry, Kai Lane (@kai)’s task'
+    );
     harness.send({ type: 'agent.report_initiative', runId: harness.activeRun(leadId).id, narrative: 'Ok.' });
     harness.send(
       { type: 'task.message', taskId: leadId, text: 'Hi' },

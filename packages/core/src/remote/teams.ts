@@ -113,6 +113,7 @@ export interface TeamSnapshotBody {
   teamId: string;
   instanceId: string;
   tasks: TeamTask[];
+  initiatives?: TeamInitiative[];
   updatedAt: number;
 }
 
@@ -187,9 +188,15 @@ export interface TeamFeedTask extends TeamTask {
   instanceId: string;
 }
 
+export interface TeamFeedInitiative extends TeamInitiative {
+  teamId: string;
+  instanceId: string;
+}
+
 export interface TeamFeedSnapshot {
   machines: TeamFeedMachine[];
   tasks: TeamFeedTask[];
+  initiatives?: TeamFeedInitiative[];
 }
 
 export const NO_TEAM_FEED: TeamFeedSnapshot = { machines: [], tasks: [] };
@@ -409,10 +416,12 @@ export function readTeamSnapshot(value: unknown): TeamSnapshot | null {
 function readSnapshotBody(text: string): TeamSnapshotBody | null {
   const fields = parseJsonRecord(text);
   if (!fields) return null;
-  const { teamId, instanceId, tasks, updatedAt } = fields;
+  const { teamId, instanceId, tasks, initiatives, updatedAt } = fields;
   if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
     return null;
-  return Array.isArray(tasks) ? { teamId, instanceId, tasks: tasks as TeamTask[], updatedAt } : null;
+  if (!Array.isArray(tasks)) return null;
+  const body: TeamSnapshotBody = { teamId, instanceId, tasks: tasks as TeamTask[], updatedAt };
+  return Array.isArray(initiatives) ? { ...body, initiatives: initiatives as TeamInitiative[] } : body;
 }
 
 export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {

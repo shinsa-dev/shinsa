@@ -602,6 +602,34 @@ describe('the outbound gate', () => {
     expect(() => EgressGate.listTeamTasks([{ ...task, repo: createRepo() }])).toThrow();
   });
 
+  test('a team listing keeps the initiative a task is in, and a shared initiative leaves without its run', () => {
+    const task = {
+      task: view.shared.task,
+      gates: [],
+      project: null,
+      repo: null,
+      owner: 'mona',
+      machine: 'Studio',
+      initiative: { instanceId: null, initiativeId: 'chat', phaseId: null },
+    };
+    expect(EgressGate.listTeamTasks([task as never])).toEqual([task]);
+    const initiative = {
+      id: 'chat',
+      name: 'Chat split',
+      description: '',
+      phases: [{ id: 'p-1', name: 'Session' }],
+      leadTaskId: 'lead',
+      report: { narrative: 'Halfway.', at: 3 },
+      finished: false,
+      updatedAt: 2,
+    };
+    expect(
+      EgressGate.listTeamInitiatives([
+        { ...initiative, report: { ...initiative.report, runId: 'run-1' }, teamMembers: [] } as never,
+      ])
+    ).toEqual([initiative]);
+  });
+
   test('a preview answer keeps the headers of the app but none that reveal the machine', () => {
     const headers = EgressGate.resolvePreviewHeaders(
       new Headers({

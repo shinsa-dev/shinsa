@@ -1,4 +1,4 @@
-import type { TeamSnapshot, TeamTask } from '@shinsa/core';
+import type { TeamInitiative, TeamSnapshot, TeamTask } from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
 
@@ -9,6 +9,7 @@ export interface HeldTeamList {
   instanceId: string;
   keyDigest: string;
   tasks: TeamTask[];
+  initiatives?: TeamInitiative[];
   updatedAt: number;
   snapshot: TeamSnapshot | null;
 }

@@ -3,6 +3,8 @@ import {
   DomainError,
   type InitiativePhase,
   selectInitiativeByReference,
+  type TeamFeedInitiative,
+  type TeamFeedTask,
 } from '@shinsa/core';
 import type {
   InitiativeSheetView,
@@ -15,6 +17,7 @@ import type { FieldSpec, Values } from './fields.ts';
 import { findTaskId } from './resolve.ts';
 import type { SurfaceClient } from './schema.ts';
 import { defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
+import { findTeamId, TEAM_FIELD } from './teams.ts';
 
 const INITIATIVE_FIELD: FieldSpec = {
   name: 'initiative',
@@ -52,8 +55,42 @@ function selectPhase(phases: readonly InitiativePhase[], ref: string) {
   return phases.find((phase) => phase.id === ref || phase.name.toLowerCase() === lower) ?? null;
 }
 
+const selectTeamInitiative = Effect.fn('Surface.selectTeamInitiative')(function* (
+  client: SurfaceClient,
+  ref: string
+) {
+  const feed = yield* client.api.teams
+    .tasks({ query: {} })
+    .pipe(Effect.catch(() => Effect.succeed({ initiatives: [] as TeamFeedInitiative[] })));
+  return selectInitiativeByReference(feed.initiatives ?? [], ref);
+});
+
+function isTaskReference(listing: TeamFeedTask, ref: string) {
+  const trimmed = ref.trim();
+  const { id, handle } = listing.task;
+  return id === trimmed || handle?.toLowerCase() === trimmed.toLowerCase() || id.startsWith(trimmed);
+}
+
+export const selectTeammateLead = Effect.fn('Surface.selectTeammateLead')(function* (
+  client: SurfaceClient,
+  ref: string
+) {
+  if (!ref.trim()) return null;
+  const feed = yield* client.api.teams
+    .tasks({ query: {} })
+    .pipe(Effect.catch(() => Effect.succeed({ tasks: [] as TeamFeedTask[], initiatives: [] })));
+  const leads = new Set(
+    (feed.initiatives ?? []).map((initiative) => `${initiative.instanceId} ${initiative.leadTaskId}`)
+  );
+  return (
+    feed.tasks.find(
+      (listing) => leads.has(`${listing.instanceId} ${listing.task.id}`) && isTaskReference(listing, ref)
+    ) ?? null
+  );
+});
+
 const findPhaseId = Effect.fn('Surface.findInitiativePhaseId')(function* (
-  initiative: InitiativeView,
+  initiative: Pick<InitiativeView, 'name' | 'phases'>,
   ref: string
 ) {
   if (!ref) return null;
@@ -167,14 +204,32 @@ const buildWrite = Effect.fn('Surface.initiativesWrite')(function* (values: Valu
 });
 
 const buildJoin = Effect.fn('Surface.tasksJoinInitiative')(function* (values: Values, client: SurfaceClient) {
-  const initiative = yield* findInitiative(client, readValue(values, 'initiative'));
-  return {
-    type: 'task.join_initiative' as const,
-    taskId: yield* findTaskId(client, readValue(values, 'task')),
-    initiativeId: initiative.id,
-    phaseId: yield* findPhaseId(initiative, readValue(values, 'phase')),
-  };
+  const ref = readValue(values, 'initiative');
+  const taskId = yield* findTaskId(client, readValue(values, 'task'));
+  const own = yield* findInitiative(client, ref).pipe(
+    Effect.catchIf(
+      (failure) => failure instanceof DomainError && failure.code === 'initiative_not_found',
+      () => Effect.succeed(null)
+    )
+  );
+  const teammate = own ? null : yield* selectTeamInitiative(client, ref);
+  const initiative = own ?? teammate ?? (yield* findInitiative(client, ref));
+  const phaseId = yield* findPhaseId(initiative, readValue(values, 'phase'));
+  const team = teammate
+    ? { team: { teamId: teammate.teamId, instanceId: teammate.instanceId, name: teammate.name } }
+    : {};
+  return { type: 'task.join_initiative' as const, taskId, initiativeId: initiative.id, phaseId, ...team };
 });
+
+function buildTeamChange(type: 'initiative.add_to_team' | 'initiative.remove_from_team') {
+  return Effect.fn('Surface.initiativeTeam')(function* (values: Values, client: SurfaceClient) {
+    return {
+      type,
+      initiativeId: (yield* findInitiative(client, readValue(values, 'initiative'))).id,
+      teamId: yield* findTeamId(client, readValue(values, 'team')),
+    };
+  });
+}
 
 export const INITIATIVE_SPECS: SurfaceSpec[] = [
   defineRead({
@@ -232,9 +287,28 @@ export const INITIATIVE_SPECS: SurfaceSpec[] = [
     done: () => 'Made the initiative.',
   }),
   defineCommand({
+    path: ['initiatives', 'add-to-team'],
+    summary:
+      'Show an initiative to a team: its lead task and its sheet, read-only. Teammates’ own tasks can then join it.',
+    command: 'initiative.add_to_team',
+    humanOnly: true,
+    fields: [INITIATIVE_FIELD, TEAM_FIELD],
+    build: buildTeamChange('initiative.add_to_team'),
+    done: () => 'The team sees the initiative now.',
+  }),
+  defineCommand({
+    path: ['initiatives', 'remove-from-team'],
+    summary: 'Stop showing an initiative to a team. Teammates’ tasks in it leave its sheet.',
+    command: 'initiative.remove_from_team',
+    humanOnly: true,
+    fields: [INITIATIVE_FIELD, TEAM_FIELD],
+    build: buildTeamChange('initiative.remove_from_team'),
+    done: () => 'The team no longer sees the initiative.',
+  }),
+  defineCommand({
     path: ['tasks', 'join-initiative'],
     summary:
-      'Add a task to an initiative, or move it to another phase. Tasks it files later join the same initiative and phase.',
+      'Add a task to an initiative, yours or one a teammate shared with your team, or move it to another phase. Tasks it files later join the same initiative and phase.',
     command: 'task.join_initiative',
     fields: [
       TASK_FIELD,

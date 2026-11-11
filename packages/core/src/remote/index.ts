@@ -331,6 +331,7 @@ export {
   type TeamFeedMachine,
   type TeamFeedSnapshot,
   type TeamFeedStatus,
+  type TeamFeedInitiative,
   type TeamFeedTask,
   type TeamHello,
   type TeamJoinFragment,

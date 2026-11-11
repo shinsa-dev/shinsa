@@ -52,7 +52,7 @@ export interface TeamInitiative {
   description: string;
   phases: InitiativePhase[];
   leadTaskId: string;
-  report: InitiativeReport | null;
+  report: Omit<InitiativeReport, 'runId'> | null;
   finished: boolean;
   updatedAt: number;
 }
@@ -117,7 +117,7 @@ function resolveTeamInitiative(initiative: Initiative, lead: Task): TeamInitiati
     description: initiative.description,
     phases: initiative.phases.map((phase) => ({ ...phase })),
     leadTaskId: lead.id,
-    report: initiative.report ?? null,
+    report: initiative.report ? { narrative: initiative.report.narrative, at: initiative.report.at } : null,
     finished: isTaskSettled(lead),
     updatedAt: initiative.updatedAt,
   };

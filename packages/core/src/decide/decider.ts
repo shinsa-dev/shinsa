@@ -50,7 +50,6 @@ export interface DecideContext {
   byTask?: string | null;
   guest?: ScopedActor | null;
   actor?: TaskOwner | null;
-  byTeammateTask?: { handle: string | null; title: string } | null;
 }
 
 export interface Decision {

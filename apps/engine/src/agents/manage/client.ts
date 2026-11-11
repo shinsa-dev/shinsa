@@ -1,5 +1,6 @@
 import { DomainError, parseUserCommand, type ShinsaEvent, type UserCommand } from '@shinsa/core';
-import { Context, Effect } from 'effect';
+import { RequestFailedWire } from '@shinsa/core/engine-api/errors';
+import { Context, Effect, Schema } from 'effect';
 import { createSurfaceClient } from '../../cli/api.ts';
 import { describeError } from '../../log/index.ts';
 import type { ProjectChanges } from '../../projects/changes.ts';
@@ -13,6 +14,8 @@ export type CommandRouter = (
   options: DispatchOptions
 ) => Effect.Effect<ShinsaEvent[], RouteFailure>;
 
+export type TeammateRelay = (instanceId: string, request: Request) => Effect.Effect<Response>;
+
 export class ManageAccess extends Context.Service<
   ManageAccess,
   {
@@ -20,6 +23,7 @@ export class ManageAccess extends Context.Service<
     readonly projects: ProjectChanges['Service'];
     readonly route: CommandRouter;
     readonly hookSecrets?: (taskId: string) => SurfaceHookSecrets;
+    readonly relay?: TeammateRelay;
   }
 >()('shinsa/engine/agents/manage/ManageAccess') {}
 
@@ -31,6 +35,32 @@ interface ManageClientOptions {
   projects?: ProjectChanges['Service'];
   route?: CommandRouter;
   hookSecrets?: SurfaceHookSecrets;
+  relay?: TeammateRelay;
+}
+
+const RELAY_ORIGIN = 'http://teammate.local';
+
+const readRelayFailure = Effect.fn('ManageClient.readRelayFailure')(function* (response: Response) {
+  const text = yield* Effect.promise(() => response.text());
+  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(RequestFailedWire))(text);
+  const message =
+    decoded._tag === 'Some' ? decoded.value.message : `The teammate’s machine answered ${response.status}.`;
+  const code = decoded._tag === 'Some' ? decoded.value.code : 'relay_failed';
+  return new DomainError({ code, message });
+});
+
+function createRelay(engine: EngineCore['Service'], byTask: string, relay: TeammateRelay) {
+  return Effect.fn('ManageClient.relay')(function* (instanceId: string, command: UserCommand) {
+    const task = (yield* engine.state).tasks[byTask];
+    const from = task ? { fromTeammateTask: { handle: task.handle ?? null, title: task.title } } : {};
+    const request = new Request(`${RELAY_ORIGIN}/api/commands`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...command, ...from }),
+    });
+    const response = yield* relay(instanceId, request);
+    if (!response.ok) return yield* Effect.fail(yield* readRelayFailure(response));
+  });
 }
 
 function refuse(error: unknown) {
@@ -55,6 +85,7 @@ export function createManageClient(options: ManageClientOptions): SurfaceClient 
         }
       : {}),
     ...(hookSecrets ? { hookSecrets } : {}),
+    ...(options.relay ? { relay: createRelay(engine, byTask, options.relay) } : {}),
     send: Effect.fn('ManageClient.send')(function* (command) {
       sent += 1;
       const id = key === null ? {} : { id: `${key}:${sent}` };

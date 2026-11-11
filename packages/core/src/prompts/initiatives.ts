@@ -49,11 +49,9 @@ function describeOpening(turn: LeadTurn) {
 
 function describeTeammateSender(note: LeadNote, teammate: LeadTeammate) {
   const person = teammate.name ? `${teammate.name} (@${teammate.login})` : `@${teammate.login}`;
-  if (!note.byAgent) return `${person}, a teammate,`;
-  const task = teammate.task
-    ? `${teammate.task.handle ? `${teammate.task.handle} ` : ''}${teammate.task.title}`
-    : 'a task';
-  return `The agent of ${task}, ${person}’s task on their machine,`;
+  if (!(note.byAgent && teammate.task)) return `${person}, a teammate,`;
+  const { handle, title } = teammate.task;
+  return `The agent of ${handle ? `${handle} ` : ''}${title}, ${person}’s task on their machine,`;
 }
 
 function describeNote(note: LeadNote) {
