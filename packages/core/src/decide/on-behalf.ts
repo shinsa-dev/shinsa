@@ -16,6 +16,8 @@ type HumanOnlyType =
   | 'task.unshare'
   | 'project.add_to_team'
   | 'project.remove_from_team'
+  | 'initiative.add_to_team'
+  | 'initiative.remove_from_team'
   | 'preview.share'
   | 'preview.unshare'
   | 'task.hand_off'
@@ -36,6 +38,8 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'task.unshare',
   'project.add_to_team',
   'project.remove_from_team',
+  'initiative.add_to_team',
+  'initiative.remove_from_team',
   'preview.share',
   'preview.unshare',
   'task.hand_off',

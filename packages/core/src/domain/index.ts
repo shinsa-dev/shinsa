@@ -111,6 +111,7 @@ export {
   type InitiativeMilestoneKind,
   type InitiativePhase,
   type InitiativeReport,
+  isInitiativeInTeam,
   resolveInitiativeText,
   selectInitiativeByReference,
   selectInitiativePhase,

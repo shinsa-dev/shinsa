@@ -241,3 +241,41 @@ export function resolveCreatedMembership(
     ...(membership.phaseId ? { initiativePhaseId: membership.phaseId } : {}),
   };
 }
+
+function assertHumanSharesInitiative(decider: Decider) {
+  if (!decider.context.onBehalf) return;
+  throw new DomainError({
+    code: 'human_only',
+    message:
+      'Only the human decides which initiatives a team sees. Tell them they can share it from the lead task’s menu.',
+  });
+}
+
+function writeInitiativeTeams(decider: Decider, initiative: Initiative, teamIds: string[]) {
+  const { teamIds: _previous, ...rest } = initiative;
+  const next = { ...rest, updatedAt: decider.context.now };
+  decider.emit({ type: 'initiative.written', initiative: teamIds.length > 0 ? { ...next, teamIds } : next });
+}
+
+export function addInitiativeToTeam(decider: Decider, command: CommandOf<'initiative.add_to_team'>) {
+  assertHumanSharesInitiative(decider);
+  const initiative = findInitiative(decider, command.initiativeId);
+  const teamIds = initiative.teamIds ?? [];
+  if (teamIds.includes(command.teamId)) return;
+  writeInitiativeTeams(decider, initiative, [...teamIds, command.teamId]);
+}
+
+export function removeInitiativeFromTeam(
+  decider: Decider,
+  command: CommandOf<'initiative.remove_from_team'>
+) {
+  assertHumanSharesInitiative(decider);
+  const initiative = findInitiative(decider, command.initiativeId);
+  const teamIds = initiative.teamIds ?? [];
+  if (!teamIds.includes(command.teamId)) return;
+  writeInitiativeTeams(
+    decider,
+    initiative,
+    teamIds.filter((teamId) => teamId !== command.teamId)
+  );
+}

@@ -435,6 +435,44 @@ describe('focusing on an initiative', () => {
   });
 });
 
+describe('sharing an initiative with a team', () => {
+  test('adds a team once and removes it once, keeping the other teams and its edits', () => {
+    const harness = createHarness();
+    const { initiativeId } = createInitiative(harness);
+    harness.send({ type: 'initiative.add_to_team', initiativeId, teamId: 'team-1' });
+    harness.send({ type: 'initiative.add_to_team', initiativeId, teamId: 'team-2' });
+    expect(initiativeOf(harness, initiativeId).teamIds).toEqual(['team-1', 'team-2']);
+    const events = harness.state.seq;
+    harness.send({ type: 'initiative.add_to_team', initiativeId, teamId: 'team-1' });
+    expect(harness.state.seq).toBe(events);
+    write(harness, initiativeId, 'Chat rewrite');
+    expect(initiativeOf(harness, initiativeId)).toMatchObject({
+      name: 'Chat rewrite',
+      teamIds: ['team-1', 'team-2'],
+    });
+    harness.send({ type: 'initiative.remove_from_team', initiativeId, teamId: 'team-1' });
+    harness.send({ type: 'initiative.remove_from_team', initiativeId, teamId: 'team-1' });
+    expect(initiativeOf(harness, initiativeId).teamIds).toEqual(['team-2']);
+    harness.send({ type: 'initiative.remove_from_team', initiativeId, teamId: 'team-2' });
+    expect(initiativeOf(harness, initiativeId)).not.toHaveProperty('teamIds');
+  });
+
+  test('only the human shares one, and an initiative that does not exist is refused', () => {
+    const harness = createHarness();
+    const { initiativeId } = createInitiative(harness);
+    const humanOnly = 'Only the human decides which initiatives a team sees.';
+    for (const type of ['initiative.add_to_team', 'initiative.remove_from_team'] as const) {
+      expect(() => harness.send({ type, initiativeId, teamId: 'team-1' }, { onBehalf: true })).toThrow(
+        humanOnly
+      );
+      expect(() => harness.send({ type, initiativeId: 'gone', teamId: 'team-1' })).toThrow(
+        'No initiative gone'
+      );
+    }
+    expect(initiativeOf(harness, initiativeId)).not.toHaveProperty('teamIds');
+  });
+});
+
 describe('on your behalf', () => {
   test('records what an agent did to initiatives for you', () => {
     const harness = createHarness();

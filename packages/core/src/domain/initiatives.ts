@@ -34,6 +34,7 @@ export interface Initiative {
   updatedAt: number;
   milestones?: InitiativeMilestone[];
   report?: InitiativeReport | null;
+  teamIds?: string[];
 }
 
 export const INITIATIVE_LIMITS = {
@@ -52,6 +53,10 @@ export function selectLeadInitiative<T extends Pick<Initiative, 'leadTaskId'>>(
 ) {
   for (const initiative of initiatives) if (initiative.leadTaskId === taskId) return initiative;
   return null;
+}
+
+export function isInitiativeInTeam(initiative: Pick<Initiative, 'teamIds'>, teamId: string) {
+  return (initiative.teamIds ?? []).includes(teamId);
 }
 
 export function resolveInitiativeText(text: string) {

@@ -1,3 +1,9 @@
+import {
+  type Initiative,
+  type InitiativePhase,
+  type InitiativeReport,
+  isInitiativeInTeam,
+} from '../domain/initiatives.ts';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { ActivityPerson, Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -31,8 +37,25 @@ export function listTeamProjectIds(state: ShinsaState, teamId: string) {
     .map((project) => project.id);
 }
 
+export interface TeamInitiative {
+  id: string;
+  name: string;
+  description: string;
+  phases: InitiativePhase[];
+  leadTaskId: string;
+  report: InitiativeReport | null;
+  finished: boolean;
+  updatedAt: number;
+}
+
+function isSharedLead(state: ShinsaState, task: Task, teamId: string) {
+  const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
+  return initiative?.leadTaskId === task.id && isInitiativeInTeam(initiative, teamId);
+}
+
 export function isTeamTask(state: ShinsaState, task: Task, teamId: string) {
   if (task.watchHome) return false;
+  if (isSharedLead(state, task, teamId)) return true;
   const projectId = resolveTaskProject(state, task);
   const project = projectId ? state.projects[projectId] : undefined;
   return (project?.teamIds ?? []).includes(teamId);
@@ -65,4 +88,25 @@ export function listTeamTasks(state: ShinsaState, teamId: string, context: TeamT
     machine: context.machine,
     heldBy: resolveHolder(task, teamId),
   }));
+}
+
+function resolveTeamInitiative(initiative: Initiative, lead: Task): TeamInitiative {
+  return {
+    id: initiative.id,
+    name: initiative.name,
+    description: initiative.description,
+    phases: initiative.phases.map((phase) => ({ ...phase })),
+    leadTaskId: lead.id,
+    report: initiative.report ?? null,
+    finished: isTaskSettled(lead),
+    updatedAt: initiative.updatedAt,
+  };
+}
+
+export function listTeamInitiatives(state: ShinsaState, teamId: string): TeamInitiative[] {
+  return Object.values(state.initiatives).flatMap((initiative) => {
+    const lead = initiative.leadTaskId ? state.tasks[initiative.leadTaskId] : undefined;
+    if (!lead || !isInitiativeInTeam(initiative, teamId)) return [];
+    return [resolveTeamInitiative(initiative, lead)];
+  });
 }

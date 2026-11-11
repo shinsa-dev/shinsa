@@ -262,6 +262,8 @@ export const UserCommand = Schema.Union([
     phases: Optional(List(InitiativePhaseInput, 50), FIELD_MESSAGES.list),
   }),
   Command('initiative.adopt_task', { taskId: TaskId }),
+  Command('initiative.add_to_team', { initiativeId: InitiativeId, teamId: IdText }),
+  Command('initiative.remove_from_team', { initiativeId: InitiativeId, teamId: IdText }),
   Command('task.join_initiative', {
     taskId: TaskId,
     initiativeId: OrNull(InitiativeId, FIELD_MESSAGES.text),

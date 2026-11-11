@@ -66,7 +66,12 @@ import {
   recordHandoff,
   removeHandoff,
 } from './handoffs.ts';
-import { joinInitiative, writeInitiative } from './initiatives.ts';
+import {
+  addInitiativeToTeam,
+  joinInitiative,
+  removeInitiativeFromTeam,
+  writeInitiative,
+} from './initiatives.ts';
 import {
   adoptTask,
   createInitiativeTask,
@@ -315,6 +320,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return writeInitiative(decider, command);
     case 'initiative.adopt_task':
       return adoptTask(decider, command);
+    case 'initiative.add_to_team':
+      return addInitiativeToTeam(decider, command);
+    case 'initiative.remove_from_team':
+      return removeInitiativeFromTeam(decider, command);
     case 'initiative.wake_lead':
       return wakeLead(decider, command);
     case 'task.join_initiative':

@@ -3,7 +3,7 @@ import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import { ACCESS_PRESETS } from '../scopes/index.ts';
 import { ACCESS_SCOPES, ACTION_SCOPES, type AccessScopes, type ActionScope } from '../scopes/schema.ts';
-import type { TeamTask } from '../share/teams.ts';
+import type { TeamInitiative, TeamTask } from '../share/teams.ts';
 import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
 import {
   REMOTE_APP_ORIGIN,
@@ -133,6 +133,7 @@ export interface TeamPresence {
 
 export interface TeamListView {
   tasks: TeamTask[];
+  initiatives?: TeamInitiative[];
   machineKey: string;
   grant?: string;
   updatedAt: number;
