@@ -11,6 +11,7 @@ import {
   type TaskPriority,
 } from '../domain/index.ts';
 import { isOfCurrentRound } from '../domain/rounds.ts';
+import { resolveAutoPaceResets } from '../domain/settings.ts';
 import { resolveFocusProjects } from '../queue/rank.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveBuildEstimate } from './estimate.ts';
@@ -19,7 +20,10 @@ import { resolveRecentUsage, resolveRecentUsageFreesAt } from './window.ts';
 export const ADMISSION_LIMITS = {
   reserve: 0.1,
   recheckMs: 30 * MINUTE_MS,
+  resetEndingMs: 3 * DAY_MS,
 } as const;
+
+const RESET_PRIORITIES: ReadonlySet<TaskPriority> = new Set(['urgent', 'high']);
 
 export const ENGAGEMENT_LIMITS = {
   windowMs: 14 * DAY_MS,
@@ -147,13 +151,31 @@ function resolveCommitted(state: ShinsaState, provider: string, skip: string | n
   return committed;
 }
 
+function isResetEnding(state: ShinsaState, provider: string, now: number) {
+  const endsAt = state.usagePaces[provider]?.resetEndsAt ?? null;
+  return endsAt !== null && endsAt > now && endsAt - now <= ADMISSION_LIMITS.resetEndingMs;
+}
+
+function resolveAdmissionPace(
+  state: ShinsaState,
+  provider: string,
+  priority: TaskPriority,
+  now: number
+): Option.Option<number> {
+  return Option.map(Option.fromNullishOr(state.usagePaces[provider]), (recorded) => {
+    if (!resolveAutoPaceResets(state.settings)) return recorded.pace;
+    const counts = RESET_PRIORITIES.has(priority) || isResetEnding(state, provider, now);
+    return counts ? Math.max(recorded.pace, recorded.resetPace) : recorded.pace;
+  });
+}
+
 export function resolveAdmission(
   state: ShinsaState,
   task: Task,
   provider: string,
   now: number
 ): Option.Option<AdmissionVerdict> {
-  const pace = state.usagePaces[provider]?.pace ?? null;
+  const pace = Option.getOrNull(resolveAdmissionPace(state, provider, task.priority, now));
   const estimate = Option.getOrNull(
     Option.flatMap(resolveBuildEstimate(state, task), (found) => found.remainingPercent)
   );
@@ -172,8 +194,13 @@ export function resolveAdmission(
   return Option.some({ fits, need, limit, percent, freesAt: Math.max(freesAt, now + MINUTE_MS) });
 }
 
-export function resolveAdmissionRoom(state: ShinsaState, provider: string, now: number) {
-  return Option.map(Option.fromNullishOr(state.usagePaces[provider]?.pace), (pace) => {
+export function resolveAdmissionRoom(
+  state: ShinsaState,
+  provider: string,
+  now: number,
+  priority: TaskPriority = 'normal'
+) {
+  return Option.map(resolveAdmissionPace(state, provider, priority, now), (pace) => {
     const used =
       resolveRecentUsage(state, now, { provider }).percent + resolveCommitted(state, provider, null);
     return pace * (1 - ADMISSION_LIMITS.reserve) - used;

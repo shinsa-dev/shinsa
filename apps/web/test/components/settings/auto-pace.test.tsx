@@ -84,7 +84,10 @@ describe('Auto pace settings', () => {
   it('shows what is left for builds under each provider while Auto pace is on', async () => {
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
-    renderForecast({ autoPace: true }, { claude: { provider: 'claude', pace: 140, at: Date.now() } });
+    renderForecast(
+      { autoPace: true },
+      { claude: { provider: 'claude', pace: 140, resetPace: 140, resetEndsAt: null, at: Date.now() } }
+    );
     expect(screen.getByText(/^Starts each build only when it fits your usage/)).toBeTruthy();
     expect(screen.getByText('Left for Claude builds in the next 24 hours')).toBeTruthy();
     expect(screen.getByText('126% left')).toBeTruthy();
@@ -103,7 +106,10 @@ describe('Auto pace settings', () => {
     spyOnEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'usage.auto_pace') });
     pushAccounts(createSnapshot({ accounts: ACCOUNTS }));
     await settle();
-    renderForecast({ autoPace: true }, { claude: { provider: 'claude', pace: 140, at: Date.now() } });
+    renderForecast(
+      { autoPace: true },
+      { claude: { provider: 'claude', pace: 140, resetPace: 140, resetEndsAt: null, at: Date.now() } }
+    );
     expect(screen.getByText('Forecast')).toBeTruthy();
     expect(screen.queryByRole('switch', { name: 'Auto pace' })).toBeNull();
     expect(screen.queryByText(/^Left for .*builds/)).toBeNull();

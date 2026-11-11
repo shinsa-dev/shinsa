@@ -30,8 +30,8 @@ describe('Auto pace in Settings', () => {
       ],
       patch: {
         usagePaces: {
-          codex: { provider: 'codex', pace: 50, at: NOW },
-          claude: { provider: 'claude', pace: 140, at: NOW },
+          codex: { provider: 'codex', pace: 50, resetPace: 50, resetEndsAt: null, at: NOW },
+          claude: { provider: 'claude', pace: 140, resetPace: 140, resetEndsAt: null, at: NOW },
         },
       },
     });
@@ -55,7 +55,9 @@ describe('Auto pace in Settings', () => {
       'Of 140% of a weekly limit, counting your usable usage resets, with 10% kept for urgent tasks. 1 build waiting'
     );
     const idle = createShinsaState({
-      patch: { usagePaces: { claude: { provider: 'claude', pace: 2, at: NOW } } },
+      patch: {
+        usagePaces: { claude: { provider: 'claude', pace: 2, resetPace: 2, resetEndsAt: null, at: NOW } },
+      },
     });
     expect(selectPaceBudget(idle, 'claude', NOW)?.detail).toBe(
       'Of 2% of a weekly limit, with 10% kept for urgent tasks'

@@ -17,7 +17,7 @@ import {
   type TaskOwner,
   type UsageWait,
 } from '../domain/index.ts';
-import { isPaceMoved, resolveRecordablePace } from '../forecast/index.ts';
+import { isProviderPaceMoved, resolveRecordablePace } from '../forecast/index.ts';
 import { resolveUsageResumeNudge } from '../prompts/session.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { releasePaceWait } from './costs.ts';
@@ -256,12 +256,14 @@ export function recordAccountPlan(decider: Decider, command: CommandOf<'account.
 }
 
 export function recordUsagePace(decider: Decider, command: CommandOf<'usage.pace_recorded'>) {
-  const known = decider.state.usagePaces[command.provider]?.pace ?? null;
-  if (!isPaceMoved(known, command.pace)) return;
+  if (!isProviderPaceMoved(decider.state.usagePaces[command.provider], command)) return;
+  const pace = Option.getOrNull(resolveRecordablePace(command.pace));
   decider.emit({
     type: 'usage.pace_recorded',
     provider: command.provider,
-    pace: Option.getOrNull(resolveRecordablePace(command.pace)),
+    pace,
+    resetPace: pace === null ? null : (Option.getOrNull(resolveRecordablePace(command.resetPace)) ?? pace),
+    resetEndsAt: pace === null ? null : command.resetEndsAt,
   });
 }
 

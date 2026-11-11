@@ -140,6 +140,7 @@ const FEATURE_ROUTES = {
   'team-keys': ['POST /api/remote/teams/key/request', 'POST /api/remote/teams/key/answer'],
   'usage.pace_limits': [],
   'usage.auto_pace': [],
+  'usage.auto_pace_resets': [],
   'team-relay': ['GET /api/teams/relays'],
   'usage.watchdog_limits': [],
   'share.scopes': [],

@@ -29,7 +29,13 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
       autoPace: true,
     },
   });
-  push(NOW - HOUR, { type: 'usage.pace_recorded', provider: 'claude', pace: 45 });
+  push(NOW - HOUR, {
+    type: 'usage.pace_recorded',
+    provider: 'claude',
+    pace: 45,
+    resetPace: 45,
+    resetEndsAt: null,
+  });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);
   const runEnds = new Map(

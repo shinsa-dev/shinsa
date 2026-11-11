@@ -84,7 +84,13 @@ function nightHarness(options: { autoPace?: boolean; pace?: number | null } = {}
   harness.advance(NOW - harness.now);
   harness.send({ type: 'settings.change', patch: { autoPace: options.autoPace ?? true } });
   if (options.pace !== null) {
-    harness.send({ type: 'usage.pace_recorded', provider: 'claude', pace: options.pace ?? 50 });
+    harness.send({
+      type: 'usage.pace_recorded',
+      provider: 'claude',
+      pace: options.pace ?? 50,
+      resetPace: options.pace ?? 50,
+      resetEndsAt: null,
+    });
   }
   return harness;
 }

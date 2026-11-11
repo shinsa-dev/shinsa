@@ -6,7 +6,7 @@ import {
   type ChatNotice,
   DomainError,
   type FastModeAvailability,
-  isPaceMoved,
+  isProviderPaceMoved,
   isSharedMachine,
   listActiveRuns,
   listOpenGates,
@@ -283,13 +283,13 @@ export class Accounts extends Context.Service<
         if (inspect) return;
         const state = yield* engine.state;
         const now = yield* Clock.currentTimeMillis;
-        const moved = listProviderPaces(next, now).filter(({ provider, pace }) =>
-          isPaceMoved(state.usagePaces[provider]?.pace ?? null, pace)
+        const moved = listProviderPaces(next, now).filter((paces) =>
+          isProviderPaceMoved(state.usagePaces[paces.provider], paces)
         );
-        for (const { provider, pace } of moved) {
+        for (const { provider, pace, resetPace, resetEndsAt } of moved) {
           yield* dispatch(
-            { type: 'usage.pace_recorded', provider, pace },
-            `usage-pace:${provider}:${pace ?? 'none'}:${state.seq}`
+            { type: 'usage.pace_recorded', provider, pace, resetPace, resetEndsAt },
+            `usage-pace:${provider}:${pace ?? 'none'}:${resetPace ?? 'none'}:${resetEndsAt ?? 'none'}:${state.seq}`
           ).pipe(
             Effect.catch((failure) =>
               Effect.logWarning('[Accounts] Could not record the safe usage pace').pipe(

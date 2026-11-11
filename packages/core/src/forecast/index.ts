@@ -1,7 +1,13 @@
 import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import { DAY_MS } from '../domain/time.ts';
-import type { AccountSummary, AccountsSnapshot, AccountUsage } from '../protocol/accounts.ts';
+import type { RecordedPace } from '../domain/types.ts';
+import type {
+  AccountSummary,
+  AccountsSnapshot,
+  AccountUsage,
+  UsageResetGrant,
+} from '../protocol/accounts.ts';
 import type {
   ForecastAccount,
   ForecastOutage,
@@ -34,16 +40,43 @@ export interface ForecastOptions {
   grants?: boolean;
 }
 
-export function resolveGrantRefill(usage: AccountUsage, now: number) {
-  const resets = (usage.resetGrants ?? [])
-    .filter(
-      (grant) =>
-        grant.usableNow &&
-        grant.clears.includes(FORECAST_LIMITS.weeklyClear) &&
-        (grant.endsAt === null || grant.endsAt > now)
-    )
-    .reduce((total, grant) => total + Math.max(0, grant.left), 0);
-  return resets * FORECAST_LIMITS.fullPercent;
+export function resolveGrantRefill(grant: UsageResetGrant) {
+  if (grant.clears.includes(FORECAST_LIMITS.weeklyClear)) return FORECAST_LIMITS.fullPercent;
+  if (!grant.givesBackWeekly) return 0;
+  return Math.min(FORECAST_LIMITS.fullPercent, Math.max(0, grant.weeklyShare ?? 0));
+}
+
+function listUsableGrants(usage: AccountUsage, now: number) {
+  return (usage.resetGrants ?? []).filter(
+    (grant) =>
+      grant.usableNow &&
+      grant.left > 0 &&
+      resolveGrantRefill(grant) > 0 &&
+      (grant.endsAt === null || grant.endsAt > now)
+  );
+}
+
+function listGrantAccounts(id: string, label: string, usage: AccountUsage, now: number): ForecastAccount[] {
+  return listUsableGrants(usage, now).map((grant) => ({
+    id: `${id}:${grant.id}`,
+    label,
+    left: grant.left * resolveGrantRefill(grant),
+    resetsAt: grant.endsAt,
+    refills: false,
+  }));
+}
+
+function listAccountBudgets(
+  id: string,
+  label: string,
+  usage: AccountUsage,
+  spentUntil: number | null,
+  now: number,
+  options: ForecastOptions
+) {
+  const weekly = resolveForecastAccount(id, label, usage, spentUntil, now);
+  if (Option.isNone(weekly)) return [];
+  return options.grants ? [weekly.value, ...listGrantAccounts(id, label, usage, now)] : [weekly.value];
 }
 
 interface Simulation {
@@ -55,6 +88,7 @@ interface Simulation {
 
 interface Budget {
   id: string;
+  refills: boolean;
   left: number;
   resetsAt: number | null;
   start: number;
@@ -67,8 +101,7 @@ export function resolveForecastAccount(
   label: string,
   usage: AccountUsage,
   spentUntil: number | null,
-  now: number,
-  options: ForecastOptions = {}
+  now: number
 ): Option.Option<ForecastAccount> {
   const weekly = usage.windows.find((window) => window.kind === 'weekly');
   if (!weekly) return Option.none();
@@ -80,8 +113,7 @@ export function resolveForecastAccount(
     resetsAt += FORECAST_LIMITS.weekMs;
     left = FORECAST_LIMITS.fullPercent;
   }
-  const refill = options.grants ? resolveGrantRefill(usage, now) : 0;
-  return Option.some({ id, label, left: left + refill, resetsAt });
+  return Option.some({ id, label, left, resetsAt });
 }
 
 export function listForecastAccounts(
@@ -92,15 +124,13 @@ export function listForecastAccounts(
   return accounts
     .filter((account) => !account.paused && account.signIn !== 'signed_out')
     .flatMap((account) =>
-      Option.toArray(
-        resolveForecastAccount(
-          account.id,
-          account.email ?? account.id,
-          account.usage,
-          account.spentUntil,
-          now,
-          options
-        )
+      listAccountBudgets(
+        account.id,
+        account.email ?? account.id,
+        account.usage,
+        account.spentUntil,
+        now,
+        options
       )
     );
 }
@@ -121,9 +151,7 @@ export function listProviderForecastAccounts(
   if (provider === CLAUDE_PROVIDER) return listForecastAccounts(snapshot.accounts, now, options);
   const login = snapshot.providers?.find((entry) => entry.provider === provider);
   if (!login?.usage || login.status === 'signed_out') return [];
-  return Option.toArray(
-    resolveForecastAccount(provider, login.email ?? login.label, login.usage, null, now, options)
-  );
+  return listAccountBudgets(provider, login.email ?? login.label, login.usage, null, now, options);
 }
 
 export function resolveRecordablePace(pace: number | null) {
@@ -140,16 +168,42 @@ export function isPaceMoved(known: number | null, pace: number | null) {
   return Math.abs(known - next.value) >= FORECAST_LIMITS.paceStep;
 }
 
+export function isProviderPaceMoved(known: RecordedPace | undefined, next: Omit<ProviderPace, 'provider'>) {
+  if (isPaceMoved(known?.pace ?? null, next.pace)) return true;
+  if (!known || Option.isNone(resolveRecordablePace(next.pace))) return false;
+  return isPaceMoved(known.resetPace, next.resetPace ?? next.pace) || known.resetEndsAt !== next.resetEndsAt;
+}
+
 export interface ProviderPace {
   provider: string;
   pace: number | null;
+  resetPace: number | null;
+  resetEndsAt: number | null;
+}
+
+function resolveProviderSafePace(accounts: readonly ForecastAccount[], now: number) {
+  return Option.getOrNull(Option.map(resolveUsageForecast(accounts, now), (forecast) => forecast.safePace));
+}
+
+function resolveResetEndsAt(accounts: readonly ForecastAccount[]) {
+  const ends = accounts.flatMap((account) =>
+    account.refills === false && account.resetsAt !== null ? [account.resetsAt] : []
+  );
+  return ends.length === 0 ? null : Math.min(...ends);
 }
 
 export function listProviderPaces(snapshot: AccountsSnapshot, now: number): ProviderPace[] {
   return listForecastProviders(snapshot).map((provider) => {
-    const accounts = listProviderForecastAccounts(snapshot, provider, now, { grants: true });
-    const forecast = resolveUsageForecast(accounts, now);
-    return { provider, pace: Option.isSome(forecast) ? forecast.value.safePace : null };
+    const plain = listProviderForecastAccounts(snapshot, provider, now);
+    const withResets = listProviderForecastAccounts(snapshot, provider, now, { grants: true });
+    const pace = resolveProviderSafePace(plain, now);
+    const counted = withResets.length > plain.length;
+    return {
+      provider,
+      pace,
+      resetPace: counted ? resolveProviderSafePace(withResets, now) : pace,
+      resetEndsAt: resolveResetEndsAt(withResets),
+    };
   });
 }
 
@@ -184,6 +238,7 @@ function closeSegment(budget: Budget, to: number): ForecastSegment {
 function simulate(accounts: readonly ForecastAccount[], pace: number, from: number, to: number): Simulation {
   const budgets: Budget[] = accounts.map((account) => ({
     id: account.id,
+    refills: account.refills ?? true,
     left: account.left,
     resetsAt: account.resetsAt,
     start: from,
@@ -204,6 +259,11 @@ function simulate(accounts: readonly ForecastAccount[], pace: number, from: numb
     const leftBefore = sumLeft(budgets);
     for (const budget of budgets) {
       if (budget.resetsAt !== next) continue;
+      if (!budget.refills) {
+        budget.left = 0;
+        budget.resetsAt = null;
+        continue;
+      }
       resets.push({ accountId: budget.id, at: next, leftBefore });
       segments.push(closeSegment(budget, next));
       budget.left = FORECAST_LIMITS.fullPercent;

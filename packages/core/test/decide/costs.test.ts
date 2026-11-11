@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   ADMISSION_LIMITS,
+  DAY_MS,
   createPercent,
   createUsd,
   isOverBudget,
@@ -9,6 +10,7 @@ import {
   listOpenGates,
   type RunUsage,
   RECENT_USAGE_MS,
+  resolveAdmissionRoom,
   resolveBuildEstimate,
   resolvePaceHold,
   resolveRecentUsage,
@@ -770,8 +772,18 @@ describe('a project’s usage limit', () => {
   });
 });
 
-function recordPace(harness: Harness, pace: number | null) {
-  harness.send({ type: 'usage.pace_recorded', provider: 'claude', pace });
+function recordPace(
+  harness: Harness,
+  pace: number | null,
+  resets: { resetPace?: number; resetEndsAt?: number | null } = {}
+) {
+  harness.send({
+    type: 'usage.pace_recorded',
+    provider: 'claude',
+    pace,
+    resetPace: resets.resetPace ?? pace,
+    resetEndsAt: resets.resetEndsAt ?? null,
+  });
 }
 
 function autoPaced(pace: number) {
@@ -880,6 +892,41 @@ describe('Auto pace', () => {
     recordPace(harness, paceFitting(harness, need * 1.5));
     expect(isHeldStepStarted(harness, first.run.id)).toBe(true);
     expect(isAdmissionHeld(harness, second.taskId)).toBe(true);
+  });
+
+  test('counts on a usage reset only for urgent and high builds, once you allow it', () => {
+    const harness = autoPaced(0.01);
+    const high = plannedTask(harness, { priority: 'high' });
+    const resetPace = paceFitting(harness, needOf(harness, high.taskId)) * 2;
+    recordPace(harness, 0.01, { resetPace, resetEndsAt: harness.now + 30 * DAY_MS });
+    expect(isAdmissionHeld(harness, high.taskId)).toBe(true);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    expect(isHeldStepStarted(harness, high.run.id)).toBe(true);
+    const normal = plannedTask(harness);
+    expect(isAdmissionHeld(harness, normal.taskId)).toBe(true);
+  });
+
+  test('lets every build count on a usage reset that ends within three days, so it is not wasted', () => {
+    const harness = autoPaced(0.01);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    const low = plannedTask(harness, { priority: 'low' });
+    const resetPace = paceFitting(harness, needOf(harness, low.taskId)) * 2;
+    recordPace(harness, 0.01, { resetPace, resetEndsAt: harness.now + 4 * DAY_MS });
+    expect(isAdmissionHeld(harness, low.taskId)).toBe(true);
+    expect(Option.getOrThrow(resolveAdmissionRoom(harness.state, 'claude', harness.now))).toBeLessThan(0);
+    expect(
+      Option.getOrThrow(resolveAdmissionRoom(harness.state, 'claude', harness.now, 'high'))
+    ).toBeGreaterThan(0);
+    recordPace(harness, 0.01, { resetPace, resetEndsAt: harness.now + 2 * DAY_MS });
+    expect(isHeldStepStarted(harness, low.run.id)).toBe(true);
+  });
+
+  test('never counts a reset pace below the pace without resets, nor a reset that already ended', () => {
+    const harness = autoPaced(10_000);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    recordPace(harness, 10_000, { resetPace: 0.01, resetEndsAt: harness.now - DAY_MS });
+    const low = plannedTask(harness, { priority: 'low' });
+    expect(isDispatched(harness, low.run.id)).toBe(true);
   });
 
   test('an urgent build may use the reserve, and starts ahead of the queue', () => {
