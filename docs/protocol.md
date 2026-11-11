@@ -349,6 +349,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
 | `initiativeId?` | string \| null | the initiative it belongs to (`docs/engine.md` → Initiatives); absent or null for none |
 | `initiativePhaseId?` | string \| null | its phase in that initiative; null for no phase |
+| `teamInitiative?` | `TeamInitiativeRef` \| null | a teammate's initiative this task joined from your machine: `teamId`, `instanceId`, `initiativeId`, `phaseId`, `name`; never beside `initiativeId` |
 | `owner?` | `TaskOwner` \| null | the person who created it (`login`, `name`, `avatarUrl`): the remote member or guest who sent `task.create`, the machine's owner at the keyboard, or the owner of the task an agent filed it from; null for tasks from before and those Slack, schedules and webhooks start, which count as the machine owner's. On a shared machine its runs use only this person's Claude accounts and GitHub token (`docs/engine.md` → Remote access, Shared machines) |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `teammateFork?` | `TeammateFork` \| null | the teammate's task this one was forked from, as a brief (`instanceId`, `taskId`, `handle`, `title`, `owner`, `request`, `rounds`, `branch`, `pullRequest`): its first Agent run starts fresh from it (`docs/engine.md` → Forking a teammate's task) |
@@ -524,6 +525,8 @@ executable changed line (`selectMeasuredCoverage`).
 | `createdAt`, `updatedAt` | number | |
 | `milestones?` | `InitiativeMilestone[]` | members' milestones since the lead's last turn, the last 40: `taskId`, `kind` (`joined`, `plan_approved`, `gate_opened`, `merged`, `done`, `cancelled`), `text` (at most 280), `at` |
 | `report?` | `InitiativeReport` \| null | the lead's last `report_initiative`: `narrative`, `runId`, `at` |
+| `teamIds?` | string[] | the teams that see it (`docs/engine.md` → Initiatives, Shared with a team); written only by `initiative.add_to_team` and `initiative.remove_from_team`; absent for none |
+| `teamMembers?` | `InitiativeTeamMember[]` | teammates' tasks in it, recorded from the team feeds, at most 200: `teamId`, `instanceId`, `taskId`, `handle`, `title`, `owner`, `stage`, `phaseId`, `gate`, `closedAt` |
 
 At most 50 open initiatives (`INITIATIVE_LIMITS`, `initiative_limit`). An initiative is found by id, exact name (any case) or the start of its id (`selectInitiativeByReference`).
 
@@ -846,7 +849,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
 | `task.create` | creates a task (request, project, initiative and phase: `initiativeId`, `initiativePhaseId`, else the ones of the task it was filed from, split from or forked from, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`, or a teammate's: `teammateFork`, never both; `initiative: true` starts an initiative instead, named by the request's first line, with this task as its lead) | `tasks create` | you; task agents file tasks with `create_task` |
-| `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below) | `tasks message [--as]` | agent |
+| `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below); `fromTeammateTask` (`handle`, `title`) names a teammate's task whose agent sent it to your lead over the fleet relay | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
 | `round.remove` | removes a round waiting to start; the waiting rounds after it move up one number; a round that started is refused (`round_started`) | `rounds remove` | agent |
@@ -854,7 +857,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
 | `task.stack_on_tasks` | stacks it on tasks as a bundle (`stacksOn`, the whole list, replacing the one it has), or takes it out (`[]`); refused, for any task in the list, on itself (`stack_self`), a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`), one with no pull request (`stack_no_pull_request`), one in another repository than the task or the others (`stack_repository`), a cycle (`dependency_cycle`), and once it builds (`stack_started`) | `tasks stack-on`, `tasks unstack` | agent |
-| `task.join_initiative` | adds a task to an initiative in a phase (`phaseId`, null for none), moves it to another phase or initiative, or takes it out (`initiativeId: null`); refused for an unknown initiative (`initiative_not_found`) or phase (`initiative_phase_not_found`), or a finished initiative (`initiative_finished`) | `tasks join-initiative`, `tasks leave-initiative` | agent |
+| `task.join_initiative` | adds a task to an initiative in a phase (`phaseId`, null for none), moves it to another phase or initiative, or takes it out (`initiativeId: null`); with `team` (`teamId`, `instanceId`, `name`) the initiative is a teammate's, recorded as `teamInitiative` and refused for a task the team does not see (`initiative_not_shared`); refused for an unknown initiative (`initiative_not_found`) or phase (`initiative_phase_not_found`), or a finished initiative (`initiative_finished`) | `tasks join-initiative`, `tasks leave-initiative` | agent |
 | `initiative.write` | changes an initiative's name, description and phases (`phases` replaces the list; a phase with an `id` keeps it, one without gets a new one; a removed phase drops its tasks to no phase); refused past the limits (`initiative_invalid`) | `initiatives write` | agent |
 | `initiative.adopt_task` | creates an initiative named after a task, adds it and every descendant by `createdBy`, `parentTaskId` and `forkOf` not already in one, and starts its lead forked from the task; refused for a task already in one (`initiative_exists`) or past the limit (`initiative_limit`) | `initiatives adopt` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
@@ -906,6 +909,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `project.remove` | removes one | `projects remove` | agent |
 | `project.add_to_team` | shows every task of the project to a team (`teamId`), read-only: `project.written` with the team in `teamIds`; nothing when it is already there | `projects add-to-team --team` | **human** |
 | `project.remove_from_team` | stops showing them: every open view of its tasks for that team closes | `projects remove-from-team --team` | **human** |
+| `initiative.add_to_team` | shows an initiative and its lead task to a team (`teamId`): `initiative.written` with the team in `teamIds`; nothing when it is already there | `initiatives add-to-team --team` | **human** |
+| `initiative.remove_from_team` | stops showing it, and drops that team's recorded members | `initiatives remove-from-team --team` | **human** |
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, or `initiativeId`, one kind at a time (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
@@ -1060,6 +1065,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `delegation.wake_policy` | `agents/tools/orchestration/handler.ts` | a `wait` call that timed out switches to waking |
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook | fires a slot, or records a failed one |
+| `initiative.record_team_members` | `TeamMembers` (`apps/engine/src/initiatives/team-members/`), when a team feed changes | records one team's members of a shared initiative (`teamId`, `members`) and queues the milestones they changed; ignored for an initiative not shared with that team or without a live lead |
 | `initiative.wake_lead` | `LeadWakes` (`apps/engine/src/initiatives/service.ts`), after the debounce | starts a lead turn with the queued milestones when the lead rests idle in `leading`; otherwise does nothing |
 | `schedule.deliver` | the webhook receiver | starts the schedule's work from a delivery |
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
@@ -1102,6 +1108,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.stack_changed` | the tasks it stacks on changed (`stacksOn`, a list, empty when taken out; `by` you or Shinsa) |
 | `initiative.written`, `initiative.removed` | an initiative is created or changed (the whole record), dissolved when its lead task is cancelled |
 | `task.initiative_changed` | a task joined, moved within or left an initiative (`initiativeId`, `phaseId`) |
+| `task.team_initiative_changed` | a task joined, moved within or left a teammate's initiative (`teamInitiative`, or null) |
+| `initiative.team_members_recorded` | a team's members of a shared initiative were recorded (`teamId`, `members`) |
 | `initiative.milestones_queued` | members' milestones were queued for the lead (`milestones`) |
 | `initiative.lead_woken` | a lead turn took the queued milestones (`runId`); the queue empties |
 | `initiative.reported` | the lead reported (`report`: `narrative`, `runId`, `at`) |
@@ -1507,9 +1515,9 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 `proof`, an HMAC with the team key over the team, the view and the key), answered by a welcome with the machine's
 fresh key and a proof over all of it or by `refused`; both derive the session key with the view in it
 (`deriveTeamSessionKey`, `TeamKeys`), then the machine sends `ShareMessage`s as a share does. A list view is a
-`TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`, `snapshot`: the same list
+`TeamListView` (`tasks`: `TeamTask[]`, `initiatives`: the `TeamInitiative`s shared with the team, `machineKey`: the machine's public key, `updatedAt`, `snapshot`: the same list
 signed, and `held`: the signed lists it keeps of the team's offline machines): each a `SharedListing` (the redacted task, its gates, its project, its repository)
-with `owner` (GitHub login) and `machine` (its name), every open task of the team's projects and the
+with `owner` (GitHub login), `machine` (its name) and `initiative` (the teammate's initiative it joined, a `TeamInitiativeRef`), every open task of the team's projects and the
 `TEAM_SETTLED_LIMIT` (50) most recently finished. A task view is a `ShareLiveView`. What a machine watches is a
 `TeamFeedSnapshot`: `machines` (`TeamFeedMachine`: `teamId`, `instanceId`, `name`, `userId`, `status`, one of
 `connecting`, `live`, `offline`, `refused`, `reason`, and `updatedAt`, when the owner's machine made the list it shows; the page marks a machine that is not `live` but has one as Offline) and `tasks` (`TeamFeedTask`: a `TeamTask` with its `teamId`

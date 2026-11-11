@@ -1577,6 +1577,37 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   them with `tasks_wait_on`, sets their phase with `tasks_join_initiative`, prioritises, messages and reads them, and
   delegates like any task (Agents manage Shinsa, below). Plans, reviews and merges stay yours: its tool list is every
   task session's, and every gate is human-only as before (Who can change Shinsa).
+- **Shared with a team.** An initiative is one record on its owner's machine; `Initiative.teamIds` lists the teams
+  that see it, written only by you (`initiative.add_to_team`, `initiative.remove_from_team`: Share with a team in the
+  lead task's `•••` menu and ⌘K, `shinsa initiatives add-to-team|remove-from-team`; human-only, since it opens the
+  effort to other people). Ownership stays per task, never per initiative: the lead is owned by whoever made it, and
+  each member by whoever owns it.
+  - **What teammates see.** A shared initiative's lead task is a team task whatever its project (`isSharedLead`), and
+    the team list carries the initiative itself (`TeamListView.initiatives`, `TeamInitiative`: name, description,
+    phases, lead, the report without its run, finished), kept in the signed snapshot like the tasks, so it still shows
+    while your machine is offline. Your own members show to the team only when their own project is in it, so sharing
+    an initiative never shows a task from a project you did not share.
+  - **A teammate's task joins from their machine.** It stays there with its own owner and carries
+    `Task.teamInitiative { teamId, instanceId, initiativeId, phaseId, name }` (`task.join_initiative` with `team`,
+    `task.team_initiative_changed`), from the task's menu, ⌘K (the teammates' initiatives their team sees are listed
+    beside their own) or `shinsa tasks join-initiative`, which also finds an initiative a teammate shared with your
+    team. Only a task the team already sees may join (`initiative_not_shared`), a lead never joins another's, and
+    every task it files inherits the reference, as members inherit their own.
+  - **The lead's machine counts them.** Their `TeamTask` names the initiative, and a watcher on the lead's machine
+    (`TeamMembers`, `apps/engine/src/initiatives/team-members/`) reads the team feeds whenever they change and records
+    each team's members (`initiative.record_team_members`, `initiative.team_members_recorded`, at most 200,
+    `Initiative.teamMembers`: handle, title, owner, stage, phase, open gate). Core diffs them into the lead's
+    milestones like its own members' (joined, plan accepted, gate opened, merged, done, cancelled), so phase progress,
+    the sheet's counts and the lead's digest include them, each named as its owner's task. The lead task's Overview
+    lists their live rows beside yours, switching to the team table (Repository and Owner, `TEAM_TASK_LIST_COLUMNS`)
+    once one is there; a teammate's row opens read-only, as on All tasks. Taking the initiative out of a team, or a
+    member's task leaving it or the team, drops their rows.
+  - **Their agents can message the lead.** `tasks_message` to a lead not on this machine relays to the teammate's
+    machine through the fleet relay, carrying the sender task's handle and title (`fromTeammateTask`); a team member
+    may send it without the team's `message` scope, but only to the lead of an initiative shared with that team
+    (`remote/scope.ts`). The lead reads it as that task's agent, never as you.
+  - **Gates stay with each task's owner.** The lead has no gate tool, and its machine sends nothing but a message to
+    a teammate's machine, so it never closes anyone's gate.
 
 ### The backlog
 
@@ -4141,7 +4172,8 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   Teams, `shinsa projects add-to-team|remove-from-team`). Both are human-only: their surface specs are `humanOnly`
   and core refuses them on your behalf (`human_only`), since they open tasks to other people. A task is in a team when
   its project is (`isTeamTask`, through `resolveTaskProject`), except an automation's home. A task without a project
-  is never shown to a team.
+  is never shown to a team. A shared initiative's lead task is also a team task, and a teammate's own task can join it
+  (Scheduling → Initiatives, Shared with a team).
 - **The team channel** (`TEAM_CHANNEL_PATH`, `/team` on the tunnel; core's `remote/teams.ts`, the engine's
   `remote/teams/service.ts`, `Teams`). A viewer asks app.shinsa.dev for a team connect token
   (`POST /__remote/teams/<team>/connect { instanceId }`, signed in, from a page; `/__remote/machine/teams/<team>/connect`

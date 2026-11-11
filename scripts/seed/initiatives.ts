@@ -1,4 +1,10 @@
-import type { ChatEvent, Initiative, PlanDocument, ShinsaEventInput } from '../../packages/core/src/index.ts';
+import type {
+  ChatEvent,
+  Initiative,
+  InitiativeTeamMember,
+  PlanDocument,
+  ShinsaEventInput,
+} from '../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../kit/time.ts';
 import {
   CHOSEN_BY_YOU,
@@ -34,6 +40,8 @@ const MEMBERS: Record<string, string> = {
 };
 
 const SEED_INITIATIVE_ID = 'initiative-chat-split';
+
+const SEED_TEAM_ID = 'core';
 
 const SEED_LEAD_ID = 'task-chat-split-lead';
 
@@ -106,6 +114,22 @@ function createSeedInitiative(at: number): Initiative {
     leadTaskId: SEED_LEAD_ID,
     createdAt: at,
     updatedAt: at,
+    teamIds: [SEED_TEAM_ID],
+  };
+}
+
+function createSeedTeammateMember(): InitiativeTeamMember {
+  return {
+    teamId: SEED_TEAM_ID,
+    instanceId: 'kai',
+    taskId: 'kai-chat-connection',
+    handle: 'KAI-14',
+    title: 'Show the chat’s connection state in the editor',
+    owner: 'kai',
+    stage: 'building',
+    phaseId: SESSION,
+    gate: null,
+    closedAt: null,
   };
 }
 
@@ -183,6 +207,12 @@ function pushSeedLead(push: (at: number, event: ShinsaEventInput) => void) {
 
 export function pushSeedInitiative(start: number, push: (at: number, event: ShinsaEventInput) => void) {
   push(start, { type: 'initiative.written', initiative: createSeedInitiative(start) });
+  push(NOW - 50 * MINUTE, {
+    type: 'initiative.team_members_recorded',
+    initiativeId: SEED_INITIATIVE_ID,
+    teamId: SEED_TEAM_ID,
+    members: [createSeedTeammateMember()],
+  });
   pushSeedLead(push);
 }
 
