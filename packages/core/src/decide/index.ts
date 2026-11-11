@@ -124,6 +124,7 @@ import {
   deliverSchedule,
   enableSchedule,
   failSchedule,
+  skipSchedule,
   fireSchedule,
   removeOwnSchedule,
   removeSchedule,
@@ -505,6 +506,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return deliverSchedule(decider, command);
     case 'schedule.fail':
       return failSchedule(decider, command);
+    case 'schedule.skip':
+      return skipSchedule(decider, command);
     case 'watch_suggestion.record':
       return recordWatchSuggestion(decider, command);
     case 'watch_suggestion.accept':

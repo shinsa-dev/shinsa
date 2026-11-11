@@ -170,6 +170,17 @@ describe('when a Slack account last started work on this machine', () => {
     expect(resolveSlackLastUsedAt(state, { teamId: 'T2', userId: 'U1' })).toBe(4_000);
   });
 
+  test('leaves out a task an automation filed from that person’s channel message', () => {
+    const state = stateWith({
+      mentioned: { teamId: 'T1', userId: 'U1' },
+      filed: { teamId: 'T1', userId: 'U1' },
+    });
+    const [, filed] = Object.values(state.tasks).filter((task) => task.slack);
+    if (!filed) throw new Error('missing task');
+    const tasks = { ...state.tasks, [filed.id]: { ...filed, scheduleId: 's1' } };
+    expect(resolveSlackLastUsedAt({ ...state, tasks }, { teamId: 'T1', userId: 'U1' })).toBe(1_000);
+  });
+
   test('is null for an account that has not started a task here', () => {
     const state = stateWith({ typed: null, other: { teamId: 'T1', userId: 'U2' } });
     expect(resolveSlackLastUsedAt(state, { teamId: 'T1', userId: 'U1' })).toBeNull();

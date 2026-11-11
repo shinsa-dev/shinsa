@@ -39,6 +39,7 @@ export {
   listSlackChannelSchedules,
   listSlackChannelWatches,
   resolveSlackChannelTrigger,
+  resolveSlackUpdatesTrigger,
   SLACK_NOT_CONNECTED,
   type SlackChannelTrigger,
 } from './channels.ts';
@@ -52,6 +53,7 @@ export {
 } from './contract.ts';
 export {
   parseSlackEvaluation,
+  resolveSlackFilterSubject,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
   serializeSlackEvaluationPrompt,

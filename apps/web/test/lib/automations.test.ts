@@ -153,7 +153,14 @@ describe('a watch’s page', () => {
       plain,
       createSchedule({
         id: 'k',
-        trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'C1',
+          channelName: 'alerts',
+          threadUpdates: true,
+        },
         nextRunAt: null,
       })
     );
@@ -161,7 +168,34 @@ describe('a watch’s page', () => {
       ['IconSlack', 'Trigger', 'Starts or messages a task for each new message in its Slack channel'],
       ['IconPlayCircle', 'On', null],
       ['IconSlack', 'When a message is posted in #alerts', 'Acme on Slack'],
+      [
+        'IconBubbleText',
+        'Posts updates in Slack',
+        'A task it files gets its status, result and “Merged” in the message’s thread.',
+      ],
     ]);
+    const quiet = createSchedule({
+      id: 'q',
+      trigger: {
+        kind: 'slack',
+        teamId: 'T1',
+        teamName: 'Acme',
+        channelId: 'C1',
+        channelName: 'alerts',
+        threadUpdates: false,
+      },
+      nextRunAt: null,
+    });
+    expect(
+      listAutomationFacts(plain, quiet)
+        .filter((fact) => fact.key === 'updates')
+        .map((fact) => [fact.label, fact.hint])
+    ).toEqual([['No updates in Slack', 'Tasks it files are not posted in Slack.']]);
+    expect(
+      listAutomationFacts(plain, { ...quiet, target: { kind: 'task', taskId: 't1' } }).some(
+        (fact) => fact.key === 'updates'
+      )
+    ).toBe(false);
     expect(
       facts({ runs: [{ at: NOW, outcome: 'sent', taskId: null, deliveryId: null, detail: null }] })
     ).toEqual(['Schedule', 'On', 'Every hour', 'Next run', 'Last run']);

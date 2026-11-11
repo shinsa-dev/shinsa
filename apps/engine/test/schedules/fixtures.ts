@@ -1,5 +1,9 @@
 import { join } from 'node:path';
 import { listActiveRuns, type ScheduleTrigger } from '@shinsa/core';
+import { Effect, Layer } from 'effect';
+import type { QuickJson } from '../../src/agents/quick/schema.ts';
+import { QuickCalls } from '../../src/agents/quick/service.ts';
+import { ScheduleFilter } from '../../src/schedules/filter/service.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir } from '../helpers/index.ts';
@@ -66,4 +70,10 @@ export async function addSchedule(
   const written = events.find((event) => event.type === 'schedule.written');
   if (!written) throw new Error('no schedule');
   return written.schedule;
+}
+
+export function createTestFilter(ask: QuickJson = () => Effect.succeed(null)) {
+  return ScheduleFilter.layer.pipe(
+    Layer.provide(Layer.succeed(QuickCalls, QuickCalls.of({ classify: ask, write: ask })))
+  );
 }
