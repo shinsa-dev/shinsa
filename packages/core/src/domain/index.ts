@@ -215,6 +215,7 @@ export {
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
   resolveAutoPace,
+  resolveAutoPaceResets,
   isSharedMachine,
   isSharedWithTeam,
   resolveSharedTeams,

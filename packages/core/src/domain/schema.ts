@@ -137,6 +137,7 @@ export const SettingsPatch = Strict(
     autopilot: Schema.optionalKey(AutopilotPatch),
     watchdogsIgnoreUsageLimits: Schema.optionalKey(Bool),
     autoPace: Schema.optionalKey(Bool),
+    autoPaceResets: Schema.optionalKey(Bool),
     sharedTeams: Schema.optionalKey(List(Id())),
   } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
   'Settings',

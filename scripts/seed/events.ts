@@ -29,9 +29,17 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
       taskUsageLimit: 10,
       autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, merge: 'low_risk', urgent: 'escalate_then_merge' },
       autoPace: true,
+      autoPaceResets: true,
     },
   });
-  push(NOW - HOUR, { type: 'usage.pace_recorded', provider: 'claude', pace: 45 });
+  push(NOW - HOUR, {
+    type: 'usage.pace_recorded',
+    provider: 'claude',
+    pace: 45,
+    resetPace: 72,
+    endingPace: 58,
+    resetEndsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
+  });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);
   const runEnds = new Map(

@@ -861,9 +861,41 @@ describe('recording the plan each account is on', () => {
 });
 
 describe('recording the safe pace of each provider', () => {
-  function recordPace(harness: Harness, pace: number | null, provider = 'claude') {
-    return harness.send({ type: 'usage.pace_recorded', provider, pace });
+  function recordPace(
+    harness: Harness,
+    pace: number | null,
+    provider = 'claude',
+    resets: { resetPace?: number | null; endingPace?: number | null; resetEndsAt?: number | null } = {}
+  ) {
+    return harness.send({
+      type: 'usage.pace_recorded',
+      provider,
+      pace,
+      resetPace: resets.resetPace ?? pace,
+      endingPace: resets.endingPace ?? pace,
+      resetEndsAt: resets.resetEndsAt ?? null,
+    });
   }
+
+  test('records the pace that counts resets and when the soonest reset ends, and again when either moves', () => {
+    const harness = createHarness();
+    recordPace(harness, 40, 'claude', { resetPace: 90, resetEndsAt: 5_000 });
+    expect(harness.state.usagePaces.claude).toMatchObject({ pace: 40, resetPace: 90, resetEndsAt: 5_000 });
+    expect(recordPace(harness, 40, 'claude', { resetPace: 90.5, resetEndsAt: 5_000 }).events).toHaveLength(0);
+    recordPace(harness, 40, 'claude', { resetPace: 120, resetEndsAt: 5_000 });
+    expect(harness.state.usagePaces.claude?.resetPace).toBe(120);
+    recordPace(harness, 40, 'claude', { resetPace: 120, resetEndsAt: 9_000 });
+    expect(harness.state.usagePaces.claude?.resetEndsAt).toBe(9_000);
+    recordPace(harness, 40, 'claude', { resetPace: 120, endingPace: 70, resetEndsAt: 9_000 });
+    expect(harness.state.usagePaces.claude?.endingPace).toBe(70);
+    recordPace(harness, 60, 'claude', { resetPace: Number.NaN, endingPace: Number.NaN });
+    expect(harness.state.usagePaces.claude).toMatchObject({
+      pace: 60,
+      resetPace: 60,
+      endingPace: 60,
+      resetEndsAt: null,
+    });
+  });
 
   test('records a provider’s pace, and again only once it moves by a whole point', () => {
     const harness = createHarness();

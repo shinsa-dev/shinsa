@@ -671,6 +671,9 @@ export interface TaskSnooze {
 export interface RecordedPace {
   provider: string;
   pace: number;
+  resetPace: number;
+  endingPace: number;
+  resetEndsAt: number | null;
   at: number;
 }
 
