@@ -1630,7 +1630,7 @@ suggestion too, queues its round, which starts once you close the answer): core 
 Agent, an answerer, an investigator or a researcher; never the reviewer, a watchdog's check or a watch's read,
 which can only report) is told it once, at the tail of its prompt
 after your own words ("While this task waited for the human, these messages were left for you…", each "Sent by an
-agent on the human’s behalf: …", "Sent by a schedule: …" or a Slack mention's own "Christo in Slack: …"; `Decider.startRun`, `task.messages_told`). The tail
+agent on the human’s behalf: …", "Sent by a schedule: …" or a Slack mention's own "<name> in Slack: …"; `Decider.startRun`, `task.messages_told`). The tail
 comes after the house rules, so a resumed session that already holds them gets it too: the fix your reply at a
 review or merge gate starts, a retry at a failure gate, the next phase. Until it is told, `resolveLaterMessages`
 leaves it out, so no brief repeats it; after, the round's brief lists it with the rest. The on-your-behalf record
@@ -4781,7 +4781,7 @@ engine ──its watched channels, on every change──►
   plan, a review, a merge, a failure; `isHeldForYou`, the rule a message sent on your behalf follows), the mention
   closes nothing, so it never answers a question, revises a plan or sends a review back: it is recorded in its chat
   and kept for its next agent (`recordHeldMessage`, `task.messaged` with `kept` and `sender: 'slack'`), which is told
-  it once, as its author wrote it ("Christo in Slack: …", Messages, above), and it gets 📥 `inbox_tray` instead
+  it once, as its author wrote it ("<name> in Slack: …", Messages, above), and it gets 📥 `inbox_tray` instead
   (`held`). Decide the gate with the card's buttons, or in Shinsa.
 - **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the mention gets
   ⏳ at once (`hourglass_flowing_sand`, Reactions below), so you see it was picked up, and the machine asks
