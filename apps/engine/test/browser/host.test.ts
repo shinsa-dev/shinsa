@@ -7,6 +7,7 @@ import {
   BrowserHostSettings,
   CHROME_EXECUTABLES,
   DevToolsActivePort,
+  PROFILE_IN_USE_MESSAGE,
   SignInUrl,
 } from '../../src/browser/host/schema.ts';
 import { BrowserHost } from '../../src/browser/host/service.ts';
@@ -149,8 +150,9 @@ describe('the browser host', () => {
         const host = yield* BrowserHost;
         const scope = yield* Scope.make();
         yield* Scope.provide(host.acquire(SHINSA), scope);
+        const headless = chrome.pidOf(SHINSA);
         yield* host.openWindow(SHINSA, SIGN_IN);
-        yield* awaitPid(chrome, SHINSA);
+        yield* awaitPid(chrome, SHINSA, headless);
         yield* host.openWindow(SHINSA, SIGN_IN);
         yield* awaitLaunches(chrome, 3);
         const refusal = yield* Effect.flip(host.acquire(SHINSA));
@@ -244,5 +246,66 @@ describe('the browser host', () => {
       })
     );
     for (const pid of pids) expect(isAlive(pid)).toBe(false);
+  });
+
+  test('stops a Chrome an earlier engine left on the profile, then starts its own', async () => {
+    const chrome = createFakeChrome();
+    const orphan = chrome.startOrphan(SHINSA);
+    await Effect.runPromise(awaitPid(chrome, SHINSA));
+    const endpoint = await runHost(
+      chrome,
+      BrowserHost.use((host) => host.acquire(SHINSA))
+    );
+    expect(isAlive(orphan)).toBe(false);
+    expect(endpoint.webSocketUrl).not.toContain(`fake-${orphan}`);
+    expect(chrome.launches()).toHaveLength(2);
+  });
+
+  test('names the process when something else holds the profile, and starts nothing', async () => {
+    const chrome = createFakeChrome();
+    const other = Bun.spawn(['sleep', '30'], { stdio: ['ignore', 'ignore', 'ignore'] });
+    chrome.lockProfile(SHINSA, other.pid);
+    const error = await runHost(chrome, Effect.flip(BrowserHost.use((host) => host.acquire(SHINSA))));
+    other.kill();
+    expect(error).toMatchObject({
+      reason: 'profile_in_use',
+      message: `Another program (process ${other.pid}) has this project's browser folder open. Quit it and try again.`,
+    });
+    expect(chrome.launches()).toHaveLength(0);
+  });
+
+  test('leaves a lock whose process is gone to Chrome', async () => {
+    const chrome = createFakeChrome();
+    const gone = Bun.spawn(['true']);
+    await gone.exited;
+    chrome.lockProfile(SHINSA, gone.pid);
+    await runHost(
+      chrome,
+      BrowserHost.use((host) => host.acquire(SHINSA))
+    );
+    expect(chrome.launches()).toHaveLength(1);
+  });
+
+  test('starts again once when Chrome finds the profile in use', async () => {
+    const chrome = createFakeChrome();
+    chrome.busyOnce();
+    const mode = await runHost(
+      chrome,
+      Effect.gen(function* () {
+        const host = yield* BrowserHost;
+        yield* host.acquire(SHINSA);
+        return yield* host.resolveMode(SHINSA);
+      })
+    );
+    expect(mode).toBe('headless');
+    expect(chrome.launches()).toHaveLength(2);
+  });
+
+  test('says the profile is in use when Chrome still refuses it after starting again', async () => {
+    const chrome = createFakeChrome();
+    chrome.busy();
+    const error = await runHost(chrome, Effect.flip(BrowserHost.use((host) => host.acquire(SHINSA))));
+    expect(error).toMatchObject({ reason: 'profile_in_use', message: PROFILE_IN_USE_MESSAGE });
+    expect(chrome.launches()).toHaveLength(2);
   });
 });
