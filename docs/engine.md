@@ -2601,8 +2601,9 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   timeout never retries a request that is still being judged; the filter and the delivery then run in a fiber
   of their own (`WebhookReceiver.settle` waits for them). The answer therefore says the request was taken, not
   what came of it: the schedule's run says that, as a sent run, or a skipped one for a request its text does not
-  cover. A delivery is `schedule.deliver` with command id `webhook:<id>:<delivery>`; one the log refuses after
-  the answer is logged ("[Webhooks] A delivery could not be recorded"), and one still waiting on the filter when
+  cover. A delivery is `schedule.deliver` with command id `webhook:<id>:<delivery>`; one core refuses after
+  the answer (a `DomainError`, such as a task to message that has closed) is logged ("[Webhooks] A delivery could not be recorded") and written as a failed run with core's
+  reason (`schedule.fail`, command id `webhook:<id>:<delivery>:fail`), as a Slack channel message's is; one the log itself cannot take is only logged, and one still waiting on the filter when
   the engine stops is lost.
 - **The automation decides whether to act: the filter** (`packages/core/src/schedules/filter.ts`,
   `apps/engine/src/schedules/filter/`: `ScheduleFilter`). It is a rule of every automation that reacts to
@@ -2636,7 +2637,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
   is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--no-slack-updates` or
   `--slack-updates=false` on the command line, whose boolean flags take no separate value), which
-  only goes with `slack_channel`, sets the trigger's `threadUpdates`. Left out, a new automation gets true and
+  goes with `slack_channel`, or alone with `schedule_id` (`--id`) to change a stored Slack channel trigger without naming the channel or asking Slack again
+  (`resolveSlackUpdatesTrigger`; refused on any other trigger, or with no schedule named), sets the trigger's `threadUpdates`. Left out, a new automation gets true and
   one that is changed keeps what it had (`resolveSlackChannelTrigger` is given the stored trigger), so naming
   the channel again never turns the updates back on by itself. Core checks the trigger it is given
   (`assertSlackChannel`: Slack ids, names of at most 120 characters, `SCHEDULE_LIMITS.slackName`). A forwarded message (`POST

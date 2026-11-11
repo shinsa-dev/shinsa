@@ -30,6 +30,7 @@ describe('reading set_schedule', () => {
         text: null,
         trigger: null,
         slackChannel: null,
+        slackUpdates: null,
         target: null,
         source: null,
         enabled: null,
@@ -108,7 +109,11 @@ describe('reading set_schedule', () => {
     expect(read({ slack_channel: 'alerts', slack_updates: false })).toMatchObject({
       value: { slackChannel: { channel: 'alerts', updates: false } },
     });
-    expect(read({ every_minutes: 5 })).toMatchObject({ value: { slackChannel: null } });
+    expect(read({ every_minutes: 5 })).toMatchObject({ value: { slackChannel: null, slackUpdates: null } });
+    expect(read({ schedule_id: 'sch-1', slack_updates: false })).toMatchObject({
+      ok: true,
+      value: { trigger: null, slackChannel: null, slackUpdates: false },
+    });
   });
 
   test('targets: a new task, a question, another task', () => {
@@ -148,7 +153,8 @@ describe('reading set_schedule', () => {
     ['a channel and a clock', { slack_channel: '#alerts', every_minutes: 5 }, 'not several'],
     ['a channel that is only a #', { slack_channel: '#' }, 'must name a channel, such as #alerts'],
     ['a channel that is empty', { slack_channel: '' }, 'slack_channel'],
-    ['updates without a channel', { every_minutes: 5, slack_updates: false }, 'slack_updates only goes with'],
+    ['updates on a clock', { every_minutes: 5, slack_updates: false }, 'not with another trigger'],
+    ['updates alone on a new automation', { slack_updates: false }, 'or alone with schedule_id'],
     [
       'a workspace without a channel',
       { every_minutes: 5, slack_workspace: 'Acme' },

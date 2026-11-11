@@ -3,6 +3,7 @@ import {
   listSlackChannelSchedules,
   listSlackChannelWatches,
   resolveSlackChannelTrigger,
+  resolveSlackUpdatesTrigger,
   type ScheduleTrigger,
   type SlackChannel,
 } from '../../src/index.ts';
@@ -44,6 +45,27 @@ describe('naming a Slack channel for an automation', () => {
       resolveSlackChannelTrigger([FEEDBACK, ALERTS], { channel: 'c1', workspace: null, updates: null }, null)
         .trigger
     ).toEqual(trigger);
+  });
+
+  test('updates alone change a stored Slack trigger and nothing else', () => {
+    const stored = {
+      kind: 'slack' as const,
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+      threadUpdates: true,
+    };
+    expect(resolveSlackUpdatesTrigger(stored, false)).toEqual({
+      trigger: { ...stored, threadUpdates: false },
+      problem: null,
+    });
+    for (const other of [null, { kind: 'interval' as const, everyMinutes: 5 }]) {
+      expect(resolveSlackUpdatesTrigger(other, false)).toEqual({
+        trigger: null,
+        problem: 'slack_updates only changes an automation on a Slack channel, and this one is not.',
+      });
+    }
   });
 
   test('posts updates in the thread unless the automation turns them off', () => {

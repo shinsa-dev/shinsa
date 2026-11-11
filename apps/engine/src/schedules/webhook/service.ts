@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { SCHEDULE_FILTER_SKIPPED, type Schedule } from '@shinsa/core';
+import { SCHEDULE_FILTER_SKIPPED, SCHEDULE_LIMITS, type Schedule } from '@shinsa/core';
 import { Clock, Context, Effect, FiberSet, Layer, Option, Ref } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { SecretStore } from '../../secrets/index.ts';
@@ -127,15 +127,29 @@ export class WebhookReceiver extends Context.Service<
               detail: SCHEDULE_FILTER_SKIPPED,
               replayKey,
             } as const);
-        yield* engine
-          .dispatch(command, { id: applies ? id : `${id}:skip` })
-          .pipe(
-            Effect.catch((failure) =>
-              Effect.logWarning('[Webhooks] A delivery could not be recorded').pipe(
-                Effect.annotateLogs({ scheduleId: schedule.id, deliveryId, error: failure.message })
+        const logFailure = (failure: { readonly message: string }) =>
+          Effect.logWarning('[Webhooks] A delivery could not be recorded').pipe(
+            Effect.annotateLogs({ scheduleId: schedule.id, deliveryId, error: failure.message })
+          );
+        yield* engine.dispatch(command, { id: applies ? id : `${id}:skip` }).pipe(
+          Effect.catchTag('DomainError', (refusal) =>
+            logFailure(refusal).pipe(
+              Effect.andThen(
+                engine.dispatch(
+                  {
+                    type: 'schedule.fail',
+                    scheduleId: schedule.id,
+                    dueAt: null,
+                    deliveryId,
+                    detail: refusal.message.slice(0, SCHEDULE_LIMITS.detail),
+                  },
+                  { id: `${id}:fail` }
+                )
               )
             )
-          );
+          ),
+          Effect.catch(logFailure)
+        );
       });
 
       const deliver = Effect.fn('WebhookReceiver.deliver')(function* (

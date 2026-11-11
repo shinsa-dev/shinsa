@@ -129,7 +129,21 @@ describe('writing a schedule', () => {
     ).toMatchObject({ threadUpdates: true });
     await expect(
       write(['--message', 'x', '--new-task', '--every-minutes', '5', '--slack-updates=false'])
-    ).rejects.toThrow('slack_updates only goes with slack_channel');
+    ).rejects.toThrow('slack_updates only goes with a Slack channel automation');
+    expect((await write(['--id', 'sch-1', '--slack-updates'], undefined, stored)).command.trigger).toEqual({
+      kind: 'slack',
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+      threadUpdates: true,
+    });
+    await expect(write(['--id', 'sch-404', '--no-slack-updates'], undefined, stored)).rejects.toThrow(
+      'slack_updates only changes an automation on a Slack channel'
+    );
+    await expect(write(['--message', 'x', '--new-task', '--no-slack-updates'])).rejects.toThrow(
+      'or alone with schedule_id'
+    );
     await expect(write(words, undefined, channels)).rejects.toThrow(
       '#alerts is in several Slack workspaces: Acme, Beta. Name the workspace too.'
     );

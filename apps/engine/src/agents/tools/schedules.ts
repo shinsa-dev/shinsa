@@ -145,7 +145,7 @@ export const SCHEDULE_TOOL_SPECS = {
         slack_updates: {
           type: 'boolean',
           description:
-            'With slack_channel: false files tasks without posting in Slack. Left out or true, a task it files gets Shinsa’s reaction on the message and its status card, result and “Merged” in the message’s thread.',
+            'With slack_channel, or alone with schedule_id to change a Slack channel automation: false files tasks without posting in Slack. Left out on a new one or true, a task it files gets Shinsa’s reaction on the message and its status card, result and “Merged” in the message’s thread.',
         },
         enabled: { type: 'boolean', description: 'false pauses it, true resumes it.' },
         max_runs: {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
-import { SCHEDULE_FILTER_SKIPPED, SCHEDULE_FILTER_SYSTEM, SCHEDULE_LIMITS } from '@shinsa/core';
+import { DomainError, SCHEDULE_FILTER_SKIPPED, SCHEDULE_FILTER_SYSTEM, SCHEDULE_LIMITS } from '@shinsa/core';
 import { Duration, Effect, Layer } from 'effect';
 import type { QuickJson } from '../../src/agents/quick/schema.ts';
 import { EngineStopped } from '../../src/runtime/engine/schema.ts';
@@ -344,6 +344,25 @@ describe('receiving a webhook', () => {
       { scheduleId: schedule.id, deliveryId: 'd1', error: 'disk full' },
     ]);
     expect(runsOf(world, schedule.id)).toEqual([]);
+  });
+
+  test('a delivery core refuses after the answer is recorded as a failed run', async () => {
+    const { world, schedule, receiver, url, replaceDispatch } = await hooked();
+    replaceDispatch((command, options) =>
+      command.type === 'schedule.deliver'
+        ? Effect.fail(new DomainError({ code: 'task_settled', message: 'The task it messages is finished.' }))
+        : world.engine.core.dispatch(command, options)
+    );
+    const logs = captureLogs();
+    const response = await send(receiver, post(url, '{}'));
+    logs.restore();
+    expect((await readJson(response)).outcome).toBe('accepted');
+    expect(logs.fieldsOf('[Webhooks] A delivery could not be recorded')).toEqual([
+      { scheduleId: schedule.id, deliveryId: 'd1', error: 'The task it messages is finished.' },
+    ]);
+    expect(runsOf(world, schedule.id)).toMatchObject([
+      { outcome: 'failed', taskId: null, deliveryId: 'd1', detail: 'The task it messages is finished.' },
+    ]);
   });
 
   test('a body that cannot be read answers with an error and is logged', async () => {

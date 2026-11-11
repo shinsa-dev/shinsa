@@ -1206,7 +1206,7 @@ Every task agent's tool: `schedules_write`. Sends `schedule.write`.
 | `--replay-key` | text, optional | With --webhook: a template that names a delivery, so a repeat starts nothing. |
 | `--slack-channel` | text, optional | Run for each new message in this Slack channel, such as #alerts. Invite @Shinsa to the channel first. |
 | `--slack-workspace` | text, optional | With --slack-channel: the Slack workspace, when the channel is in several. |
-| `--slack-updates` | boolean, optional | With --slack-channel: false files tasks without posting in Slack. Otherwise a filed task gets its status in the message’s thread. |
+| `--slack-updates` | boolean, optional | With --slack-channel, or alone with --id: false (--no-slack-updates) files tasks without posting in Slack. Otherwise a filed task gets its status in the message’s thread. |
 | `--new-task` | boolean, optional | Start a new task on each run. |
 | `--repo` | text, optional | With --new-task: the repository (name or id). |
 | `--priority` | choice, optional | With --new-task: its priority. |

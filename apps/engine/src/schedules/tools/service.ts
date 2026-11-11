@@ -6,6 +6,7 @@ import {
   listProjectRepos,
   listSchedules,
   resolveSlackChannelTrigger,
+  resolveSlackUpdatesTrigger,
   type Schedule,
   type ScheduleRequest,
   type ShinsaEvent,
@@ -182,12 +183,11 @@ export class ScheduleTools extends Context.Service<ScheduleTools, ScheduleToolsS
           request: ScheduleRequest,
           stored: ScheduleTrigger | null
         ) {
-          if (request.slackChannel === null) return request.trigger;
-          const { trigger, problem } = resolveSlackChannelTrigger(
-            yield* options.slackChannels,
-            request.slackChannel,
-            stored
-          );
+          if (request.slackChannel === null && request.slackUpdates === null) return request.trigger;
+          const { trigger, problem } =
+            request.slackChannel === null
+              ? resolveSlackUpdatesTrigger(stored, request.slackUpdates ?? true)
+              : resolveSlackChannelTrigger(yield* options.slackChannels, request.slackChannel, stored);
           return trigger ?? (yield* refuse(problem));
         });
 

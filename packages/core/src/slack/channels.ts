@@ -61,6 +61,18 @@ export function resolveSlackChannelTrigger(
   };
 }
 
+export function resolveSlackUpdatesTrigger(
+  stored: ScheduleTrigger | null,
+  threadUpdates: boolean
+): SlackChannelResolution {
+  if (stored?.kind !== 'slack')
+    return {
+      trigger: null,
+      problem: 'slack_updates only changes an automation on a Slack channel, and this one is not.',
+    };
+  return { trigger: { ...stored, threadUpdates }, problem: null };
+}
+
 export function listSlackChannelWatches(state: ShinsaState): SlackChannelWatch[] {
   const watches = new Map<string, SlackChannelWatch>();
   for (const schedule of Object.values(state.schedules)) {

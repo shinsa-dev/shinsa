@@ -14,6 +14,7 @@ import {
   ScheduleOptions,
   SecretRequestInput,
   SlackChannelChoice,
+  SlackUpdatesChoice,
   TargetChoice,
   Webhook,
   WHEN_KEYS,
@@ -32,6 +33,7 @@ export interface ScheduleRequest {
   text: string | null;
   trigger: ScheduleTrigger | null;
   slackChannel: SlackChannelRequest | null;
+  slackUpdates: boolean | null;
   target: ScheduleTargetInput | null;
   source: string | null;
   enabled: boolean | null;
@@ -59,6 +61,7 @@ function readWebhook(reader: HandOverReader, value: unknown): TriggerRead {
     },
     secretRef: signature?.secret_ref ?? null,
     slackChannel: null,
+    slackUpdates: null,
   };
 }
 
@@ -70,10 +73,24 @@ function readSlackChannel(reader: HandOverReader, input: Record<string, unknown>
   } = reader.read(SlackChannelChoice, input, []);
   const name = channel.replace(/^#/, '').trim();
   if (!name) reader.refuse('slack_channel must name a channel, such as #alerts.');
-  return { trigger: null, secretRef: null, slackChannel: { channel: name, workspace, updates } };
+  return {
+    trigger: null,
+    secretRef: null,
+    slackChannel: { channel: name, workspace, updates },
+    slackUpdates: null,
+  };
 }
 
-const NO_TRIGGER: TriggerRead = { trigger: null, secretRef: null, slackChannel: null };
+const NO_TRIGGER: TriggerRead = { trigger: null, secretRef: null, slackChannel: null, slackUpdates: null };
+
+function readSlackUpdates(reader: HandOverReader, input: Record<string, unknown>): TriggerRead {
+  const { slack_updates: slackUpdates } = reader.read(SlackUpdatesChoice, input, []);
+  if (input.schedule_id === undefined || input.schedule_id === null)
+    reader.refuse(
+      'slack_updates goes with slack_channel, or alone with schedule_id to change a Slack channel automation.'
+    );
+  return { ...NO_TRIGGER, slackUpdates };
+}
 
 function readDaily(reader: HandOverReader, input: Record<string, unknown>): ScheduleTrigger {
   const { daily_at: raw, weekdays } = reader.read(DailyAt, input, []);
@@ -85,6 +102,7 @@ interface TriggerRead {
   trigger: ScheduleTrigger | null;
   secretRef: string | null;
   slackChannel: SlackChannelRequest | null;
+  slackUpdates: boolean | null;
 }
 
 function readTrigger(reader: HandOverReader, input: Record<string, unknown>, now: number): TriggerRead {
@@ -92,7 +110,8 @@ function readTrigger(reader: HandOverReader, input: Record<string, unknown>, now
     (key) => input[key] !== undefined && input[key] !== null && input[key] !== false
   );
   const [when] = given;
-  if (when === undefined) return NO_TRIGGER;
+  const updatesGiven = input.slack_updates !== undefined && input.slack_updates !== null;
+  if (when === undefined) return updatesGiven ? readSlackUpdates(reader, input) : NO_TRIGGER;
   if (given.length > 1) {
     reader.refuse(`Give one of ${WHEN_KEYS.join(', ')}, not several.`);
     return NO_TRIGGER;
@@ -100,8 +119,8 @@ function readTrigger(reader: HandOverReader, input: Record<string, unknown>, now
   if (input.weekdays !== undefined && when !== 'daily_at') reader.refuse('weekdays only go with daily_at.');
   if (input.slack_workspace !== undefined && input.slack_workspace !== null && when !== 'slack_channel')
     reader.refuse('slack_workspace only goes with slack_channel.');
-  if (input.slack_updates !== undefined && input.slack_updates !== null && when !== 'slack_channel')
-    reader.refuse('slack_updates only goes with slack_channel: name the channel again to change it.');
+  if (updatesGiven && when !== 'slack_channel')
+    reader.refuse('slack_updates only goes with a Slack channel automation, not with another trigger.');
   switch (when) {
     case 'in_minutes': {
       const minutes = reader.read(InMinutes, input.in_minutes, ['in_minutes']);
@@ -144,7 +163,7 @@ export function validateScheduleRequest(
   now: number
 ): Validation<ScheduleRequest> {
   const reader = new HandOverReader();
-  const { trigger, secretRef, slackChannel } = readTrigger(reader, input, now);
+  const { trigger, secretRef, slackChannel, slackUpdates } = readTrigger(reader, input, now);
   const naming = reader.read(ScheduleNaming, input, []);
   const target = readTarget(reader, input);
   const options = reader.read(ScheduleOptions, input, []);
@@ -154,6 +173,7 @@ export function validateScheduleRequest(
     text: naming.message,
     trigger,
     slackChannel,
+    slackUpdates,
     target,
     source: options.source,
     enabled: options.enabled,

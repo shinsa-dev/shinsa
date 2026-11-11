@@ -129,6 +129,8 @@ export const SlackChannelChoice = HandOverRecord({
   slack_updates: OrAbsent(Flag),
 });
 
+export const SlackUpdatesChoice = HandOverRecord({ slack_updates: Flag });
+
 export const TargetChoice = HandOverRecord({
   new_task: Flag,
   task_id: OptionalText(SCHEDULE_LIMITS.reference),
