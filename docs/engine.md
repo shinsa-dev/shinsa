@@ -2723,11 +2723,36 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   headers and query values (authorization, cookies, anything naming a token, secret, key, signature or password)
   are redacted whether the template names one or takes them all. An optional `replay_key` template, which reads
   the values as they are because only its hash is kept, dedupes deliveries for a week (500 keys per schedule): a
-  repeat answers 202 `duplicate` and starts nothing. A delivery is `schedule.deliver` with command id
-  `webhook:<id>:<delivery>`; the answer is 202 with the delivery id.
+  repeat answers 202 `duplicate` and starts nothing. Every other request that passes those checks is answered
+  202 `accepted` with the delivery id at once, before the filter (below) is asked, so a sender with a short
+  timeout never retries a request that is still being judged; the filter and the delivery then run in a fiber
+  of their own (`WebhookReceiver.settle` waits for them). The answer therefore says the request was taken, not
+  what came of it: the schedule's run says that, as a sent run, or a skipped one for a request its text does not
+  cover. A delivery is `schedule.deliver` with command id `webhook:<id>:<delivery>`; one core refuses after
+  the answer (a `DomainError`, such as a task to message that has closed) is logged ("[Webhooks] A delivery could not be recorded") and written as a failed run with core's
+  reason (`schedule.fail`, command id `webhook:<id>:<delivery>:fail`), as a Slack channel message's is; one the log itself cannot take is only logged, and one still waiting on the filter when
+  the engine stops is lost.
+- **The automation decides whether to act: the filter** (`packages/core/src/schedules/filter.ts`,
+  `apps/engine/src/schedules/filter/`: `ScheduleFilter`). It is a rule of every automation that reacts to
+  something arriving, not of one trigger: before a webhook request or a Slack channel message runs a schedule,
+  the engine asks the classifier quick call whether the schedule's text applies to what arrived
+  (`SCHEDULE_FILTER_SYSTEM`, a fixed system prompt; in the user prompt the text, then what arrived fenced in a
+  nonce-tagged element as data, `serializeScheduleFilterPrompt`: a Slack message under "From <author>:", a bot's
+  name with "(bot)", so a text limited to one author can be judged (`resolveSlackFilterSubject`), or the webhook
+  request with credentials redacted (`resolveWebhookFilterSubject`), cut to 8,000 characters; the answer `file`
+  or `skip`, `parseScheduleFilter`). `skip` only when the text plainly limits itself to a kind this one is not
+  ("only bugs", "only failed deploys", "only the web app") or what arrived is plainly nothing to act on, a
+  report that all is well included; `file` when it sets no limit or the model is unsure. A skip is
+  `schedule.skip`, which records a skipped run ("The automation did not apply to this, so nothing was
+  started.") with the delivery's replay key and does nothing else: no task, no message, no run count, nothing in
+  Slack. A classifier that does not answer within 8 seconds (`FILTER_TIMEOUT`), or answers anything else, files, so an outage never drops an alert. The call is a few hundred
+  tokens a delivery. A watch is never asked: its read is what decides which reports become tasks (below), which
+  is also how an automation on a clock files nothing when all is well. A schedule on a clock with no `source`
+  has nothing to judge before it runs, so it runs each time.
 - **Slack channel triggers** (`packages/core/src/slack/channels.ts`, `apps/engine/src/slack/service.ts`; the flow
   and what app.shinsa.dev keeps are in Slack, below). A schedule whose trigger is `{kind: 'slack', teamId,
-  teamName, channelId, channelName}` runs once for each new top-level message in that channel. An agent passes
+  teamName, channelId, channelName, threadUpdates}` runs once for each new top-level message in that channel
+  that its text applies to (the filter, below). An agent passes
   `slack_channel` (a name, with or without `#`, or a channel id) and optionally `slack_workspace` to `set_schedule`
   or `schedules_write` (`shinsa schedules write --slack-channel #alerts`); core reads them as a `SlackChannelRequest`
   beside the other ways to say when (exactly one of them, and `slack_workspace` only with `slack_channel`), and
@@ -2737,7 +2762,12 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   to do: remote access off (`SLACK_NOT_CONNECTED`), no channel at all, which is Slack not linked or @Shinsa
   invited nowhere ("Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa
   to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
-  is in several linked workspaces ("Name the workspace too."). Core checks the trigger it is given
+  is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--no-slack-updates` or
+  `--slack-updates=false` on the command line, whose boolean flags take no separate value), which
+  goes with `slack_channel`, or alone with `schedule_id` (`--id`) to change a stored Slack channel trigger without naming the channel or asking Slack again
+  (`resolveSlackUpdatesTrigger`; refused on any other trigger, or with no schedule named), sets the trigger's `threadUpdates`. Left out, a new automation gets true and
+  one that is changed keeps what it had (`resolveSlackChannelTrigger` is given the stored trigger), so naming
+  the channel again never turns the updates back on by itself. Core checks the trigger it is given
   (`assertSlackChannel`: Slack ids, names of at most 120 characters, `SCHEDULE_LIMITS.slackName`). A forwarded message (`POST
   /api/slack/messages`, signed like a mention) is delivered to every enabled schedule on that workspace and
   channel (`listSlackChannelSchedules`) as `schedule.deliver` with command id `slack-message:<schedule>:<event
@@ -2748,7 +2778,26 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   is fenced too, since a bot's is free text set by whoever posts to an incoming webhook. Each schedule takes at most 60 a
   minute, the webhook's own limit; the first message over it is recorded as a failed run ("More than 60
   messages a minute were posted, so the rest of this minute's were skipped.") and the rest of that minute are
-  dropped. A delivery core refuses is a failed run with its reason (`schedule.fail`). A message for a channel no
+  dropped. A delivery core refuses is a failed run with its reason (`schedule.fail`).
+  **The automation's text decides whether a message is acted on** (the filter, below): a message it does not
+  cover is `schedule.skip` (command id `slack-message:<schedule>:<event id>:skip`) with the message's replay key,
+  and nothing reaches Slack. A message whose replay key the schedule already holds is dropped before the rate
+  limit and the filter, so a Slack retry costs no call. The engine answers
+  the forward 202 as soon as the message is read and checked, and each schedule's delivery, the filter's
+  call included, runs after it on a fiber of the Slack service (`Slack.settle` waits for them), so a slow
+  classifier never holds app.shinsa.dev's forward to the next machine; a delivery still waiting on the
+  classifier when the engine stops is lost, as a forward to a stopped engine is.
+  **A task it files gets the mention's thread.** A delivery carries the message as `slackMessage`
+  (`SlackMessageRef`: workspace, channel, `messageTs`, author, permalink, channel name). When the schedule starts a
+  new task and its trigger's `threadUpdates` is on, core links that task to the thread whose root is the message
+  (`linkSlackMessageThread`, on the step a mention's task shares; `slack.thread_linked`, with no reaction yet), so
+  everything a mention's task gets follows from `syncSlackThreads` (Slack, below): the one reaction on the
+  message, the status card in its thread with the open gate's buttons, the result, a tripped watchdog and
+  "Merged", and a later @Shinsa mention in that thread messages the task. The task's header shows "Filed in
+  #alerts". With `threadUpdates` off, or for a schedule that messages an existing task, nothing is linked and
+  nothing is posted. A thread holds one open task: when several automations watch the channel, each files its
+  task and the first to file takes the thread, the others file silently. Changing the option applies to tasks
+  filed from then on. A message for a channel no
   enabled schedule watches answers 202 with `delivered: 0` and sends the watched channels again, so
   app.shinsa.dev stops forwarding it.
 - **Automations have three types**, read from the schedule (`resolveAutomationType` in the web, each row of Settings
@@ -2797,8 +2846,9 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   type's colour (`AUTOMATION_TYPE_LOOK`: a schedule blue, a trigger orange, a watch purple), and shows a watch as
   "Watch · <server> · <when> · N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
   `routes/automation.tsx`), laid out like a task page: its text as the description, a facts row (its type, on or
-  paused, the integration, the project in its own colour, when it runs, the next and last run and how many tasks it
-  filed, `listAutomationFacts`), the tasks it filed in All tasks' own rows, and an Activity log of every run, newest
+  paused, the integration, the project in its own colour, when it runs, for a Slack channel trigger that starts
+  tasks whether it posts updates in Slack ("Posts updates in Slack" or "No updates in Slack"), the next and last
+  run and how many tasks it filed, `listAutomationFacts`), the tasks it filed in All tasks' own rows, and an Activity log of every run, newest
   first, drawn by the task page's own entry (`ActivityEntry`): a title for the outcome ("Filed 1 task", "No new
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
@@ -4776,8 +4826,15 @@ Slack ──a message in a channel──► app.shinsa.dev /slack/events
               ──► t-<id>.shinsa.dev /api/slack/messages
                     └─ each enabled schedule on the channel
                        ├─ over 60 a minute ──► one failed run
+                       ├─ its text does not apply (the
+                       │  classifier) ──► schedule.skip:
+                       │                  a skipped run, nothing in Slack
                        └─ schedule.deliver ──► a new task, or a
                                                message to its task
+                             └─ a new task, updates on
+                                ──► slack.thread_linked: the card,
+                                    result and "Merged" in the
+                                    message's thread, as for a mention
 engine ──its watched channels, on every change──►
          app.shinsa.dev /__remote/slack/watches
 ```
@@ -4816,8 +4873,9 @@ engine ──its watched channels, on every change──►
   you connect again. Each row leads with when that
   account last started work here ("Last used 2h ago · Connected 3d ago", or "Not used yet"): the engine
   adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
-  that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
-  decisions from a card's buttons do not count. A page reaching an older engine, whose links lack the field, shows
+  that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread,
+  decisions from a card's buttons and a task an automation filed from that user's channel message
+  (`Task.scheduleId`) do not count. A page reaching an older engine, whose links lack the field, shows
   "Connected 3d ago". A task started from Slack has a fact beside "Filed by" in its header, "Filed in #support"
   (`resolveSlackFact`, `components/task/facts.tsx`), or "Filed in Slack" when the channel's name is unknown, which
   opens the thread it came from in a new tab: the mention's permalink, or
@@ -4859,6 +4917,11 @@ engine ──its watched channels, on every change──►
   which clears the confirmation for that channel's watches, so the first message after anyone leaves is checked
   whatever its age. A machine whose watch was removed is told nothing: its trigger stays listed and gets no
   messages until a linked person is in the channel again and the watches are sent.
+  A machine may post, react and set the status in any thread of a channel it watches now
+  (`SlackStore.hasWatch`: the watch row, with a link to that workspace still on the machine), since a channel
+  message is forwarded without a thread row; its first call there records the thread (`slack_threads`), so a task
+  filed from a channel message keeps its thread once the automation is paused or deleted. A thread in a channel
+  it neither watches nor was sent is still refused (`ThreadNotForwarded`).
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
@@ -5090,8 +5153,8 @@ engine ──its watched channels, on every change──►
   in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
 - **What app.shinsa.dev sees.** Slack's messages and the posts back pass through the Worker on their way and are never
   stored, linked threads included: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
-  account and machine, with that person's read-only user token sealed the same way), which threads were sent to which machine and which messages each machine posted (so a machine
-  posts only in its own threads and edits only its own messages), and Slack's event ids for a day. The sealed channel
+  account and machine, with that person's read-only user token sealed the same way), which threads were sent to which machine, a watched channel's thread from the machine's first post in it, and which messages each machine posted (so a machine
+  posts only in its own threads and those of a channel it watches, and edits only its own messages), and Slack's event ids for a day. The sealed channel
   of remote access is not involved; this is the one path where the Worker reads what goes by.
 
 ## Who can change Shinsa
@@ -5416,7 +5479,7 @@ truth, and a snapshot only saves replaying it.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
   `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
   one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`; the first, `stack-lists`, turns the single `stacksOn` of
-  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
+  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null; `slack-thread-updates` gives every stored Slack channel trigger from before the option `threadUpdates: true`; the last, `review-ratings`, gives every `review.reported` from before the reviewer's ratings `ratings: null`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
   in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it

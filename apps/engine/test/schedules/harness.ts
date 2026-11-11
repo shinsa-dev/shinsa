@@ -7,6 +7,7 @@ import { ScheduleTimeZone } from '../../src/schedules/schema.ts';
 import { WebhookDeliveryId } from '../../src/schedules/webhook/schema.ts';
 import { SecretStore } from '../../src/secrets/index.ts';
 import { openServices } from '../runtime/harness.ts';
+import { createTestFilter } from './fixtures.ts';
 
 export interface SchedulesHarnessOptions {
   baseUrl?: string;
@@ -38,6 +39,7 @@ export async function openSchedules(
   }).pipe(
     Layer.provide(
       Layer.mergeAll(
+        createTestFilter(),
         Layer.succeed(SecretStore, secrets),
         timeZone ? Layer.succeed(ScheduleTimeZone, timeZone) : Layer.empty,
         newId ? Layer.succeed(WebhookDeliveryId, Effect.sync(newId)) : Layer.empty,

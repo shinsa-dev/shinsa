@@ -126,7 +126,10 @@ export const EveryMinutes = CountUpTo(SCHEDULE_LIMITS.maxEveryMinutes);
 export const SlackChannelChoice = HandOverRecord({
   slack_channel: Required(SCHEDULE_LIMITS.reference),
   slack_workspace: OptionalText(SCHEDULE_LIMITS.reference),
+  slack_updates: OrAbsent(Flag),
 });
+
+export const SlackUpdatesChoice = HandOverRecord({ slack_updates: Flag });
 
 export const TargetChoice = HandOverRecord({
   new_task: Flag,
@@ -195,3 +198,13 @@ export const SecretRequestInput = HandOverRecord({
   label: Required(SCHEDULE_LIMITS.secretLabel),
   reason: Required(SCHEDULE_LIMITS.secretReason),
 });
+
+export const ScheduleFilterReply = Schema.Struct({ decision: Schema.Literals(['file', 'skip']) });
+
+export type ScheduleFilterDecision = (typeof ScheduleFilterReply.Type)['decision'];
+
+export interface ScheduleFilterSubject {
+  label: string;
+  tag: string;
+  body: string;
+}

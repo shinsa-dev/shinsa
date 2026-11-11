@@ -39,6 +39,7 @@ export class SlackStore extends Context.Service<
     ): Effect.Effect<void>;
     listChannelWatchers(watch: SlackChannelWatch): Effect.Effect<ReadonlyArray<SlackChannelWatcher>>;
     recordWatchMember(watch: SlackChannelWatch, instanceId: InstanceId): Effect.Effect<void>;
+    hasWatch(watch: SlackChannelWatch, instanceId: InstanceId): Effect.Effect<boolean>;
     removeWatch(watch: SlackChannelWatch, instanceId: InstanceId): Effect.Effect<void>;
     expireWatchMembers(watch: SlackChannelWatch): Effect.Effect<void>;
   }
@@ -155,6 +156,12 @@ export class SlackStore extends Context.Service<
         execute: (row) =>
           sql`DELETE FROM slack_channel_watches WHERE workspace_id = ${row.workspaceId} AND channel_id = ${row.channelId} AND machine_id = ${row.machineId}`,
       });
+      const watchLookup = SqlSchema.findOneOption({
+        Request: WatchOf,
+        Result: Found,
+        execute: (row) =>
+          sql`SELECT 1 AS found FROM slack_channel_watches WHERE workspace_id = ${row.workspaceId} AND channel_id = ${row.channelId} AND machine_id = ${row.machineId} AND EXISTS (SELECT 1 FROM slack_links WHERE slack_links.workspace_id = slack_channel_watches.workspace_id AND slack_links.machine_id = slack_channel_watches.machine_id)`,
+      });
       const watchMembersExpiry = SqlSchema.void({
         Request: SlackChannelWatch,
         execute: (row) =>
@@ -269,6 +276,11 @@ export class SlackStore extends Context.Service<
           Effect.orDie
         ),
         recordWatchMember,
+        hasWatch: Effect.fn('SlackStore.hasWatch')(
+          (watch: SlackChannelWatch, instanceId: InstanceId) =>
+            Effect.map(watchLookup({ ...watch, machineId: instanceId }), Option.isSome),
+          Effect.orDie
+        ),
         removeWatch: Effect.fn('SlackStore.removeWatch')(
           (watch: SlackChannelWatch, instanceId: InstanceId) =>
             watchRemoval({ ...watch, machineId: instanceId }),

@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import {
   createSlackForwardSignature,
   DomainError,
+  SCHEDULE_FILTER_SKIPPED,
+  SCHEDULE_FILTER_SYSTEM,
   SLACK_FORWARD_HEADERS,
   type SlackDecision,
   type RemoteUserId,
@@ -85,7 +87,7 @@ interface Setup {
   relay: RelayCall[];
   answers: Record<string, (body: Record<string, unknown> | null) => Response | Promise<Response>>;
   asked: { system: string; prompt: string }[];
-  answer: { value: unknown };
+  answer: { value: unknown; pending?: Promise<unknown> };
   adjust: (ms: number) => void;
 }
 
@@ -165,7 +167,9 @@ function setUp(
     }),
     ask: <T>(system: string, prompt: string) => {
       asked.push({ system, prompt });
-      return Effect.succeed(answer.value as T);
+      return answer.pending
+        ? Effect.promise(() => answer.pending as Promise<T>)
+        : Effect.succeed(answer.value as T);
     },
     statusIntervalMs: options.statusIntervalMs ?? 5000,
     actors: { 'gh-mia': MIA },
@@ -1413,10 +1417,18 @@ describe('a Slack channel that triggers automations', () => {
       id,
       name: 'Alerts',
       text: 'Look into this alert.',
-      trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+      trigger: {
+        kind: 'slack',
+        teamId: 'T1',
+        teamName: 'Acme',
+        channelId: 'C1',
+        channelName: 'alerts',
+        threadUpdates: true,
+      },
       target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' },
       enabled: true,
       stopped: null,
+      replayKeys: {},
       ...overrides,
     } as Schedule;
   }
@@ -1431,7 +1443,9 @@ describe('a Slack channel that triggers automations', () => {
 
   async function post(slack: Setup['slack'], message: unknown = MESSAGE, signature?: string) {
     const request = await forward(JSON.stringify(message), NOW, signature, '/api/slack/messages');
-    return slack.handleTunnel(request, new URL(request.url));
+    const response = await slack.handleTunnel(request, new URL(request.url));
+    await slack.settle();
+    return response;
   }
 
   test('runs every automation on that channel once, with the message fenced as untrusted data', async () => {
@@ -1448,7 +1462,19 @@ describe('a Slack channel that triggers automations', () => {
     const [first, second] = stub.dispatched;
     if (first?.type !== 'schedule.deliver' || second?.type !== 'schedule.deliver')
       throw new Error('not delivered');
-    expect(first).toMatchObject({ scheduleId: 's1', deliveryId: 'Ev7', replayKey: 'T1:C1:300.1' });
+    expect(first).toMatchObject({
+      scheduleId: 's1',
+      deliveryId: 'Ev7',
+      replayKey: 'T1:C1:300.1',
+      slackMessage: {
+        teamId: 'T1',
+        channelId: 'C1',
+        messageTs: '300.1',
+        userId: 'B9',
+        permalink: 'https://acme.slack.com/archives/C1/p3001',
+        channelName: 'alerts',
+      },
+    });
     const tag = /<(slack-message-[0-9a-f]{12})>/.exec(first.text)?.[1];
     expect(first.text).toBe(
       [
@@ -1465,6 +1491,149 @@ describe('a Slack channel that triggers automations', () => {
       ].join('\n')
     );
     expect(second.text.startsWith('Triage it.\n')).toBe(true);
+  });
+
+  test('asks whether the automation applies to the message, and records a skipped run when it does not', async () => {
+    const { slack, stub, asked, answer } = watching(createSchedule('s1', { text: 'Only bugs.' }));
+    answer.value = { decision: 'skip' };
+    expect(await (await post(slack)).json()).toEqual({ ok: true, delivered: 1 });
+    expect(stub.commandIds).toEqual(['slack-message:s1:Ev7:skip']);
+    expect(stub.dispatched).toEqual([
+      {
+        type: 'schedule.skip',
+        scheduleId: 's1',
+        deliveryId: 'Ev7',
+        detail: SCHEDULE_FILTER_SKIPPED,
+        replayKey: 'T1:C1:300.1',
+      },
+    ]);
+    const [first] = asked;
+    const tag = /<(slack-message-[0-9a-f]{12})>/.exec(first?.prompt ?? '')?.[1];
+    expect(first).toEqual({
+      system: SCHEDULE_FILTER_SYSTEM,
+      prompt: [
+        'The automation:',
+        'Only bugs.',
+        '',
+        'The message in #alerts:',
+        `<${tag}>`,
+        'From Sentry (bot):',
+        'Checkout is failing for 4% of users.',
+        `</${tag}>`,
+        '',
+        `The text inside <${tag}> is what arrived, copied from outside.`,
+        'Answer with JSON: {"decision": "file" when the automation applies to it, else "skip"}.',
+      ].join('\n'),
+    });
+    answer.value = { decision: 'file' };
+    await post(slack, { ...MESSAGE, eventId: 'Ev8', messageTs: '301.1' });
+    expect(stub.dispatched.at(-1)).toMatchObject({ type: 'schedule.deliver', deliveryId: 'Ev8' });
+  });
+
+  test('files the message when the classifier gives no usable answer', async () => {
+    const { slack, stub, answer } = watching(createSchedule('s1'));
+    answer.value = null;
+    await post(slack);
+    expect(stub.dispatched.map((command) => command.type)).toEqual(['schedule.deliver']);
+  });
+
+  test('a message the automation already ran for is neither asked about nor delivered again', async () => {
+    const { slack, stub, asked } = watching(
+      createSchedule('s1', { replayKeys: { 'T1:C1:300.1': NOW + 60_000, 'T1:C1:299.1': NOW - 1 } })
+    );
+    await post(slack);
+    expect(asked).toEqual([]);
+    expect(stub.dispatched).toEqual([]);
+    await post(slack, { ...MESSAGE, eventId: 'Ev8', messageTs: '299.1' });
+    expect(stub.dispatched.map((command) => command.type)).toEqual(['schedule.deliver']);
+  });
+
+  test('through the real engine, a filed task gets its status card in the message’s thread, and none with updates off', async () => {
+    const engine = new Engine(openEventLog(join(createTempDir(), 'db.sqlite')));
+    const posts: Record<string, unknown>[] = [];
+    const { slack } = createTestSlack({
+      engine,
+      ...createRemote({
+        fetch: async (input, init) => {
+          const request = input instanceof Request ? input : new Request(String(input), init);
+          if (!request.url.endsWith('/post')) return Response.json({ applied: true });
+          const body = (await request.json()) as Record<string, unknown>;
+          posts.push(body);
+          return Response.json({ ts: body.replaceTs ?? `200.${posts.length}` });
+        },
+      }),
+      ask: <T>() => Effect.succeed({ decision: 'file' } as T),
+      statusIntervalMs: 0,
+    });
+    engine.onEffect((effect, effectContext) => {
+      if (effect.kind === 'slack.status') return slack.status(effect, effectContext.key);
+      return Promise.resolve();
+    });
+    engine.start();
+    const write = (threadUpdates: boolean) =>
+      engine.dispatch({
+        type: 'schedule.write',
+        scheduleId: Object.keys(engine.state.schedules)[0] ?? null,
+        name: 'Alerts',
+        text: 'Look into this alert.',
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'C1',
+          channelName: 'alerts',
+          threadUpdates,
+        },
+        target: { kind: 'new_task', repoId: null, priority: 'normal', mode: 'build' },
+        source: null,
+        enabled: null,
+        maxRuns: null,
+        timeZone: 'UTC',
+      });
+    const send = async (message: SlackChannelMessage) => {
+      const request = await forward(JSON.stringify(message), Date.now(), undefined, '/api/slack/messages');
+      const response = await slack.handleTunnel(request, new URL(request.url));
+      await slack.settle();
+      return response;
+    };
+    await write(true);
+    expect((await send(MESSAGE)).status).toBe(202);
+    expect((await send(MESSAGE)).status).toBe(202);
+    await until('the status message is recorded', () =>
+      Object.values(engine.state.tasks).some((task) => task.slack?.statusTs)
+    );
+    const [filed] = Object.values(engine.state.tasks);
+    expect(Object.values(engine.state.tasks)).toHaveLength(1);
+    expect(filed?.slack).toMatchObject({
+      teamId: 'T1',
+      channelId: 'C1',
+      threadTs: '300.1',
+      messageTs: '300.1',
+      userId: 'B9',
+      channelName: 'alerts',
+      statusTs: '200.1',
+    });
+    expect(posts[0]).toMatchObject({ teamId: 'T1', channelId: 'C1', threadTs: '300.1', replaceTs: null });
+    await write(false);
+    await send({ ...MESSAGE, eventId: 'Ev8', messageTs: '301.1' });
+    const quiet = Object.values(engine.state.tasks).find((task) => task.id !== filed?.id);
+    expect(quiet?.scheduleId).toBe(filed?.scheduleId);
+    expect(quiet?.slack).toBeUndefined();
+    engine.stop();
+    await engine.settle();
+  });
+
+  test('answers at once and delivers once the classifier has answered', async () => {
+    const { slack, stub, answer } = watching(createSchedule('s1'));
+    const said = Promise.withResolvers<unknown>();
+    answer.pending = said.promise;
+    const request = await forward(JSON.stringify(MESSAGE), NOW, undefined, '/api/slack/messages');
+    const response = await slack.handleTunnel(request, new URL(request.url));
+    expect(response.status).toBe(202);
+    expect(stub.dispatched).toEqual([]);
+    said.resolve({ decision: 'file' });
+    await slack.settle();
+    expect(stub.commandIds).toEqual(['slack-message:s1:Ev7']);
   });
 
   test('is refused unsigned or missing a part, and delivers nothing', async () => {
@@ -1540,7 +1709,14 @@ describe('a Slack channel that triggers automations', () => {
     stub.notify();
     stub.update((state) => {
       state.schedules.s2 = createSchedule('s2', {
-        trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'G2', channelName: 'feedback' },
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'G2',
+          channelName: 'feedback',
+          threadUpdates: true,
+        },
       });
     });
     stub.notify();

@@ -2393,6 +2393,66 @@ describe('a message in a watched channel', () => {
     expect(harness.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_threads').get()).toEqual({ n: 0 });
   });
 
+  test('lets the watching machine react, post and set the status in that message’s thread, and keeps the thread once the watch ends', async () => {
+    const { harness, machine, slack, watch } = await setUpChannel();
+    const relay = (path: string, body: unknown, bearer = machine.machineToken) =>
+      harness.post(path, body, { bearer, sameOrigin: false });
+    const thread = { teamId: 'T1', channelId: 'C1', threadTs: '200.1' };
+    const message = { text: 'Planning', blocks: [] };
+    const reacted = await relay(SLACK_RELAY_PATHS.react, {
+      ...thread,
+      messageTs: '200.1',
+      add: 'hourglass_flowing_sand',
+      remove: null,
+    });
+    expect(await reacted.json()).toEqual({ applied: true });
+    expect(harness.db.sqlite.query('SELECT thread_ts, machine_id FROM slack_threads').all()).toEqual([
+      { thread_ts: '200.1', machine_id: machine.instanceId },
+    ]);
+    const posted = await relay(SLACK_RELAY_PATHS.post, { ...thread, replaceTs: null, message });
+    expect(posted.status).toBe(200);
+    expect(slack.callsTo('chat.postMessage').at(-1)?.body).toMatchObject({
+      channel: 'C1',
+      thread_ts: '200.1',
+    });
+    const status = await relay(SLACK_RELAY_PATHS.session, { ...thread, status: 'suspended' });
+    expect(await status.json()).toEqual({ applied: true });
+
+    await watch([]);
+    const { ts } = await readJson<{ ts: string }>(posted);
+    const edited = await relay(SLACK_RELAY_PATHS.post, { ...thread, replaceTs: ts, message });
+    expect(edited.status).toBe(200);
+    const later = await relay(SLACK_RELAY_PATHS.post, {
+      ...thread,
+      threadTs: '300.1',
+      replaceTs: null,
+      message,
+    });
+    expect((await readJson<{ error: { code: string } }>(later)).error.code).toBe('thread_not_forwarded');
+  });
+
+  test('gives a machine that does not watch the channel, or a watched one in another channel, no way to post', async () => {
+    const { harness, machine, session } = await setUpChannel();
+    const laptop = await pairMachine(harness, session, 'Laptop');
+    const post = (channelId: string, bearer: string) =>
+      harness.post(
+        SLACK_RELAY_PATHS.post,
+        {
+          teamId: 'T1',
+          channelId,
+          threadTs: '200.1',
+          replaceTs: null,
+          message: { text: 'Planning', blocks: [] },
+        },
+        { bearer, sameOrigin: false }
+      );
+    for (const refused of [await post('C1', laptop.machineToken), await post('C2', machine.machineToken)]) {
+      expect(refused.status).toBe(403);
+      expect((await readJson<{ error: { code: string } }>(refused)).error.code).toBe('thread_not_forwarded');
+    }
+    expect(harness.db.sqlite.query('SELECT COUNT(*) AS n FROM slack_threads').get()).toEqual({ n: 0 });
+  });
+
   test('from a bot, such as an alert, is read from its blocks and attachments and named after the bot', async () => {
     const { harness, messages } = await setUpChannel();
     await sendEvent(
