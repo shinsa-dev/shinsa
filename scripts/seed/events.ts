@@ -27,9 +27,18 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
       ...createSettings(),
       taskUsageLimit: 10,
       autoPace: true,
+      agentModels: { agent: 'auto', reviewer: 'auto', answerer: 'auto' },
     },
   });
   push(NOW - HOUR, { type: 'usage.pace_recorded', provider: 'claude', pace: 45 });
+  push(NOW - HOUR, {
+    type: 'usage.models_recorded',
+    models: [
+      { family: 'fable', usable: true, left: 38 },
+      { family: 'opus', usable: true, left: 61 },
+      { family: 'sonnet', usable: true, left: 80 },
+    ],
+  });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);
   const runEnds = new Map(

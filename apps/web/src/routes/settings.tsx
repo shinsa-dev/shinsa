@@ -6,7 +6,7 @@ import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { AccountSettings } from '@/components/settings/accounts.tsx';
-import { AgentSettings } from '@/components/settings/agents.tsx';
+import { AgentSettings, useRoutingRoom } from '@/components/settings/agents.tsx';
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
@@ -69,7 +69,15 @@ function isTabRead(tab: SettingsTabId, extensionsRead: boolean, foldersRead: boo
   return true;
 }
 
-function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId }) {
+function TabSections({
+  state,
+  tab,
+  room,
+}: {
+  state: ShinsaState;
+  tab: SettingsTabId;
+  room: ShinsaState['modelRoom'] | null;
+}) {
   switch (tab) {
     case 'general':
       return (
@@ -97,7 +105,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
     case 'agents':
       return (
         <>
-          <AgentSettings settings={state.settings} />
+          <AgentSettings settings={state.settings} room={room} />
           <MemorySettings state={state} />
           <VersionSettings />
         </>
@@ -142,6 +150,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const repos = Object.values(state.repos);
   const explorerSide = useExplorerSide();
   const updateChannel = React.useSyncExternalStore(subscribeDesktopUpdate, readDesktopChannel);
+  const room = useRoutingRoom(state);
   useRegisterCommands(
     listSettingsSections(
       state.settings,
@@ -151,7 +160,8 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
       repos,
       explorerSide,
       updateChannel,
-      resolveUsageRates(state.runs, state.accountPlans)
+      resolveUsageRates(state.runs, state.accountPlans),
+      room
     )
   );
   const extensions = useExtensions();
@@ -180,7 +190,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
             onValueChange={openTab}
           />
         </div>
-        <TabSections state={state} tab={tab} />
+        <TabSections state={state} tab={tab} room={room} />
       </div>
     </PageScroll>
   );

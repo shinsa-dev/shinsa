@@ -2,6 +2,7 @@ import {
   type AccountsSnapshot,
   type AgentProviderInfo,
   type CompactionMode,
+  type ModelRoom,
   hasEngineFeature,
   listAgentProviders,
   type PlanApproval,
@@ -62,6 +63,7 @@ import {
   describeRoleSelects,
   FIX_ROUND_ITEMS,
   FOLDERS_TITLE,
+  isRoutedRole,
   listAgentModelItems,
   listAttentionItems,
   listBudgetItems,
@@ -83,6 +85,7 @@ import {
   parseUsageLimit,
   resolveAgentModelPatch,
   resolveAgentModelValue,
+  resolveAutoModelHint,
   resolveAgentSpeedPatch,
   resolveAttentionValue,
   resolveBudgetValue,
@@ -368,7 +371,8 @@ function listWorkflowChoices(settings: Settings): Command[] {
 function listGroupChoices(
   settings: Settings,
   providers: AgentProviderInfo[],
-  snapshot: AccountsSnapshot | null
+  snapshot: AccountsSnapshot | null,
+  autoHint: string | null
 ) {
   return AGENT_GROUPS.flatMap((group) => {
     const labels = describeGroupSelects(group);
@@ -377,7 +381,7 @@ function listGroupChoices(
       settingChoice(
         `model.${group.id}`,
         labels.model,
-        listGroupModelItems(providers, settings, group),
+        listGroupModelItems(providers, settings, group, autoHint),
         resolveGroupModel(settings, group),
         (next) => patchSettings(resolveGroupModelPatch(settings, group, next))
       ),
@@ -395,7 +399,8 @@ function listGroupChoices(
 function listRoleChoices(
   settings: Settings,
   providers: AgentProviderInfo[],
-  snapshot: AccountsSnapshot | null
+  snapshot: AccountsSnapshot | null,
+  autoHint: string | null
 ) {
   return AGENT_ROLES.flatMap((entry) => {
     const { role } = entry;
@@ -406,7 +411,7 @@ function listRoleChoices(
       settingChoice(
         `model.${role}`,
         labels.model,
-        listAgentModelItems(providers, model),
+        listAgentModelItems(providers, model, isRoutedRole(role) ? autoHint : null),
         model,
         (next) => patchSettings(resolveAgentModelPatch(settings, role, next)),
         true
@@ -521,8 +526,10 @@ export function listSettingsSections(
   repos: Repo[] = [],
   explorerSide: ExplorerSide = 'left',
   updateChannel: UpdateChannel | null = null,
-  rates: Map<string, UsageRate | null> | null = null
+  rates: Map<string, UsageRate | null> | null = null,
+  room: Readonly<Record<string, ModelRoom>> | null = null
 ): CommandSection[] {
+  const autoHint = room ? resolveAutoModelHint(room) : null;
   return [
     { id: 'settings.sections', heading: 'Jump to', rank: RANK.context, commands: listJumpCommands() },
     {
@@ -532,8 +539,8 @@ export function listSettingsSections(
       commands: [
         ...listAttentionChoices(settings, notifications),
         ...listWorkflowChoices(settings),
-        ...listGroupChoices(settings, providers, snapshot),
-        ...listRoleChoices(settings, providers, snapshot),
+        ...listGroupChoices(settings, providers, snapshot, autoHint),
+        ...listRoleChoices(settings, providers, snapshot, autoHint),
         ...listUsageChoices(settings, snapshot, rates),
         ...listWorkspaceChoices(repos),
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>

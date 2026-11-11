@@ -119,6 +119,21 @@ empty answer is not kept, so the next read asks again; meanwhile the read serves
 list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
 default provider's list, the one setup's Model step offers.
 
+**Automatic.** A Claude role's model can be `auto` (`AUTO_MODEL`, "Automatic"), saved in `agentModels` like any other
+choice and offered first in the Claude group of the task agents' pickers (the group and each of its roles, never the
+quick jobs, which are not routed, and never Codex) on an engine that announces `models.routing`. `startRun` resolves
+it when the step starts (`resolveStepModel` in `packages/core/src/agent-models/routing.ts`), so `run.model` is always
+a real model and replay gives the same one: a plan on a large task takes the first usable of Fable then Opus, any
+other plan or step Opus then Sonnet (`MODEL_ROUTES`), so Fable never builds. A model is usable unless
+`state.modelRoom` says no signed-in, unpaused account can run its family (a family never recorded counts as usable).
+The account roster records that room (`usage.models_recorded`, `listModelRoom`: per Claude family, whether any account
+can run it and the most room any one account has left) on an accounts refresh when a family turns usable or spent or
+its room moves by 5 points (`isModelRoomMoved`); recording it re-checks waits on a model's own limit, so a step on
+Automatic waiting on Fable starts again on Opus. Everything that needs a concrete model before a step starts (the
+account list, the safe pace, delegations) reads `resolveAgentModel`, which gives the role's default for `auto`. The
+picker's hint says what Automatic picks now (`resolveAutoModelHint`), and every step's header in the chat names the
+model it ran on beside its account (`resolveRunModelLabel`).
+
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
-import { createSettings, type Settings } from '@shinsa/core';
+import { createSettings, type ModelRoom, type Settings } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
@@ -34,10 +34,13 @@ async function settle() {
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
-function renderAgents(settings: Settings = createSettings()) {
+function renderAgents(
+  settings: Settings = createSettings(),
+  room: Readonly<Record<string, ModelRoom>> | null = null
+) {
   return render(
     <TooltipProvider>
-      <AgentSettings settings={settings} />
+      <AgentSettings settings={settings} room={room} />
     </TooltipProvider>
   );
 }
@@ -53,6 +56,33 @@ async function choose(label: string, option: string) {
 }
 
 describe('Settings → Agents → Models', () => {
+  it('offers Automatic under Claude for task agents only, and picking it saves the auto model', async () => {
+    renderAgents(createSettings(), {});
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model for quick jobs' }));
+    await settle();
+    const quick = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(quick).queryByRole('option', { name: /Automatic/ })).toBeNull();
+    fireEvent.keyDown(quick, { key: 'Escape' });
+    await settle();
+    await choose('Model for task agents', 'Automatic Fable 5.1 plans large tasks, Opus 5.5 does the rest');
+    const sent = listSentCommands().at(-1) as { patch: Partial<Settings> };
+    expect(sent.patch.agentModels).toMatchObject({ agent: 'auto', reviewer: 'auto', answerer: 'auto' });
+  });
+
+  it('shows Automatic as the chosen model', () => {
+    const auto = { ...createSettings(), agentModels: { agent: 'auto', reviewer: 'auto', answerer: 'auto' } };
+    renderAgents(auto, {});
+    expect(screen.getByRole('combobox', { name: 'Model for task agents' }).textContent).toBe('Automatic');
+  });
+
+  it('offers no Automatic when the engine cannot route', async () => {
+    renderAgents(createSettings(), null);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model for task agents' }));
+    await settle();
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(list).queryByRole('option', { name: /Automatic/ })).toBeNull();
+  });
+
   it('has two groups, task agents on Opus and quick jobs on Sonnet, each saying what it holds', () => {
     renderAgents();
     expect(screen.getByRole('heading', { name: 'Models' })).toBeTruthy();
