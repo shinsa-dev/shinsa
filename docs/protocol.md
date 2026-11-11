@@ -62,7 +62,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | judgement call | A choice the agent made in a phase, with its reason and the alternatives it rejected | `JudgementCall` | Judgement call, "Judgement calls" |
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | rating | The reviewer's two ratings of a change: how sure it is (`confidence`) and what breaks if it is wrong (`risk`), each low, medium or high | `ReviewRatings`, `ReviewRating`, `report_review`'s `confidence` and `risk`, `Task.reviewRatings` | Confidence, Risk |
-| Autopilot | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autopilot` (`AutopilotPolicy`, its `contacts` a list of `AutopilotContact`), `Task.autopiloted`, `Task.escalation`, `Task.slackEscalations`, `Gate.autopilotDue`, `autopilot.fire` | Autopilot, Approved for you, Sent to your team, Sent by your team, Why this reached you, Who it asks, Send a test |
+| Autopilot | Your delegate: a pre-approval policy under which, inside hard limits, a model judges each plan, question, review and merge to act on for you or bring to you, learns from your answers, and as a last resort sends an urgent change to your team | `autopilot` (`AutopilotPolicy`: `level`, `gates`, `autoMerge`, `escalate`, its `contacts` a list of `AutopilotContact`), `AutopilotFacts`, `AutopilotLimits`, `AutopilotLesson`, `state.autopilotLessons`, `Task.autopiloted`, `Task.escalation`, `Task.slackEscalations`, `Gate.autopilotDue`, `autopilot.judge`, `autopilot.fire` | Autopilot, Ask me first, Balanced, Most things, Auto merge, Done for you, What it learned, Approved for you, Sent to your team, Sent by your team, Why this reached you, Who it asks, Send a test |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
 | request (an iteration) | Something you sent an agent that its next hand-over answers (changes at a gate, line comments, feedback on a plan, a message to a running or resting agent, a follow-up, a restarted step), with its reply: a headline, each point you raised marked done, answered or not changed with a note, and what you do now. The chat shows it on the hand-over's card and the overview on the card it belongs to, the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `AgentReply` (the `reply` of every hand-over that answers one), `ReplyingHandOver`, `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
@@ -676,8 +676,13 @@ Soft gates, decided by Shinsa or the reviewer:
 | `choices?`, `recommendation?` | | a question's one-click answers |
 | `cause?` | `budget` \| `monitor` \| `push_hook` \| `paused` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round; `paused` is your `task.pause`, whose approve (Resume) restarts the step |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
-| `autopilotHeld?` | string | why Autopilot left this review gate for you ("The reviewer’s confidence is medium.") |
-| `autopilotDue?` | `{ at, action: 'escalate' \| 'merge', wait, waitedMinutes }` \| null | an open merge gate's Autopilot deadline (`autopilot.scheduled`); `wait` (`AutopilotWait`) is `configured`, `outside_hours` or `hours_ended`, and `waitedMinutes` the wait it set; `AutopilotClock` fires `autopilot.fire` at `at` |
+| `autopilotHeld?` | string | why Autopilot brought this plan, question, review or merge gate to you (`autopilot.forwarded`: "The reviewer’s confidence is medium.") |
+| `autopilotTeaches?` | boolean | whether your answer to a gate Autopilot brought you teaches it (false when a setting held it back) |
+| `autopilotJudging?` | boolean | a judgment was asked for this gate (`autopilot.judging`) and has not come back |
+| `autopilotAnswer?` | string | the reason Autopilot gave when it answered this gate for you |
+| `autopilotLearned?` | boolean | the lessons from your answer to this gate were kept |
+| `autopilotSeen?` | boolean | you marked what Autopilot did here seen (`autopilot.seen`), so it leaves Done for you |
+| `autopilotDue?` | `{ at }` \| null | an urgent task's open merge gate's next Autopilot check, an hour on (`autopilot.scheduled`); `AutopilotClock` fires `autopilot.fire` at `at` |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
 | `provider?` | string | the provider a Sign in gate is for, set on every one (`claude` for a Claude account) |
@@ -896,8 +901,9 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, never both (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
+| `autopilot.seen` | marks what Autopilot did at these gates as seen (`gateIds`), so it leaves Done for you; gates it did not answer for you are skipped | `autopilot seen` | **human** |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `sharedTeams`, `activeHours` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` and `quietWaitMinutes` (15 by default) each 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits, `contacts` (none by default, at most 5, each `slack_channel` or `slack_person` with `teamId`, `id`, `name` and, for a person, `image`) is replaced whole; `activeHours` is null (learned) or at most 14 `ActiveDay` spans, each `weekday` 0 (Sunday) to 6, `from` 0 to 23 and `to` after `from` up to 24, none overlapping on a weekday |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `sharedTeams`, `activeHours` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy: `level` `ask_first`, `balanced` (default) or `most`, `gates` a list of `plans`, `questions`, `reviews` (all by default) replaced whole, `autoMerge` `off`, `low_risk` (default) or `approved`, `escalate` (true by default), `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits, `contacts` (none by default, at most 5, each `slack_channel` or `slack_person` with `teamId`, `id`, `name` and, for a person, `image`) is replaced whole; `activeHours` is null (learned) or at most 14 `ActiveDay` spans, each `weekday` 0 (Sunday) to 6, `from` 0 to 23 and `to` after `from` up to 24, none overlapping on a weekday |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1031,7 +1037,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `message.route`, `message.drop` | `MessageInbox` (`triage/inbox/service.ts`) | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
-| `autopilot.fire` | `AutopilotClock` | acts on an open merge gate's Autopilot deadline (`dueAt`): merges for you, or escalates to your team with why it could not |
+| `autopilot.fire` | `AutopilotClock` | an urgent task's merge gate's hourly check (`dueAt`): escalates when the hard limits allow, asks for a judgment when it may merge, or revises an escalation whose promised merge it can no longer make |
+| `autopilot.judgment` | the `autopilot.judge` effect | the judge's answer for a gate (`verdict` `act` or `forward`, `reason`, `reply` for a question); core checks the limits again, then acts for you or brings it to you |
+| `idle.record` | the engine's `IdleWatch` | your Mac's last keyboard or mouse input (`inputAt`) and, once 10 idle minutes end, the span you were away (`away`); refused for a span `away.record` refuses |
 | `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
@@ -1066,6 +1074,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `repo.registered`, `repo.updated`, `repo.removed` | a repository is registered, changed, forgotten |
 | `project.written`, `project.removed` | a project is written, removed |
 | `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with projects, opens one (`{ projectIds, except, from, to, until }`, kept a year) |
+| `mac.used` | you used your Mac in this hour (`usedAt`, from `idle.record`), kept in `state.presence` like something you did in Shinsa |
 | `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
 | `clock.recorded` | the engine recorded this Mac's time zone (`timeZone`), kept as `state.timeZone`, the clock your hours are learned and read on |
 | `settings.changed` | settings change (the whole settings object) |
@@ -1149,7 +1158,11 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
 | `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `ahead` when that approval was made for you, `autopilot` with the reason when Autopilot made it), withdrawn, or replaced by your message |
-| `autopilot.scheduled` | an open merge gate's Autopilot deadline was set or cleared (`gateId`, `due` or null) |
+| `autopilot.scheduled` | an open merge gate's next Autopilot check was set or cleared (`gateId`, `due` or null) |
+| `autopilot.judging` | Autopilot asked for a judgment on a gate (`gateId`) |
+| `autopilot.forwarded` | Autopilot brought a gate to you (`gateId`, `reason`, `teaches`) |
+| `autopilot.learned` | lessons from your answer were kept (`lessons`, each an `AutopilotLesson`; `state.autopilotLessons`, the last 50) |
+| `autopilot.seen` | you marked what Autopilot did at these gates seen (`gateIds`) |
 | `task.escalated` | Autopilot sent the urgent change to your team (`reason`, `handoff`; sets `Task.escalation`) |
 | `task.escalation_revised` | the wait ended without the merge an escalation promised (`reason`, `handoff` with `mergesAt` null and `blockedBy`; keeps `Task.escalation.at`) |
 | `gate.noted` | the open operation gate's notes were replaced (`notes`, null clears them; the same gate, no new notification) |
@@ -1229,6 +1242,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.post` | replay_safe | `slack:<thread key>` | none: posts a watchdog that found a problem as a new message through app.shinsa.dev |
 | `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
 | `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
+| `autopilot.judge` | replay_safe | `task:<id>` | `autopilot.judgment`: one quick call on the classifier model with the gate's facts and lessons; `forward` when no model answers |
 | `slack.escalate` | replay_safe | `slack-escalation:<task>` | `part` `message`: `slack.record_escalation` after posting an open escalation to one of the policy's channels or people through `/__remote/slack/notify`; once it cleared, edits that message and records nothing. `part` `follow_up`: once merged, replies in that message's thread and records it with `slack.record_escalation_follow_up`, then edits the reply; key `slack.escalate:<part>:<task>:<escalated at>:<team>:<id>:<seq>` |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
@@ -1438,7 +1452,7 @@ A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolve
 | Field | Holds |
 | --- | --- |
 | `from`, `to` | The log position the patch applies to and the one it reaches; equal for a change that is not an event (a new Home guide, `docs/engine.md` → The briefing) |
-| `fields` | `focus`, `settings`, `onBehalfActions` when they changed, each a `ValueChange` |
+| `fields` | `focus`, `settings`, `onBehalfActions`, `timeZone`, `autopilotLessons` when they changed, each a `ValueChange` |
 | `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`, `away`, `focusHistory`, `accountPlans`, `usagePaces`), the entries that changed by id, each an `EntryChange` |
 
 An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `{ fields, unset }` (the fields whose
