@@ -28,12 +28,13 @@ import {
   toggleAutopilotGate,
   listHandoffParagraphs,
   listTeamEscalationRows,
+  listDoneForYouRows,
   resolveAutopilotFact,
   resolveAutopilotValue,
   resolveEscalationFact,
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
-import { createTask } from '../support/state.ts';
+import { createGate, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
@@ -493,5 +494,37 @@ describe('the hand-off an escalation shows', () => {
     expect(listHandoffParagraphs(ready, { owner: null, presence: null, now: HOUR })[0]?.text).toBe(
       'It is urgent and ready for you to merge, so Autopilot sent it to your team.'
     );
+  });
+});
+
+describe('the things Autopilot did for you on Home', () => {
+  const answered = { status: 'answered' as const, answeredAt: NOW, autopilotAnswer: 'Small and clear.' };
+  const state = createShinsaState({
+    tasks: [
+      createTask({ id: 't-1', title: 'Paint the button', stage: 'merged' }),
+      createTask({ id: 't-2', title: 'Ship the fix', stage: 'building' }),
+    ],
+    gates: [
+      createGate({ id: 'g-merge', taskId: 't-1', type: 'merge', ...answered }),
+      createGate({ id: 'g-plan', taskId: 't-2', type: 'plan', ...answered, answeredAt: NOW - 1 }),
+      createGate({ id: 'g-question', taskId: 't-2', type: 'question', ...answered, answeredAt: NOW - 2 }),
+      createGate({ id: 'g-review', taskId: 't-2', type: 'review', ...answered, answeredAt: NOW - 3 }),
+      createGate({ id: 'g-seen', taskId: 't-2', type: 'review', ...answered, autopilotSeen: true }),
+      createGate({ id: 'g-yours', taskId: 't-2', type: 'review', status: 'answered', answeredAt: NOW }),
+    ],
+  });
+
+  it('lists each unseen gate it answered, newest first, saying what it did', () => {
+    expect(listDoneForYouRows(state).map((row) => [row.gateId, row.title, row.summary, row.icon])).toEqual([
+      ['g-merge', 'Paint the button', 'Autopilot merged it for you.', 'IconMerged'],
+      ['g-plan', 'Ship the fix', 'Autopilot approved the plan for you.', 'IconChecklist'],
+      ['g-question', 'Ship the fix', 'Autopilot answered an agent’s question for you.', 'IconBubbleCheck'],
+      ['g-review', 'Ship the fix', 'Autopilot approved the review for you.', 'IconCheckCircle2'],
+    ]);
+    expect(listDoneForYouRows(state)[0]).toMatchObject({
+      reason: 'Small and clear.',
+      at: NOW,
+      tone: 'green',
+    });
   });
 });

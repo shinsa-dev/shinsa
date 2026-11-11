@@ -1640,6 +1640,22 @@ shinsa focus clear [--json]
 
 Every task agent's tool: `focus_clear`. Sends `focus.change`.
 
+### autopilot
+
+#### shinsa autopilot seen
+
+Mark what Autopilot did for you as seen, so it leaves Home and stops notifying.
+
+```
+shinsa autopilot seen <gates...> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `autopilot.seen`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<gates>` | list, required | The gates Autopilot answered, by id. |
+
 ### away
 
 #### shinsa away record

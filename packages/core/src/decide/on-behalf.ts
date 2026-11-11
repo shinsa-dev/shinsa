@@ -22,7 +22,8 @@ type HumanOnlyType =
   | 'handoff.remove'
   | 'task.hand_to_teammate'
   | 'task.give_back'
-  | 'away.record';
+  | 'away.record'
+  | 'autopilot.seen';
 
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
@@ -43,6 +44,7 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'task.hand_to_teammate',
   'task.give_back',
   'away.record',
+  'autopilot.seen',
 ]);
 
 type OnBehalfCommand = Exclude<UserCommand, { type: HumanOnlyType }>;

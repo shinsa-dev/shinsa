@@ -32,7 +32,7 @@ import {
   removeEvidence,
   reportReview,
 } from './agents.ts';
-import { applyAutopilotJudgment, fireAutopilot } from './autopilot.ts';
+import { applyAutopilotJudgment, fireAutopilot, markAutopilotSeen } from './autopilot.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
 import { requestBrowserSignIn } from './browser-sign-in.ts';
 import { reviewBundles } from './bundles.ts';
@@ -219,6 +219,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return changeFocus(decider, command);
     case 'away.record':
       return recordAway(decider, command);
+    case 'autopilot.seen':
+      return markAutopilotSeen(decider, command);
     case 'clock.record':
       return recordClock(decider, command);
     case 'settings.change':

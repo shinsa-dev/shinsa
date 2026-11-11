@@ -1,3 +1,4 @@
+export { isAutopilotDoneSeeable, listAutopilotDone } from './done.ts';
 export {
   describeAutopilotLesson,
   listAutopilotLessons,
@@ -12,6 +13,7 @@ export {
 } from './limits.ts';
 export {
   AUTOPILOT_CEILINGS,
+  AUTOPILOT_DONE_LIMIT,
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LESSON_ANSWERS,
   AUTOPILOT_LESSON_KINDS,
@@ -19,6 +21,7 @@ export {
   AUTOPILOT_LIMITS,
   AUTOPILOT_VERDICTS,
   type AutopilotCeiling,
+  type AutopilotDone,
   type AutopilotFacts,
   type AutopilotGateKind,
   type AutopilotJudgment,

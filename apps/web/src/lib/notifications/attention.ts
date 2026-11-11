@@ -11,7 +11,12 @@ import {
   type Task,
   type TeamEscalation,
 } from '@shinsa/core';
-import { describeTeamEscalationSummary } from '@/lib/autopilot.ts';
+import {
+  describeTeamEscalationSummary,
+  type DoneForYouRow,
+  listDoneForYouRows,
+  resolveDoneForYouTag,
+} from '@/lib/autopilot.ts';
 import { flattenWhitespace } from '@/lib/format/count.ts';
 import { stripMarkdown } from '@/lib/format/markdown.ts';
 import { describeOperationIntro } from '@/lib/overview/operation.ts';
@@ -95,8 +100,19 @@ export function describeTeamEscalation(escalation: TeamEscalation): DecisionNoti
   };
 }
 
+export function describeDoneForYou(row: DoneForYouRow): DecisionNotice {
+  return {
+    tag: resolveDoneForYouTag(row.gateId),
+    taskId: row.taskId,
+    title: row.title,
+    body: resolveBody(`${row.summary} ${row.reason}`),
+    path: null,
+  };
+}
+
 export function listOpenNoticeTags(state: ShinsaState, escalations: readonly TeamEscalation[] = []) {
   return new Set([
+    ...listDoneForYouRows(state).map((row) => resolveDoneForYouTag(row.gateId)),
     ...listOpenGates(state)
       .filter((gate) => !isGateHeld(state, gate))
       .map((gate) => gate.id),
@@ -114,5 +130,6 @@ export function listNewDecisions(
   return [
     ...resolveQueue(state, now).ready.map(describeDecision),
     ...escalations.map(describeTeamEscalation),
+    ...listDoneForYouRows(state).map(describeDoneForYou),
   ].filter((notice) => !previous.has(notice.tag));
 }

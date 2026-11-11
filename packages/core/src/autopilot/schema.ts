@@ -3,6 +3,17 @@ import type { ReviewRating } from '../report/types.ts';
 
 export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge';
 
+export interface AutopilotDone {
+  gateId: string;
+  taskId: string;
+  gate: AutopilotGateKind;
+  title: string;
+  reason: string;
+  at: number;
+}
+
+export const AUTOPILOT_DONE_LIMIT = 50;
+
 export interface AutopilotScope {
   phases: number;
   files: number;

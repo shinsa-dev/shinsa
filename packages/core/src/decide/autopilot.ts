@@ -1,3 +1,4 @@
+import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
 import { resolveLessonLimit } from '../autopilot/lessons.ts';
 import { isUrgentTask, resolveAutopilotFacts, resolveAutopilotLimits } from '../autopilot/limits.ts';
 import { resolveJudgedGateKind } from '../autopilot/prompt.ts';
@@ -11,6 +12,7 @@ import {
 import type { CommandOf } from '../commands/index.ts';
 import {
   type AutopilotDue,
+  DomainError,
   type EscalationHandoff,
   type Gate,
   HOUR_MS,
@@ -331,4 +333,18 @@ export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fi
     });
   }
   scheduleAutopilot(decider, gate, next);
+}
+
+export function markAutopilotSeen(decider: Decider, command: CommandOf<'autopilot.seen'>) {
+  if (decider.context.onBehalf) {
+    throw new DomainError({
+      code: 'human_only',
+      message: 'Only you mark what Autopilot did for you as seen.',
+    });
+  }
+  const gateIds = [...new Set(command.gateIds)].filter((gateId) => {
+    const gate = decider.state.gates[gateId];
+    return gate !== undefined && isAutopilotDoneSeeable(gate);
+  });
+  if (gateIds.length > 0) decider.emit({ type: 'autopilot.seen', gateIds });
 }

@@ -440,6 +440,26 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     done: () => 'Everything shows again.',
   }),
   defineCommand({
+    path: ['autopilot', 'seen'],
+    summary: 'Mark what Autopilot did for you as seen, so it leaves Home and stops notifying.',
+    command: 'autopilot.seen',
+    humanOnly: true,
+    fields: [
+      {
+        name: 'gates',
+        kind: 'list',
+        positional: 'rest',
+        required: true,
+        description: 'The gates Autopilot answered, by id.',
+      },
+    ],
+    build: (values) => ({
+      type: 'autopilot.seen',
+      gateIds: Array.isArray(values.gates) ? values.gates.map(String) : [],
+    }),
+    done: () => 'Marked as seen.',
+  }),
+  defineCommand({
     path: ['away', 'record'],
     summary:
       'Record a span you were away from your Mac, so your turnaround leaves it out. The Mac app sends these itself.',

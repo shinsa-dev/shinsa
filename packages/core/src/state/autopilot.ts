@@ -37,6 +37,10 @@ export function applyAutopilotLearned(state: ShinsaState, event: EventOf<'autopi
     if (lesson.kind === 'acted') updateGate(state, lesson.gateId, { autopilotLearned: true });
 }
 
+export function applyAutopilotSeen(state: ShinsaState, event: EventOf<'autopilot.seen'>) {
+  for (const gateId of event.gateIds) updateGate(state, gateId, { autopilotSeen: true });
+}
+
 export function applyTaskEscalated(state: ShinsaState, event: EventOf<'task.escalated'>) {
   updateTask(state, event.taskId, event.at, {
     escalation: { at: event.at, reason: event.reason, handoff: event.handoff },

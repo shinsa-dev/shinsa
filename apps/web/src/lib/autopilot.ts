@@ -1,11 +1,14 @@
 import {
   type AutopilotContact,
   type AutopilotContactKind,
+  type AutopilotDone,
+  type AutopilotGateKind,
   type AutopilotGate,
   type AutopilotLevel,
   type AutoMerge,
   HOUR_MS,
   isSameAutopilotContact,
+  listAutopilotDone,
   MAX_AUTOPILOT_CONTACTS,
   type MergeBlock,
   MINUTE_MS,
@@ -14,6 +17,7 @@ import {
   type ReviewRating,
   resolveAutopilotPolicy,
   type Settings,
+  type ShinsaState,
   type SlackDirectoryView,
   type SlackSnapshot,
   type Task,
@@ -21,6 +25,8 @@ import {
   type TeamEscalation,
   type TeamPresenceStatus,
 } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
+import type { Tone } from '@/lib/format/tone.ts';
 import { describeAgentReview } from '@/lib/review/report.ts';
 import type { SettingItem } from '@/lib/settings.ts';
 import { describeTeamTaskOwner, resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
@@ -457,4 +463,59 @@ export function listTeamEscalationRows(escalations: readonly TeamEscalation[]): 
     since: item.escalation.at,
     path: resolveTeamTaskPath(resolveTeamTaskTarget(item.entry)),
   }));
+}
+
+export const DONE_FOR_YOU_TITLE = 'Done for you';
+
+export const DONE_FOR_YOU_SEEN = 'Seen';
+
+export const DONE_FOR_YOU_ALL_SEEN = 'Mark all seen';
+
+const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
+  plan: 'Autopilot approved the plan for you.',
+  question: 'Autopilot answered an agent’s question for you.',
+  review: 'Autopilot approved the review for you.',
+  merge: 'Autopilot started the merge for you.',
+};
+
+const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
+  plan: { icon: 'IconChecklist', tone: 'purple' },
+  question: { icon: 'IconBubbleCheck', tone: 'blue' },
+  review: { icon: 'IconCheckCircle2', tone: 'green' },
+  merge: { icon: 'IconMerged', tone: 'green' },
+};
+
+export interface DoneForYouRow {
+  gateId: string;
+  taskId: string;
+  title: string;
+  summary: string;
+  reason: string;
+  at: number;
+  icon: IconName;
+  tone: Tone;
+}
+
+function describeDoneForYou(done: AutopilotDone, task: Task | undefined) {
+  if (done.gate === 'merge' && task?.stage === 'merged') return 'Autopilot merged it for you.';
+  return DONE_FOR_YOU_TEXT[done.gate];
+}
+
+export function listDoneForYouRows(state: ShinsaState): DoneForYouRow[] {
+  return listAutopilotDone(state).map((done) => {
+    const task = state.tasks[done.taskId];
+    return {
+      gateId: done.gateId,
+      taskId: done.taskId,
+      title: task?.title ?? done.title,
+      summary: describeDoneForYou(done, task),
+      reason: done.reason,
+      at: done.at,
+      ...DONE_FOR_YOU_GLYPH[done.gate],
+    };
+  });
+}
+
+export function resolveDoneForYouTag(gateId: string) {
+  return `autopilot-done:${gateId}`;
 }

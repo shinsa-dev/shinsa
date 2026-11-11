@@ -65,6 +65,7 @@ import {
 import {
   applyAutopilotForwarded,
   applyAutopilotLearned,
+  applyAutopilotSeen,
   applyAutopilotJudging,
   applyAutopilotScheduled,
   applyEscalationRevised,
@@ -1052,6 +1053,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'autopilot.learned':
       applyAutopilotLearned(state, event);
+      break;
+    case 'autopilot.seen':
+      applyAutopilotSeen(state, event);
       break;
     case 'task.escalated':
       applyTaskEscalated(state, event);

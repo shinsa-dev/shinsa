@@ -63,6 +63,7 @@ export function WideSection({
   empty,
   persistId,
   defaultOpen = true,
+  action,
   children,
 }: {
   title: string;
@@ -70,12 +71,13 @@ export function WideSection({
   empty: string | null;
   persistId: DisclosureId;
   defaultOpen?: boolean;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const disclosure = useDisclosure(persistId, defaultOpen);
   return (
     <section className={cn('flex flex-col gap-1', disclosure.open && 'pb-1')}>
-      <SectionLabel count={count} disclosure={disclosure} className='px-1'>
+      <SectionLabel count={count} disclosure={disclosure} action={action} className='px-1'>
         {title}
       </SectionLabel>
       {disclosure.open && (
