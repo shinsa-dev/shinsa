@@ -3,6 +3,7 @@ import {
   describeScheduleTarget,
   describeScheduleTrigger,
   resolveSlackChannelTrigger,
+  resolveSlackUpdatesTrigger,
   type Schedule,
   type ScheduleTarget,
   TASK_PRIORITIES,
@@ -74,7 +75,9 @@ const resolveTrigger = Effect.fn('Surface.scheduleTrigger')(function* (
   values: Values,
   now: number
 ) {
+  const id = readValue(values, 'id');
   const input = {
+    ...(id ? { schedule_id: id } : {}),
     in_minutes: values.inMinutes,
     run_at: values.runAt,
     every_minutes: values.everyMinutes,
@@ -83,14 +86,23 @@ const resolveTrigger = Effect.fn('Surface.scheduleTrigger')(function* (
     webhook: resolveWebhookInput(values),
     slack_channel: values.slackChannel,
     slack_workspace: values.slackWorkspace,
+    slack_updates: typeof values.slackUpdates === 'boolean' ? values.slackUpdates : undefined,
   };
   const result = validateScheduleRequest(input, now);
   if (!result.ok)
     return yield* new DomainError({ code: 'schedule_invalid', message: result.errors.join(' ') });
-  const { slackChannel } = result.value;
-  if (slackChannel === null) return result.value.trigger;
+  const { slackChannel, slackUpdates } = result.value;
+  if (slackChannel === null && slackUpdates === null) return result.value.trigger;
+  const { schedules } = id ? yield* client.api.state.schedules() : { schedules: [] };
+  const stored = schedules.find((schedule) => schedule.id === id)?.trigger ?? null;
+  if (slackChannel === null) {
+    const changed = resolveSlackUpdatesTrigger(stored, slackUpdates ?? true);
+    return (
+      changed.trigger ?? (yield* new DomainError({ code: 'schedule_invalid', message: changed.problem }))
+    );
+  }
   const { channels } = yield* client.api.slack.channels();
-  const { trigger, problem } = resolveSlackChannelTrigger(channels, slackChannel);
+  const { trigger, problem } = resolveSlackChannelTrigger(channels, slackChannel, stored);
   return trigger ?? (yield* new DomainError({ code: 'schedule_invalid', message: problem }));
 });
 
@@ -202,7 +214,7 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
         name: 'message',
         kind: 'text',
         description:
-          'What it sends: the request of the new task, or the message. A webhook may use {{body.path}}.',
+          'What it sends: the request of the new task, or the message. A webhook may use {{body.path}}. For a webhook or a Slack channel, say here which requests or messages to act on, such as only bugs: the rest are skipped.',
       },
       { name: 'inMinutes', kind: 'integer', description: 'Once, this many minutes from now.' },
       { name: 'runAt', kind: 'text', description: 'Once, at this ISO 8601 time.' },
@@ -243,6 +255,12 @@ export const SCHEDULE_SPECS: SurfaceSpec[] = [
         name: 'slackWorkspace',
         kind: 'text',
         description: 'With --slack-channel: the Slack workspace, when the channel is in several.',
+      },
+      {
+        name: 'slackUpdates',
+        kind: 'boolean',
+        description:
+          'With --slack-channel, or alone with --id: false (--no-slack-updates) files tasks without posting in Slack. Otherwise a filed task gets its status in the message’s thread.',
       },
       { name: 'newTask', kind: 'boolean', description: 'Start a new task on each run.' },
       { name: 'repo', kind: 'text', description: 'With --new-task: the repository (name or id).' },

@@ -228,6 +228,7 @@ export const ScheduleTrigger = Tagged('kind', SCHEDULE_TRIGGER_KINDS, [
     teamName: Id(),
     channelId: Id(),
     channelName: Id(),
+    threadUpdates: ByDefault(Bool, FIELD_MESSAGES.boolean, () => true),
   }),
 ]);
 

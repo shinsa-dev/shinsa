@@ -18,7 +18,8 @@ function isNamed(value: string, id: string, name: string) {
 
 export function resolveSlackChannelTrigger(
   channels: readonly SlackChannel[],
-  choice: SlackChannelRequest
+  choice: SlackChannelRequest,
+  stored: ScheduleTrigger | null
 ): SlackChannelResolution {
   if (channels.length === 0)
     return {
@@ -54,9 +55,22 @@ export function resolveSlackChannelTrigger(
       teamName: match.teamName.trim(),
       channelId: match.channelId,
       channelName: match.channelName.trim(),
+      threadUpdates: choice.updates ?? (stored?.kind === 'slack' ? stored.threadUpdates : true),
     },
     problem: null,
   };
+}
+
+export function resolveSlackUpdatesTrigger(
+  stored: ScheduleTrigger | null,
+  threadUpdates: boolean
+): SlackChannelResolution {
+  if (stored?.kind !== 'slack')
+    return {
+      trigger: null,
+      problem: 'slack_updates only changes an automation on a Slack channel, and this one is not.',
+    };
+  return { trigger: { ...stored, threadUpdates }, problem: null };
 }
 
 export function listSlackChannelWatches(state: ShinsaState): SlackChannelWatch[] {

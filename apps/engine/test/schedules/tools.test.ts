@@ -142,6 +142,7 @@ describe('set_schedule', () => {
       teamName: 'Acme',
       channelId: 'C1',
       channelName: 'alerts',
+      threadUpdates: true,
     });
     expect(reply).toBe(
       `Saved “Look into this alert.” (schedule_id ${schedule.id}). When a message is posted in #alerts. Starts a new task.`
@@ -156,6 +157,15 @@ describe('set_schedule', () => {
       'Saved “Alerts”'
     );
     expect(only(world).trigger).toEqual(schedule.trigger);
+    await tool('set_schedule', { schedule_id: schedule.id, slack_channel: '#alerts', slack_updates: false });
+    expect(only(world).trigger).toMatchObject({ kind: 'slack', channelId: 'C1', threadUpdates: false });
+    await tool('set_schedule', { schedule_id: schedule.id, slack_channel: '#alerts' });
+    expect(only(world).trigger).toMatchObject({ kind: 'slack', channelId: 'C1', threadUpdates: false });
+    await tool('set_schedule', { schedule_id: schedule.id, slack_channel: '#alerts', slack_updates: true });
+    expect(only(world).trigger).toMatchObject({ threadUpdates: true });
+    await tool('set_schedule', { schedule_id: schedule.id, slack_updates: false });
+    expect(only(world).trigger).toMatchObject({ kind: 'slack', channelId: 'C1', threadUpdates: false });
+    await expect(tool('set_schedule', { schedule_id: 'gone', slack_updates: false })).rejects.toThrow();
   });
 
   test('a Slack channel is refused while Slack is not connected', async () => {
