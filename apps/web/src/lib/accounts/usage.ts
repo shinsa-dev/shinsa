@@ -37,6 +37,8 @@ const USAGE_EXTRA_LABEL = {
   noLimit: 'On, no monthly limit',
   credit: 'Credit left',
   reset: 'Usage reset',
+  weeklyReset: 'Weekly reset',
+  fableReset: 'Fable reset',
   notUsable: 'Not usable yet',
 };
 
@@ -295,10 +297,16 @@ function describeGrantDetail(grant: UsageResetGrant, now: number) {
   return reach === null ? `Ends ${ends}` : `${reach} · ends ${ends}`;
 }
 
+function resolveGrantLabel(grant: UsageResetGrant) {
+  if (grant.clears.includes('seven_day')) return USAGE_EXTRA_LABEL.weeklyReset;
+  if (grant.clears.includes('seven_day_overage_included')) return USAGE_EXTRA_LABEL.fableReset;
+  return grant.label ?? USAGE_EXTRA_LABEL.reset;
+}
+
 function createGrantRow(grant: UsageResetGrant, now: number): UsageNoteRow {
   return {
     id: `reset:${grant.id}`,
-    label: grant.label ?? USAGE_EXTRA_LABEL.reset,
+    label: resolveGrantLabel(grant),
     value: `${grant.left} of ${grant.total} left`,
     detail: describeGrantDetail(grant, now),
   };
