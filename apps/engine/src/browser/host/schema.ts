@@ -92,12 +92,14 @@ export interface ProfileLock {
 
 export type ProfileHolder =
   | { readonly kind: 'none' }
-  | { readonly kind: 'ours'; readonly pid: number }
+  | { readonly kind: 'ours'; readonly pid: number; readonly headless: boolean }
   | { readonly kind: 'foreign'; readonly pid: number };
 
 export const HOLDER_POLL_SCHEDULE = Schedule.spaced(Duration.millis(50));
 
 export const KILL_GRACE = Duration.seconds(1);
+
+export const HEADLESS_FLAG = '--headless=new';
 
 export const SHARED_ARGS: ReadonlyArray<string> = [
   '--use-mock-keychain',
@@ -107,7 +109,7 @@ export const SHARED_ARGS: ReadonlyArray<string> = [
 ];
 
 export const HEADLESS_ARGS: ReadonlyArray<string> = [
-  '--headless=new',
+  HEADLESS_FLAG,
   '--remote-debugging-address=127.0.0.1',
   '--remote-debugging-port=0',
   '--force-device-scale-factor=2',

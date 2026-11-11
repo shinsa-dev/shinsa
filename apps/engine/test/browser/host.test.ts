@@ -248,9 +248,9 @@ describe('the browser host', () => {
     for (const pid of pids) expect(isAlive(pid)).toBe(false);
   });
 
-  test('stops a Chrome an earlier engine left on the profile, then starts its own', async () => {
+  test('stops a sign-in window an earlier engine left on the profile, then starts its own', async () => {
     const chrome = createFakeChrome();
-    const orphan = chrome.startOrphan(SHINSA);
+    const orphan = chrome.startOrphan(SHINSA, 'window');
     await Effect.runPromise(awaitPid(chrome, SHINSA));
     const endpoint = await runHost(
       chrome,
@@ -306,6 +306,37 @@ describe('the browser host', () => {
     chrome.busy();
     const error = await runHost(chrome, Effect.flip(BrowserHost.use((host) => host.acquire(SHINSA))));
     expect(error).toMatchObject({ reason: 'profile_in_use', message: PROFILE_IN_USE_MESSAGE });
+    expect(chrome.launches()).toHaveLength(2);
+  });
+
+  test('stops the headless Chromes earlier engines left when it starts, and leaves sign-in windows', async () => {
+    const chrome = createFakeChrome();
+    const headless = chrome.startOrphan(SHINSA);
+    await Effect.runPromise(awaitPid(chrome, SHINSA));
+    const window = chrome.startOrphan(SUPERWALL, 'window');
+    await Effect.runPromise(awaitPid(chrome, SUPERWALL));
+    await runHost(
+      chrome,
+      Effect.promise(() => until('the left headless Chrome to stop', () => !isAlive(headless)))
+    );
+    expect(isAlive(window)).toBe(true);
+    process.kill(window);
+  });
+
+  test('starts no browser of its own while it stops the ones left behind', async () => {
+    const chrome = createFakeChrome();
+    const orphan = chrome.startOrphan(SHINSA);
+    await Effect.runPromise(awaitPid(chrome, SHINSA));
+    const mode = await runHost(
+      chrome,
+      Effect.gen(function* () {
+        const host = yield* BrowserHost;
+        yield* host.acquire(SHINSA);
+        return yield* host.resolveMode(SHINSA);
+      })
+    );
+    expect(isAlive(orphan)).toBe(false);
+    expect(mode).toBe('headless');
     expect(chrome.launches()).toHaveLength(2);
   });
 });

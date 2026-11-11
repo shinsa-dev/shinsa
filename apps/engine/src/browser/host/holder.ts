@@ -7,6 +7,7 @@ import { isProcessAlive } from '../../instance/lock/liveness.ts';
 import {
   BrowserUnavailable,
   HOLDER_POLL_SCHEDULE,
+  HEADLESS_FLAG,
   KILL_GRACE,
   PROFILE_IN_USE_MESSAGE,
   type ProfileHolder,
@@ -25,6 +26,10 @@ export function isOpenedOn(commandLine: string, folder: string) {
   const flag = `--user-data-dir=${folder}`;
   const line = commandLine.trim();
   return line.endsWith(flag) || line.includes(`${flag} `);
+}
+
+export function isHeadless(commandLine: string) {
+  return commandLine.split(/\s+/).includes(HEADLESS_FLAG);
 }
 
 export function resolveProfileInUseMessage(pid: number | null) {
@@ -50,8 +55,8 @@ export const resolveProfileHolder = Effect.fn('BrowserHost.resolveProfileHolder'
     return { kind: 'none' } satisfies ProfileHolder;
   }
   const commandLine = yield* readCommandLine(pid);
-  const kind = isOpenedOn(commandLine, folder) ? 'ours' : 'foreign';
-  return { kind, pid } satisfies ProfileHolder;
+  if (!isOpenedOn(commandLine, folder)) return { kind: 'foreign', pid } satisfies ProfileHolder;
+  return { kind: 'ours', pid, headless: isHeadless(commandLine) } satisfies ProfileHolder;
 });
 
 const signal = (pid: number, name: NodeJS.Signals) =>
@@ -82,8 +87,34 @@ export const reclaimProfile = Effect.fn('BrowserHost.reclaimProfile')(function* 
   const holder = yield* resolveProfileHolder(folder);
   if (holder.kind === 'none') return;
   if (holder.kind === 'foreign') return yield* profileInUse(holder.pid);
-  yield* stopProfileHolder(holder.pid, grace);
+  yield* stopOrphan(folder, holder.pid, grace);
+});
+
+const stopOrphan = Effect.fn('BrowserHost.stopOrphan')(function* (
+  folder: string,
+  pid: number,
+  grace: Duration.Input
+) {
+  yield* stopProfileHolder(pid, grace);
   yield* Effect.logWarning('[Browser] Stopped a Chrome an earlier Shinsa left running').pipe(
-    Effect.annotateLogs({ pid: holder.pid, profile: folder })
+    Effect.annotateLogs({ pid, profile: folder })
   );
+});
+
+const sweepProfile = Effect.fn('BrowserHost.sweepProfile')(function* (folder: string, grace: Duration.Input) {
+  const holder = yield* resolveProfileHolder(folder);
+  if (holder.kind !== 'ours' || !holder.headless) return;
+  yield* stopOrphan(folder, holder.pid, grace);
+});
+
+export const sweepOrphans = Effect.fn('BrowserHost.sweepOrphans')(function* (
+  root: string,
+  grace: Duration.Input
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const names = yield* fs.readDirectory(root).pipe(Effect.orElseSucceed(constant([])));
+  yield* Effect.forEach(names, (name) => Effect.ignore(sweepProfile(join(root, name), grace)), {
+    concurrency: 'unbounded',
+    discard: true,
+  });
 });

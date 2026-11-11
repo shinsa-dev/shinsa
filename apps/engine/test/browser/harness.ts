@@ -44,7 +44,7 @@ export interface FakeChrome {
   busy(): void;
   busyOnce(): void;
   lockProfile(profile: BrowserProfile, pid: number, host?: string): void;
-  startOrphan(profile: BrowserProfile): number;
+  startOrphan(profile: BrowserProfile, mode?: 'headless' | 'window'): number;
 }
 
 export function createFakeChrome(): FakeChrome {
@@ -72,10 +72,11 @@ export function createFakeChrome(): FakeChrome {
       mkdirSync(folder, { recursive: true });
       symlinkSync(`${host}-${pid}`, join(folder, 'SingletonLock'));
     },
-    startOrphan: (profile) => {
+    startOrphan: (profile, mode = 'headless') => {
       const folder = join(home, 'data', 'browser', profile);
       mkdirSync(folder, { recursive: true });
-      const orphan = Bun.spawn([path, `--user-data-dir=${folder}`, '--headless=new', 'about:blank'], {
+      const args = mode === 'headless' ? ['--headless=new', 'about:blank'] : ['https://accounts.google.com/'];
+      const orphan = Bun.spawn([path, `--user-data-dir=${folder}`, ...args], {
         stdio: ['ignore', 'ignore', 'ignore'],
       });
       return orphan.pid;

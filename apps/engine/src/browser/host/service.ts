@@ -4,7 +4,7 @@ import { constant, constFalse } from 'effect/Function';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { EngineConfig } from '../../config/service.ts';
 import { sendCdpCommand } from '../cdp/command.ts';
-import { profileInUse, reclaimProfile } from './holder.ts';
+import { profileInUse, reclaimProfile, sweepOrphans } from './holder.ts';
 import {
   ACTIVE_PORT_FILE,
   type BrowserEndpoint,
@@ -288,6 +288,12 @@ export class BrowserHost extends Context.Service<
         Effect.map(selectRunning(profile), (current): BrowserMode =>
           Option.isSome(current) ? current.value.mode : 'stopped'
         );
+
+      yield* lock.take(1);
+      yield* Effect.forkIn(
+        withPlatform(sweepOrphans(root, settings.stopTimeout)).pipe(Effect.ensuring(lock.release(1))),
+        layerScope
+      );
 
       yield* Effect.addFinalizer(() =>
         Effect.flatMap(Ref.get(running), (all) =>

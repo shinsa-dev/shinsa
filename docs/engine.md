@@ -6248,13 +6248,25 @@ you: Settings → Browser ─────────┤
   first; a kill would lose the sign-ins made since the last write. Both modes run with `--use-mock-keychain`, so the
   profile encrypts the same way in each and Chrome never asks for your Keychain. Browser state lives in these folders,
   never in the event log.
+- **A profile an earlier engine left open** (`host/holder.ts`, since 2026-11-11). The host keeps its browsers only in
+  memory, so an engine that was killed (a crash, a forced quit, an update) leaves its Chrome running, and Chrome refuses
+  a second one on the same folder (exit code 21, `PROFILE_IN_USE_CODE`). Before each launch the host reads the
+  profile's `SingletonLock` (`<host>-<pid>`): a live process on this machine whose command line opens exactly that
+  folder (`--user-data-dir=<folder>`) is an earlier engine's Chrome, so it is stopped (SIGTERM, which Chrome treats as
+  a quit and writes its cookies, then SIGKILL after `stopTimeout`) and logged as `[Browser] Stopped a Chrome an earlier
+  Shinsa left running`. Any other live holder is never killed: the call fails with `profile_in_use`, whose message
+  names the process to quit. A lock whose process is gone, or from another machine, is left to Chrome, which takes it
+  over itself. When Chrome still exits with 21, the host reclaims and starts once more, then says the profile is in
+  use. When the engine starts, it stops every headless Chrome an earlier engine left on a profile in `browserDir`
+  before it launches any of its own (`sweepOrphans`, holding the host's lock); a sign-in window you left open stays,
+  until that project's browser is next needed.
 - **Agents reach it through the engine** (`BrowserProxy`). Each run of a task in a project is issued a key
   (`RunSupervisor.issueBrowser`) that the run's scope revokes when it ends, closing its connections; the endpoint,
   `ws://127.0.0.1:<port>/browser/cdp/<key>`, goes into the run's environment as `PLAYWRIGHT_MCP_CDP_ENDPOINT`
   (`resolveBrowserEnv`), for Claude's process and Codex's app server alike, never into the prompt (Caching, below).
   The route refuses a connection from outside this machine, from another site's Origin, or with a key that is not a
-  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start or the sign-in
-  window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
+  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start, finds its profile
+  held by another program or the sign-in window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
   agent cannot take every other agent's pages down. Every agent shares the default context, so the cookies are one
   jar, but each connection sees only its own pages (`createTargetFilter`): a page counts as its own when it opened it
   (`Target.createTarget`) or a page of its own opened it (a popup, by `openerId`). Every other page is hidden from its

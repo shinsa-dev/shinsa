@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
 import { Effect, Option } from 'effect';
 import {
+  isHeadless,
   isOpenedOn,
   parseProfileLock,
   resolveProfileHolder,
@@ -38,6 +39,12 @@ describe("a browser profile's lock holder", () => {
     expect(isOpenedOn(`chrome --user-data-dir=${folder}\n`, folder)).toBe(true);
     expect(isOpenedOn(`chrome --user-data-dir=${folder}-b --headless=new`, folder)).toBe(false);
     expect(isOpenedOn('', folder)).toBe(false);
+  });
+
+  test('tells a headless Chrome from a sign-in window by its command line', () => {
+    expect(isHeadless('chrome --user-data-dir=/data/browser/a --headless=new about:blank')).toBe(true);
+    expect(isHeadless('chrome --user-data-dir=/data/browser/a https://accounts.google.com/')).toBe(false);
+    expect(isHeadless('chrome --headless=old')).toBe(false);
   });
 
   test('ignores a lock from another machine or from this process', async () => {
