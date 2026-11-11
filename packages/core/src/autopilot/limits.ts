@@ -1,0 +1,180 @@
+import { type Gate, HOUR_MS, MINUTE_MS, hasStep } from '../domain/index.ts';
+import { type AutopilotGate, type AutopilotPolicy } from '../domain/settings.ts';
+import type { Task } from '../domain/types.ts';
+import { isActiveAt, resolveActiveHours } from '../presence/hours.ts';
+import type { ReviewRating } from '../report/types.ts';
+import type { ShinsaState } from '../state/project.ts';
+import {
+  AUTOPILOT_CEILINGS,
+  AUTOPILOT_LIMITS,
+  type AutopilotFacts,
+  type AutopilotGateKind,
+  type AutopilotLimit,
+  type AutopilotLimits,
+  type AutopilotPresence,
+  type AutopilotScope,
+} from './schema.ts';
+
+const RISK_ORDER: Record<ReviewRating, number> = { low: 0, medium: 1, high: 2 };
+
+const GATE_SETTING: Record<Exclude<AutopilotGateKind, 'merge'>, AutopilotGate> = {
+  plan: 'plans',
+  question: 'questions',
+  review: 'reviews',
+};
+
+const ALLOWED: AutopilotLimit = { allowed: true };
+
+function refuse(reason: string): AutopilotLimit {
+  return { allowed: false, reason };
+}
+
+export function isUrgentTask(task: Task) {
+  return task.priority === 'urgent' && task.priorityOnBehalf !== true;
+}
+
+function resolveLastSeenAt(state: ShinsaState, now: number) {
+  const hours = Object.keys(state.presence).map(Number);
+  if (hours.length === 0) return null;
+  return Math.min(now, (Math.max(...hours) + 1) * HOUR_MS);
+}
+
+export function resolveAutopilotPresence(state: ShinsaState, now: number): AutopilotPresence {
+  const hours = resolveActiveHours(state, now);
+  const lastSeenAt = resolveLastSeenAt(state, now);
+  const awayMinutes = lastSeenAt === null ? null : Math.floor((now - lastSeenAt) / MINUTE_MS);
+  const active = awayMinutes !== null && awayMinutes <= AUTOPILOT_LIMITS.activeMinutes;
+  return {
+    inHours: hours === null ? null : isActiveAt(hours, now),
+    active,
+    awayMinutes: active ? 0 : awayMinutes,
+  };
+}
+
+function resolveScope(task: Task): AutopilotScope | null {
+  const document = task.plan?.document;
+  return document ? { phases: document.phases.length, files: document.files.length } : null;
+}
+
+function isHeldPlan(task: Task) {
+  const document = task.plan?.document;
+  return (
+    hasStep(task, 'operate') ||
+    task.planFirst ||
+    Boolean(task.backlog) ||
+    document?.approval === true ||
+    (document?.split ?? []).length > 0
+  );
+}
+
+export function resolveAutopilotFacts(
+  state: ShinsaState,
+  task: Task,
+  gate: AutopilotGateKind,
+  openedAt: Gate['openedAt'],
+  now: number
+): AutopilotFacts {
+  const ratings = task.reviewRatings ?? null;
+  return {
+    gate,
+    urgent: isUrgentTask(task),
+    watchdog: task.createdBy?.kind === 'watchdog',
+    confidence: ratings?.confidence ?? null,
+    risk: ratings?.risk ?? null,
+    scope: resolveScope(task),
+    heldPlan: isHeldPlan(task),
+    escalatedReview: false,
+    approvedByYou: !task.autopiloted,
+    waitedMinutes: Math.max(0, Math.floor((now - openedAt) / MINUTE_MS)),
+    presence: resolveAutopilotPresence(state, now),
+  };
+}
+
+function isWithin(risk: ReviewRating, ceiling: ReviewRating) {
+  return RISK_ORDER[risk] <= RISK_ORDER[ceiling];
+}
+
+function isHigher(left: ReviewRating, right: ReviewRating) {
+  return RISK_ORDER[left] > RISK_ORDER[right];
+}
+
+function hasBeenAwayLong(facts: AutopilotFacts) {
+  const away = facts.presence.awayMinutes;
+  if (facts.presence.active || away === null) return false;
+  return Math.min(away, facts.waitedMinutes) >= AUTOPILOT_LIMITS.awayMinutes;
+}
+
+function limitRatings(facts: AutopilotFacts, ceiling: ReviewRating): AutopilotLimit {
+  if (facts.confidence === null || facts.risk === null)
+    return refuse('The reviewer did not rate the change.');
+  if (facts.confidence !== 'high') return refuse(`The reviewer’s confidence is ${facts.confidence}.`);
+  if (!isWithin(facts.risk, ceiling)) {
+    return refuse(`The risk is ${facts.risk}, above what Autopilot does on its own.`);
+  }
+  return ALLOWED;
+}
+
+function limitPlan(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+  if (facts.heldPlan)
+    return refuse('This plan asks for you: it runs an operation, splits or you asked to see it.');
+  const scope = facts.scope;
+  if (!scope) return refuse('The plan has no phases yet.');
+  const ceiling = AUTOPILOT_CEILINGS[policy.level].scope;
+  if (scope.phases > ceiling.phases || scope.files > ceiling.files) {
+    return refuse('The plan is larger than Autopilot approves on its own.');
+  }
+  return ALLOWED;
+}
+
+function limitReview(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+  if (facts.escalatedReview) return refuse('The agents could not settle the review.');
+  const ceiling = AUTOPILOT_CEILINGS[policy.level];
+  return limitRatings(facts, facts.urgent ? ceiling.urgentRisk : ceiling.risk);
+}
+
+function resolveMergeCeiling(facts: AutopilotFacts, policy: AutopilotPolicy): ReviewRating {
+  const ceiling = AUTOPILOT_CEILINGS[policy.level];
+  const base = policy.autoMerge === 'low_risk' ? 'low' : ceiling.risk;
+  if (!facts.urgent || !hasBeenAwayLong(facts)) return base;
+  return isHigher(ceiling.urgentRisk, base) ? ceiling.urgentRisk : base;
+}
+
+function limitMerge(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+  if (policy.autoMerge === 'off') return refuse('Auto merge is off.');
+  if (facts.approvedByYou) return refuse('You approved the review yourself.');
+  return limitRatings(facts, resolveMergeCeiling(facts, policy));
+}
+
+function limitAct(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+  if (!policy.enabled) return refuse('Autopilot is off.');
+  if (facts.gate !== 'merge' && !policy.gates.includes(GATE_SETTING[facts.gate])) {
+    return refuse('Autopilot does not act on this kind of gate.');
+  }
+  switch (facts.gate) {
+    case 'plan':
+      return limitPlan(facts, policy);
+    case 'question':
+      return ALLOWED;
+    case 'review':
+      return limitReview(facts, policy);
+    case 'merge':
+      return limitMerge(facts, policy);
+  }
+}
+
+function limitEscalate(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+  if (!policy.enabled || !policy.escalate) return refuse('Autopilot does not contact your team.');
+  if (!facts.urgent) return refuse('Only urgent changes go to your team.');
+  if (facts.risk !== 'high') return refuse('Only high risk changes go to your team.');
+  if (facts.presence.active) return refuse('You are active, so it stays with you.');
+  if (!hasBeenAwayLong(facts)) {
+    return refuse(
+      `It goes to your team only after you have been away ${AUTOPILOT_LIMITS.awayMinutes} minutes.`
+    );
+  }
+  return ALLOWED;
+}
+
+export function resolveAutopilotLimits(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimits {
+  return { act: limitAct(facts, policy), escalate: limitEscalate(facts, policy) };
+}

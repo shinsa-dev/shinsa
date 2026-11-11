@@ -19,11 +19,14 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckMark } from '@/components/status/check-mark.tsx';
 import {
+  AUTO_MERGE_ITEMS,
   AUTOPILOT_BLOCKS,
   AUTOPILOT_ENABLED_ITEMS,
-  AUTOPILOT_MERGE_ITEMS,
+  AUTOPILOT_ESCALATE_ITEMS,
+  AUTOPILOT_GATE_ITEMS,
+  AUTOPILOT_GATE_ROWS,
+  AUTOPILOT_LEVEL_ITEMS,
   AUTOPILOT_OFF,
-  AUTOPILOT_RISK_ITEMS,
   AUTOPILOT_ROWS,
   AUTOPILOT_TITLE,
   AUTOPILOT_TURN_ON,
@@ -34,11 +37,7 @@ import {
   describeSlackTestResults,
   hasTeamProject,
   isAskWaiting,
-  isMergedAfterWait,
   isSlackTestSent,
-  listAutopilotQuietItems,
-  listAutopilotUrgentItems,
-  listAutopilotWaitItems,
   listContactOptions,
   listSlackWorkspaceItems,
   resolveAutopilotValue,
@@ -48,6 +47,7 @@ import {
   resolveSlackUnavailable,
   TEAM_CONTACT,
   toggleAutopilotContact,
+  toggleAutopilotGate,
 } from '@/lib/autopilot.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { sendSlackTests, useSlack, useSlackDirectory } from '@/lib/connection/slack.ts';
@@ -246,12 +246,10 @@ function AskBlock({
 
 export function AutopilotSettings({ settings }: { settings: Settings }) {
   const available = useEngineFeature('autopilot');
-  const yourHours = useEngineFeature('active-hours');
   const projects = useShinsaSelector((state) => state.projects);
   const { policy, enabled } = resolveAutopilotValue(settings);
   if (!available) return null;
   const team = hasTeamProject(Object.values(projects ?? {}));
-  const reachable = team || policy.contacts.length > 0;
   const updateAutopilot = (patch: Partial<AutopilotPolicy>) => {
     void updateSettings({ autopilot: { ...policy, ...patch } });
   };
@@ -284,42 +282,46 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
       {policy.enabled && (
         <>
           <SettingsBlock
-            header={
-              <BlockHeader icon={AUTOPILOT_BLOCKS.approving.icon} title={AUTOPILOT_BLOCKS.approving.title} />
-            }
+            header={<BlockHeader icon={AUTOPILOT_BLOCKS.acting.icon} title={AUTOPILOT_BLOCKS.acting.title} />}
           >
-            <SettingRow title={AUTOPILOT_ROWS.approve}>
+            <SettingRow title={AUTOPILOT_ROWS.level}>
               <SelectField
-                label={AUTOPILOT_ROWS.approve}
-                items={AUTOPILOT_RISK_ITEMS}
-                value={policy.approveUpTo}
-                onValueChange={(approveUpTo) => updateAutopilot({ approveUpTo })}
+                label={AUTOPILOT_ROWS.level}
+                items={AUTOPILOT_LEVEL_ITEMS}
+                value={policy.level}
+                onValueChange={(level) => updateAutopilot({ level })}
               />
             </SettingRow>
-            <SettingRow title={AUTOPILOT_ROWS.urgentApprove}>
-              <SelectField
-                label={AUTOPILOT_ROWS.urgentApprove}
-                items={AUTOPILOT_RISK_ITEMS}
-                value={policy.urgentApproveUpTo}
-                onValueChange={(urgentApproveUpTo) => updateAutopilot({ urgentApproveUpTo })}
-              />
-            </SettingRow>
-            <SettingRow title={AUTOPILOT_ROWS.merge}>
-              <SelectField
-                label={AUTOPILOT_ROWS.merge}
-                items={AUTOPILOT_MERGE_ITEMS}
-                value={policy.merge}
-                onValueChange={(merge) => updateAutopilot({ merge })}
-              />
-            </SettingRow>
+            {AUTOPILOT_GATE_ROWS.map((row) => (
+              <SettingRow key={row.gate} title={row.title}>
+                <SelectField
+                  label={row.title}
+                  items={AUTOPILOT_GATE_ITEMS}
+                  value={policy.gates.includes(row.gate) ? 'on' : 'off'}
+                  onValueChange={(value) =>
+                    updateAutopilot({ gates: toggleAutopilotGate(policy.gates, row.gate, value === 'on') })
+                  }
+                />
+              </SettingRow>
+            ))}
           </SettingsBlock>
           <SettingsBlock
-            header={<BlockHeader icon={AUTOPILOT_BLOCKS.urgent.icon} title={AUTOPILOT_BLOCKS.urgent.title} />}
+            header={
+              <BlockHeader icon={AUTOPILOT_BLOCKS.merging.icon} title={AUTOPILOT_BLOCKS.merging.title} />
+            }
           >
+            <SettingRow title={AUTOPILOT_ROWS.autoMerge}>
+              <SelectField
+                label={AUTOPILOT_ROWS.autoMerge}
+                items={AUTO_MERGE_ITEMS}
+                value={policy.autoMerge}
+                onValueChange={(autoMerge) => updateAutopilot({ autoMerge })}
+              />
+            </SettingRow>
             <SettingRow
               title={
                 <>
-                  {AUTOPILOT_ROWS.urgent}
+                  {AUTOPILOT_ROWS.escalate}
                   {isAskWaiting(policy, team) && (
                     <Hint label='No one is asked yet. Add a Slack channel or person, or share a project with a team.'>
                       <Icon size='sm' name='IconCircleInfo' className='text-warning' />
@@ -329,32 +331,12 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
               }
             >
               <SelectField
-                label={AUTOPILOT_ROWS.urgent}
-                items={listAutopilotUrgentItems(reachable)}
-                value={policy.urgent}
-                onValueChange={(urgent) => updateAutopilot({ urgent })}
+                label={AUTOPILOT_ROWS.escalate}
+                items={AUTOPILOT_ESCALATE_ITEMS}
+                value={policy.escalate ? 'on' : 'off'}
+                onValueChange={(value) => updateAutopilot({ escalate: value === 'on' })}
               />
             </SettingRow>
-            {isMergedAfterWait(policy) && (
-              <SettingRow title={AUTOPILOT_ROWS.wait}>
-                <SelectField
-                  label={AUTOPILOT_ROWS.wait}
-                  items={listAutopilotWaitItems(policy)}
-                  value={String(policy.urgentWaitMinutes)}
-                  onValueChange={(value) => updateAutopilot({ urgentWaitMinutes: Number(value) })}
-                />
-              </SettingRow>
-            )}
-            {yourHours && isMergedAfterWait(policy) && (
-              <SettingRow title={AUTOPILOT_ROWS.quiet}>
-                <SelectField
-                  label={AUTOPILOT_ROWS.quiet}
-                  items={listAutopilotQuietItems(policy)}
-                  value={String(policy.quietWaitMinutes)}
-                  onValueChange={(value) => updateAutopilot({ quietWaitMinutes: Number(value) })}
-                />
-              </SettingRow>
-            )}
             <SettingRow title={AUTOPILOT_ROWS.usage}>
               <SelectField
                 label={AUTOPILOT_ROWS.usage}

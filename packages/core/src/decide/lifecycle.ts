@@ -183,7 +183,7 @@ export function openReviewGate(decider: Decider, taskId: string, escalation: Rev
   const ahead = escalation === null && task.approveAfterFix === true;
   const autopilot = ahead
     ? null
-    : resolveAutopilotDecision(decider.state.settings, task, escalation !== null);
+    : resolveAutopilotDecision(decider.state, decider.context.now, task, escalation !== null);
   const gate = decider.openGate(
     taskId,
     'review',

@@ -1,5 +1,6 @@
 export * from './accounts/index.ts';
 export * from './agent-models/index.ts';
+export * from './autopilot/index.ts';
 export * from './briefing/index.ts';
 export * from './browser/index.ts';
 export * from './changelog/index.ts';

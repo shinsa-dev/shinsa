@@ -8,7 +8,8 @@ import {
   type SlackSnapshot,
 } from '@shinsa/core';
 import {
-  AUTOPILOT_RISK_ITEMS,
+  AUTO_MERGE_ITEMS,
+  AUTOPILOT_LEVEL_ITEMS,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
   describeContactPickerEmpty,
@@ -16,7 +17,6 @@ import {
   hasTeamProject,
   isSlackTestSent,
   isAskWaiting,
-  listAutopilotUrgentItems,
   resolveContactTestBlock,
   listContactOptions,
   listSlackWorkspaceItems,
@@ -25,7 +25,7 @@ import {
   resolveSlackUnavailable,
   toggleAutopilotContact,
   describeAgentReviewNote,
-  listAutopilotWaitItems,
+  toggleAutopilotGate,
   listHandoffParagraphs,
   listTeamEscalationRows,
   resolveAutopilotFact,
@@ -66,31 +66,13 @@ const DIRECTORY: SlackDirectoryView = {
 };
 
 describe('who an escalation reaches', () => {
-  it('offers asking for a review only once someone can be asked', () => {
-    const asks = (reachable: boolean) =>
-      listAutopilotUrgentItems(reachable).map((item) => [item.value, item.disabled ?? null]);
-    expect(asks(true)).toEqual([
-      ['wait', null],
-      ['escalate', null],
-      ['escalate_then_merge', null],
-      ['merge', null],
-    ]);
-    expect(asks(false)).toEqual([
-      ['wait', null],
-      ['escalate', 'Add someone to ask first'],
-      ['escalate_then_merge', 'Add someone to ask first'],
-      ['merge', null],
-    ]);
-  });
-
   it('knows whether a project is shared with a team, and warns while an ask reaches no one', () => {
     expect(hasTeamProject([{ teamIds: [] }, {}])).toBe(false);
     expect(hasTeamProject([{}, { teamIds: ['team-1'] }])).toBe(true);
-    const asking = { ...AUTOPILOT_DEFAULTS, urgent: 'escalate_then_merge' as const };
-    expect(isAskWaiting(asking, false)).toBe(true);
-    expect(isAskWaiting(asking, true)).toBe(false);
-    expect(isAskWaiting({ ...asking, contacts: [ONCALL] }, false)).toBe(false);
-    expect(isAskWaiting({ ...AUTOPILOT_DEFAULTS, urgent: 'merge' }, false)).toBe(false);
+    expect(isAskWaiting(AUTOPILOT_DEFAULTS, false)).toBe(true);
+    expect(isAskWaiting(AUTOPILOT_DEFAULTS, true)).toBe(false);
+    expect(isAskWaiting({ ...AUTOPILOT_DEFAULTS, contacts: [ONCALL] }, false)).toBe(false);
+    expect(isAskWaiting({ ...AUTOPILOT_DEFAULTS, escalate: false }, false)).toBe(false);
   });
 
   it('says why Slack cannot be picked: an older engine, still checking, unreachable, or not connected', () => {
@@ -234,32 +216,31 @@ describe('the Autopilot settings', () => {
     expect(resolveAutopilotValue(createSettings())).toEqual({ policy: AUTOPILOT_DEFAULTS, enabled: 'off' });
     const settings = {
       ...createSettings(),
-      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, merge: 'approved' as const },
+      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, autoMerge: 'approved' as const },
     };
-    expect(resolveAutopilotValue(settings)).toMatchObject({ enabled: 'on', policy: { merge: 'approved' } });
+    expect(resolveAutopilotValue(settings)).toMatchObject({
+      enabled: 'on',
+      policy: { autoMerge: 'approved' },
+    });
   });
 
-  it('names each risk limit, and never approving is not a shield', () => {
-    expect(AUTOPILOT_RISK_ITEMS.map((item) => [item.value, item.label, item.icon])).toEqual([
-      ['none', 'Never', 'IconCircleX'],
-      ['low', 'Low risk only', 'IconShieldCheck'],
-      ['medium', 'Up to medium risk', 'IconShieldCheck'],
-      ['high', 'Any risk', 'IconShieldCheck'],
+  it('names how much it does alone and what Auto merge takes, each with one sentence on the level', () => {
+    expect(AUTOPILOT_LEVEL_ITEMS.map((item) => [item.value, item.label])).toEqual([
+      ['ask_first', 'Ask me first'],
+      ['balanced', 'Balanced'],
+      ['most', 'Most things'],
     ]);
+    expect(AUTOPILOT_LEVEL_ITEMS.every((item) => (item.hint ?? '').endsWith('.'))).toBe(true);
+    expect(AUTO_MERGE_ITEMS.map((item) => item.value)).toEqual(['off', 'low_risk', 'approved']);
   });
 
-  it('lists the waits in order with the one you saved, in minutes or hours', () => {
-    const items = listAutopilotWaitItems({ ...AUTOPILOT_DEFAULTS, urgentWaitMinutes: 90 });
-    expect(items.map((item) => item.label)).toEqual([
-      '15 minutes',
-      '30 minutes',
-      '1 hour',
-      '90 minutes',
-      '2 hours',
-      '4 hours',
-      '8 hours',
+  it('adds or drops one gate and keeps the others', () => {
+    expect(toggleAutopilotGate(['plans', 'questions', 'reviews'], 'questions', false)).toEqual([
+      'plans',
+      'reviews',
     ]);
-    expect(items[2]).toEqual({ value: '60', label: '1 hour', icon: 'IconClock' });
+    expect(toggleAutopilotGate(['plans'], 'reviews', true)).toEqual(['plans', 'reviews']);
+    expect(toggleAutopilotGate(['plans', 'reviews'], 'reviews', true)).toEqual(['plans', 'reviews']);
   });
 });
 

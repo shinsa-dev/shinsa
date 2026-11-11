@@ -1,15 +1,15 @@
 import {
   type AutopilotContact,
   type AutopilotContactKind,
-  type AutopilotMerge,
+  type AutopilotGate,
+  type AutopilotLevel,
+  type AutoMerge,
   HOUR_MS,
   isSameAutopilotContact,
   MAX_AUTOPILOT_CONTACTS,
   type MergeBlock,
   MINUTE_MS,
   type AutopilotPolicy,
-  type AutopilotRisk,
-  type AutopilotUrgent,
   type Project,
   type ReviewRating,
   resolveAutopilotPolicy,
@@ -37,55 +37,69 @@ export const AUTOPILOT_ENABLED_ITEMS: SettingItem<'on' | 'off'>[] = [
   { value: 'on', label: 'On', icon: 'IconRocket' },
 ];
 
-const RISK_LABEL: Record<AutopilotRisk, string> = {
-  none: 'Never',
-  low: 'Low risk only',
-  medium: 'Up to medium risk',
-  high: 'Any risk',
-};
+export const AUTOPILOT_LEVEL_ITEMS: SettingItem<AutopilotLevel>[] = [
+  {
+    value: 'ask_first',
+    label: 'Ask me first',
+    icon: 'IconShieldCheck',
+    hint: 'It acts alone only on small, low-risk work.',
+  },
+  {
+    value: 'balanced',
+    label: 'Balanced',
+    icon: 'IconShieldCheck',
+    hint: 'It acts alone on clear, low-risk work, and on medium risk when urgent.',
+  },
+  {
+    value: 'most',
+    label: 'Most things',
+    icon: 'IconRocket',
+    hint: 'It acts alone on medium-risk work, and on any urgent work once you are away.',
+  },
+];
 
-export const AUTOPILOT_RISK_ITEMS: SettingItem<AutopilotRisk>[] = (
-  ['none', 'low', 'medium', 'high'] as const
-).map((value) => ({
-  value,
-  label: RISK_LABEL[value],
-  icon: value === 'none' ? 'IconCircleX' : 'IconShieldCheck',
-}));
+export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string }[] = [
+  { gate: 'plans', title: 'Plans' },
+  { gate: 'questions', title: 'Agent questions' },
+  { gate: 'reviews', title: 'Reviews' },
+];
 
-export const AUTOPILOT_MERGE_ITEMS: SettingItem<AutopilotMerge>[] = [
-  { value: 'never', label: 'Never, ask me', icon: 'IconCircleX' },
+export const AUTOPILOT_GATE_ITEMS: SettingItem<'on' | 'off'>[] = [
+  { value: 'on', label: 'Autopilot decides', icon: 'IconRocket' },
+  { value: 'off', label: 'Always ask me', icon: 'IconCircleX' },
+];
+
+export function toggleAutopilotGate(gates: readonly AutopilotGate[], gate: AutopilotGate, on: boolean) {
+  const others = gates.filter((saved) => saved !== gate);
+  return on ? [...others, gate] : others;
+}
+
+export const AUTO_MERGE_ITEMS: SettingItem<AutoMerge>[] = [
+  { value: 'off', label: 'Off, I merge', icon: 'IconCircleX' },
   { value: 'low_risk', label: 'Low risk changes', icon: 'IconMerged' },
   { value: 'approved', label: 'Every change it approved', icon: 'IconMerged' },
 ];
 
-const NOBODY_TO_ASK = 'Add someone to ask first';
-
-const ASKS: ReadonlySet<AutopilotUrgent> = new Set(['escalate', 'escalate_then_merge']);
-
-export function listAutopilotUrgentItems(reachable: boolean): SettingItem<AutopilotUrgent>[] {
-  const items: SettingItem<AutopilotUrgent>[] = [
-    { value: 'wait', label: 'Wait for me', icon: 'IconClock' },
-    { value: 'escalate', label: 'Ask for a review', icon: 'IconMegaphone' },
-    { value: 'escalate_then_merge', label: 'Ask for a review, then merge', icon: 'IconMegaphone' },
-    { value: 'merge', label: 'Merge after a wait', icon: 'IconMerged' },
-  ];
-  if (reachable) return items;
-  return items.map((item) => (ASKS.has(item.value) ? { ...item, disabled: NOBODY_TO_ASK } : item));
-}
+export const AUTOPILOT_ESCALATE_ITEMS: SettingItem<'on' | 'off'>[] = [
+  {
+    value: 'on',
+    label: 'Only as a last resort',
+    icon: 'IconMegaphone',
+    hint: 'Only when you are away and the change is urgent and high risk.',
+  },
+  { value: 'off', label: 'Never', icon: 'IconCircleX' },
+];
 
 export const AUTOPILOT_BLOCKS = {
-  approving: { title: 'Approving for you', icon: 'IconShieldCheck' },
-  urgent: { title: 'Urgent changes', icon: 'IconClock' },
+  acting: { title: 'Acting for you', icon: 'IconShieldCheck' },
+  merging: { title: 'Merging', icon: 'IconMerged' },
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
 } as const;
 
 export const AUTOPILOT_ROWS = {
-  approve: 'Reviews',
-  urgentApprove: 'Urgent reviews',
-  merge: 'Merges',
-  urgent: 'When ready to merge',
-  wait: 'Merges after',
-  quiet: 'Outside your hours, after',
+  level: 'On its own',
+  autoMerge: 'Auto merge',
+  escalate: 'Your team',
   usage: 'Usage limits',
 } as const;
 
@@ -93,10 +107,6 @@ export const AUTOPILOT_USAGE_ITEMS: SettingItem<'on' | 'off'>[] = [
   { value: 'on', label: 'Ignore them', icon: 'IconRocket' },
   { value: 'off', label: 'Keep them', icon: 'IconCircleX' },
 ];
-
-function isAskingOthers(policy: AutopilotPolicy) {
-  return ASKS.has(policy.urgent);
-}
 
 export function hasTeamProject(projects: readonly Pick<Project, 'teamIds'>[]) {
   return projects.some((project) => (project.teamIds?.length ?? 0) > 0);
@@ -109,7 +119,7 @@ export const TEAM_CONTACT = {
 } as const;
 
 export function isAskWaiting(policy: AutopilotPolicy, team: boolean) {
-  return isAskingOthers(policy) && !team && policy.contacts.length === 0;
+  return policy.escalate && !team && policy.contacts.length === 0;
 }
 
 const SLACK_CHECKING = 'Checking Slack';
@@ -224,31 +234,11 @@ export function describeSlackTestResults(
   return `Not sent to ${name}: ${failed.problem ?? 'Slack refused it.'}`;
 }
 
-const WAIT_CHOICES = [15, 30, 60, 120, 240, 480];
-
 function describeMinutes(minutes: number) {
   if (minutes < 60) return `${minutes} minutes`;
   const hours = minutes / 60;
   if (!Number.isInteger(hours)) return `${minutes} minutes`;
   return hours === 1 ? '1 hour' : `${hours} hours`;
-}
-
-export function listAutopilotWaitItems(policy: AutopilotPolicy): SettingItem<string>[] {
-  const values = [...new Set([...WAIT_CHOICES, policy.urgentWaitMinutes])].sort((a, b) => a - b);
-  return values.map((value) => ({ value: String(value), label: describeMinutes(value), icon: 'IconClock' }));
-}
-
-const QUIET_WAIT_CHOICES = [5, 10, 15, 30, 60];
-
-export function listAutopilotQuietItems(policy: AutopilotPolicy): SettingItem<string>[] {
-  const values = [...new Set([...QUIET_WAIT_CHOICES, policy.quietWaitMinutes])].sort((a, b) => a - b);
-  return values.map((value) => ({ value: String(value), label: describeMinutes(value), icon: 'IconMoon' }));
-}
-
-const MERGES_AFTER_WAIT: ReadonlySet<AutopilotUrgent> = new Set(['merge', 'escalate_then_merge']);
-
-export function isMergedAfterWait(policy: AutopilotPolicy) {
-  return MERGES_AFTER_WAIT.has(policy.urgent);
 }
 
 export function resolveAutopilotValue(settings: Settings) {

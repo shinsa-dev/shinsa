@@ -1,7 +1,13 @@
+import { isUrgentTask, resolveAutopilotFacts, resolveAutopilotLimits } from '../autopilot/limits.ts';
+import {
+  AUTOPILOT_LIMITS,
+  type AutopilotFacts,
+  type AutopilotGateKind,
+  type AutopilotLimit,
+} from '../autopilot/schema.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   type AutopilotDue,
-  type AutopilotWait,
   type EscalationHandoff,
   type Gate,
   HOUR_MS,
@@ -10,15 +16,9 @@ import {
   MINUTE_MS,
   resolveApprovalPath,
 } from '../domain/index.ts';
-import {
-  type AutopilotPolicy,
-  type AutopilotRisk,
-  resolveAutopilotPolicy,
-  type Settings,
-} from '../domain/settings.ts';
+import { resolveAutopilotPolicy, type Settings } from '../domain/settings.ts';
 import type { Task } from '../domain/types.ts';
-import { isActiveAt, resolveActiveHours, resolveNextActiveChange } from '../presence/hours.ts';
-import type { ReviewFinding, ReviewRating } from '../report/types.ts';
+import type { ReviewFinding } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -27,31 +27,21 @@ import { startMerge } from './pull-requests.ts';
 
 export type AutopilotDecision = { approve: true; reason: string } | { approve: false; reason: string };
 
-const RISK_ORDER: Record<ReviewRating, number> = { low: 0, medium: 1, high: 2 };
-
-function isRiskWithin(risk: ReviewRating, upTo: AutopilotRisk) {
-  return upTo !== 'none' && RISK_ORDER[risk] <= RISK_ORDER[upTo];
-}
-
-function isUrgent(task: Task) {
-  return task.priority === 'urgent' && task.priorityOnBehalf !== true;
-}
-
-function isRiskAllowed(settings: Settings, task: Task, risk: ReviewRating) {
-  const policy = resolveAutopilotPolicy(settings);
-  if (isRiskWithin(risk, policy.approveUpTo)) return true;
-  return isUrgent(task) && isRiskWithin(risk, policy.urgentApproveUpTo);
+function resolveLimits(
+  state: ShinsaState,
+  task: Task,
+  gate: AutopilotGateKind,
+  openedAt: number,
+  now: number,
+  escalatedReview = false
+) {
+  const facts = { ...resolveAutopilotFacts(state, task, gate, openedAt, now), escalatedReview };
+  return { facts, limits: resolveAutopilotLimits(facts, resolveAutopilotPolicy(state.settings)) };
 }
 
 export function isUsageLimitExempt(settings: Settings, task: Task) {
   const policy = resolveAutopilotPolicy(settings);
-  return policy.enabled && policy.ignoreUsageLimits && isUrgent(task);
-}
-
-function isAutopilotCandidate(settings: Settings, task: Task) {
-  const ratings = task.reviewRatings;
-  if (!resolveAutopilotPolicy(settings).enabled || !ratings) return false;
-  return ratings.confidence === 'high' && isRiskAllowed(settings, task, ratings.risk);
+  return policy.enabled && policy.ignoreUsageLimits && isUrgentTask(task);
 }
 
 function isDismissed(task: Task, finding: ReviewFinding) {
@@ -63,33 +53,34 @@ function isDismissed(task: Task, finding: ReviewFinding) {
   );
 }
 
-export function isFindingFixedBeforeReview(settings: Settings, task: Task, finding: ReviewFinding) {
+export function isFindingFixedBeforeReview(
+  state: ShinsaState,
+  now: number,
+  task: Task,
+  finding: ReviewFinding
+) {
   if (isDismissed(task, finding)) return false;
   if (finding.severity === 'blocking') return true;
   if (finding.severity !== 'should_fix') return false;
-  return task.approveAfterFix === true || isAutopilotCandidate(settings, task);
+  return task.approveAfterFix === true || resolveLimits(state, task, 'review', now, now).limits.act.allowed;
 }
 
-function describeApproval(task: Task, risk: ReviewRating) {
-  return isUrgent(task) ? `High confidence, ${risk} risk, urgent.` : `High confidence, ${risk} risk.`;
+function describeApproval(task: Task) {
+  const risk = task.reviewRatings?.risk ?? 'low';
+  return isUrgentTask(task) ? `High confidence, ${risk} risk, urgent.` : `High confidence, ${risk} risk.`;
 }
 
 export function resolveAutopilotDecision(
-  settings: Settings,
+  state: ShinsaState,
+  now: number,
   task: Task,
   escalated: boolean
 ): AutopilotDecision | null {
-  const ratings = task.reviewRatings;
-  if (!resolveAutopilotPolicy(settings).enabled) return null;
-  if (escalated) return { approve: false, reason: 'The agents could not settle the review.' };
-  if (!ratings) return { approve: false, reason: 'The reviewer did not rate the change.' };
-  if (ratings.confidence !== 'high') {
-    return { approve: false, reason: `The reviewer’s confidence is ${ratings.confidence}.` };
-  }
-  if (!isRiskAllowed(settings, task, ratings.risk)) {
-    return { approve: false, reason: `The risk is ${ratings.risk}, above what Autopilot approves.` };
-  }
-  return { approve: true, reason: describeApproval(task, ratings.risk) };
+  if (!resolveAutopilotPolicy(state.settings).enabled) return null;
+  const { act } = resolveLimits(state, task, 'review', now, now, escalated).limits;
+  return act.allowed
+    ? { approve: true, reason: describeApproval(task) }
+    : { approve: false, reason: act.reason };
 }
 
 const MERGE_BLOCK_TEXT: Record<MergeBlock, string> = {
@@ -103,12 +94,6 @@ function resolveMergeRefusal(decider: Decider, task: Task): MergeBlock | null {
   if (hasOpenPreMergeSteps(decider, task)) return 'pre_merge_steps';
   if (resolveApprovalPath(task, 'merge') !== 'merge') return 'edits_not_pushed';
   return null;
-}
-
-function isMergeAllowed(settings: Settings, task: Task) {
-  const merge = resolveAutopilotPolicy(settings).merge;
-  if (merge === 'approved') return true;
-  return merge === 'low_risk' && task.reviewRatings?.risk === 'low';
 }
 
 function mergeForYou(decider: Decider, gate: Gate, reason: string) {
@@ -129,85 +114,41 @@ function scheduleAutopilot(decider: Decider, gate: Gate, due: AutopilotDue | nul
   decider.emit({ type: 'autopilot.scheduled', gateId: gate.id, due });
 }
 
-const ASKS_AT_ONCE: ReadonlySet<AutopilotPolicy['urgent']> = new Set(['escalate', 'escalate_then_merge']);
-
-const MERGES_AFTER_WAIT: ReadonlySet<AutopilotPolicy['urgent']> = new Set(['merge', 'escalate_then_merge']);
-
-const READY = 'Urgent, and ready to merge.';
-
-function resolveUrgentPolicy(decider: Decider, task: Task) {
-  const policy = resolveAutopilotPolicy(decider.state.settings);
-  return policy.enabled && isUrgent(task) ? policy : null;
+function isWatched(decider: Decider, task: Task) {
+  return resolveAutopilotPolicy(decider.state.settings).enabled && isUrgentTask(task);
 }
 
-function resolveWait(state: ShinsaState, now: number, policy: AutopilotPolicy) {
-  const hours = resolveActiveHours(state, now);
-  const configured = now + policy.urgentWaitMinutes * MINUTE_MS;
-  if (!isActiveAt(hours, now)) {
-    const quiet = now + policy.quietWaitMinutes * MINUTE_MS;
-    if (quiet < configured) return { wait: 'outside_hours' as const, at: quiet };
-    return { wait: 'configured' as const, at: configured };
-  }
-  const ended = resolveNextActiveChange(hours, now);
-  const quiet = ended === null ? null : ended + policy.quietWaitMinutes * MINUTE_MS;
-  if (quiet !== null && quiet < configured) return { wait: 'hours_ended' as const, at: quiet };
-  return { wait: 'configured' as const, at: configured };
-}
-
-function resolveUrgentDue(decider: Decider, task: Task): AutopilotDue | null {
-  const policy = resolveUrgentPolicy(decider, task);
-  if (!policy || !MERGES_AFTER_WAIT.has(policy.urgent)) return null;
-  const now = decider.context.now;
-  const { wait, at } = resolveWait(decider.state, now, policy);
-  return { at, action: 'merge', wait, waitedMinutes: Math.round((at - now) / MINUTE_MS) };
-}
-
-function askAtOnce(decider: Decider, task: Task, mergesAt: number | null) {
-  const policy = resolveUrgentPolicy(decider, task);
-  if (!policy || !ASKS_AT_ONCE.has(policy.urgent)) return;
-  const refusal = mergesAt === null ? null : resolveMergeRefusal(decider, task);
-  escalate(decider, task, refusal ? `${READY} ${MERGE_BLOCK_TEXT[refusal]}` : READY, {
-    waitedMinutes: 0,
-    mergesAt: refusal ? null : mergesAt,
-    blockedBy: refusal,
-  });
+function resolveNextCheck(decider: Decider): AutopilotDue {
+  return { at: decider.context.now + AUTOPILOT_LIMITS.awayMinutes * MINUTE_MS };
 }
 
 export function syncAutopilotDeadlines(decider: Decider, taskId?: string) {
   for (const gate of listOpenGates(decider.state, taskId)) {
     if (gate.type !== 'merge') continue;
-    const task = decider.task(gate.taskId);
-    const due = resolveUrgentDue(decider, task);
-    if (due === null) scheduleAutopilot(decider, gate, null);
-    else if (!gate.autopilotDue) scheduleAutopilot(decider, gate, due);
-    askAtOnce(decider, task, due === null ? null : (gate.autopilotDue?.at ?? due.at));
+    if (!isWatched(decider, decider.task(gate.taskId))) scheduleAutopilot(decider, gate, null);
+    else if (!gate.autopilotDue) scheduleAutopilot(decider, gate, resolveNextCheck(decider));
   }
+}
+
+function describeMinutes(minutes: number) {
+  if (minutes < 60) return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+  const hours = Math.round(minutes / 60);
+  return hours === 1 ? '1 hour' : `${hours} hours`;
+}
+
+function describeUrgentMerge(waitedMinutes: number) {
+  return `Urgent, and you were away while the merge waited ${describeMinutes(waitedMinutes)}.`;
 }
 
 export function applyAutopilotMerge(decider: Decider, gate: Gate) {
   const task = decider.task(gate.taskId);
-  const settings = decider.state.settings;
-  if (resolveAutopilotPolicy(settings).enabled && isMergeAllowed(settings, task)) {
-    if (resolveMergeRefusal(decider, task) === null) {
-      mergeForYou(decider, gate, task.autopiloted?.reason ?? '');
-      return;
-    }
+  const { act } = resolveLimits(decider.state, task, 'merge', gate.openedAt, decider.context.now).limits;
+  if (act.allowed && resolveMergeRefusal(decider, task) === null) {
+    mergeForYou(decider, gate, task.autopiloted?.reason ?? '');
+    return;
   }
-  const due = resolveUrgentDue(decider, task);
-  scheduleAutopilot(decider, gate, due);
-  askAtOnce(decider, task, due?.at ?? null);
+  scheduleAutopilot(decider, gate, isWatched(decider, task) ? resolveNextCheck(decider) : null);
 }
-
-function describeMinutes(minutes: number) {
-  return minutes === 1 ? '1 minute' : `${minutes} minutes`;
-}
-
-const WAIT_TEXT: Record<AutopilotWait, (minutes: string) => string> = {
-  configured: (minutes) => `Urgent, and the merge waited ${minutes} for you.`,
-  outside_hours: (minutes) => `Urgent, outside your usual hours, and the merge waited ${minutes} for you.`,
-  hours_ended: (minutes) =>
-    `Urgent, and the merge waited ${minutes} for you, until shortly after your usual hours ended.`,
-};
 
 function resolveOwnerActiveAt(state: ShinsaState) {
   const hours = Object.keys(state.presence).map(Number);
@@ -255,6 +196,23 @@ function escalate(decider: Decider, task: Task, reason: string, timing: HandoffT
     });
 }
 
+function selectDueGate(decider: Decider, command: CommandOf<'autopilot.fire'>) {
+  const gate = decider.state.gates[command.gateId];
+  const task = decider.state.tasks[command.taskId];
+  if (!gate || !task || gate.taskId !== task.id || gate.type !== 'merge' || gate.status !== 'open')
+    return null;
+  if (gate.autopilotDue?.at !== command.dueAt || isTaskClosed(task)) return null;
+  return isWatched(decider, task) ? { gate, task } : null;
+}
+
+function describeAway(facts: AutopilotFacts) {
+  return `Urgent, high risk, and you were away while the merge waited ${describeMinutes(facts.waitedMinutes)}.`;
+}
+
+function describeLimit(limit: AutopilotLimit) {
+  return limit.allowed ? '' : limit.reason;
+}
+
 function reviseEscalation(decider: Decider, task: Task, reason: string, timing: HandoffTiming) {
   decider.emit({
     type: 'task.escalation_revised',
@@ -264,31 +222,35 @@ function reviseEscalation(decider: Decider, task: Task, reason: string, timing: 
   });
 }
 
-function selectDueGate(decider: Decider, command: CommandOf<'autopilot.fire'>) {
-  const gate = decider.state.gates[command.gateId];
-  const task = decider.state.tasks[command.taskId];
-  if (!gate || !task || gate.taskId !== task.id || gate.type !== 'merge' || gate.status !== 'open')
-    return null;
-  const due = gate.autopilotDue;
-  if (due?.at !== command.dueAt || isTaskClosed(task)) return null;
-  const policy = resolveUrgentPolicy(decider, task);
-  if (!policy || !MERGES_AFTER_WAIT.has(policy.urgent)) return null;
-  return { gate, task, due };
-}
-
 export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fire'>) {
   const found = selectDueGate(decider, command);
   if (!found) return;
-  const { gate, task, due } = found;
-  const waited = WAIT_TEXT[due.wait](describeMinutes(due.waitedMinutes));
+  const { gate, task } = found;
+  const { facts, limits } = resolveLimits(decider.state, task, 'merge', gate.openedAt, decider.context.now);
   const refusal = resolveMergeRefusal(decider, task);
-  if (refusal === null) {
-    mergeForYou(decider, gate, waited);
+  const next = resolveNextCheck(decider);
+  const mergeable = limits.act.allowed && refusal === null;
+  if (limits.escalate.allowed && !task.escalation) {
+    const reason = describeAway(facts);
+    escalate(decider, task, refusal ? `${reason} ${MERGE_BLOCK_TEXT[refusal]}` : reason, {
+      waitedMinutes: facts.waitedMinutes,
+      mergesAt: mergeable ? next.at : null,
+      blockedBy: refusal,
+    });
+    scheduleAutopilot(decider, gate, next);
     return;
   }
-  const reason = `${waited} ${MERGE_BLOCK_TEXT[refusal]}`;
-  const timing = { waitedMinutes: due.waitedMinutes, mergesAt: null, blockedBy: refusal };
-  if (!task.escalation) escalate(decider, task, reason, timing);
-  else if (task.escalation.handoff.mergesAt !== null) reviseEscalation(decider, task, reason, timing);
-  scheduleAutopilot(decider, gate, null);
+  if (mergeable) {
+    mergeForYou(decider, gate, describeUrgentMerge(facts.waitedMinutes));
+    return;
+  }
+  if (task.escalation && task.escalation.handoff.mergesAt !== null) {
+    const why = refusal ? MERGE_BLOCK_TEXT[refusal] : describeLimit(limits.act);
+    reviseEscalation(decider, task, `${describeAway(facts)} ${why}`, {
+      waitedMinutes: facts.waitedMinutes,
+      mergesAt: null,
+      blockedBy: refusal,
+    });
+  }
+  scheduleAutopilot(decider, gate, next);
 }

@@ -30,8 +30,6 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
       autopilot: {
         ...AUTOPILOT_DEFAULTS,
         enabled: true,
-        merge: 'low_risk',
-        urgent: 'escalate_then_merge',
         contacts: [
           { kind: 'slack_channel', teamId: 'T02SUPERWALL', id: 'C07ONCALL', name: 'oncall' },
           {

@@ -9,7 +9,6 @@ import {
   isProjectKey,
   isSameAutopilotContact,
   MAX_COMPACTION_LEAD_MINUTES,
-  MAX_URGENT_WAIT_MINUTES,
   NO_FOCUS,
   normaliseFocusProjects,
   PROJECT_COLORS,
@@ -80,13 +79,9 @@ function assertSettings(patch: Partial<Settings>) {
     });
   }
   assertWatchdogSettings(patch);
-  for (const wait of [patch.autopilot?.urgentWaitMinutes, patch.autopilot?.quietWaitMinutes]) {
-    if (wait !== undefined && !isWholeBetween(wait, 1, MAX_URGENT_WAIT_MINUTES)) {
-      throw new DomainError({
-        code: 'settings_invalid',
-        message: `An urgent change waits 1 to ${MAX_URGENT_WAIT_MINUTES} minutes.`,
-      });
-    }
+  const gates = patch.autopilot?.gates;
+  if (gates && new Set(gates).size !== gates.length) {
+    throw new DomainError({ code: 'settings_invalid', message: 'Name each Autopilot gate once.' });
   }
   assertAutopilotContacts(patch.autopilot?.contacts);
   assertActiveHours(patch.activeHours);
