@@ -61,7 +61,13 @@ import {
   describeStage,
   describeUnreachedTeammates,
 } from './activity.ts';
-import { applyAutopilotScheduled, applyEscalationRevised, applyTaskEscalated } from './autopilot.ts';
+import {
+  applyAutopilotForwarded,
+  applyAutopilotJudging,
+  applyAutopilotScheduled,
+  applyEscalationRevised,
+  applyTaskEscalated,
+} from './autopilot.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
 import { applyFeedbackEvent } from './feedback.ts';
@@ -1033,6 +1039,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'autopilot.scheduled':
       applyAutopilotScheduled(state, event);
+      break;
+    case 'autopilot.judging':
+      applyAutopilotJudging(state, event);
+      break;
+    case 'autopilot.forwarded':
+      applyAutopilotForwarded(state, event);
       break;
     case 'task.escalated':
       applyTaskEscalated(state, event);

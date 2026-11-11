@@ -23,7 +23,7 @@ import {
 import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies, resolveBundle } from '../state/queries.ts';
-import { resolveAutopilotDecision } from './autopilot.ts';
+import { askAutopilot } from './autopilot.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { syncStackBases } from './dependencies.ts';
 import { approveReviewAhead } from './gates.ts';
@@ -181,23 +181,11 @@ export function openReviewGate(decider: Decider, taskId: string, escalation: Rev
   );
   const task = decider.task(taskId);
   const ahead = escalation === null && task.approveAfterFix === true;
-  const autopilot = ahead
-    ? null
-    : resolveAutopilotDecision(decider.state, decider.context.now, task, escalation !== null);
-  const gate = decider.openGate(
-    taskId,
-    'review',
-    decider.task(taskId).title,
-    serializeReportMarkdown(report),
-    {
-      details: {
-        ...(escalation ? { escalation } : {}),
-        ...(autopilot && !autopilot.approve ? { autopilotHeld: autopilot.reason } : {}),
-      },
-    }
-  );
+  const gate = decider.openGate(taskId, 'review', task.title, serializeReportMarkdown(report), {
+    details: escalation ? { escalation } : {},
+  });
   if (ahead) approveReviewAhead(decider, gate);
-  else if (autopilot?.approve) approveReviewAhead(decider, gate, autopilot.reason);
+  else askAutopilot(decider, gate);
 }
 
 export function settleTask(

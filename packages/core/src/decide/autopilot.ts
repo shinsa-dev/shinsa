@@ -1,5 +1,7 @@
 import { isUrgentTask, resolveAutopilotFacts, resolveAutopilotLimits } from '../autopilot/limits.ts';
+import { resolveJudgedGateKind } from '../autopilot/prompt.ts';
 import {
+  AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LIMITS,
   type AutopilotFacts,
   type AutopilotGateKind,
@@ -22,10 +24,9 @@ import type { ReviewFinding } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
+import { answerGateForYou, approveReviewAhead } from './gates.ts';
 import { hasOpenPreMergeSteps } from './merge-steps.ts';
 import { startMerge } from './pull-requests.ts';
-
-export type AutopilotDecision = { approve: true; reason: string } | { approve: false; reason: string };
 
 function resolveLimits(
   state: ShinsaState,
@@ -63,24 +64,6 @@ export function isFindingFixedBeforeReview(
   if (finding.severity === 'blocking') return true;
   if (finding.severity !== 'should_fix') return false;
   return task.approveAfterFix === true || resolveLimits(state, task, 'review', now, now).limits.act.allowed;
-}
-
-function describeApproval(task: Task) {
-  const risk = task.reviewRatings?.risk ?? 'low';
-  return isUrgentTask(task) ? `High confidence, ${risk} risk, urgent.` : `High confidence, ${risk} risk.`;
-}
-
-export function resolveAutopilotDecision(
-  state: ShinsaState,
-  now: number,
-  task: Task,
-  escalated: boolean
-): AutopilotDecision | null {
-  if (!resolveAutopilotPolicy(state.settings).enabled) return null;
-  const { act } = resolveLimits(state, task, 'review', now, now, escalated).limits;
-  return act.allowed
-    ? { approve: true, reason: describeApproval(task) }
-    : { approve: false, reason: act.reason };
 }
 
 const MERGE_BLOCK_TEXT: Record<MergeBlock, string> = {
@@ -136,18 +119,104 @@ function describeMinutes(minutes: number) {
   return hours === 1 ? '1 hour' : `${hours} hours`;
 }
 
-function describeUrgentMerge(waitedMinutes: number) {
-  return `Urgent, and you were away while the merge waited ${describeMinutes(waitedMinutes)}.`;
+export function applyAutopilotMerge(decider: Decider, gate: Gate) {
+  askAutopilot(decider, gate);
+  scheduleAutopilot(
+    decider,
+    gate,
+    isWatched(decider, decider.task(gate.taskId)) ? resolveNextCheck(decider) : null
+  );
 }
 
-export function applyAutopilotMerge(decider: Decider, gate: Gate) {
+function forward(decider: Decider, gateId: string, reason: string) {
+  const gate = decider.state.gates[gateId];
+  if (!gate || (gate.autopilotHeld === reason && gate.autopilotJudging !== true)) return;
+  decider.emit({ type: 'autopilot.forwarded', gateId, reason });
+}
+
+function requestJudgment(decider: Decider, gateId: string) {
+  const gate = decider.state.gates[gateId];
+  if (!gate || gate.autopilotJudging === true) return;
+  decider.emit({ type: 'autopilot.judging', gateId });
+  decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId });
+}
+
+function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind) {
   const task = decider.task(gate.taskId);
-  const { act } = resolveLimits(decider.state, task, 'merge', gate.openedAt, decider.context.now).limits;
-  if (act.allowed && resolveMergeRefusal(decider, task) === null) {
-    mergeForYou(decider, gate, task.autopiloted?.reason ?? '');
+  const { act } = resolveLimits(
+    decider.state,
+    task,
+    kind,
+    gate.openedAt,
+    decider.context.now,
+    gate.escalation !== undefined
+  ).limits;
+  if (!act.allowed) return act.reason;
+  if (kind !== 'merge') return null;
+  const block = resolveMergeRefusal(decider, task);
+  return block === null ? null : MERGE_BLOCK_TEXT[block];
+}
+
+export function askAutopilot(decider: Decider, gate: Gate) {
+  if (!resolveAutopilotPolicy(decider.state.settings).enabled) return;
+  const kind = resolveJudgedGateKind(gate);
+  if (!kind) return;
+  const refusal = resolveRefusal(decider, gate, kind);
+  if (refusal !== null) forward(decider, gate.id, refusal);
+  else requestJudgment(decider, gate.id);
+}
+
+const NOT_SURE = 'Autopilot was not sure what to answer, so the question waits for you.';
+
+const NO_REASON = 'Autopilot judged it clear and small enough to do for you.';
+
+function selectJudgedGate(decider: Decider, command: CommandOf<'autopilot.judgment'>) {
+  const gate = decider.state.gates[command.gateId];
+  const task = decider.state.tasks[command.taskId];
+  if (!gate || !task || gate.taskId !== task.id || gate.status !== 'open') return null;
+  if (gate.autopilotJudging !== true || isTaskClosed(task)) return null;
+  const kind = resolveJudgedGateKind(gate);
+  return kind ? { gate, kind } : null;
+}
+
+function clip(text: string | null, limit: number) {
+  return (text ?? '').trim().slice(0, limit);
+}
+
+export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'autopilot.judgment'>) {
+  const found = selectJudgedGate(decider, command);
+  if (!found) return;
+  const { gate, kind } = found;
+  const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason);
+  const refusal = resolveAutopilotPolicy(decider.state.settings).enabled
+    ? resolveRefusal(decider, gate, kind)
+    : 'Autopilot is off.';
+  if (refusal !== null) {
+    forward(decider, gate.id, refusal);
     return;
   }
-  scheduleAutopilot(decider, gate, isWatched(decider, task) ? resolveNextCheck(decider) : null);
+  if (command.verdict === 'forward') {
+    forward(decider, gate.id, reason || 'Autopilot judged this needs you.');
+    return;
+  }
+  const why = reason || NO_REASON;
+  switch (kind) {
+    case 'plan':
+      answerGateForYou(decider, gate, 'approve', null, why);
+      return;
+    case 'review':
+      approveReviewAhead(decider, gate, why);
+      return;
+    case 'merge':
+      mergeForYou(decider, gate, why);
+      return;
+    case 'question': {
+      const reply = clip(command.reply, AUTOPILOT_JUDGMENT_LIMITS.reply);
+      if (reply) answerGateForYou(decider, gate, 'reply', reply, why);
+      else forward(decider, gate.id, NOT_SURE);
+      return;
+    }
+  }
 }
 
 function resolveOwnerActiveAt(state: ShinsaState) {
@@ -241,7 +310,8 @@ export function fireAutopilot(decider: Decider, command: CommandOf<'autopilot.fi
     return;
   }
   if (mergeable) {
-    mergeForYou(decider, gate, describeUrgentMerge(facts.waitedMinutes));
+    requestJudgment(decider, gate.id);
+    scheduleAutopilot(decider, gate, next);
     return;
   }
   if (task.escalation && task.escalation.handoff.mergesAt !== null) {

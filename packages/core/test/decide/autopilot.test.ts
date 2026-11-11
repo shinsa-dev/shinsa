@@ -10,6 +10,7 @@ import {
   type ReviewRatings,
   type TaskPriority,
 } from '../../src/index.ts';
+import { resolveQueue } from '../../src/queue/rank.ts';
 import { applyEvent } from '../../src/state/project.ts';
 import { listOpenGates } from '../../src/state/queries.ts';
 import {
@@ -51,6 +52,22 @@ function review(harness: Harness, taskId: string, ratings = HIGH_LOW, findings: 
   });
 }
 
+function judgedGate(harness: Harness, taskId: string) {
+  return listOpenGates(harness.state, taskId).find((gate) => gate.autopilotJudging === true);
+}
+
+function judge(
+  harness: Harness,
+  taskId: string,
+  reason: string,
+  verdict: 'act' | 'forward' = 'act',
+  reply: string | null = null
+) {
+  const gate = judgedGate(harness, taskId);
+  if (!gate) throw new Error('No gate waits for Autopilot.');
+  return harness.send({ type: 'autopilot.judgment', taskId, gateId: gate.id, verdict, reason, reply });
+}
+
 function fix(harness: Harness, taskId: string, treeHash: string) {
   const runId = harness.activeRun(taskId).id;
   harness.send({
@@ -88,6 +105,9 @@ describe('Autopilot at the review', () => {
   test('approves a high-confidence, low-risk change for you and says why', () => {
     const { harness, taskId } = setup({ autoMerge: 'off' });
     review(harness, taskId);
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'review', autopilotJudging: true });
+    expect(harness.lastEffect('autopilot.judge')).toMatchObject({ taskId });
+    judge(harness, taskId, 'High confidence, low risk.');
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(reviewGate(harness, taskId)).toMatchObject({ status: 'answered', decision: 'approve' });
     expect(harness.task(taskId)).toMatchObject({
@@ -122,6 +142,7 @@ describe('Autopilot at the review', () => {
   test('approves a medium-risk change when it may do most things', () => {
     const { harness, taskId } = setup({ level: 'most', autoMerge: 'off' });
     review(harness, taskId, { confidence: 'high', risk: 'medium' });
+    judge(harness, taskId, 'High confidence, medium risk.');
     expect(harness.task(taskId).autopiloted?.reason).toBe('High confidence, medium risk.');
   });
 
@@ -134,6 +155,7 @@ describe('Autopilot at the review', () => {
   test('approves an urgent change one risk higher, and says it was urgent', () => {
     const { harness, taskId } = setup({ autoMerge: 'off' }, 'urgent');
     review(harness, taskId, { confidence: 'high', risk: 'medium' });
+    judge(harness, taskId, 'High confidence, medium risk, urgent.');
     expect(harness.task(taskId)).toMatchObject({
       stage: 'shipping',
       autopiloted: { reason: 'High confidence, medium risk, urgent.' },
@@ -153,6 +175,7 @@ describe('Autopilot at the review', () => {
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
     fix(harness, taskId, 'tree-1');
     review(harness, taskId, HIGH_LOW, [{ ...SHOULD_FIX, severity: 'optional' }]);
+    judge(harness, taskId, 'Fixed what the reviewer asked.');
     expect(harness.task(taskId).stage).toBe('shipping');
   });
 
@@ -175,6 +198,7 @@ describe('Autopilot at the review', () => {
   test('a review that opens again forgets the earlier approval', () => {
     const { harness, taskId } = setup({ autoMerge: 'off' });
     review(harness, taskId);
+    judge(harness, taskId, 'High confidence, low risk.');
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
     harness.send({ type: 'settings.change', patch: { autopilot: { enabled: false } } });
@@ -266,6 +290,10 @@ function reachMerge({ policy, priority = 'normal', ratings = HIGH_LOW, steps }: 
   else buildAll(harness, taskId);
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   review(harness, taskId, ratings);
+  if (judgedGate(harness, taskId)) {
+    const urgent = priority === 'urgent' ? ', urgent' : '';
+    judge(harness, taskId, `High confidence, ${ratings.risk} risk${urgent}.`);
+  }
   if (harness.task(taskId).stage === 'awaiting_review') approve(harness, taskId);
   pushed(harness, taskId);
   harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
@@ -331,6 +359,8 @@ describe('Autopilot at the merge', () => {
 
   test('merges a low-risk change it approved as soon as the pull request is clean', () => {
     const { harness, taskId } = reachMerge({ policy: {} });
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'merge', autopilotJudging: true });
+    judge(harness, taskId, 'High confidence, low risk.');
     expectMerging(harness, taskId, 'High confidence, low risk.');
   });
 
@@ -339,6 +369,7 @@ describe('Autopilot at the merge', () => {
     const low = reachMerge({ policy: { level: 'most' }, ratings });
     expectMergeWaits(low.harness, low.taskId);
     const approved = reachMerge({ policy: { level: 'most', autoMerge: 'approved' }, ratings });
+    judge(approved.harness, approved.taskId, 'High confidence, medium risk.');
     expectMerging(approved.harness, approved.taskId, 'High confidence, medium risk.');
   });
 
@@ -372,11 +403,9 @@ describe('Autopilot at the merge', () => {
       ratings: { confidence: 'high', risk: 'medium' },
     });
     fireAway(harness, taskId);
-    expectMerging(
-      harness,
-      taskId,
-      `Urgent, and you were away while the merge waited ${waitedText(harness, taskId)}.`
-    );
+    const reason = `Urgent, and you were away while the merge waited ${waitedText(harness, taskId)}.`;
+    judge(harness, taskId, reason);
+    expectMerging(harness, taskId, reason);
   });
 
   test('never merges or escalates while you are active, and checks again later', () => {
@@ -436,11 +465,9 @@ describe('Autopilot at the merge', () => {
     });
     expectMergeWaits(harness, taskId);
     fire(harness, taskId);
-    expectMerging(
-      harness,
-      taskId,
-      `Urgent, and you were away while the merge waited ${waitedText(harness, taskId)}.`
-    );
+    const reason = `Urgent, and you were away while the merge waited ${waitedText(harness, taskId)}.`;
+    judge(harness, taskId, reason);
+    expectMerging(harness, taskId, reason);
     expect(harness.task(taskId).escalation).toBeNull();
   });
 
@@ -825,3 +852,174 @@ function recordCommand(taskId: string, escalatedAt: number) {
     problem: null,
   };
 }
+
+function planGateHarness(policy: Partial<AutopilotPolicy> | null) {
+  const harness = createHarness();
+  harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+  if (policy) harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true, ...policy } } });
+  const taskId = createTask(harness);
+  proposePlan(harness, taskId);
+  return { harness, taskId };
+}
+
+function askAgent(harness: Harness, taskId: string, gateId = 'q1') {
+  harness.send({
+    type: 'agent.ask',
+    runId: harness.activeRun(taskId).id,
+    gateId,
+    question: 'Which tab group scrolls?',
+    context: 'Two containers scroll.',
+    choices: ['The outer one', 'The inner one'],
+    recommendation: 'The inner one',
+  });
+}
+
+describe('Autopilot judges each gate', () => {
+  test('approves a small, clear plan it judged, and says why in the activity', () => {
+    const { harness, taskId } = planGateHarness({});
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'plan', autopilotJudging: true });
+    judge(harness, taskId, 'Two small phases with a clear goal.');
+    expect(harness.task(taskId).stage).not.toBe('awaiting_plan');
+    const plan = Object.values(harness.state.gates).find((gate) => gate.type === 'plan');
+    expect(plan).toMatchObject({ status: 'answered', decision: 'approve' });
+    expect(
+      harness.task(taskId).activity.find((entry) => entry.text.startsWith('Approved for you'))
+    ).toMatchObject({
+      actor: 'shinsa',
+      detail: 'Two small phases with a clear goal.',
+    });
+  });
+
+  test('brings a plan it judged unclear to you, once in the activity, and keeps it out of judging', () => {
+    const { harness, taskId } = planGateHarness({});
+    judge(harness, taskId, 'The scope is unclear.', 'forward');
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'plan',
+      status: 'open',
+      autopilotJudging: false,
+      autopilotHeld: 'The scope is unclear.',
+    });
+    const brought = harness.task(taskId).activity.filter((entry) => entry.text.startsWith('Brought to you'));
+    expect(brought).toEqual([expect.objectContaining({ actor: 'shinsa', detail: 'The scope is unclear.' })]);
+  });
+
+  test('a forward without a reason still says the work needs you', () => {
+    const { harness, taskId } = planGateHarness({});
+    judge(harness, taskId, '  ', 'forward');
+    expect(harness.openGate(taskId).autopilotHeld).toBe('Autopilot judged this needs you.');
+  });
+
+  test('says it judged the work clear when the model gave no reason', () => {
+    const { harness, taskId } = planGateHarness({});
+    judge(harness, taskId, '');
+    expect(
+      harness.task(taskId).activity.find((entry) => entry.text.startsWith('Approved for you'))?.detail
+    ).toBe('Autopilot judged it clear and small enough to do for you.');
+  });
+
+  test('leaves a plan alone while Autopilot is off, and quietly holds one past its limits', () => {
+    const off = planGateHarness(null);
+    expect(off.harness.openGate(off.taskId).autopilotJudging ?? false).toBe(false);
+    expect(off.harness.effectsOf('autopilot.judge')).toHaveLength(0);
+    const held = planGateHarness({ gates: ['reviews'] });
+    expect(held.harness.openGate(held.taskId)).toMatchObject({
+      autopilotHeld: 'Autopilot does not act on this kind of gate.',
+    });
+    expect(held.harness.task(held.taskId).activity.some((entry) => entry.text.startsWith('Brought'))).toBe(
+      false
+    );
+  });
+
+  test('answers an agent’s question with the reply it wrote', () => {
+    const { harness, taskId } = planGateHarness(null);
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true } } });
+    approve(harness, taskId);
+    askAgent(harness, taskId);
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'question', autopilotJudging: true });
+    judge(harness, taskId, 'The agent recommends it and it matches the request.', 'act', ' The inner one. ');
+    expect(harness.state.gates.q1).toMatchObject({
+      status: 'answered',
+      decision: 'reply',
+      response: 'The inner one.',
+    });
+    expect(harness.lastEffect('question.resolve')).toMatchObject({ gateId: 'q1' });
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      actor: 'shinsa',
+      text: 'Answered for you by Autopilot: Which tab group scrolls?',
+    });
+  });
+
+  test('leaves a question for you when it did not write a reply', () => {
+    const { harness, taskId } = planGateHarness(null);
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true } } });
+    approve(harness, taskId);
+    askAgent(harness, taskId);
+    judge(harness, taskId, 'Sure.', 'act', null);
+    expect(harness.state.gates.q1).toMatchObject({
+      status: 'open',
+      autopilotHeld: 'Autopilot was not sure what to answer, so the question waits for you.',
+    });
+  });
+
+  test('keeps a gate Autopilot is judging out of Needs you, with its task working', () => {
+    const { harness, taskId } = planGateHarness({});
+    const queue = resolveQueue(harness.state, harness.now);
+    expect(queue.ready.some((entry) => entry.task.id === taskId)).toBe(false);
+    expect(queue.working.some((task) => task.id === taskId)).toBe(true);
+    judge(harness, taskId, 'Unclear.', 'forward');
+    expect(resolveQueue(harness.state, harness.now).ready.some((entry) => entry.task.id === taskId)).toBe(
+      true
+    );
+  });
+
+  test('applies its limits again when the judgment comes back, and ignores one for a gate that moved on', () => {
+    const { harness, taskId } = planGateHarness({});
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: false } } });
+    judge(harness, taskId, 'Fine.');
+    expect(harness.openGate(taskId)).toMatchObject({ status: 'open', autopilotHeld: 'Autopilot is off.' });
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true, gates: ['reviews'] } } });
+    const gate = harness.openGate(taskId);
+    expect(
+      harness.send({
+        type: 'autopilot.judgment',
+        taskId,
+        gateId: gate.id,
+        verdict: 'act',
+        reason: 'x',
+        reply: null,
+      }).events
+    ).toEqual([]);
+    const second = planGateHarness({});
+    const judging = second.harness.openGate(second.taskId);
+    second.harness.send({ type: 'settings.change', patch: { autopilot: { gates: ['reviews'] } } });
+    judge(second.harness, second.taskId, 'Fine.');
+    expect(second.harness.openGate(second.taskId).autopilotHeld).toBe(
+      'Autopilot does not act on this kind of gate.'
+    );
+    const third = planGateHarness({});
+    approve(third.harness, third.taskId);
+    const answered = Object.values(third.harness.state.gates).find((found) => found.type === 'plan');
+    const late = {
+      type: 'autopilot.judgment',
+      taskId: third.taskId,
+      gateId: answered?.id ?? '',
+      verdict: 'act',
+      reason: 'Late.',
+      reply: null,
+    } as const;
+    expect(third.harness.send(late).events).toEqual([]);
+    expect(third.harness.send({ ...late, gateId: 'gone' }).events).toEqual([]);
+    expect(third.harness.send({ ...late, taskId: 'gone', gateId: judging.id }).events).toEqual([]);
+  });
+
+  test('brings a merge to you when something blocks it by the time it judged', () => {
+    const { harness, taskId } = reachMerge({ policy: {} });
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    judge(harness, taskId, 'Clean.');
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'merge',
+      autopilotHeld: 'Your edits are not pushed yet.',
+    });
+    expectMergeWaits(harness, taskId);
+  });
+});

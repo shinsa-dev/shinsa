@@ -1,5 +1,5 @@
-import type { ShinsaEffect } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import { resolveAutopilotJudgeRequest, type ShinsaEffect } from '@shinsa/core';
+import { Clock, Context, Effect, Layer } from 'effect';
 import { provideTaskGitHub } from '../../../github/identity/resolve.ts';
 import { MachineGitHub } from '../../../github/identity/schema.ts';
 import type { Slack, SlackRefusal, SlackRelayFailure } from '../../../slack/index.ts';
@@ -67,6 +67,24 @@ export class EffectHandlers extends Context.Service<
         yield* world.dispatch(
           { type: 'share.describe', taskId, description },
           { id: `${attempt.key}:share.describe` }
+        );
+      });
+
+      const judgeAutopilot = Effect.fn('EffectHandlers.judgeAutopilot')(function* (
+        effect: EffectOf<'autopilot.judge'>,
+        attempt: EffectAttempt
+      ) {
+        const now = yield* Clock.currentTimeMillis;
+        const request = resolveAutopilotJudgeRequest(yield* world.state, effect.gateId, now);
+        if (!request) return;
+        const judgment = (yield* world.judgeAutopilot(request.system, request.prompt)) ?? {
+          verdict: 'forward' as const,
+          reason: 'Autopilot could not reach a model, so this waits for you.',
+          reply: null,
+        };
+        yield* world.dispatch(
+          { type: 'autopilot.judgment', taskId: effect.taskId, gateId: effect.gateId, ...judgment },
+          { id: `${attempt.key}:autopilot.judgment` }
         );
       });
 
@@ -151,6 +169,8 @@ export class EffectHandlers extends Context.Service<
             return yield* withSlack((slack) => slack.react(effect));
           case 'slack.escalate':
             return yield* withSlack((slack) => slack.escalate(effect, attempt.key));
+          case 'autopilot.judge':
+            return yield* judgeAutopilot(effect, attempt);
           case 'feedback.draft':
             return yield* Effect.mapError(
               world.feedback.draft(effect.feedbackId, attempt.key),

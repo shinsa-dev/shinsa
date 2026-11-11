@@ -253,6 +253,19 @@ function answerDecision(
   if (gate.type === 'merge') approveMerge(decider, gate);
 }
 
+export function answerGateForYou(
+  decider: Decider,
+  gate: Gate,
+  decision: 'approve' | 'reply',
+  response: string | null,
+  reason: string
+) {
+  decider.emit({ type: 'gate.answered', gateId: gate.id, decision, response, autopilot: reason });
+  decider.requestBriefing(gate.taskId);
+  if (gate.type === 'question') answerQuestion(decider, gate);
+  else answerDecision(decider, gate, decision, response, []);
+}
+
 export function answerGate(
   decider: Decider,
   gateId: string,

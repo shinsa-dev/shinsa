@@ -803,6 +803,7 @@ export interface Gate {
   cause?: GateCause;
   escalation?: ReviewEscalation;
   autopilotHeld?: string;
+  autopilotJudging?: boolean;
   autopilotDue?: AutopilotDue | null;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;

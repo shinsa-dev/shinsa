@@ -6,6 +6,7 @@ import {
   CI_GRACE_MS,
   createPullRequestWatch,
   evaluatePullRequestWatch,
+  type Gate,
   type PullRequest,
   type ShinsaCommand,
   type ShinsaState,
@@ -537,6 +538,75 @@ describe('describing a shared task', () => {
     );
     await silent.runner.apply({ kind: 'share.describe', taskId: 'task-1' }, createContext());
     expect(silent.dispatched).toEqual([]);
+  });
+});
+
+describe('judging a gate for Autopilot', () => {
+  const JUDGING = {
+    id: 'g-plan',
+    taskId: 'task-1',
+    type: 'plan',
+    status: 'open',
+    title: 'Fix the scroll',
+    body: 'The plan.',
+    runId: null,
+    openedAt: 0,
+    answeredAt: null,
+    decision: null,
+    response: null,
+    autopilotJudging: true,
+  } as const;
+
+  function withJudgingGate(gate: Partial<Gate> = {}) {
+    return (state: ShinsaState) => {
+      withTask({})(state);
+      state.gates[JUDGING.id] = { ...JUDGING, ...gate };
+    };
+  }
+
+  test('asks the judge about the gate and records its judgment under an id the effect decides', async () => {
+    const asked: string[] = [];
+    const { runner, dispatched, commandIds } = setup(withJudgingGate(), {
+      judgeAutopilot: (_system, prompt) =>
+        Effect.sync(() => {
+          asked.push(prompt);
+          return { verdict: 'act', reason: 'Small and clear.', reply: null };
+        }),
+    });
+    const context = createContext();
+    await runner.apply({ kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan' }, context);
+    expect(asked[0]).toStartWith('Decision: Approve the plan');
+    expect(dispatched).toEqual([
+      {
+        type: 'autopilot.judgment',
+        taskId: 'task-1',
+        gateId: 'g-plan',
+        verdict: 'act',
+        reason: 'Small and clear.',
+        reply: null,
+      },
+    ]);
+    expect(commandIds).toEqual([`${context.key}:autopilot.judgment`]);
+  });
+
+  test('brings the gate to you when no model answers, and does nothing for a gate it no longer judges', async () => {
+    const silent = setup(withJudgingGate());
+    await silent.runner.apply(
+      { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan' },
+      createContext()
+    );
+    expect(silent.dispatched).toEqual([
+      expect.objectContaining({
+        type: 'autopilot.judgment',
+        verdict: 'forward',
+        reason: 'Autopilot could not reach a model, so this waits for you.',
+      }),
+    ]);
+    const done = setup(withJudgingGate({ status: 'answered' }), {
+      judgeAutopilot: () => Effect.succeed({ verdict: 'act', reason: 'x', reply: null }),
+    });
+    await done.runner.apply({ kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan' }, createContext());
+    expect(done.dispatched).toEqual([]);
   });
 });
 

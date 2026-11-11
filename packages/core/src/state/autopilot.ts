@@ -6,6 +6,24 @@ export function applyAutopilotScheduled(state: ShinsaState, event: EventOf<'auto
   updateGate(state, event.gateId, { autopilotDue: event.due });
 }
 
+export function applyAutopilotJudging(state: ShinsaState, event: EventOf<'autopilot.judging'>) {
+  updateGate(state, event.gateId, { autopilotJudging: true });
+}
+
+export function applyAutopilotForwarded(state: ShinsaState, event: EventOf<'autopilot.forwarded'>) {
+  const gate = state.gates[event.gateId];
+  if (!gate) return;
+  const judged = gate.autopilotJudging === true && gate.autopilotHeld !== event.reason;
+  updateGate(state, event.gateId, { autopilotJudging: false, autopilotHeld: event.reason });
+  if (!judged) return;
+  record(state, gate.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'decision',
+    text: `Brought to you by Autopilot: ${gate.title}`,
+    detail: event.reason,
+  });
+}
+
 export function applyTaskEscalated(state: ShinsaState, event: EventOf<'task.escalated'>) {
   updateTask(state, event.taskId, event.at, {
     escalation: { at: event.at, reason: event.reason, handoff: event.handoff },

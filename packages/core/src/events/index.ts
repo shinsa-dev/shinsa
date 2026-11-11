@@ -273,6 +273,8 @@ type EventBody =
     }
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'autopilot.scheduled'; gateId: string; due: AutopilotDue | null }
+  | { type: 'autopilot.judging'; gateId: string }
+  | { type: 'autopilot.forwarded'; gateId: string; reason: string }
   | { type: 'task.escalated'; taskId: string; reason: string; handoff: EscalationHandoff }
   | { type: 'task.escalation_revised'; taskId: string; reason: string; handoff: EscalationHandoff }
   | { type: 'gate.noted'; gateId: string; notes: string | null }

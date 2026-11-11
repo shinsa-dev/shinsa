@@ -20,6 +20,7 @@ import {
 import { assembleReport } from '../report/assemble.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument } from '../report/types.ts';
+import { askAutopilot } from './autopilot.ts';
 import { BACKLOG_REASON, PLAN_READY_REASON } from './backlog.ts';
 import {
   assertCheckIds,
@@ -84,9 +85,10 @@ export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_
     return;
   }
   decider.stage(task.id, 'awaiting_plan', proposed.backlog ? BACKLOG_REASON : PLAN_READY_REASON);
-  decider.openGate(task.id, 'plan', command.document.title ?? task.title, body, {
+  const gate = decider.openGate(task.id, 'plan', command.document.title ?? task.title, body, {
     details: { planVersion: proposed.plan?.version ?? 1 },
   });
+  askAutopilot(decider, gate);
 }
 
 export function completePhase(decider: Decider, command: CommandOf<'agent.complete_phase'>) {
@@ -311,11 +313,12 @@ export function askQuestion(decider: Decider, command: CommandOf<'agent.ask'>) {
   if (existing)
     throw new DomainError({ code: 'gate_exists', message: `Gate ${command.gateId} already exists.` });
   const choices = command.choices ?? [];
-  decider.openGate(task.id, 'question', command.question, command.context ?? '', {
+  const gate = decider.openGate(task.id, 'question', command.question, command.context ?? '', {
     id: command.gateId,
     runId: run.id,
     ...(choices.length > 0 ? { details: { choices, recommendation: command.recommendation ?? null } } : {}),
   });
+  askAutopilot(decider, gate);
 }
 
 export function attachEvidence(decider: Decider, command: CommandOf<'agent.attach_evidence'>) {

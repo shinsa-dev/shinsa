@@ -51,3 +51,19 @@ export const AUTOPILOT_LIMITS = {
   activeMinutes: 30,
   awayMinutes: 60,
 } as const;
+
+export const AUTOPILOT_VERDICTS = ['act', 'forward'] as const;
+
+export type AutopilotVerdict = (typeof AUTOPILOT_VERDICTS)[number];
+
+export interface AutopilotJudgment {
+  verdict: AutopilotVerdict;
+  reason: string;
+  reply: string | null;
+}
+
+export const AUTOPILOT_JUDGMENT_LIMITS = {
+  reason: 240,
+  reply: 2000,
+  context: 1200,
+} as const;

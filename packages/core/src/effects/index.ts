@@ -49,6 +49,7 @@ export type ShinsaEffect =
       contact: AutopilotContact;
       part: SlackEscalationPart;
     }
+  | { kind: 'autopilot.judge'; taskId: string; gateId: string }
   | { kind: 'feedback.draft'; feedbackId: string }
   | { kind: 'feedback.file'; feedbackId: string };
 
@@ -88,6 +89,7 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'slack.merge': 'replay_safe',
   'slack.react': 'replay_safe',
   'slack.escalate': 'replay_safe',
+  'autopilot.judge': 'replay_safe',
   'feedback.draft': 'replay_safe',
   'feedback.file': 'process_bound',
 };
@@ -117,6 +119,8 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.runId}:${seq}`;
     case 'question.resolve':
       return `${effect.kind}:${effect.gateId}`;
+    case 'autopilot.judge':
+      return `${effect.kind}:${effect.gateId}:${seq}`;
     case 'run.wake':
     case 'delegation.steer':
       return `${effect.kind}:${effect.runId}:${effect.generation}`;
@@ -181,6 +185,8 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `steer:${effect.runId}`;
     case 'question.resolve':
       return `gate:${effect.gateId}`;
+    case 'autopilot.judge':
+      return `autopilot:${effect.taskId}`;
     case 'delegation.reply':
       return `reply:${effect.runId}`;
     case 'pull_request.watch':
