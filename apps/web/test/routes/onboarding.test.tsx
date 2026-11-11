@@ -114,6 +114,12 @@ async function settle() {
   await act(async () => {});
 }
 
+async function waitForIdleAccess() {
+  await waitFor(() =>
+    expect((screen.getByRole('button', { name: 'Leave it out' }) as HTMLButtonElement).disabled).toBe(false)
+  );
+}
+
 async function comeBackToWindow() {
   await settle();
   act(() => {
@@ -481,13 +487,15 @@ describe('the setup page', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
     await waitFor(() => expect(sentReplies()).toHaveLength(1));
+    await waitForIdleAccess();
     await comeBackToWindow();
     await waitFor(() => expect(sentReplies()).toHaveLength(2));
+    await waitForIdleAccess();
     fireEvent.click(screen.getByRole('option', { name: /~\/oss/ }));
     await comeBackToWindow();
     await waitFor(() => expect(sentReplies()).toHaveLength(3));
-    await settle();
-    fireEvent.click(await screen.findByRole('button', { name: 'Leave it out' }));
+    await waitForIdleAccess();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave it out' }));
     await waitFor(() => expect(sentReplies()).toHaveLength(4));
     const both = { type: 'answer', stepId: 'roots', values: ['/Users/me/Developer', '/Users/me/oss'] };
     expect(sentReplies()).toEqual([
