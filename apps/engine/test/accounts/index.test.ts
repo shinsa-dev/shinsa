@@ -197,6 +197,7 @@ async function createWorld(options: WorldOptions = {}) {
     requestHttp: (_url, init) => {
       const token = new Headers(init.headers).get('authorization')?.replace('Bearer ', '') ?? '';
       const body = usage.get(token);
+      if (body === LIMITED) return Promise.resolve(new Response('slow down', { status: 429 }));
       return Promise.resolve(body ? Response.json(body) : new Response('no', { status: 401 }));
     },
     spawnLogin,
@@ -249,6 +250,8 @@ async function createWorld(options: WorldOptions = {}) {
 }
 
 type World = Awaited<ReturnType<typeof createWorld>>;
+
+const LIMITED = 'limited';
 
 function windows(session: number, weekly: number, fable = 0, resetsAt = '2030-01-01T00:00:00Z') {
   return {
@@ -646,7 +649,14 @@ describe('recording the safe usage pace', () => {
     const pace = recorded?.type === 'usage.pace_recorded' ? recorded.pace : null;
     expect(pace).toBeGreaterThan(0);
     world.stub.update((state) => {
-      state.usagePaces.claude = { provider: 'claude', pace: pace ?? 0, at: 1 };
+      state.usagePaces.claude = {
+        provider: 'claude',
+        pace: pace ?? 0,
+        resetPace: recorded?.type === 'usage.pace_recorded' ? (recorded.resetPace ?? 0) : 0,
+        endingPace: recorded?.type === 'usage.pace_recorded' ? (recorded.endingPace ?? 0) : 0,
+        resetEndsAt: null,
+        at: 1,
+      };
     });
     const before = paceCommands(world).length;
     await world.accounts.store.update(world.accounts.store.list()[0]?.id ?? '', { switchAt: 80 });
@@ -906,6 +916,100 @@ describe('moving a rejected attempt to another account', () => {
     });
   });
 
+  test('a limit only the run’s model hit marks the account spent for that model alone', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+      state.settings = { ...state.settings, agentModels: { agent: 'fable' } };
+    });
+    world.usage.set('token-a@example.com', windows(10, 40, 100));
+    const verdict = await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(verdict).toMatchObject({
+      retry: false,
+      failure: { limitScope: 'model', model: 'fable', account: { id: a.id } },
+    });
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: 'fable' });
+    expect(
+      (await lease(world, { model: 'opus', previous: { id: a.id, email: a.email } }))?.reason
+    ).toBeNull();
+    const restarted = await createWorld({ root: world.root, now: world.now + 1 });
+    const marks = JSON.parse(readFileSync(join(world.config.dataDir, 'account-marks.json'), 'utf8'));
+    expect(marks.marks[a.id]).toEqual([{ until: world.now + HOUR, at: world.now, model: 'fable' }]);
+    restarted.stub.update((state) => {
+      state.settings = { ...state.settings, agentModels: { agent: 'fable' } };
+    });
+    expect(restarted.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: 'fable' });
+    restarted.stub.update((state) => {
+      state.settings = { ...state.settings, agentModels: { agent: 'opus' } };
+    });
+    expect(restarted.accounts.snapshot().accounts[0]).toMatchObject({ spentUntil: null, spentModel: null });
+  });
+
+  test('a model limit is still told apart while Claude holds back usage reads', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    world.usage.set('token-a@example.com', windows(10, 40, 96));
+    await world.accounts.limits.refresh([a.id], true);
+    world.usage.set('token-a@example.com', LIMITED);
+    await world.accounts.limits.refresh([a.id], true);
+    await world.accounts.limits.recordPush(a.id, {
+      kind: 'rate_limit',
+      status: 'rejected',
+      limit: 'seven_day',
+      utilization: null,
+      resetsAt: world.now + HOUR,
+    });
+    const verdict = await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(verdict.failure).toMatchObject({ limitScope: 'model', model: 'fable' });
+  });
+
+  test('a model limit leaves the account to runs on other models, and each model keeps its own mark', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const b = await addAccount(world, 'b@example.com', 30);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    expect(await reject(world, a.id, { resetAt: world.now + HOUR, limitScope: 'model' })).toEqual({
+      retry: true,
+    });
+    expect((await lease(world, { model: 'fable' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(a.id);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ model: 'opus' });
+    });
+    await reject(world, a.id, { resetAt: world.now + 2 * HOUR, limitScope: 'model' });
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'fable' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'sonnet' }))?.id).toBe(a.id);
+  });
+
+  test('a limit the shared windows show, or one on a run without a model, spends the account for every model', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const b = await addAccount(world, 'b@example.com', 30);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    world.usage.set('token-a@example.com', windows(10, 100, 100));
+    await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: null });
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(b.id);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ model: null });
+    });
+    const verdict = await reject(world, b.id, { resetAt: world.now + 2 * HOUR }, [a.id, b.id]);
+    expect(verdict.failure).toMatchObject({ limitScope: 'account', model: null });
+  });
+
   test('the accounts a run already tried come with the rejection, so nothing is remembered between runs', async () => {
     const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
@@ -935,6 +1039,8 @@ describe('moving a rejected attempt to another account', () => {
       failure: failure({
         resetAt: world.now + 4 * HOUR,
         account: { id: bound.id, email: 'bound@example.com' },
+        model: null,
+        limitScope: 'account',
       }),
     });
   });

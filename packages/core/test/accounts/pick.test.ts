@@ -10,6 +10,7 @@ import {
   pickAccount,
   resolveCandidateSpentUntil,
   resolvePoolResetAt,
+  selectCandidateSpentModel,
   selectNextAccount,
   STALE_USAGE_MS,
   type UsageWindow,
@@ -65,6 +66,21 @@ const FABLE_SPENT = createUsage([
 ]);
 
 describe('spent accounts', () => {
+  test('the model an account is spent for comes from its mark or its own window, never with a shared window spent', () => {
+    const spentModel = (patch: Partial<AccountCandidate>, model: string | null) =>
+      Option.getOrNull(selectCandidateSpentModel(createCandidate('a', patch), model, NOW));
+    expect(spentModel({ spentUntil: NOW + 10_000, spentModel: 'fable' }, 'fable')).toBe('fable');
+    expect(spentModel({ spentUntil: NOW + 10_000, spentModel: 'fable' }, 'opus')).toBeNull();
+    expect(spentModel({ spentUntil: NOW - 1, spentModel: 'fable' }, 'fable')).toBeNull();
+    expect(spentModel({ spentUntil: NOW + 10_000 }, 'fable')).toBeNull();
+    expect(spentModel({ usage: FABLE_SPENT }, 'fable')).toBe('Fable');
+    expect(spentModel({ usage: FABLE_SPENT }, 'opus')).toBeNull();
+    const shared = createUsage([{ usedPercent: 100 }, { ...FABLE_SPENT.windows[1] }]);
+    expect(spentModel({ usage: shared, spentUntil: NOW + 10_000, spentModel: 'fable' }, 'fable')).toBeNull();
+    const stale = { ...FABLE_SPENT, checkedAt: NOW - STALE_USAGE_MS - 1 };
+    expect(spentModel({ usage: stale }, 'fable')).toBeNull();
+  });
+
   test('an account is spent until the later of its marked and its measured reset', () => {
     const marked = createCandidate('a', { spentUntil: NOW + 10_000 });
     expect(Option.getOrNull(resolveCandidateSpentUntil(marked, null, NOW))).toBe(NOW + 10_000);
@@ -82,6 +98,17 @@ describe('spent accounts', () => {
     const account = createCandidate('a', { usage: FABLE_SPENT });
     expect(Option.getOrNull(resolveCandidateSpentUntil(account, 'claude-fable-5', NOW))).toBe(NOW + 5_000);
     expect(Option.getOrNull(resolveCandidateSpentUntil(account, 'claude-opus-4-1', NOW))).toBeNull();
+  });
+
+  test('a mark for one model keeps the account out only for that model', () => {
+    const marked = createCandidate('a', { spentUntil: NOW + 10_000, spentModel: 'fable' });
+    expect(Option.getOrNull(resolveCandidateSpentUntil(marked, 'claude-fable-5-2', NOW))).toBe(NOW + 10_000);
+    expect(Option.getOrNull(resolveCandidateSpentUntil(marked, null, NOW))).toBe(NOW + 10_000);
+    expect(isUsableAccount(marked, 'opus', NOW)).toBe(true);
+    const picked = pickAccount(createRequest([marked], { model: 'opus' }));
+    expect(Option.getOrNull(picked)?.usable).toBe(true);
+    expect(Option.getOrNull(resolvePoolResetAt([marked], 'opus', NOW))).toBeNull();
+    expect(Option.getOrNull(resolvePoolResetAt([marked], 'fable', NOW))).toBe(NOW + 10_000);
   });
 
   test('a paused, signed-out or spent account is not usable', () => {

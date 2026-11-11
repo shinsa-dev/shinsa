@@ -39,6 +39,8 @@ export interface UsageResetGrant {
   clears: string[];
   usableNow: boolean;
   endsAt: number | null;
+  givesBackWeekly: boolean;
+  weeklyShare: number | null;
 }
 
 export interface AccountUsage {
@@ -67,6 +69,7 @@ export interface AccountSummary {
   signInDetail: string | null;
   usage: AccountUsage;
   spentUntil: number | null;
+  spentModel?: string | null;
   runs: number;
 }
 

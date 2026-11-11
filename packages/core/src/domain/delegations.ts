@@ -1,4 +1,6 @@
-import type { Run, RunRole } from './types.ts';
+import { Option } from 'effect';
+import { isOfCurrentRound } from './rounds.ts';
+import type { Run, RunRole, Task } from './types.ts';
 
 export type DelegationMode = 'async' | 'wait';
 
@@ -76,6 +78,7 @@ export interface TaskCreator {
 
 export interface TaskSplit {
   planVersion: number;
+  round?: number;
   runId: string;
   taskIds: string[];
   at: number;
@@ -104,6 +107,13 @@ const READ_ONLY_ROLES: ReadonlySet<RunRole> = new Set<RunRole>([
   'answerer',
   'researcher',
 ]);
+
+export function selectPlanSplit(task: Task): Option.Option<TaskSplit> {
+  const version = task.plan?.version ?? 0;
+  return Option.fromNullishOr(
+    (task.splits ?? []).find((split) => split.planVersion === version && isOfCurrentRound(task, split))
+  );
+}
 
 export function isDelegatedRun(run: Run): run is Run & { delegation: RunDelegation } {
   return run.delegation !== undefined && run.delegation !== null;

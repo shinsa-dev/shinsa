@@ -230,8 +230,8 @@ src/
 │   │                forks of any task, a watchdog's of its own), report_read (to endIntakeRead or endWatchCheck),
 │   │                missRead (a read that gives up), isReadBusy, listSourceFiledTasks
 │   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
-│   ├── slack.ts     A Slack mention: to the open task of its thread (forwarded with 👀, or kept with 📥 while a
-│   │                gate is open, `slack.react`), else `slack.evaluate`; `slack.start_task` once it is work: a new
+│   ├── slack.ts     A Slack mention: to the open task of its thread (forwarded with 👀, or kept for its next
+│   │                agent with 📥 while a gate but the result is open, isHeldForYou, `slack.react`), else `slack.evaluate`; `slack.start_task` once it is work: a new
 │   │                task as Home starts one (`task.create`, triage picks the kind, project and priority), linked to
 │   │                the thread with `slack.thread_linked`; the card's ts; `slack.decide` (decideSlackGate: a
 │   │                decision from Slack through answerGate, then `slack.decided`); and syncSlackThreads (after every

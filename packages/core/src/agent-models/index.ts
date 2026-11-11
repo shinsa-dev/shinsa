@@ -109,6 +109,10 @@ export function resolveModelFamily(modelId: string) {
   return /^claude-([a-z]+)/.exec(bare)?.[1] ?? bare;
 }
 
+export function resolveModelFamilyLabel(modelId: string) {
+  return capitalise(resolveModelFamily(modelId));
+}
+
 export function resolveModelLabel(modelId: string) {
   const known = KNOWN_AGENT_PROVIDERS.flatMap((provider) => provider.models).find(
     (model) => model.id === modelId

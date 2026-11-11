@@ -141,6 +141,7 @@ const FEATURE_ROUTES = {
   'usage.pace_limits': [],
   autopilot: [],
   'usage.auto_pace': [],
+  'usage.auto_pace_resets': [],
   'team-relay': ['GET /api/teams/relays'],
   'usage.watchdog_limits': [],
   'share.scopes': [],

@@ -11,6 +11,7 @@ import {
   resolveAgentFastMode,
   resolveAttentionLimit,
   resolveAutoPace,
+  resolveAutoPaceResets,
   resolveAutopilotPolicy,
   resolveCompaction,
   resolveDelegationLimit,
@@ -72,6 +73,7 @@ describe('the settings a command may change', () => {
       sharePreset: 'standard',
       autopilot: AUTOPILOT_DEFAULTS,
       autoPace: false,
+      autoPaceResets: false,
       sharedTeams: [],
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
@@ -102,6 +104,13 @@ describe('resolveAutoPace', () => {
   test('Auto pace is off unless you switch it on', () => {
     expect(resolveAutoPace({ ...createSettings(), autoPace: undefined })).toBe(false);
     expect(resolveAutoPace({ ...createSettings(), autoPace: true })).toBe(true);
+  });
+});
+
+describe('resolveAutoPaceResets', () => {
+  test('Auto pace counts on usage resets only once you allow it', () => {
+    expect(resolveAutoPaceResets({ ...createSettings(), autoPaceResets: undefined })).toBe(false);
+    expect(resolveAutoPaceResets({ ...createSettings(), autoPaceResets: true })).toBe(true);
   });
 });
 
