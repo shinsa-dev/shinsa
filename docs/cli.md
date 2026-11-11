@@ -1468,7 +1468,7 @@ Every task agent's tool: `settings_get` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset, autoPace, sharedTeams. |
+| `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset, autoPace, autoPaceResets, sharedTeams. |
 
 #### shinsa settings set
 
@@ -1482,7 +1482,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset, autoPace, sharedTeams. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset, watchdogsIgnoreUsageLimits, autoPace, sharedTeams. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode, watchdogHours, watchdogFirstCheckMinutes, watchdogMaxGapHours, watchdogsIgnoreUsageLimits, taskCapacity, placementPolicies, shareLimit, sharePreset, autoPace, autoPaceResets, sharedTeams. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, dailyUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit, shareLimit, sharePreset, watchdogsIgnoreUsageLimits, autoPace, autoPaceResets, sharedTeams. |
 | `<value>` | text, required | The new value. |
 
 ### projects
