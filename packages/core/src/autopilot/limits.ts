@@ -26,7 +26,11 @@ const GATE_SETTING: Record<Exclude<AutopilotGateKind, 'merge'>, AutopilotGate> =
 const ALLOWED: AutopilotLimit = { allowed: true };
 
 function refuse(reason: string): AutopilotLimit {
-  return { allowed: false, reason };
+  return { allowed: false, reason, setting: false };
+}
+
+function refuseBySetting(reason: string): AutopilotLimit {
+  return { allowed: false, reason, setting: true };
 }
 
 export function isUrgentTask(task: Task) {
@@ -116,7 +120,7 @@ function limitRatings(facts: AutopilotFacts, ceiling: ReviewRating): AutopilotLi
 
 function limitPlan(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
   if (facts.heldPlan)
-    return refuse('This plan asks for you: it runs an operation, splits or you asked to see it.');
+    return refuseBySetting('This plan asks for you: it runs an operation, splits or you asked to see it.');
   const scope = facts.scope;
   if (!scope) return refuse('The plan has no phases yet.');
   const ceiling = AUTOPILOT_CEILINGS[policy.level].scope;
@@ -127,7 +131,7 @@ function limitPlan(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLim
 }
 
 function limitReview(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
-  if (facts.escalatedReview) return refuse('The agents could not settle the review.');
+  if (facts.escalatedReview) return refuseBySetting('The agents could not settle the review.');
   const ceiling = AUTOPILOT_CEILINGS[policy.level];
   return limitRatings(facts, facts.urgent ? ceiling.urgentRisk : ceiling.risk);
 }
@@ -140,15 +144,15 @@ function resolveMergeCeiling(facts: AutopilotFacts, policy: AutopilotPolicy): Re
 }
 
 function limitMerge(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
-  if (policy.autoMerge === 'off') return refuse('Auto merge is off.');
-  if (facts.approvedByYou) return refuse('You approved the review yourself.');
+  if (policy.autoMerge === 'off') return refuseBySetting('Auto merge is off.');
+  if (facts.approvedByYou) return refuseBySetting('You approved the review yourself.');
   return limitRatings(facts, resolveMergeCeiling(facts, policy));
 }
 
 function limitAct(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
-  if (!policy.enabled) return refuse('Autopilot is off.');
+  if (!policy.enabled) return refuseBySetting('Autopilot is off.');
   if (facts.gate !== 'merge' && !policy.gates.includes(GATE_SETTING[facts.gate])) {
-    return refuse('Autopilot does not act on this kind of gate.');
+    return refuseBySetting('Autopilot does not act on this kind of gate.');
   }
   switch (facts.gate) {
     case 'plan':

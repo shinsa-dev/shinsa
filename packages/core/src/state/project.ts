@@ -1,3 +1,4 @@
+import type { AutopilotLesson } from '../autopilot/schema.ts';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type AccountPlan,
@@ -63,6 +64,7 @@ import {
 } from './activity.ts';
 import {
   applyAutopilotForwarded,
+  applyAutopilotLearned,
   applyAutopilotJudging,
   applyAutopilotScheduled,
   applyEscalationRevised,
@@ -119,6 +121,7 @@ export interface ShinsaState {
   usagePaces: Record<string, RecordedPace>;
   onBehalfActions: OnBehalfAction[];
   timeZone: string | null;
+  autopilotLessons: AutopilotLesson[];
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
 }
@@ -152,6 +155,7 @@ export function createState(): ShinsaState {
     usagePaces: {},
     onBehalfActions: [],
     timeZone: null,
+    autopilotLessons: [],
   };
 }
 
@@ -1045,6 +1049,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'autopilot.forwarded':
       applyAutopilotForwarded(state, event);
+      break;
+    case 'autopilot.learned':
+      applyAutopilotLearned(state, event);
       break;
     case 'task.escalated':
       applyTaskEscalated(state, event);

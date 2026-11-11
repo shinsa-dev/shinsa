@@ -20,6 +20,7 @@ import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
 import { requestIteration } from './iterations.ts';
+import { learnFromAnswer } from './lessons.ts';
 import { settleTask, startPlanning } from './lifecycle.ts';
 import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
@@ -284,6 +285,7 @@ export function answerGate(
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
   const thenApprove = options.thenApprove ? { thenApprove: true } : {};
+  learnFromAnswer(decider, { gate, decision, response });
   decider.emit({
     type: 'gate.answered',
     gateId,

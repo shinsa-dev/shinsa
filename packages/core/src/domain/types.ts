@@ -804,6 +804,9 @@ export interface Gate {
   escalation?: ReviewEscalation;
   autopilotHeld?: string;
   autopilotJudging?: boolean;
+  autopilotAnswer?: string;
+  autopilotTeaches?: boolean;
+  autopilotLearned?: boolean;
   autopilotDue?: AutopilotDue | null;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;

@@ -1,3 +1,4 @@
+import { AUTOPILOT_LESSON_LIMITS } from '../autopilot/schema.ts';
 import type { EventOf } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateGate, updateTask } from './write.ts';
@@ -14,7 +15,11 @@ export function applyAutopilotForwarded(state: ShinsaState, event: EventOf<'auto
   const gate = state.gates[event.gateId];
   if (!gate) return;
   const judged = gate.autopilotJudging === true && gate.autopilotHeld !== event.reason;
-  updateGate(state, event.gateId, { autopilotJudging: false, autopilotHeld: event.reason });
+  updateGate(state, event.gateId, {
+    autopilotJudging: false,
+    autopilotHeld: event.reason,
+    autopilotTeaches: event.teaches,
+  });
   if (!judged) return;
   record(state, gate.taskId, event.at, {
     actor: 'shinsa',
@@ -22,6 +27,14 @@ export function applyAutopilotForwarded(state: ShinsaState, event: EventOf<'auto
     text: `Brought to you by Autopilot: ${gate.title}`,
     detail: event.reason,
   });
+}
+
+export function applyAutopilotLearned(state: ShinsaState, event: EventOf<'autopilot.learned'>) {
+  state.autopilotLessons = [...(state.autopilotLessons ?? []), ...event.lessons].slice(
+    -AUTOPILOT_LESSON_LIMITS.kept
+  );
+  for (const lesson of event.lessons)
+    if (lesson.kind === 'acted') updateGate(state, lesson.gateId, { autopilotLearned: true });
 }
 
 export function applyTaskEscalated(state: ShinsaState, event: EventOf<'task.escalated'>) {

@@ -1,3 +1,4 @@
+import type { AutopilotLesson } from '../autopilot/schema.ts';
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
   AutopilotDue,
@@ -274,7 +275,8 @@ type EventBody =
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'autopilot.scheduled'; gateId: string; due: AutopilotDue | null }
   | { type: 'autopilot.judging'; gateId: string }
-  | { type: 'autopilot.forwarded'; gateId: string; reason: string }
+  | { type: 'autopilot.forwarded'; gateId: string; reason: string; teaches: boolean }
+  | { type: 'autopilot.learned'; lessons: AutopilotLesson[] }
   | { type: 'task.escalated'; taskId: string; reason: string; handoff: EscalationHandoff }
   | { type: 'task.escalation_revised'; taskId: string; reason: string; handoff: EscalationHandoff }
   | { type: 'gate.noted'; gateId: string; notes: string | null }

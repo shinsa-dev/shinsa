@@ -28,7 +28,7 @@ export interface AutopilotFacts {
   presence: AutopilotPresence;
 }
 
-export type AutopilotLimit = { allowed: true } | { allowed: false; reason: string };
+export type AutopilotLimit = { allowed: true } | { allowed: false; reason: string; setting: boolean };
 
 export interface AutopilotLimits {
   act: AutopilotLimit;
@@ -66,4 +66,57 @@ export const AUTOPILOT_JUDGMENT_LIMITS = {
   reason: 240,
   reply: 2000,
   context: 1200,
+} as const;
+
+export const AUTOPILOT_LESSON_KINDS = ['acted', 'forwarded'] as const;
+
+export type AutopilotLessonKind = (typeof AUTOPILOT_LESSON_KINDS)[number];
+
+export const AUTOPILOT_LESSON_ANSWERS = ['approved', 'revised', 'rejected', 'replied'] as const;
+
+export type AutopilotLessonAnswer = (typeof AUTOPILOT_LESSON_ANSWERS)[number];
+
+export interface AutopilotLessonFacts {
+  urgent: boolean;
+  watchdog: boolean;
+  confidence: ReviewRating | null;
+  risk: ReviewRating | null;
+  scope: AutopilotScope | null;
+}
+
+export interface AutopilotLesson {
+  id: string;
+  at: number;
+  taskId: string;
+  gateId: string;
+  gate: AutopilotGateKind;
+  kind: AutopilotLessonKind;
+  answer: AutopilotLessonAnswer;
+  reason: string;
+  note: string | null;
+  facts: AutopilotLessonFacts;
+}
+
+export interface AutopilotGateLessons {
+  gate: AutopilotGateKind;
+  acted: number;
+  kept: number;
+  corrected: number;
+  forwarded: number;
+  couldHaveActed: number;
+  paused: boolean;
+}
+
+export interface AutopilotLessonSummary {
+  gates: AutopilotGateLessons[];
+  recent: AutopilotLesson[];
+}
+
+export const AUTOPILOT_LESSON_LIMITS = {
+  kept: 50,
+  prompt: 8,
+  recent: 5,
+  note: 280,
+  window: 4,
+  corrections: 2,
 } as const;

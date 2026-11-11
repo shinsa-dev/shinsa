@@ -1,5 +1,6 @@
 import type { Gate, GateType, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { listAutopilotLessonLines } from './lessons.ts';
 import { resolveAutopilotFacts } from './limits.ts';
 import { AUTOPILOT_JUDGMENT_LIMITS, type AutopilotFacts, type AutopilotGateKind } from './schema.ts';
 
@@ -13,6 +14,7 @@ export const AUTOPILOT_JUDGE_SYSTEM = [
   'An urgent fix a watchdog found while the developer is away may merge, when the reviewer rated it high confidence.',
   'To answer an agent’s question, write the reply the developer would give, in plain words, in `reply`; otherwise leave `reply` empty.',
   `Write \`reason\` as one plain sentence the developer reads later, at most ${AUTOPILOT_JUDGMENT_LIMITS.reason} characters.`,
+  'Weigh what the developer taught you at earlier decisions like this one: do what they approved, bring what they changed.',
   'Answer with one JSON object and nothing else.',
 ].join('\n');
 
@@ -60,7 +62,17 @@ function describeChoices(gate: Gate) {
   return [`Choices${recommended}:`, ...choices.map((choice) => `- ${choice}`)];
 }
 
-export function resolveAutopilotJudgePrompt(task: Task, gate: Gate, facts: AutopilotFacts) {
+function describeLessons(lessons: readonly string[]) {
+  if (lessons.length === 0) return [];
+  return ['', 'What the developer taught you at earlier ones, most recent first:', ...lessons];
+}
+
+export function resolveAutopilotJudgePrompt(
+  task: Task,
+  gate: Gate,
+  facts: AutopilotFacts,
+  lessons: readonly string[] = []
+) {
   const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
   return [
     `Decision: ${GATE_NAME[facts.gate]}`,
@@ -74,6 +86,7 @@ export function resolveAutopilotJudgePrompt(task: Task, gate: Gate, facts: Autop
     `${gate.title}`,
     clip(gate.body, limit * 2),
     ...describeChoices(gate),
+    ...describeLessons(lessons),
   ]
     .filter((line, index, lines) => line !== '' || lines[index - 1] !== '')
     .join('\n');
@@ -97,5 +110,6 @@ export function resolveAutopilotJudgeRequest(state: ShinsaState, gateId: string,
   const kind = resolveJudgedGateKind(gate);
   if (!kind) return null;
   const facts = resolveAutopilotFacts(state, task, kind, gate.openedAt, now);
-  return { system: AUTOPILOT_JUDGE_SYSTEM, prompt: resolveAutopilotJudgePrompt(task, gate, facts) };
+  const lessons = listAutopilotLessonLines(state, kind);
+  return { system: AUTOPILOT_JUDGE_SYSTEM, prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons) };
 }

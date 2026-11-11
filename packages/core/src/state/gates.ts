@@ -68,6 +68,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
     response: event.response,
     answeredAt: event.at,
     ...(event.verdicts ? { verdicts: event.verdicts } : {}),
+    ...(event.autopilot ? { autopilotAnswer: event.autopilot } : {}),
   });
   const gate = state.gates[event.gateId];
   if (!gate) return;

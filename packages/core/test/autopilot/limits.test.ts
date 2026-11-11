@@ -131,20 +131,26 @@ describe('the facts of a gate', () => {
 
 describe('what Autopilot may do on its own', () => {
   test('nothing while it is off', () => {
-    expect(act({}, { enabled: false })).toEqual({ allowed: false, reason: 'Autopilot is off.' });
+    expect(act({}, { enabled: false })).toEqual({
+      allowed: false,
+      reason: 'Autopilot is off.',
+      setting: true,
+    });
   });
 
   test('approves a plan within its size, and never one that asks for you or runs too large', () => {
     expect(act({ gate: 'plan' })).toEqual({ allowed: true });
-    expect(act({ gate: 'plan', heldPlan: true })).toMatchObject({ allowed: false });
+    expect(act({ gate: 'plan', heldPlan: true })).toMatchObject({ allowed: false, setting: true });
     expect(act({ gate: 'plan', scope: null })).toEqual({
       allowed: false,
       reason: 'The plan has no phases yet.',
+      setting: false,
     });
     const large = { gate: 'plan', scope: { phases: 5, files: 3 } } as const;
     expect(act(large)).toEqual({
       allowed: false,
       reason: 'The plan is larger than Autopilot approves on its own.',
+      setting: false,
     });
     expect(act(large, { level: 'most' })).toEqual({ allowed: true });
     expect(act({ gate: 'plan', scope: { phases: 2, files: 5 } }, { level: 'ask_first' })).toMatchObject({
@@ -157,6 +163,7 @@ describe('what Autopilot may do on its own', () => {
     expect(act({ gate: 'question' }, { gates: ['plans', 'reviews'] })).toEqual({
       allowed: false,
       reason: 'Autopilot does not act on this kind of gate.',
+      setting: true,
     });
   });
 
@@ -164,6 +171,7 @@ describe('what Autopilot may do on its own', () => {
     expect(act({ gate: 'review', confidence: null, risk: null })).toEqual({
       allowed: false,
       reason: 'The reviewer did not rate the change.',
+      setting: false,
     });
   });
 
@@ -171,6 +179,7 @@ describe('what Autopilot may do on its own', () => {
     expect(act({ risk: 'low' }, { autoMerge: 'off' })).toEqual({
       allowed: false,
       reason: 'Auto merge is off.',
+      setting: true,
     });
   });
 
@@ -208,6 +217,6 @@ describe('when Autopilot may contact your team', () => {
       'It goes to your team only after you have been away 60 minutes.',
     ],
   ] as const)('never when %s', (_case, facts, policy, reason) => {
-    expect(escalate(facts, policy)).toEqual({ allowed: false, reason });
+    expect(escalate(facts, policy)).toEqual({ allowed: false, reason, setting: false });
   });
 });
