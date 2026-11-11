@@ -4,15 +4,17 @@ import { isModelMarkFor } from '../accounts/usage.ts';
 import {
   CLAUDE_PROVIDER,
   RUN_AGENT_ROLE,
-  resolveAgentModel,
   resolveAgentProvider,
   resolveModelFamilyLabel,
   resolveProviderLabel,
 } from '../agent-models/index.ts';
+import { resolveStepModel } from '../agent-models/routing.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
   type Gate,
+  type ModelRoom,
+  type ModelRoomReading,
   isTaskClosed,
   MINUTE_MS,
   OWNER_SIGNED_OUT_CODE,
@@ -44,6 +46,8 @@ const SIGNED_OUT_CODES: ReadonlySet<string> = new Set([
   'authentication_failed',
   'api_error_401',
 ]);
+
+const MODEL_ROOM_STEP = 5;
 
 function isSameAccount(a: RunAccount | null | undefined, b: RunAccount | null | undefined) {
   return (a?.id ?? null) === (b?.id ?? null) && (a?.email ?? null) === (b?.email ?? null);
@@ -118,19 +122,20 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
   moveWatchCheck(decider, wait.runId, next.id);
 }
 
-function isModelMoved(decider: Decider, wait: UsageWait) {
-  const { settings } = decider.state;
-  const role = RUN_AGENT_ROLE[wait.role];
-  const provider = resolveAgentProvider(settings, role);
+function isModelMoved(decider: Decider, task: Task, wait: UsageWait) {
+  const { settings, modelRoom } = decider.state;
+  const provider = resolveAgentProvider(settings, RUN_AGENT_ROLE[wait.role]);
   if (provider !== (wait.provider ?? CLAUDE_PROVIDER)) return true;
-  return !isModelMarkFor(wait.model, resolveAgentModel(settings, role, provider));
+  const purpose = decider.state.runs[wait.runId]?.purpose ?? null;
+  const model = resolveStepModel({ settings, room: modelRoom, size: task.size, role: wait.role, purpose });
+  return !isModelMarkFor(wait.model, model);
 }
 
 export function releaseModelWaits(decider: Decider) {
   for (const task of Object.values(decider.state.tasks)) {
     const wait = task.usageWait;
     if (wait?.status !== 'armed' || wait.cause === 'pace' || wait.limitScope !== 'model') continue;
-    if (RUN_STAGES.has(task.stage) && isModelMoved(decider, wait)) resumeFromWait(decider, task, wait);
+    if (RUN_STAGES.has(task.stage) && isModelMoved(decider, task, wait)) resumeFromWait(decider, task, wait);
   }
 }
 
@@ -293,6 +298,22 @@ export function recordUsagePace(decider: Decider, command: CommandOf<'usage.pace
     provider: command.provider,
     pace: Option.getOrNull(resolveRecordablePace(command.pace)),
   });
+}
+
+function isRoomMoved(known: Readonly<Record<string, ModelRoom>>, models: readonly ModelRoomReading[]) {
+  if (Object.keys(known).length !== models.length) return true;
+  return models.some((model) => {
+    const before = known[model.family];
+    if (!before || before.usable !== model.usable) return true;
+    if (before.left === null || model.left === null) return before.left !== model.left;
+    return Math.abs(before.left - model.left) >= MODEL_ROOM_STEP;
+  });
+}
+
+export function recordModelRoom(decider: Decider, command: CommandOf<'usage.models_recorded'>) {
+  if (!isRoomMoved(decider.state.modelRoom, command.models)) return;
+  decider.emit({ type: 'usage.models_recorded', models: command.models });
+  releaseModelWaits(decider);
 }
 
 export function recordAccountRemoved(decider: Decider, command: CommandOf<'account.removed'>) {

@@ -890,3 +890,74 @@ describe('recording the safe pace of each provider', () => {
     expect(harness.state.usagePaces.claude).toBeUndefined();
   });
 });
+
+describe('the automatic model', () => {
+  type Reading = { family: string; usable: boolean; left: number | null };
+
+  function recordRoom(harness: Harness, models: Reading[]) {
+    return harness.send({ type: 'usage.models_recorded', models });
+  }
+
+  function chooseAuto(harness: Harness) {
+    harness.send({ type: 'settings.change', patch: { agentModels: { agent: 'auto' } } });
+  }
+
+  const ROOMY: Reading[] = [
+    { family: 'fable', usable: true, left: 40 },
+    { family: 'opus', usable: true, left: 60 },
+  ];
+
+  test('records each model’s room, and again only once it moves', () => {
+    const harness = createHarness();
+    recordRoom(harness, ROOMY);
+    expect(harness.state.modelRoom.fable).toMatchObject({ family: 'fable', usable: true, left: 40 });
+    expect(recordRoom(harness, ROOMY).events).toHaveLength(0);
+    expect(recordRoom(harness, [{ ...ROOMY[0]!, left: 42 }, ROOMY[1]!]).events).toHaveLength(0);
+    expect(recordRoom(harness, [{ ...ROOMY[0]!, left: 30 }, ROOMY[1]!]).events).toHaveLength(1);
+    expect(recordRoom(harness, [{ ...ROOMY[0]!, left: null }, ROOMY[1]!]).events).toHaveLength(1);
+    expect(recordRoom(harness, [{ ...ROOMY[0]!, left: null, usable: false }, ROOMY[1]!]).events).toHaveLength(1);
+    expect(recordRoom(harness, [ROOMY[1]!]).events).toHaveLength(1);
+    expect(harness.state.modelRoom.fable).toBeUndefined();
+    expect(recordRoom(harness, [{ ...ROOMY[1]!, family: 'sonnet' }]).events).toHaveLength(1);
+  });
+
+  test('a large task plans on Fable and builds on Opus', () => {
+    const harness = createHarness();
+    chooseAuto(harness);
+    const taskId = createTask(harness, { size: 'large' });
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'plan', model: 'fable' });
+    proposePlan(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build', model: 'opus' });
+  });
+
+  test('a small task plans on Opus, and a fixed model is kept as before', () => {
+    const harness = createHarness();
+    chooseAuto(harness);
+    expect(harness.activeRun(createTask(harness))).toMatchObject({ purpose: 'plan', model: 'opus' });
+    harness.send({ type: 'settings.change', patch: { agentModels: { agent: 'sonnet' } } });
+    expect(harness.activeRun(createTask(harness, { size: 'large' })).model).toBe('sonnet');
+  });
+
+  test('planning skips Fable once it is spent on every account', () => {
+    const harness = createHarness();
+    chooseAuto(harness);
+    recordRoom(harness, [{ family: 'fable', usable: false, left: 0 }]);
+    expect(harness.activeRun(createTask(harness, { size: 'large' })).model).toBe('opus');
+  });
+
+  test('a step waiting on Fable’s limit starts again on Opus once Fable is spent everywhere', () => {
+    const harness = createHarness();
+    chooseAuto(harness);
+    const taskId = createTask(harness, { size: 'large' });
+    linkSession(harness, taskId, 'plan-session');
+    const run = fail(harness, taskId, {
+      ...limit(harness.state.seq + 1_000 + HOUR),
+      model: 'fable',
+      limitScope: 'model',
+    });
+    recordRoom(harness, ROOMY);
+    expect(harness.task(taskId).usageWait?.status).toBe('armed');
+    recordRoom(harness, [{ family: 'fable', usable: false, left: 0 }, ROOMY[1]!]);
+    expect(harness.activeRun(taskId)).toMatchObject({ model: 'opus', continues: run.id });
+  });
+});

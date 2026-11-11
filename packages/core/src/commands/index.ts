@@ -1,4 +1,5 @@
 import type {
+  ModelRoomReading,
   BundleConflict,
   CheckEvidence,
   ConfigProblem,
@@ -318,6 +319,7 @@ type SystemCommand =
   | { type: 'account.removed'; accountId: string }
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
   | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
+  | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand

@@ -13,6 +13,7 @@ import {
   bindAccount,
   changeUsageWait,
   recordAccountPlan,
+  recordModelRoom,
   recordUsagePace,
   recordAccountRemoved,
   recordProviderSignIn,
@@ -454,6 +455,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordAccountPlan(decider, command);
     case 'usage.pace_recorded':
       return recordUsagePace(decider, command);
+    case 'usage.models_recorded':
+      return recordModelRoom(decider, command);
     case 'provider.record_sign_in':
       return recordProviderSignIn(decider, command);
     case 'agent.delegate':

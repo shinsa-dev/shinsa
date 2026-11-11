@@ -18,6 +18,10 @@ export const CLAUDE_PROVIDER = 'claude';
 
 export const CODEX_PROVIDER = 'codex';
 
+export const AUTO_MODEL = 'auto';
+
+export const AUTO_MODEL_LABEL = 'Automatic';
+
 export const KNOWN_AGENT_MODELS: AgentModel[] = [
   { id: 'opus', label: 'Opus 5.5', description: '' },
   { id: 'fable', label: 'Fable 5.1', description: '' },
@@ -84,7 +88,7 @@ function isQuickRole(role: AgentRole) {
   return role === 'classifier' || role === 'writer';
 }
 
-export function resolveAgentModel(
+export function resolveChosenModel(
   settings: Settings,
   role: AgentRole,
   provider: string = resolveAgentProvider(settings, role)
@@ -94,6 +98,21 @@ export function resolveAgentModel(
   const defaults = PROVIDER_DEFAULT_MODELS[provider] ?? DEFAULT_AGENT_MODELS;
   if (isQuickRole(role) || provider !== settings.defaultProvider) return defaults[role];
   return settings.defaultModel || defaults[role];
+}
+
+export function resolveAgentModel(
+  settings: Settings,
+  role: AgentRole,
+  provider: string = resolveAgentProvider(settings, role)
+) {
+  const chosen = resolveChosenModel(settings, role, provider);
+  if (chosen !== AUTO_MODEL) return chosen;
+  return (PROVIDER_DEFAULT_MODELS[provider] ?? DEFAULT_AGENT_MODELS)[role];
+}
+
+export function isAutoModel(settings: Settings, role: AgentRole) {
+  const provider = resolveAgentProvider(settings, role);
+  return provider === CLAUDE_PROVIDER && resolveChosenModel(settings, role, provider) === AUTO_MODEL;
 }
 
 export function resolveProviderLabel(providerId: string) {
@@ -114,6 +133,7 @@ export function resolveModelFamilyLabel(modelId: string) {
 }
 
 export function resolveModelLabel(modelId: string) {
+  if (modelId === AUTO_MODEL) return AUTO_MODEL_LABEL;
   const known = KNOWN_AGENT_PROVIDERS.flatMap((provider) => provider.models).find(
     (model) => model.id === modelId
   );

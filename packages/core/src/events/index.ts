@@ -14,6 +14,7 @@ import type {
   Gate,
   GateDecision,
   MessageKind,
+  ModelRoomReading,
   Monitor,
   PhaseReport,
   PhaseStatus,
@@ -92,6 +93,7 @@ type EventBody =
   | { type: 'away.recorded'; from: number; to: number }
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
   | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
+  | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'settings.changed'; settings: Settings }
   | {
       type: 'task.created';
