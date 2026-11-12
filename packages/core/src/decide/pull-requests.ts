@@ -2,8 +2,10 @@ import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   type BundleConflict,
+  hasBlockingCiFailure,
   hasStep,
   isTaskSettled,
+  listInheritedCiFailures,
   type MergeQueueEntry,
   type MergeQueueState,
   type PullRequest,
@@ -34,7 +36,8 @@ import {
 } from './bundles.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { applyEditsApproval } from './edits.ts';
-import { resetFixBudget, startFix } from './fixes.ts';
+import { isUnchangedFix } from './fingerprints.ts';
+import { failUnchangedFix, resetFixBudget, startFix } from './fixes.ts';
 import { settleTask } from './lifecycle.ts';
 import { recordEarlierRoundMerged } from './rounds.ts';
 import { finishMerge } from './shapes.ts';
@@ -76,10 +79,16 @@ const UNREADABLE_HOOK_FAILURE = 'unreadable';
 
 const GATE_OUTPUT_LINES = 40;
 
+function hasPassingCi(pullRequest: PullRequest, watch: PullRequestWatch) {
+  if (pullRequest.checks === 'passing') return true;
+  if (pullRequest.checks === 'none') return watch.ciAbsent;
+  return pullRequest.checks === 'failing' && watch.passed && !hasBlockingCiFailure(pullRequest);
+}
+
 function isMergeReady(pullRequest: PullRequest, watch: PullRequestWatch) {
   return (
     pullRequest.state === 'open' &&
-    (pullRequest.checks === 'passing' || (pullRequest.checks === 'none' && watch.ciAbsent)) &&
+    hasPassingCi(pullRequest, watch) &&
     pullRequest.unresolvedComments === 0 &&
     pullRequest.mergeable === true
   );
@@ -88,7 +97,7 @@ function isMergeReady(pullRequest: PullRequest, watch: PullRequestWatch) {
 function needsPullRequestFix(pullRequest: PullRequest) {
   return (
     pullRequest.state === 'open' &&
-    (pullRequest.checks === 'failing' ||
+    (hasBlockingCiFailure(pullRequest) ||
       pullRequest.unresolvedComments > 0 ||
       pullRequest.mergeable === false)
   );
@@ -333,17 +342,48 @@ function reactToWatch(
   }
   recordWatch(decider, task.id, report.next, report.changes);
   if (clean) {
-    decider.stage(task.id, 'shipping', 'waiting for CI');
+    decider.stage(task.id, 'shipping', describeCleanWait(pullRequest));
+    return;
+  }
+  startPullRequestFix(decider, task, watch, report, pullRequest, removal);
+}
+
+function startPullRequestFix(
+  decider: Decider,
+  task: Task,
+  watch: PullRequestWatch,
+  report: PullRequestWatchReport,
+  pullRequest: PullRequest,
+  removal: string | null
+) {
+  const reason = pullRequest.mergeable === false ? 'conflict' : 'pull_request';
+  const signature = Option.getOrNull(resolvePullRequestSignature(pullRequest, report.next));
+  if (
+    reason === 'pull_request' &&
+    !hasFixableChange(report.changes) &&
+    (pullRequest.headSha ?? null) === watch.headSha &&
+    isUnchangedFix(task, reason, signature)
+  ) {
+    failUnchangedFix(decider, task.id, reason);
     return;
   }
   startFix(
     decider,
     task.id,
-    pullRequest.mergeable === false ? 'conflict' : 'pull_request',
+    reason,
     resolvePullRequestFixPrompt(pullRequest, trimWatchChanges(report.changes), removal),
-    Option.getOrNull(resolvePullRequestSignature(pullRequest, report.next)),
+    signature,
     { base: pullRequest.base ?? null, commentsOnly: isCommentsOnly(pullRequest, report.changes) }
   );
+}
+
+function describeCleanWait(pullRequest: PullRequest) {
+  const inherited = listInheritedCiFailures(pullRequest).map((check) => `“${check.name}”`);
+  if (inherited.length === 0) return 'waiting for CI';
+  const base = pullRequest.base ?? 'the base branch';
+  const names =
+    inherited.length === 1 ? inherited[0] : `${inherited.slice(0, -1).join(', ')} and ${inherited.at(-1)}`;
+  return `${names} ${inherited.length === 1 ? 'fails' : 'fail'} on ${base} too`;
 }
 
 function isEarlierRoundPullRequest(task: Task, number: number) {

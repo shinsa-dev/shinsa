@@ -1,4 +1,5 @@
 import { describeCount } from '../chat/text.ts';
+import { hasBlockingCiFailure, listInheritedCiFailures } from '../domain/ci.ts';
 import { isBlockingCheck } from '../domain/checks.ts';
 import type { PullRequest, PullRequestWatchChange, ReviewComment } from '../domain/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
@@ -164,11 +165,19 @@ function describeMergeConflict(pullRequest: PullRequest) {
   return `- The branch has merge conflicts with its base, \`${base}\`. Shinsa fetched it: merge it in with \`git merge origin/${base}\`, resolve every conflict and \`git add\` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.`;
 }
 
+function describeInheritedFailures(pullRequest: PullRequest) {
+  const names = listInheritedCiFailures(pullRequest).map((check) => check.name);
+  if (names.length === 0) return '';
+  const base = pullRequest.base ? `\`${pullRequest.base}\`` : 'the base branch';
+  return `- These checks fail on ${base} too, so no change here can clear them: leave them alone. ${names.join(', ')}.`;
+}
+
 function describeStandingProblems(pullRequest: PullRequest) {
   return [
-    pullRequest.checks === 'failing'
+    hasBlockingCiFailure(pullRequest)
       ? '- CI checks are failing. Read the failing logs with `gh pr checks` and `gh run view`.'
       : '',
+    describeInheritedFailures(pullRequest),
     pullRequest.unresolvedComments > 0
       ? `- ${describeUnresolved(pullRequest.unresolvedComments)} (review bots or people). Read them with \`gh pr view ${pullRequest.number} --comments\` and the review threads API.`
       : '',
