@@ -102,7 +102,8 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
 type RetryBy = 'shinsa' | 'you';
 
 export function retryArmedTask(decider: Decider, taskId: string, by: RetryBy, guidance: string | null) {
-  const cause = decider.task(taskId).autoRetry?.cause;
+  const task = decider.task(taskId);
+  const cause = isRetryArmed(task) ? task.autoRetry?.cause : null;
   decider.resetRecoveries(taskId, by === 'shinsa' ? 'kept' : 'reset');
   if (cause === 'push_hook') {
     retryHookFix(decider, taskId, guidance);

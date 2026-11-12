@@ -45,7 +45,7 @@ import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } f
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { finishMove } from './moves.ts';
-import { retryTask } from './retry.ts';
+import { retryArmedTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
 import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
 
@@ -295,8 +295,7 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
     }
     decider.bindNextRun(task.id, command.account);
   }
-  decider.resetRecoveries(command.taskId);
-  retryTask(decider, command.taskId, null);
+  retryArmedTask(decider, command.taskId, decider.context.onBehalf ? 'shinsa' : 'you', null);
 }
 
 export function readyWorktree(decider: Decider, command: CommandOf<'worktree.ready'>) {

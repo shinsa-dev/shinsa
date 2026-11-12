@@ -1,5 +1,5 @@
 import type { CommandOf } from '../commands/index.ts';
-import { DomainError, isPausingGate, type Task, type TaskStage } from '../domain/index.ts';
+import { DomainError, isPausingGate, isRetryArmed, type Task, type TaskStage } from '../domain/index.ts';
 import type { ShinsaEffectKind } from '../effects/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
@@ -34,6 +34,7 @@ const PAUSED_DETAIL =
   'Its agent was stopped where it was. Resume to pick the step up again, or send it a message.';
 
 export function isTaskPausable(state: ShinsaState, task: Task) {
+  if (isRetryArmed(task)) return true;
   return PAUSABLE_STAGES.has(task.stage) && !listOpenGates(state, task.id).some(isPausingGate);
 }
 

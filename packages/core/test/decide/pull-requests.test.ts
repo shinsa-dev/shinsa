@@ -266,6 +266,17 @@ describe('reacting to the pull request', () => {
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
 
+  test('a failed merge arms a retry that Stop retrying holds with your Pause gate', () => {
+    const { harness, taskId } = shipping();
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    approve(harness, taskId);
+    harness.send({ type: 'effect.fail', taskId, title: 'Could not merge the pull request', detail: 'gh' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_merge', autoRetry: { status: 'armed' } });
+    harness.send({ type: 'task.pause', taskId });
+    expect(harness.task(taskId).autoRetry?.status).toBe('spent');
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'failure', cause: 'paused' });
+  });
+
   test('a clean pull request clears a failure the loop left behind', () => {
     const { harness, taskId } = shipping();
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'gh' });
@@ -1018,6 +1029,11 @@ describe('a pre-push hook that rejects the push', () => {
     fireRetry(harness, taskId);
     expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'hook', fixRounds: 1 });
     expect(harness.activeRun(taskId).prompt).toContain(HOOK_OUTPUT);
+
+    finishFix(harness, taskId);
+    failHook(harness, taskId);
+    harness.send({ type: 'task.retry', taskId });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'hook', autoRetry: null });
 
     finishFix(harness, taskId);
     failHook(harness, taskId);

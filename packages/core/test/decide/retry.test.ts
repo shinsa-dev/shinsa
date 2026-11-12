@@ -95,6 +95,15 @@ describe('automatic retries', () => {
     expect(harness.task(taskId).autoRetry?.attempt).toBe(1);
   });
 
+  test('a Retry sent on your behalf restarts the step but keeps the count', () => {
+    const { harness, taskId } = failing();
+    harness.send({ type: 'task.retry', taskId }, { onBehalf: true, byTask: 'other' });
+    expect(harness.task(taskId).autoRetry).toMatchObject({ attempt: 1, status: 'spent' });
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'plan' });
+    breakTask(harness, taskId);
+    expect(harness.task(taskId).autoRetry?.attempt).toBe(2);
+  });
+
   test('a message retries at once with your words as guidance and starts the count again', () => {
     const { harness, taskId } = failing();
     expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('retry');

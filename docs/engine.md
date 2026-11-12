@@ -1601,7 +1601,8 @@ the round, the plan version, the phases reported and the gates you answered); a 
 plan, review or merge gate starts it again, while a new commit alone does not, since a stalled fix loop makes one every
 round. The 11th failure at the same milestone opens the failure gate as before, its detail saying Shinsa already
 retried it 10 times (`MAX_AUTO_RETRIES`, `describeRetriesSpent`). While a retry is armed the task counts as live and
-shows Retrying with the reason and a countdown, Retry now (`task.retry`) and Stop retrying (`task.pause`); a message to
+shows Retrying with the reason and a countdown, Retry now (`task.retry`, which, like the clock, starts a fix round for a
+failed pre-push hook) and Stop retrying (`task.pause`, accepted at any stage while a retry is armed); a message to
 the agent retries at once with it as guidance; Retry, a message, your Pause, cancelling or any step that starts clears
 it (`task.retry_cleared`), and only your own Retry or message starts the count again (`streak: reset`), never one sent
 on your behalf. Holds you chose keep the gate through `Decider.hold`: your Pause, the task's usage or cost limit, a
