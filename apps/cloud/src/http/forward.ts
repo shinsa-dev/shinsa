@@ -41,6 +41,16 @@ export const recordMachineOffline = Effect.fn('recordMachineOffline')(function* 
   );
 });
 
+export const recordPreviewStopped = Effect.fn('recordPreviewStopped')(function* (
+  instanceId: string,
+  previewId: string,
+  status: number
+) {
+  yield* Effect.logWarning('[Cloud] Preview service stopped').pipe(
+    Effect.annotateLogs({ instanceId, previewId, status })
+  );
+});
+
 export const requestOnlineMachine = Effect.fn('requestOnlineMachine')(function* <R>(
   surface: OfflineSurface,
   instanceId: string,
