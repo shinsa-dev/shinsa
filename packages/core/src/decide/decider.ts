@@ -235,6 +235,11 @@ export class Decider {
     return { taskId: source.taskId, runId: source.id, sessionId: source.sessionId };
   }
 
+  #sessionModel(resumeFrom: Run | null, fork: RunFork | null) {
+    if (resumeFrom) return resumeFrom.model;
+    return fork ? (this.state.runs[fork.runId]?.model ?? null) : null;
+  }
+
   #hasHadSession(taskId: string) {
     return Object.values(this.state.runs).some(
       (run) =>
@@ -360,6 +365,7 @@ export class Decider {
         size: task.size,
         role,
         purpose,
+        sessionModel: this.#sessionModel(resumeFrom, fork),
       }),
       sessionId: resumeFrom?.sessionId ?? null,
       startedAt: this.context.now,

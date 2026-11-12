@@ -124,7 +124,14 @@ choice and offered first in every model picker, on its own above the providers' 
 hint, on an engine that announces `models.routing`. It only ever picks Claude models for a step. `startRun` resolves
 it when the step starts (`resolveStepModel` in `packages/core/src/agent-models/routing.ts`), so `run.model` is always
 a real model and replay gives the same one: a plan on a large task takes the first usable of Fable then Opus, any
-other plan or step Opus then Sonnet (`MODEL_ROUTES`), so Fable never builds. A model is usable unless
+other plan or step Opus then Sonnet (`MODEL_ROUTES`), so Fable never builds. A provider caches per model, so a
+step that resumes a session keeps the session's model while it is one of the step's choices and usable
+(`sessionModel`): Fable plans only a large task's first session, later rounds plan on the session's Opus, and a step
+that fell back to Sonnet stays there. Automatic thus moves a session to another model once, from Fable's plan to
+Opus at build phase 1, which folds to the round brief (Boundary folds), or when the model runs out. A cache written
+on another model never counts as warm (`isSessionCacheWarm`), so that first step on the new model always folds and
+writes only the brief into its cache, never the planning conversation. Quick jobs, the reviewer's own session and
+delegations are separate requests and sessions, so routing never touches the Agent's cache. A model is usable unless
 `state.modelRoom` says no signed-in, unpaused account can run its family (a family never recorded counts as usable).
 The account roster records that room (`usage.models_recorded`, `listModelRoom`: per Claude family, whether any account
 can run it and the most room any one account has left) on an accounts refresh when a family turns usable or spent or
@@ -6658,8 +6665,8 @@ nothing before its turn is left as it is, and so is a step whose history is unde
 `foldFloor`) while its cache is still warm: there a fold would rewrite more of the cache than it saves, so the fold is
 dropped and the step reads its warm cache. Whether it is warm is the expiry the session's last run recorded when it
 ended (`resolveCacheExpiry`, the same reading idle compaction uses, kept on the run by `run.cached` so it survives a
-restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
-no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
+restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, when
+that run was on another model (a provider caches per model), or when no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
 first and writes only the folded prefix.
 
 *Routing a session* (`providers/claude/route.ts`). Each Claude session and idle compaction resolves a route before it

@@ -176,8 +176,9 @@ export function isSessionCacheWarm(context: TurnContext, sessionId: string, now:
   const earlier = listSessionRuns(context, sessionId).filter(
     (run) => run.id !== context.run.id && run.cacheExpiresAt !== undefined
   );
-  const expiresAt = earlier.at(-1)?.cacheExpiresAt;
-  return expiresAt !== undefined && now < expiresAt;
+  const last = earlier.at(-1);
+  if (!last || last.model !== context.run.model) return false;
+  return last.cacheExpiresAt !== undefined && now < last.cacheExpiresAt;
 }
 
 export const resolveTurnPrompt = Effect.fn('TurnPlan.resolvePrompt')(function* (

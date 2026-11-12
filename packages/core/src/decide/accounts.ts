@@ -123,8 +123,15 @@ function isModelMoved(decider: Decider, task: Task, wait: UsageWait) {
   const { settings, modelRoom } = decider.state;
   const provider = resolveAgentProvider(settings, RUN_AGENT_ROLE[wait.role]);
   if (provider !== (wait.provider ?? CLAUDE_PROVIDER)) return true;
-  const purpose = decider.state.runs[wait.runId]?.purpose ?? null;
-  const model = resolveStepModel({ settings, room: modelRoom, size: task.size, role: wait.role, purpose });
+  const run = decider.state.runs[wait.runId];
+  const model = resolveStepModel({
+    settings,
+    room: modelRoom,
+    size: task.size,
+    role: wait.role,
+    purpose: run?.purpose ?? null,
+    sessionModel: decider.resumableFrom(run ?? null)?.model ?? null,
+  });
   return !isModelMarkFor(wait.model, model);
 }
 

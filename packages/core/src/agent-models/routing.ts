@@ -20,6 +20,7 @@ export interface RouteRequest {
 export interface StepModelRequest extends RouteRequest {
   settings: Settings;
   room: Readonly<Record<string, ModelRoom>>;
+  sessionModel: string | null;
 }
 
 function isPlanStep({ role, purpose }: RouteRequest) {
@@ -35,13 +36,19 @@ export function isModelUsable(room: Readonly<Record<string, ModelRoom>>, model: 
   return room[resolveModelFamily(model)]?.usable !== false;
 }
 
-export function resolveRoutedModel(request: RouteRequest, room: Readonly<Record<string, ModelRoom>>) {
+export function resolveRoutedModel(
+  request: RouteRequest,
+  room: Readonly<Record<string, ModelRoom>>,
+  sessionModel: string | null = null
+) {
   const candidates = MODEL_ROUTES[resolveRouteStep(request)];
+  const kept = sessionModel ? resolveModelFamily(sessionModel) : null;
+  if (kept && candidates.includes(kept) && isModelUsable(room, kept)) return kept;
   return candidates.find((model) => isModelUsable(room, model)) ?? candidates[0] ?? 'opus';
 }
 
-export function resolveStepModel({ settings, room, ...request }: StepModelRequest) {
+export function resolveStepModel({ settings, room, sessionModel, ...request }: StepModelRequest) {
   const role = RUN_AGENT_ROLE[request.role];
   if (!isAutoModel(settings, role)) return resolveAgentModel(settings, role);
-  return resolveRoutedModel(request, room);
+  return resolveRoutedModel(request, room, sessionModel);
 }

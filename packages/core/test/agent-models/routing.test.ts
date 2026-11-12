@@ -87,6 +87,16 @@ describe('the route of a step', () => {
     expect(resolveRoutedModel(build, room('opus', 'sonnet'))).toBe('opus');
   });
 
+  test('a resumed session keeps its model while it suits the step, so the cache stays on one model', () => {
+    const plan = { size: 'large' as const, role: 'agent' as const, purpose: 'plan' as const };
+    const build = { ...plan, purpose: 'build' as const };
+    expect(resolveRoutedModel(plan, room(), 'opus')).toBe('opus');
+    expect(resolveRoutedModel(build, room(), 'claude-fable-5-1')).toBe('opus');
+    expect(resolveRoutedModel(build, room(), 'sonnet')).toBe('sonnet');
+    expect(resolveRoutedModel(build, room('sonnet'), 'sonnet')).toBe('opus');
+    expect(resolveRoutedModel(plan, room(), null)).toBe('fable');
+  });
+
   test('a model with no recorded room counts as usable, matched by its family', () => {
     expect(isModelUsable({}, 'fable')).toBe(true);
     expect(isModelUsable(room('fable'), 'claude-fable-5-1')).toBe(false);
@@ -94,7 +104,13 @@ describe('the route of a step', () => {
 });
 
 describe('the model a step starts on', () => {
-  const plan = { size: 'large' as const, role: 'agent' as const, purpose: 'plan' as const, room: room() };
+  const plan = {
+    size: 'large' as const,
+    role: 'agent' as const,
+    purpose: 'plan' as const,
+    room: room(),
+    sessionModel: null,
+  };
 
   test('is routed when the role’s model is Automatic', () => {
     expect(resolveStepModel({ ...plan, settings: AUTO })).toBe('fable');
