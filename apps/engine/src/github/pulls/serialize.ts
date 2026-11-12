@@ -10,6 +10,7 @@ import {
   resolveCurrentRound,
   type Task,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { resolveCommitType, serializeConventionalSubject } from '../../git/conventional.ts';
 import {
   CHECK_STATUS,
@@ -67,14 +68,21 @@ export function resolveCheckRunsState(checks: readonly CiRun[]): CiState {
   return gate.some((check) => check.status === 'pending') ? 'pending' : 'passing';
 }
 
-function markFailsOnBase(checks: readonly CiRun[], base: readonly ContextNode[] | null): CiRun[] {
-  const failing = new Set(
-    resolveCheckRuns(base ?? [])
-      .filter(isFailedRun)
-      .map((check) => check.name)
-  );
+function selectBaseOutcome(history: readonly (readonly CiRun[])[], name: string): Option.Option<boolean> {
+  for (const runs of history) {
+    const named = runs.filter((run) => run.name === name);
+    if (named.some(isFailedRun)) return Option.some(true);
+    if (named.some((run) => run.status !== 'pending')) return Option.some(false);
+  }
+  return Option.none();
+}
+
+function markFailsOnBase(checks: readonly CiRun[], base: readonly (readonly ContextNode[])[]): CiRun[] {
+  const history = base.map(resolveCheckRuns);
   return checks.map((check) =>
-    isFailedRun(check) && failing.has(check.name) ? { ...check, failsOnBase: true } : check
+    isFailedRun(check) && Option.getOrElse(selectBaseOutcome(history, check.name), () => false)
+      ? { ...check, failsOnBase: true }
+      : check
   );
 }
 
@@ -168,7 +176,9 @@ export function serializePullRequest(
   );
   const unresolved = threads.length;
   const contexts = pull?.commits.nodes.at(-1)?.commit.statusCheckRollup?.contexts.nodes ?? null;
-  const base = pull?.baseRef?.target?.statusCheckRollup?.contexts.nodes ?? null;
+  const base = (pull?.baseRef?.target?.history?.nodes ?? []).map(
+    (node) => node.statusCheckRollup?.contexts.nodes ?? []
+  );
   const checkRuns = contexts ? markFailsOnBase(resolveCheckRuns(contexts), base) : null;
   return {
     number: view.number,

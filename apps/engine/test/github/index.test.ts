@@ -305,12 +305,18 @@ describe('serializePullRequest', () => {
         ],
       },
       baseRef: {
-        target: rollup([
-          run('Workers Builds: docs', 'FAILURE'),
-          run('lint', 'SUCCESS'),
-          run('build', 'FAILURE'),
-          { __typename: 'StatusContext', context: 'deploy', state: 'FAILURE' },
-        ]),
+        target: {
+          history: {
+            nodes: [
+              rollup([
+                run('Workers Builds: docs', 'FAILURE'),
+                run('lint', 'SUCCESS'),
+                run('build', 'FAILURE'),
+                { __typename: 'StatusContext', context: 'deploy', state: 'FAILURE' },
+              ]),
+            ],
+          },
+        },
       },
     });
     expect(serializePullRequest(view, details, 5).checkRuns).toEqual([
@@ -341,12 +347,56 @@ describe('serializePullRequest', () => {
       null,
       { target: null },
       { target: {} },
-      { target: { statusCheckRollup: null } },
+      { target: { history: { nodes: [] } } },
+      { target: { history: { nodes: [{ statusCheckRollup: null }] } } },
     ]) {
       expect(serializePullRequest(view, createDetails({ commits: failing, baseRef }), 5).checkRuns).toEqual(
         expected
       );
     }
+  });
+
+  test('a check still running on the base’s newest commit takes its result from the newest commit that finished it', () => {
+    const run = (name: string, status: string, conclusion: string | null) => ({
+      __typename: 'CheckRun',
+      name,
+      status,
+      conclusion,
+    });
+    const rollup = (nodes: ContextNode[]) => ({ statusCheckRollup: { contexts: { nodes } } });
+    const details = createDetails({
+      commits: {
+        nodes: [
+          {
+            commit: rollup([
+              run('Workers Builds: docs', 'COMPLETED', 'FAILURE'),
+              run('lint', 'COMPLETED', 'FAILURE'),
+              run('e2e', 'COMPLETED', 'FAILURE'),
+            ]),
+          },
+        ],
+      },
+      baseRef: {
+        target: {
+          history: {
+            nodes: [
+              rollup([
+                run('Workers Builds: docs', 'IN_PROGRESS', null),
+                run('lint', 'IN_PROGRESS', null),
+                run('e2e', 'IN_PROGRESS', null),
+              ]),
+              rollup([run('Workers Builds: docs', 'COMPLETED', 'FAILURE'), run('lint', 'QUEUED', null)]),
+              rollup([run('lint', 'COMPLETED', 'SUCCESS'), run('e2e', 'COMPLETED', 'FAILURE')]),
+            ],
+          },
+        },
+      },
+    });
+    expect(serializePullRequest(view, details, 5).checkRuns).toEqual([
+      { name: 'Workers Builds: docs', status: 'failure', required: null, url: null, failsOnBase: true },
+      { name: 'lint', status: 'failure', required: null, url: null },
+      { name: 'e2e', status: 'failure', required: null, url: null, failsOnBase: true },
+    ]);
   });
 
   test('auto-merge counts as a queue, a written reason is kept as it is, and an unknown queue state is no queue', () => {

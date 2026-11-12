@@ -576,6 +576,28 @@ describe('watching the pull request', () => {
     expect(harness.openGate(taskId).type).toBe('merge');
   });
 
+  test('a required check that fails on the base too closes an open merge gate on the same head', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, { base: 'main' });
+    expect(harness.openGate(taskId).type).toBe('merge');
+    record(harness, taskId, { base: 'main', checks: 'failing', checkRuns: [INHERITED] });
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: '“Workers Builds: superwall-docs” fails on main too',
+      fixRounds: 0,
+    });
+  });
+
+  test('an optional check that fails on the base too keeps an open merge gate', () => {
+    const { harness, taskId } = shipping();
+    const build = { name: 'build', status: 'success' as const, required: true, url: null };
+    record(harness, taskId, { checks: 'passing', checkRuns: [build] });
+    const gate = harness.openGate(taskId);
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, { ...INHERITED, required: false }] });
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+
   test('an inherited failure with no required checks known keeps the task waiting', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, {

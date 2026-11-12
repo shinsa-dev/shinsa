@@ -94,6 +94,10 @@ function isMergeReady(pullRequest: PullRequest, watch: PullRequestWatch) {
   );
 }
 
+function isCiHoldingMerge(pullRequest: PullRequest, watch: PullRequestWatch) {
+  return pullRequest.checks === 'failing' && !hasPassingCi(pullRequest, watch);
+}
+
 function needsPullRequestFix(pullRequest: PullRequest) {
   return (
     pullRequest.state === 'open' &&
@@ -130,7 +134,11 @@ function keepsMergeGate(
 ) {
   const gate = listOpenGates(decider.state, task.id).find((open) => open.type === 'merge');
   if (!gate || (gate.commit ?? null) !== (pullRequest.headSha ?? null)) return false;
-  return !hasFixableChange(report.changes) && !needsPullRequestFix(pullRequest);
+  return (
+    !hasFixableChange(report.changes) &&
+    !needsPullRequestFix(pullRequest) &&
+    !isCiHoldingMerge(pullRequest, report.next)
+  );
 }
 
 function isMerging(decider: Decider, task: Task) {
@@ -316,7 +324,8 @@ function reactToWatch(
     return;
   }
   const clean = !hasFixableChange(report.changes) && !needsPullRequestFix(pullRequest);
-  if (!fresh && keepsBundleReady(task, pullRequest.headSha ?? null, clean)) {
+  const ready = clean && !isCiHoldingMerge(pullRequest, report.next);
+  if (!fresh && keepsBundleReady(task, pullRequest.headSha ?? null, ready)) {
     recordWatch(decider, task.id, report.next, report.changes);
     return;
   }

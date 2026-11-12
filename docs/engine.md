@@ -5705,14 +5705,16 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   recomputing mergeability (`mergeable: null`), do not take it back; only a new head, a failure or
   a new comment does, so a gate never opens and closes again on one commit.
 - **A failure inherited from the base is not the Agent's.** The same GraphQL read asks for the check
-  runs of the base branch's head commit (`baseRef.target.statusCheckRollup`), and a failing run whose
-  name also fails there is marked `failsOnBase` (`serializePullRequest`, `apps/engine/src/github/pulls`);
-  a deleted base or one without checks marks nothing. Such a failure is left out of what the watch
+  runs of the base branch's newest commits (`baseRef.target.history`, `BASE_HISTORY_DEPTH` of them), and
+  a failing run is marked `failsOnBase` when the newest base commit that finished a run of that name
+  failed it, so a base still building its head reads as the commit before (`serializePullRequest`,
+  `apps/engine/src/github/pulls`); a deleted base, one without checks or one whose runs of that name are
+  all still going marks nothing. Such a failure is left out of what the watch
   reports, of the stall key and of what needs a fix (`hasBlockingCiFailure`, `domain/ci.ts`). A pull request
   whose only failures are inherited starts no fix turn: the task stays shipping with the reason
   "“‹check›” fails on ‹base› too" and the watch keeps reading it. An inherited required check keeps the
-  merge gate closed, since GitHub would refuse the merge, until it passes; inherited optional checks do
-  not hold it. Any other failure still starts a fix, whose prompt names the inherited ones as not the
+  merge gate closed, and closes one already open on the same head (`isCiHoldingMerge`), since GitHub
+  would refuse the merge, until it passes; inherited optional checks do not hold it. Any other failure still starts a fix, whose prompt names the inherited ones as not the
   Agent's to fix; the task page shows them as failing on the base too, and `read_task` lists them so.
   Before this, a check broken on `main` sent the Agent eight fix turns that changed nothing.
 - **A fix that changed nothing ends the loop.** A `pull_request` fix whose push left the head where
