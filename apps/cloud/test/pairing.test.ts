@@ -117,11 +117,8 @@ describe('pairing a machine', () => {
     const claimed = await poll(harness, start);
     expect(claimed).toMatchObject({ status: 'claimed', owner: 'mona' });
     const credentials = await openClaimed(pair, claimed);
-    expect(credentials).toMatchObject({
-      instanceId,
-      tunnelToken: 'tunnel-token-1',
-      tunnelHost: `t-${instanceId}.shinsa.dev`,
-    });
+    expect(Object.keys(credentials).sort()).toEqual(['connectKey', 'instanceId', 'machineToken']);
+    expect(credentials.instanceId).toBe(instanceId);
     expect(await poll(harness, start)).toEqual({ status: 'expired' });
     const stored = harness.db.sqlite.query('SELECT machine_token_hash FROM machines').get() as {
       machine_token_hash: string;
@@ -152,7 +149,7 @@ describe('pairing a machine', () => {
     expect(claimed).toMatchObject({
       status: 'claimed',
       owner: 'mona',
-      credentials: { instanceId, tunnelToken: 'tunnel-token-1', tunnelHost: `t-${instanceId}.shinsa.dev` },
+      credentials: { instanceId },
     });
     expect(claimed).not.toHaveProperty('sealedCredentials');
     const row = harness.db.sqlite.query('SELECT features FROM machines').get() as { features: string };

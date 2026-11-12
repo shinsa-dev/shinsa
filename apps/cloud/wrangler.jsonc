@@ -24,6 +24,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "MachineRelay" }]
+  },
+  "migrations": [{ "tag": "v1-relay", "new_sqlite_classes": ["MachineRelay"] }],
   "vars": {
     "CLOUDFLARE_ACCOUNT_ID": "e8563b02f2bf2b6a136f2781445a486f",
     "TUNNEL_ZONE": "shinsa.dev",

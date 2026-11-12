@@ -40,8 +40,11 @@ export const PairsHandlers = HttpApiBuilder.group(
       userId: CurrentUser['Service']['id']
     ) {
       const instanceId = yield* crypto.createInstanceId;
-      const tunnelHost = resolveTunnelHost(instanceId);
-      const tunnel = yield* cloudflare.createTunnel(`shinsa-${instanceId}`, tunnelHost, DEFAULT_LOCAL_URL);
+      const tunnel = yield* cloudflare.createTunnel(
+        `shinsa-${instanceId}`,
+        resolveTunnelHost(instanceId),
+        DEFAULT_LOCAL_URL
+      );
       const machineToken = yield* crypto.createToken();
       const connectKey = yield* crypto.createToken();
       yield* machines.create({
@@ -58,8 +61,6 @@ export const PairsHandlers = HttpApiBuilder.group(
       const credentials: MachineCredentials = {
         instanceId,
         machineToken: Redacted.value(machineToken),
-        tunnelToken: Redacted.value(tunnel.tunnelToken),
-        tunnelHost,
         connectKey: Redacted.value(connectKey),
       };
       const stored = hasMachineFeature(pairing.features, 'sealed-pairing')

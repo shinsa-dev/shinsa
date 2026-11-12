@@ -5,7 +5,9 @@ import { ConfigProvider, Effect, Layer, Logger } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { SqlClient } from 'effect/sql';
 import { TestClock } from 'effect/testing';
+import { RelayRooms } from '../src/http/worker.ts';
 import { CloudServices } from '../src/layers.ts';
+import { RELAY_ROOM_ORIGIN } from '../src/relay/schema.ts';
 import { SQL_NAMES } from '../src/store/shared/schema.ts';
 
 export const TEST_NOW = 1_800_000_000_000;
@@ -123,6 +125,12 @@ export const servicesTest = ({ upstream = createUpstream(), env = {} }: Services
     Layer.provide([
       ConfigProvider.layer(ConfigProvider.fromUnknown({ ...TEST_ENV, ...env })),
       Layer.succeed(FetchHttpClient.Fetch, upstream.fetch),
+      Layer.succeed(RelayRooms, {
+        fetch: (instanceId, room) =>
+          upstream.fetch(
+            new Request(room.url.replace(RELAY_ROOM_ORIGIN, `https://${instanceId}.relay.test`), room)
+          ),
+      }),
     ]),
     Layer.provideMerge(ClockTest)
   );

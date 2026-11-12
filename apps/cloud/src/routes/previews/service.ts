@@ -24,7 +24,7 @@ import { serializeCookie } from '../../http/cookies.ts';
 import { isTunnelOffline, recordMachineOffline, resolveForwardHeaders } from '../../http/forward.ts';
 import { readCookie } from '../../http/request.ts';
 import { NOINDEX, respondRedirect, respondText } from '../../http/responses.ts';
-import { Tunnels } from '../../integrations/tunnels/service.ts';
+import { Relays } from '../../integrations/relays/service.ts';
 import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
 import { resolveForwardCookie } from './address.ts';
@@ -49,7 +49,7 @@ export class PreviewHost extends Context.Service<
     PreviewHost,
     Effect.gen(function* () {
       const config = yield* CloudConfig;
-      const tunnels = yield* Tunnels;
+      const relays = yield* Relays;
       const machines = yield* Machines;
       const decodeInstanceId = Schema.decodeUnknownOption(InstanceId);
 
@@ -115,11 +115,12 @@ export class PreviewHost extends Context.Service<
         const request = yield* Effect.orDie(
           HttpServerRequest.HttpServerRequest.pipe(Effect.flatMap(HttpServerRequest.toWeb))
         );
-        const answer = yield* tunnels
+        const answer = yield* relays
           .request(machine.id, `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`, {
             method: request.method,
             headers: resolvePreviewHeaders(request.headers, pass),
             body: BODILESS_METHODS.has(request.method) ? null : request.body,
+            address: request.headers.get('cf-connecting-ip'),
           })
           .pipe(
             Effect.tapError((error) => recordMachineOffline('preview', machine.id, { error: error.message })),

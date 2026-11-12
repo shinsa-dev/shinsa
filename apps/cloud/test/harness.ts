@@ -22,7 +22,8 @@ import { type Clock, Clock as ClockService, ConfigProvider, Context, Duration, E
 import { FetchHttpClient } from 'effect/http';
 import { SqlClient } from 'effect/sql';
 import { makeCloudHandler } from '../src/app.ts';
-import { Assets, WorkerContext } from '../src/http/worker.ts';
+import { Assets, RelayRooms, WorkerContext } from '../src/http/worker.ts';
+import { RELAY_ROOM_ORIGIN } from '../src/relay/schema.ts';
 import { SQL_NAMES } from '../src/store/shared/schema.ts';
 
 export interface CloudConfig {
@@ -282,6 +283,10 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
         Layer.succeed(FetchHttpClient.Fetch, ((input, init) =>
           world.fetch(input, init)) as typeof globalThis.fetch),
         Layer.succeed(ClockService.Clock, createTestClock(clock)),
+        Layer.succeed(RelayRooms, {
+          fetch: (instanceId, room) =>
+            world.fetch(new Request(resolveRelayTestUrl(instanceId, room.url), room)),
+        }),
         Layer.succeed(Assets, {
           fetch: (asset) => Promise.resolve(new Response(`asset ${new URL(asset.url).pathname}`)),
         })
@@ -364,6 +369,10 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
   }
 
   return { db, world, calls, handlers, clock, settle, request, call, post, signIn, signInNative };
+}
+
+export function resolveRelayTestUrl(instanceId: string, roomUrl: string) {
+  return roomUrl.replace(RELAY_ROOM_ORIGIN, `https://${instanceId}.relay.test`);
 }
 
 export async function readJson<T>(response: Response) {

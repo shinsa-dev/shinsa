@@ -5,14 +5,14 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { requestOnlineMachine, resolveForwardHeaders } from '../../http/forward.ts';
 import { CurrentUrl } from '../../http/request.ts';
 import { respondText } from '../../http/responses.ts';
-import { Tunnels } from '../../integrations/tunnels/service.ts';
+import { Relays } from '../../integrations/relays/service.ts';
 import { Machines } from '../../store/machines/service.ts';
 import { BODILESS_METHODS, FORWARDED_AWAY, HOOK_BODY_LIMIT_BYTES, HOOK_ROUTE, HookParams } from './schema.ts';
 
 export const HookRoutes = Layer.unwrap(
   Effect.gen(function* () {
     const machines = yield* Machines;
-    const tunnels = yield* Tunnels;
+    const relays = yield* Relays;
 
     const respondOffline = () =>
       respondText('This machine is offline. Try again later.', {
@@ -34,7 +34,7 @@ export const HookRoutes = Layer.unwrap(
       const answer = yield* requestOnlineMachine(
         'webhook',
         machine.value.id,
-        tunnels.request(machine.value.id, `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}${url.search}`, {
+        relays.request(machine.value.id, `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}${url.search}`, {
           method: request.method,
           headers: resolveForwardHeaders(new Headers(request.headers), FORWARDED_AWAY),
           ...(body ? { body } : {}),

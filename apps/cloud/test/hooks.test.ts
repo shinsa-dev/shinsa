@@ -9,7 +9,7 @@ async function pairInstance(harness: Harness) {
 
 function answerTunnel(harness: Harness, answer: () => Response | Promise<Response>) {
   harness.handlers.push((call) =>
-    call.url.includes('.shinsa.dev/api/hooks/') ? answer() : new Response('', { status: 599 })
+    call.url.includes('.relay.test/api/hooks/') ? answer() : new Response('', { status: 599 })
   );
 }
 
@@ -31,9 +31,7 @@ describe('webhooks through app.shinsa.dev', () => {
     expect(delivered.status).toBe(202);
     expect(await delivered.json()).toEqual({ delivery: 'd1' });
     const forwarded = harness.calls.at(-1);
-    expect(forwarded?.url).toBe(
-      `https://t-${instanceId}.shinsa.dev/api/hooks/schedule-1/token-1?source=maple`
-    );
+    expect(forwarded?.url).toBe(`https://${instanceId}.relay.test/api/hooks/schedule-1/token-1?source=maple`);
     expect(forwarded?.method).toBe('POST');
     expect(forwarded?.body).toBe('{"alert":"down"}');
     expect(forwarded?.headers.get('x-maple-signature')).toBe('sig');
@@ -54,7 +52,7 @@ describe('webhooks through app.shinsa.dev', () => {
       const refused = await harness.call(`/hooks/${instanceId}/${path}`, { method: 'POST', body: 'x' });
       expect([path, refused.status]).toEqual([path, 404]);
     }
-    expect(harness.calls.filter((call) => call.url.includes('.shinsa.dev/'))).toEqual([]);
+    expect(harness.calls.filter((call) => call.url.includes('.relay.test/'))).toEqual([]);
   });
 
   test('passes a GET through without a body', async () => {

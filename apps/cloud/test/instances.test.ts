@@ -108,7 +108,7 @@ describe('instances', () => {
     expect(answer.expiresAt).toBe(harness.clock.now + CONNECT_TOKEN_TTL_MS);
     const url = new URL(answer.url);
     expect(`${url.protocol}//${url.host}${url.pathname}`).toBe(
-      `wss://t-${studio.instanceId}.shinsa.dev/remote`
+      `wss://app.shinsa.dev/__relay/${studio.instanceId}/remote`
     );
     const token = url.searchParams.get('token') ?? '';
     const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
@@ -244,7 +244,7 @@ describe('instances', () => {
     const connect = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, auth);
     expect(connect.status).toBe(200);
     expect((await readJson<ConnectResponse>(connect)).url).toStartWith(
-      `wss://t-${studio.instanceId}.shinsa.dev/remote?token=`
+      `wss://app.shinsa.dev/__relay/${studio.instanceId}/remote?token=`
     );
     const removed = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, auth);
     expect(removed.status).toBe(200);

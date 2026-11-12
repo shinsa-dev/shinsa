@@ -1,12 +1,18 @@
 import { D1Client } from '@effect/sql-d1';
 import { ConfigProvider, Context, Layer } from 'effect';
 import { makeCloudHandler } from './app.ts';
-import { Assets, WorkerContext } from './http/worker.ts';
+import { Assets, RelayRooms, WorkerContext } from './http/worker.ts';
 import { SQL_NAMES } from './store/shared/schema.ts';
+
+export { MachineRelay } from './relay/durable.ts';
 
 interface WorkerEnv {
   readonly DB: D1Client.D1ClientConfig['db'];
   readonly ASSETS: { fetch: (request: Request) => Promise<Response> };
+  readonly RELAY: {
+    idFromName: (name: string) => unknown;
+    get: (id: unknown) => { fetch: (request: Request) => Promise<Response> };
+  };
 }
 
 interface ExecutionContext {
@@ -22,6 +28,9 @@ function resolveHandler(env: WorkerEnv) {
     Layer.mergeAll(
       D1Client.layer({ db: env.DB, ...SQL_NAMES }),
       Layer.succeed(Assets, { fetch: (request) => env.ASSETS.fetch(request) }),
+      Layer.succeed(RelayRooms, {
+        fetch: (instanceId, request) => env.RELAY.get(env.RELAY.idFromName(instanceId)).fetch(request),
+      }),
       ConfigProvider.layer(ConfigProvider.fromUnknown(env))
     )
   );
