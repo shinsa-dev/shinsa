@@ -26,7 +26,7 @@ export function isTunnelOffline(response: Response) {
 export const recordMachineOffline = Effect.fn('recordMachineOffline')(function* (
   surface: OfflineSurface,
   instanceId: string,
-  cause: { readonly status: number } | { readonly error: string }
+  cause: { readonly status: number } | { readonly error: string } | { readonly lastSeenAt: number | null }
 ) {
   yield* Effect.logWarning('[Cloud] Machine offline').pipe(
     Effect.annotateLogs({
@@ -34,7 +34,9 @@ export const recordMachineOffline = Effect.fn('recordMachineOffline')(function* 
       instanceId,
       ...('status' in cause
         ? { reason: 'status', status: cause.status }
-        : { reason: 'unreachable', error: cause.error }),
+        : 'error' in cause
+          ? { reason: 'unreachable', error: cause.error }
+          : { reason: 'stale', lastSeenAt: cause.lastSeenAt }),
     })
   );
 });

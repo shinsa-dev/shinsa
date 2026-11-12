@@ -175,7 +175,11 @@ describe('a preview link', () => {
     const stale = await visit(harness, `${origin}/`, withKey());
     expect(stale.status).toBe(503);
     expect(await stale.text()).toContain(PREVIEW_OFFLINE.slice(0, 40));
-    expect(logged).toHaveBeenCalledTimes(2);
+    expect(logged).toHaveBeenCalledTimes(3);
+    expect(logged.mock.calls[2]).toEqual([
+      '[Cloud] Machine offline',
+      expect.objectContaining({ surface: 'preview', reason: 'stale', lastSeenAt: expect.any(Number) }),
+    ]);
     expect(errors).not.toHaveBeenCalled();
     logged.mockRestore();
     errors.mockRestore();

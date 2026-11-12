@@ -191,8 +191,10 @@ export class PreviewHost extends Context.Service<
         if (!(pass.key || pass.access)) return respondPage('gone', 404);
         const machine = yield* selectMachine(address);
         if (Option.isNone(machine)) return respondPage('gone', 404);
-        if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis))
+        if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis)) {
+          yield* recordMachineOffline('preview', machine.value.id, { lastSeenAt: machine.value.lastSeenAt });
           return respondPage('offline', 503);
+        }
         return yield* forward(url, machine.value, address, pass);
       });
 
