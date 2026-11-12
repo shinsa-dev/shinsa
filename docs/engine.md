@@ -5421,7 +5421,8 @@ keeps beside its events (`store/event-log.ts`).
   steps again, and the engine reports a retry as `<effect key>:<attempt>:pull_request.record_retry`; a repository triage or the setup check registers
   `<effect key>:repo.register`. The
   clocks name theirs after what they fire (`monitor:<id>:<attempt>`, `schedule:<id>:<dueAt>` and
-  `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`). The files two open tasks both change go
+  `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`, and `auto-retry:<task>:<attempt>:<at>` for a
+  failed task's automatic retry, its due time in the id so a streak that starts again is never a repeat). The files two open tasks both change go
   under `overlaps:<task>:<hash of the overlaps>` (Other work in the repository).
   - A run (`agents/supervisor/attempts.ts`): its attempt ids are `<run>:<n>`, and the attempt's commands are
     `run.attempt:<attempt>`, `run.link:<attempt>:<session>`, `run.meter:<attempt>` (and `run.meter:<attempt>:<session>`

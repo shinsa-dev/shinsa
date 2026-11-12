@@ -185,6 +185,8 @@ src/
 │                        EngineClock, the start, stop and fireDue every clock service has, in schema.ts),
 │                        monitors/ (MonitorClock) and watchdogs/ (WatchdogClock: a watchdog's next check), each a
 │                        Context.Service on makeEngineClock with its ClockTimings reference in schema.ts
+├── tasks/               retry/ (TaskRetry: a failed task's automatic retry, task.auto_retry when its autoRetry is
+│                        due, keyed `auto-retry:<task>:<attempt>:<at>` by command.ts; TaskRetryTimings in schema.ts)
 ├── agents/              RunSupervisor (supervisor/: service.ts (the RunSupervisor service: its layer provides LiveRuns
 │   │                    to ToolCallsLayer and builds IdleCompaction, RunWorld and RunHost; the run limits and the
 │   │                    session, rejection and notice hooks are the RunLimits and RunHooks references in schema.ts;
@@ -813,8 +815,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Every command the server sends gets a fixed id from its cause** (`EngineCore.dispatch(command, { id })`), unique for
   distinct causes and identical for a repeat, naming everything the decision depends on; the list is
   `docs/engine.md` → Command receipts → Deterministic server ids.
-- **Timers that fire from state run `makeStateClock`** (`runtime/clock/`): `MonitorClock`, `WatchdogClock`, `ShareClock`
-  and `ScheduleClock` are services whose layer runs `makeEngineClock` (`runtime/clock/engine.ts`) over a list of what is
+- **Timers that fire from state run `makeStateClock`** (`runtime/clock/`): `MonitorClock`, `WatchdogClock`, `ShareClock`,
+  `ScheduleClock` and `TaskRetry` are services whose layer runs `makeEngineClock` (`runtime/clock/engine.ts`) over a list of what is
   due, and `UsageResume` runs `makeStateClock` from its layer the same way; start and stop are Effects on the service,
   and the layer's scope stops it. The clock keeps one timer fiber for the
   earliest (`runtime/clock/service.ts`), re-armed on every state change and kept when the earliest due time stays

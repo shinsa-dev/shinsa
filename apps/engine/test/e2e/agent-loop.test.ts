@@ -86,7 +86,7 @@ describe('every way a turn can end reaches core as its class', () => {
     expect(sdk.params).toHaveLength(1);
   });
 
-  test('a signed-out account and a claude that cannot run pause the task with what to do', async () => {
+  test('a signed-out account holds the task to sign in, and a claude that cannot run retries on its own', async () => {
     const signedOut = await openWithSdk([
       (call) => [
         init(call),
@@ -106,9 +106,13 @@ describe('every way a turn can end reaches core as its class', () => {
 
     const outdated = await openWithSdk([], { ok: false, reason: 'outdated', message: 'Update Claude Code.' });
     const second = await outdated.w.createTask();
-    const gate = await outdated.w.untilGate(second, 'failure');
-    expect(gate.title).toBe('The agent could not start');
-    expect(gate.body).toBe('Update Claude Code. Retry starts the step again.');
+    const retry = await outdated.w.untilRetry(second);
+    expect(retry).toMatchObject({
+      title: 'The agent could not start',
+      detail: 'Update Claude Code. Retry starts the step again.',
+      attempt: 1,
+    });
+    expect(outdated.w.gates(second)).toEqual([]);
     expect(outdated.sdk.params).toHaveLength(0);
   });
 
@@ -125,7 +129,7 @@ describe('every way a turn can end reaches core as its class', () => {
     expect(first?.failure?.class).toBe('context_window_full');
     expect(second?.resume).toBe(false);
     expect(second?.prompt).toContain('so this is a fresh session in the same worktree');
-    await w.untilGate(taskId, 'failure');
+    await w.untilRetry(taskId);
     expect(sdk.params[1]?.options).not.toHaveProperty('resume');
   });
 
@@ -196,7 +200,7 @@ describe('restarts', () => {
     expect(Object.values(w.state.runs).filter((candidate) => candidate.outcome === 'failed')).toEqual([]);
   });
 
-  test('a run that keeps dying with the server is resumed once, and the next crash opens the failure gate', async () => {
+  test('a run that keeps dying with the server is resumed once, and the next crash arms a retry', async () => {
     world = await World.create();
     const w = world;
     for (let index = 0; index < 2; index += 1) w.agents.queue('plan', (agent) => agent.hang());
@@ -206,8 +210,9 @@ describe('restarts', () => {
     await w.restart();
     await w.until('the continuation', () => w.agents.of('plan').length === 2);
     await w.restart();
-    const gate = await w.untilGate(taskId, 'failure');
-    expect(gate.title).toBe('The agent paused');
+    const retry = await w.untilRetry(taskId);
+    expect(retry.title).toBe('The agent paused');
+    expect(w.gates(taskId)).toEqual([]);
     expect(w.agents.of('plan')).toHaveLength(2);
     expect(w.state.runs[runId]?.failure).toMatchObject({ class: 'aborted', code: 'crash_loop' });
   });
