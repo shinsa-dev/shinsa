@@ -33,7 +33,7 @@ export function isHeadless(commandLine: string) {
   return commandLine.split(/\s+/).includes(HEADLESS_FLAG);
 }
 
-export function resolveProfileInUseMessage(pid: number | null) {
+function resolveProfileInUseMessage(pid: number | null) {
   if (pid === null) return PROFILE_IN_USE_MESSAGE;
   return PROFILE_IN_USE_MESSAGE.replace('Another program', `Another program (process ${pid})`);
 }
