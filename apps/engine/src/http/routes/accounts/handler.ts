@@ -57,6 +57,9 @@ export const AccountsHandlers = HttpApiBuilder.group(
       )
       .handle('remove', ({ payload }) =>
         actAs((found, requester) => found.remove(payload.accountId, requester))
+      )
+      .handle('provider', ({ payload }) =>
+        act((found) => found.chooseProvider(payload.provider, payload.choice))
       );
   })
 );

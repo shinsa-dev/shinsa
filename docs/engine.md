@@ -6839,7 +6839,18 @@ sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
 Agent usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
-tools check lists only codex itself, as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
+tools check no longer lists codex. **Which providers Shinsa uses** is `config.json`'s `providerLogins`
+(`{ codex: 'added' | 'removed' }`, decoded leniently): with no entry a provider shows only while it is signed in, and
+the first time it is seen signed in it is recorded as `added`, so a lapsed sign-in keeps its row and its Sign in gate;
+`removed` hides it even while `codex login` is still signed in. A hidden provider drops out of the snapshot's
+`providers`, its usage is no longer polled, and `GET /api/providers` leaves its models out (`isProviderShown`,
+`accounts/providers.ts`); a step already running on it still keeps the limits it reports and is metered against
+them, unless it is `removed`. `POST /api/accounts/provider { provider, choice }` (feature `accounts.provider_choice`,
+human-only, `shinsa accounts provider`) records the choice: removing moves every role and the default provider that
+used it back to Claude (`resolveProviderReset`, one `settings.change`) and never runs `codex logout`; adding reads its
+sign-in and usage again at once. In Settings the provider's row menu has Remove Codex, behind a confirm dialog, and
+Add account lists each provider not shown (Codex), which adds it back with the `codex login` command on its row until
+it is signed in. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
 arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
 names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Paused: ‹email› needs signing in", and
 every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
@@ -7416,7 +7427,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
   (the folders that hold repositories), `worktreesDir` (where new worktrees go, Where agents work), `port`,
-  `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
+  `hostname`, `editor`, `terminal`, `onboardedAt` and `providerLogins`. With no `port`
   the engine takes 7446 (`APP_IDENTITY`), in the unassigned 7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
   server. Is port 7446 in use? Quit the program on it, or set another `port` in <config.json>." (`listenOnPort` in
   `http/server/service.ts`; the Mac app shows it as Port 7446 is taken). The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds

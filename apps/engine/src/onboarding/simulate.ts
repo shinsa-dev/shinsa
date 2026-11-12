@@ -18,7 +18,6 @@ const CHECK_COMMANDS: Record<string, SimulatedId> = {
   'gh auth status': 'gh_auth',
   'claude --version': 'claude',
   'bun --version': 'bun',
-  'codex --version': 'codex',
 };
 
 const MISSING_OUTPUT: Partial<Record<SimulatedId, Pick<CommandResult, 'code' | 'stdout' | 'stderr'>>> = {
