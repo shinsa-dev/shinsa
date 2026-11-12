@@ -23,6 +23,7 @@ import { RelayConnector } from '../../src/remote/relay/service.ts';
 import { until } from '../helpers/index.ts';
 
 const TOKEN = 'machine-token';
+const UNREACHABLE_PORT = 1;
 
 const LIMITS = {
   connectTimeout: '2 seconds',
@@ -234,12 +235,12 @@ describe('the relay connector', () => {
   test('fails with the status the relay refused it with, or none when the relay cannot be reached', async () => {
     const relay = startRelay();
     relay.refuse = 401;
-    const refused = await openFails(relay, 'http://127.0.0.1:1');
+    const refused = await openFails(relay, `http://127.0.0.1:${UNREACHABLE_PORT}`);
     expect(refused).toMatchObject({ _tag: 'RelayConnectFailed', status: 401 });
-    const closed = Bun.serve({ port: 0, fetch: () => new Response() });
-    const port = closed.port as number;
-    await closed.stop(true);
-    const down = await openFails({ ...relay, port }, 'http://127.0.0.1:1');
+    const down = await openFails(
+      { ...relay, port: UNREACHABLE_PORT },
+      `http://127.0.0.1:${UNREACHABLE_PORT}`
+    );
     expect(down).toMatchObject({ _tag: 'RelayConnectFailed', status: null });
   });
 
@@ -307,9 +308,6 @@ describe('the relay connector', () => {
   test('closes a stream whose body is too large, whose engine is unreachable, or that the relay cancels', async () => {
     const relay = startRelay();
     const engine = startEngine();
-    const closed = Bun.serve({ port: 0, fetch: () => new Response() });
-    const deadPort = closed.port as number;
-    await closed.stop(true);
     await withLink(relay, engine.url, async () => {
       sendOpen(relay, { stream: 4, kind: 'http', method: 'POST', path: '/big', headers: [] });
       sendData(relay, 4, 'x'.repeat(20));
@@ -353,7 +351,7 @@ describe('the relay connector', () => {
       },
       breaking
     );
-    await withLink(relay, `http://127.0.0.1:${deadPort}`, async () => {
+    await withLink(relay, `http://127.0.0.1:${UNREACHABLE_PORT}`, async () => {
       sendOpen(relay, { stream: 8, kind: 'http', method: 'GET', path: '/', headers: [] });
       sendControl(relay, { type: 'end', stream: 8 as RelayStreamId });
       await until('the failure', () => selectControl(relay, 8, 'close') !== undefined);
@@ -458,10 +456,7 @@ describe('the relay connector', () => {
 
   test('answers 502 for a socket the engine cannot be reached for', async () => {
     const relay = startRelay();
-    const closed = Bun.serve({ port: 0, fetch: () => new Response() });
-    const deadPort = closed.port as number;
-    await closed.stop(true);
-    await withLink(relay, `http://127.0.0.1:${deadPort}`, async () => {
+    await withLink(relay, `http://127.0.0.1:${UNREACHABLE_PORT}`, async () => {
       sendOpen(relay, { stream: 14, kind: 'socket', method: 'GET', path: '/ws', headers: [] });
       await until('the refusal', () => selectControl(relay, 14, 'response') !== undefined);
       expect(selectControl(relay, 14, 'response')).toMatchObject({ status: 502 });
@@ -480,7 +475,10 @@ describe('the relay connector’s helpers', () => {
   });
 
   test('a refused connect is read for its status only when it names one', async () => {
-    const refusal = await openFails({ ...startRelay(), refuse: null, port: 1 }, 'http://127.0.0.1:1');
+    const refusal = await openFails(
+      { ...startRelay(), refuse: null, port: UNREACHABLE_PORT },
+      `http://127.0.0.1:${UNREACHABLE_PORT}`
+    );
     expect(refusal).toMatchObject({ status: null });
     expect(Option.isNone(selectRefusalStatus({ reason: { _tag: 'SocketReadError' } } as never))).toBe(true);
   });
@@ -509,7 +507,7 @@ describe('the relay connector’s helpers', () => {
         connector.open({
           instanceId: 'k3x9',
           machineToken: Redacted.make(TOKEN),
-          localUrl: 'http://127.0.0.1:1',
+          localUrl: `http://127.0.0.1:${UNREACHABLE_PORT}`,
         })
       ).pipe(Effect.scoped, Effect.flip, Effect.provide(createRefusedConnector('No relay here.')))
     );
