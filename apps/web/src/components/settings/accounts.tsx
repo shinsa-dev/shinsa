@@ -40,8 +40,15 @@ import {
   parseSwitchValue,
   resolveAccountSwitchValue,
 } from '@/lib/accounts/limits.ts';
+import {
+  type AddableProvider,
+  describeProviderAdded,
+  listAddableProviders,
+  type ProviderChoice,
+} from '@/lib/accounts/providers.ts';
 import { resolveAccountHeader, resolveUsageModel } from '@/lib/accounts/usage.ts';
 import {
+  chooseProvider,
   importAccount,
   refreshUsage,
   removeAccount,
@@ -49,6 +56,7 @@ import {
   updateAccount,
   useAccounts,
 } from '@/lib/connection/accounts.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { describeAccountOwner, isOwnAccount } from '@/lib/tasks/owner.ts';
 import { GitHubTokenBlock } from './github-token.tsx';
 import { SettingsEmpty, SettingsGroup } from './group.tsx';
@@ -61,11 +69,22 @@ export interface AccountActions {
   importLogin: (entry: AccountImport) => void;
   update: (accountId: string, patch: AccountPatch, done: string) => Promise<boolean>;
   remove: (accountId: string) => void;
+  chooseProvider: (provider: string, choice: ProviderChoice, done: string) => void;
   refresh: () => Promise<unknown>;
 }
 
-function AddAccountButton({ imports, actions }: { imports: AccountImport[]; actions: AccountActions }) {
-  if (imports.length === 0) {
+function AddAccountButton({
+  imports,
+  providers,
+  actions,
+}: {
+  imports: AccountImport[];
+  providers: AddableProvider[];
+  actions: AccountActions;
+}) {
+  const choosable = useEngineFeature('accounts.provider_choice');
+  const addable = choosable ? providers : [];
+  if (imports.length === 0 && addable.length === 0) {
     return (
       <Button variant='secondary' size='sm' icon='IconUserAdd' onClick={() => actions.signIn(null)}>
         {ACCOUNT_LABEL.add}
@@ -100,6 +119,16 @@ function AddAccountButton({ imports, actions }: { imports: AccountImport[]; acti
             </DropdownMenuItem>
           );
         })}
+        {addable.length > 0 && <DropdownMenuSeparator />}
+        {addable.map((provider) => (
+          <DropdownMenuItem
+            key={provider.id}
+            icon='IconPlusMedium'
+            onClick={() => actions.chooseProvider(provider.id, 'added', describeProviderAdded(provider))}
+          >
+            {provider.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -270,6 +299,7 @@ const LIVE_ACTIONS: AccountActions = {
   importLogin: (entry) => void importAccount(entry),
   update: updateAccount,
   remove: (accountId) => void removeAccount(accountId),
+  chooseProvider: (provider, choice, done) => void chooseProvider(provider, choice, done),
   refresh: refreshUsage,
 };
 
@@ -283,6 +313,7 @@ export function AccountsGroup({
   actions: AccountActions;
 }) {
   const { accounts, imports, providers = [] } = snapshot;
+  const addable = listAddableProviders(snapshot);
   return (
     <SettingsGroup
       title={ACCOUNT_LABEL.section}
@@ -291,13 +322,13 @@ export function AccountsGroup({
         accounts.length > 0 && (
           <>
             <RefreshButton label={ACCOUNT_LABEL.refreshUsage} onRefresh={actions.refresh} />
-            <AddAccountButton imports={imports} actions={actions} />
+            <AddAccountButton imports={imports} providers={addable} actions={actions} />
           </>
         )
       }
     >
       {accounts.length === 0 && (
-        <SettingsEmpty action={<AddAccountButton imports={imports} actions={actions} />}>
+        <SettingsEmpty action={<AddAccountButton imports={imports} providers={addable} actions={actions} />}>
           {ACCOUNT_LABEL.none}
         </SettingsEmpty>
       )}
@@ -315,7 +346,12 @@ export function AccountsGroup({
         <SettingsEmpty key={`shared-${account.id}`}>{describeSharedLogin(account)}</SettingsEmpty>
       ))}
       {providers.map((login) => (
-        <ProviderLoginBlock key={login.provider} login={login} onRefresh={actions.refresh} />
+        <ProviderLoginBlock
+          key={login.provider}
+          login={login}
+          onRefresh={actions.refresh}
+          onRemove={(provider, done) => actions.chooseProvider(provider, 'removed', done)}
+        />
       ))}
       <GitHubTokenBlock />
     </SettingsGroup>

@@ -16,7 +16,6 @@ export const FIXES: Record<PrerequisiteId, string> = {
   gh: 'Install the GitHub CLI with Homebrew.',
   claude: 'Install Claude Code, which agents run on.',
   bun: 'Your repositories use Bun. Install it so agents can run their checks.',
-  codex: 'Only for agents you run on Codex.',
 };
 
 export const OPTIONAL_BUN_FIX = 'Only for repositories that use Bun.';
@@ -31,7 +30,6 @@ export const COMMANDS: Record<PrerequisiteId, string> = {
   gh: 'brew install gh',
   claude: 'curl -fsSL https://claude.ai/install.sh | bash',
   bun: 'curl -fsSL https://bun.sh/install | bash',
-  codex: 'npm install -g @openai/codex',
 };
 
 export const SCRIPTS: Partial<Record<PrerequisiteId, string>> = {
@@ -46,5 +44,4 @@ export const LABELS: Record<PrerequisiteId, string> = {
   gh: 'GitHub CLI',
   claude: 'Claude Code',
   bun: 'Bun',
-  codex: 'Codex',
 };
