@@ -10,7 +10,6 @@ import {
   createUsd,
   describeUsd,
   type FastModeAvailability,
-  type ModelRoom,
   listAgentProviders,
   type PlanApproval,
   RUN_AGENT_ROLE,
@@ -25,7 +24,6 @@ import {
   resolveMeterWindow,
   resolveModelLabel,
   resolveProviderLabel,
-  resolveRoutedModel,
   resolveWatchdogDefaults,
   resolveWeeklyPercent,
   type Settings,
@@ -70,7 +68,6 @@ export interface AgentGroup {
   description: string;
   roles: AgentRoleEntry[];
   following: FollowingRoleEntry[];
-  routed: boolean;
 }
 
 const TASK_ROLES: AgentRoleEntry[] = [
@@ -99,7 +96,6 @@ export const AGENT_GROUPS: AgentGroup[] = [
       followRole('investigator', 'Investigator', 'Finds the cause of a problem.'),
       followRole('researcher', 'Researcher', 'Looks into a question and writes a report.'),
     ],
-    routed: true,
   },
   {
     id: 'quick',
@@ -114,15 +110,10 @@ export const AGENT_GROUPS: AgentGroup[] = [
       { role: 'writer', title: 'Writer', description: 'Writes the guide on Home.' },
     ],
     following: [],
-    routed: false,
   },
 ];
 
 export const AGENT_ROLES: AgentRoleEntry[] = AGENT_GROUPS.flatMap((group) => group.roles);
-
-export function isRoutedRole(role: AgentRole) {
-  return AGENT_GROUPS.some((group) => group.routed && group.roles.some((entry) => entry.role === role));
-}
 
 export function describeFollowedRole(entry: FollowingRoleEntry) {
   return `Follows the ${entry.follows.title.toLowerCase()}`;
@@ -467,38 +458,26 @@ export function resolveAgentModelValue(settings: Settings, role: AgentRole) {
   return resolveModelKey(resolveAgentProvider(settings, role), resolveChosenModel(settings, role));
 }
 
-export function resolveAutoModelHint(room: Readonly<Record<string, ModelRoom>>) {
-  const plan = resolveModelLabel(resolveRoutedModel({ size: 'large', role: 'agent', purpose: 'plan' }, room));
-  const work = resolveModelLabel(resolveRoutedModel({ size: null, role: 'agent', purpose: 'build' }, room));
-  if (plan === work) return `${work} for every step now`;
-  return `${plan} plans large tasks, ${work} does the rest`;
-}
-
-function createAutoItem(entry: AgentProviderInfo, hint: string): SettingItem<string> {
-  return {
-    value: resolveModelKey(entry.id, AUTO_MODEL),
-    label: AUTO_MODEL_LABEL,
-    hint,
-    icon: resolveProviderIcon(entry.id),
-    group: entry.label,
-  };
-}
+const AUTO_ITEM: SettingItem<string> = {
+  value: resolveModelKey(CLAUDE_PROVIDER, AUTO_MODEL),
+  label: AUTO_MODEL_LABEL,
+  icon: 'IconArrowSplitRight',
+};
 
 export function listAgentModelItems(
   providers: AgentProviderInfo[],
   current: string | null,
-  autoHint: string | null = null
+  automatic = false
 ): SettingItem<string>[] {
-  const items: SettingItem<string>[] = providers.flatMap((entry) => {
-    const models = entry.models.map((option) => ({
+  const models: SettingItem<string>[] = providers.flatMap((entry) =>
+    entry.models.map((option) => ({
       value: resolveModelKey(entry.id, option.id),
       label: option.label,
       icon: resolveProviderIcon(entry.id),
       group: entry.label,
-    }));
-    if (autoHint === null || entry.id !== CLAUDE_PROVIDER) return models;
-    return [createAutoItem(entry, autoHint), ...models];
-  });
+    }))
+  );
+  const items = automatic ? [AUTO_ITEM, ...models] : models;
   if (current === null || items.some((item) => item.value === current)) return items;
   const { provider, model } = parseModelKey(current);
   const group = resolveProviderLabel(provider);
@@ -532,12 +511,11 @@ export function listGroupModelItems(
   providers: AgentProviderInfo[],
   settings: Settings,
   group: AgentGroup,
-  autoHint: string | null = null
+  automatic = false
 ) {
   const current = resolveGroupModel(settings, group);
-  const hint = group.routed ? autoHint : null;
-  if (current === MIXED_VALUE) return [MIXED_ITEM, ...listAgentModelItems(providers, null, hint)];
-  return listAgentModelItems(providers, current, hint);
+  if (current === MIXED_VALUE) return [MIXED_ITEM, ...listAgentModelItems(providers, null, automatic)];
+  return listAgentModelItems(providers, current, automatic);
 }
 
 function assignRoles<Value>(group: AgentGroup, value: Value) {

@@ -115,6 +115,13 @@ export function isAutoModel(settings: Settings, role: AgentRole) {
   return provider === CLAUDE_PROVIDER && resolveChosenModel(settings, role, provider) === AUTO_MODEL;
 }
 
+const AUTO_QUICK_PROVIDERS: Partial<Record<AgentRole, string>> = { writer: CODEX_PROVIDER };
+
+export function resolveQuickProvider(settings: Settings, role: AgentRole) {
+  const preferred = isAutoModel(settings, role) ? AUTO_QUICK_PROVIDERS[role] : undefined;
+  return preferred ?? resolveAgentProvider(settings, role);
+}
+
 export function resolveProviderLabel(providerId: string) {
   return KNOWN_AGENT_PROVIDERS.find((provider) => provider.id === providerId)?.label ?? providerId;
 }

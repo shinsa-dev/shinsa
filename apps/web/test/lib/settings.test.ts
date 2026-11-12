@@ -19,7 +19,6 @@ import {
   FAST_MODE_ITEMS,
   FAST_MODE_UNAVAILABLE,
   FIX_ROUND_ITEMS,
-  isRoutedRole,
   listAgentModelItems,
   listAttentionItems,
   listBudgetItems,
@@ -45,7 +44,6 @@ import {
   parseUsageLimit,
   resolveAgentModelPatch,
   resolveAgentModelValue,
-  resolveAutoModelHint,
   resolveAgentSpeedPatch,
   resolveAttentionValue,
   resolveBudgetValue,
@@ -437,40 +435,26 @@ describe('models per role', () => {
     });
   });
 
-  it('puts Automatic first under Claude, with its hint, only when asked to', () => {
-    const items = listAgentModelItems(providers, 'claude:opus', 'Opus 5.5 for every step now');
-    expect(items[0]).toEqual({
-      value: 'claude:auto',
-      label: 'Automatic',
-      hint: 'Opus 5.5 for every step now',
-      icon: 'IconClaudeai',
-      group: 'Claude',
-    });
+  it('puts Automatic first, on its own and with no hint, only when asked to', () => {
+    const items = listAgentModelItems(providers, 'claude:opus', true);
+    expect(items[0]).toEqual({ value: 'claude:auto', label: 'Automatic', icon: 'IconArrowSplitRight' });
     expect(items.filter((item) => item.value.endsWith(':auto'))).toHaveLength(1);
     expect(listAgentModelItems(providers, 'claude:opus').some((item) => item.value === 'claude:auto')).toBe(
       false
     );
   });
 
-  it('keeps Automatic out of quick jobs, which are not routed', () => {
-    const quick = AGENT_GROUPS.find((group) => group.id === 'quick') as (typeof AGENT_GROUPS)[number];
-    const task = AGENT_GROUPS.find((group) => group.id === 'task') as (typeof AGENT_GROUPS)[number];
-    expect(
-      listGroupModelItems(providers, settings(), quick, 'hint').some((item) => item.label === 'Automatic')
-    ).toBe(false);
-    expect(listGroupModelItems(providers, settings(), task, 'hint')[0]?.label).toBe('Automatic');
-    expect(isRoutedRole('agent')).toBe(true);
-    expect(isRoutedRole('classifier')).toBe(false);
+  it('offers Automatic to every group, quick jobs too', () => {
+    for (const group of AGENT_GROUPS) {
+      expect(listGroupModelItems(providers, settings(), group, true)[0]?.label).toBe('Automatic');
+      expect(
+        listGroupModelItems(providers, settings(), group).some((item) => item.label === 'Automatic')
+      ).toBe(false);
+    }
   });
 
   it('shows a role on Automatic as auto, not as the model it falls back to', () => {
     expect(resolveAgentModelValue(settings({ agentModels: { agent: 'auto' } }), 'agent')).toBe('claude:auto');
-  });
-
-  it('says which model Automatic picks now from each model’s room', () => {
-    expect(resolveAutoModelHint({})).toBe('Fable 5.1 plans large tasks, Opus 5.5 does the rest');
-    const spent = { family: 'fable', usable: false, left: 0, at: 1 };
-    expect(resolveAutoModelHint({ fable: spent })).toBe('Opus 5.5 for every step now');
   });
 
   it('patches a role’s provider and model together, and only that role', () => {

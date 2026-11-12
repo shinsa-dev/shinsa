@@ -8,6 +8,7 @@ import {
   resolveAgentModel,
   resolveChosenModel,
   resolveModelLabel,
+  resolveQuickProvider,
   resolveRouteStep,
   resolveRoutedModel,
   resolveStepModel,
@@ -36,6 +37,22 @@ describe('the automatic model', () => {
     expect(isAutoModel(AUTO, 'agent')).toBe(true);
     expect(isAutoModel(AUTO, 'answerer')).toBe(false);
     expect(isAutoModel({ ...AUTO, agentProviders: { agent: 'codex' } }, 'agent')).toBe(false);
+  });
+});
+
+describe('the provider of a quick job', () => {
+  test('the writer on Automatic writes with Codex first, on Codex’s own writer model', () => {
+    const settings = { ...createSettings(), agentModels: { writer: AUTO_MODEL, classifier: AUTO_MODEL } };
+    expect(resolveQuickProvider(settings, 'writer')).toBe('codex');
+    expect(resolveAgentModel(settings, 'writer', 'codex')).toBe('gpt-5.6-luna');
+    expect(resolveAgentModel(settings, 'writer', 'claude')).toBe('sonnet');
+  });
+
+  test('the classifier on Automatic, and a writer on a fixed model, keep their own provider', () => {
+    const settings = { ...createSettings(), agentModels: { writer: 'haiku', classifier: AUTO_MODEL } };
+    expect(resolveQuickProvider(settings, 'classifier')).toBe('claude');
+    expect(resolveAgentModel(settings, 'classifier')).toBe('sonnet');
+    expect(resolveQuickProvider(settings, 'writer')).toBe('claude');
   });
 });
 

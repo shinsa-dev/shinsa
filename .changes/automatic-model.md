@@ -1,4 +1,4 @@
 ---
 kind: added
 ---
-Task agents can use Automatic as their model: large tasks plan on Fable and every other step runs on Opus, skipping a model that is out of usage. Each step in the chat now shows the model it ran on.
+Pick Automatic as a model: large tasks plan on Fable, other steps run on Opus, and the Home guide is written with Codex. A model that is out of usage is skipped. Each step in the chat shows its model.

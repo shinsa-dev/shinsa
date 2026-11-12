@@ -1,4 +1,4 @@
-import type { AccountsSnapshot, AgentProviderInfo, ModelRoom, Settings, ShinsaState } from '@shinsa/core';
+import type { AccountsSnapshot, AgentProviderInfo, Settings } from '@shinsa/core';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -20,7 +20,6 @@ import {
   describeRoleSelects,
   FIX_ROUND_ITEMS,
   type FollowingRoleEntry,
-  isRoutedRole,
   listAgentModelItems,
   listDelegationLimitItems,
   listGroupModelItems,
@@ -36,7 +35,6 @@ import {
   resolveAgentModelPatch,
   resolveAgentModelValue,
   resolveAgentSpeedPatch,
-  resolveAutoModelHint,
   resolveDelegationLimitValue,
   resolveFixRoundValue,
   resolveGroupModel,
@@ -68,16 +66,12 @@ interface ModelsContext {
   settings: Settings;
   providers: AgentProviderInfo[];
   accounts: AccountsSnapshot | null;
-  room: Readonly<Record<string, ModelRoom>> | null;
+  automatic: boolean;
   update: SettingsUpdate;
 }
 
-export function useRoutingRoom(state: ShinsaState) {
-  return useEngineFeature('models.routing') ? state.modelRoom : null;
-}
-
-function resolveContextHint(room: ModelsContext['room']) {
-  return room ? resolveAutoModelHint(room) : null;
+export function useAutomaticModel() {
+  return useEngineFeature('models.routing');
 }
 
 function AgentSelects({
@@ -145,14 +139,13 @@ function RoleRow({ context, entry }: { context: ModelsContext; entry: AgentRoleE
   const { settings, providers, accounts, update } = context;
   const { role } = entry;
   const model = resolveAgentModelValue(settings, role);
-  const hint = isRoutedRole(role) ? resolveContextHint(context.room) : null;
   const availability = resolveSpeedAvailability(accounts, settings, [role]);
   return (
     <DescribedRow title={<span className='truncate'>{entry.title}</span>} description={entry.description}>
       <AgentSelects
         variant='ghost'
         labels={describeRoleSelects(entry)}
-        modelItems={listAgentModelItems(providers, model, hint)}
+        modelItems={listAgentModelItems(providers, model, context.automatic)}
         model={model}
         speedItems={listSpeedItems(availability)}
         speed={resolveSpeedValue(settings, role, availability)}
@@ -214,7 +207,7 @@ function AgentGroupBlock({ context, group }: { context: ModelsContext; group: Ag
       >
         <AgentSelects
           labels={describeGroupSelects(group)}
-          modelItems={listGroupModelItems(providers, settings, group, resolveContextHint(context.room))}
+          modelItems={listGroupModelItems(providers, settings, group, context.automatic)}
           model={model}
           speedItems={listGroupSpeedItems(settings, group, availability)}
           speed={speed}
@@ -270,13 +263,7 @@ function DelegationLimitField({ settings }: { settings: Settings }) {
   );
 }
 
-export function AgentSettings({
-  settings,
-  room,
-}: {
-  settings: Settings;
-  room: Readonly<Record<string, ModelRoom>> | null;
-}) {
+export function AgentSettings({ settings, automatic }: { settings: Settings; automatic: boolean }) {
   const providers = useAgentProviders();
   const accounts = useAccounts();
   return (
@@ -285,7 +272,7 @@ export function AgentSettings({
         settings={settings}
         providers={providers}
         accounts={accounts}
-        room={room}
+        automatic={automatic}
         update={(patch) => void updateSettings(patch)}
       />
       <SettingsGroup title='Engine'>
