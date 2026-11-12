@@ -4,6 +4,7 @@ import {
   type Gate,
   isAgentQuestion,
   isReplyingRun,
+  isRetryArmed,
   isTaskClosed,
   isTaskResting,
   isTaskSettled,
@@ -35,6 +36,7 @@ import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { requestIteration } from './iterations.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
+import { retryArmedTask } from './retry.ts';
 import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
   acceptsFollowUp,
@@ -70,7 +72,8 @@ export type MessageEffect =
 
 type Delivery =
   | { effect: 'steer' | 'wake'; run: Run }
-  | { effect: 'retry' | 'verify_setup' | 'supersede_question'; gate: Gate }
+  | { effect: 'retry'; gate: Gate | null }
+  | { effect: 'verify_setup' | 'supersede_question'; gate: Gate }
   | { effect: StageEffect };
 
 const FEEDBACK_ONLY_EFFECTS: ReadonlySet<MessageEffect> = new Set<MessageEffect>([
@@ -118,6 +121,7 @@ function resolveDelivery(state: ShinsaState, task: Task): Delivery {
   const gates = listOpenGates(state, task.id);
   const paused = gates.find(isRetriedByMessage);
   if (paused) return { effect: 'retry', gate: paused };
+  if (isRetryArmed(task)) return { effect: 'retry', gate: null };
   const setup = gates.find((gate) => gate.type === 'configuration');
   if (setup) return { effect: 'verify_setup', gate: setup };
   const question = gates.find(isAgentQuestion);
@@ -200,7 +204,8 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
       queueMessageForWake(decider, delivery.run, resolveGuestText(decider, delivery.run.taskId, text));
       return;
     case 'retry':
-      answerGate(decider, delivery.gate.id, 'reply', text);
+      if (delivery.gate) answerGate(decider, delivery.gate.id, 'reply', text);
+      else retryArmedTask(decider, task.id, decider.context.onBehalf ? 'shinsa' : 'you', text);
       return;
     case 'verify_setup':
       answerGate(decider, delivery.gate.id, 'approve', null);

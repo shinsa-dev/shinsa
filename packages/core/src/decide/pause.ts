@@ -43,5 +43,5 @@ export function pauseTask(decider: Decider, command: CommandOf<'task.pause'>) {
     throw new DomainError({ code: 'not_pausable', message: 'Nothing is working on this task to pause.' });
   }
   decider.cancelEffects(task.id, PAUSED_EFFECTS, 'You paused the task.');
-  decider.fail(task.id, PAUSED_TITLE, PAUSED_DETAIL, null, 'paused');
+  decider.hold(task.id, PAUSED_TITLE, PAUSED_DETAIL, null, 'paused');
 }

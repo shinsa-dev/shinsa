@@ -135,7 +135,7 @@ describe('the cost limit per task', () => {
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
   });
 
-  test('turning the limit off releases them too, and keeps other pauses', () => {
+  test('turning the limit off releases them too, and keeps other retries waiting', () => {
     const { harness, taskId } = limited(5);
     meter(harness, taskId, 6);
     proposePlan(harness, taskId);
@@ -143,7 +143,7 @@ describe('the cost limit per task', () => {
     harness.send({ type: 'effect.fail', taskId: other, title: 'Broke', detail: 'x' });
     harness.send({ type: 'settings.change', patch: { taskBudgetUsd: null } });
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
-    expect(harness.openGate(other).title).toBe('Broke');
+    expect(harness.task(other).autoRetry).toMatchObject({ title: 'Broke', status: 'armed' });
   });
 
   test('retrying after you raised the limit does not count as continuing', () => {

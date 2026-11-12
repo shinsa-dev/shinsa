@@ -128,7 +128,7 @@ export function holdForBudget(decider: Decider, run: Run) {
   const spent = selectSpentBudget(decider.state, task);
   if (Option.isNone(spent)) return false;
   const budget = spent.value;
-  decider.fail(
+  decider.hold(
     task.id,
     BUDGET_TITLE[budget.unit],
     `This task reached ${describeLimit(budget)}, so the next step did not start.${describeEstimate(budget)} Continue to allow another ${describeBudgetAmount(budget, 'cap')}, or cancel the task.`,

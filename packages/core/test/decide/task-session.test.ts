@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { listOpenGates, type Run } from '../../src/index.ts';
+import type { Run } from '../../src/index.ts';
 import {
   approve,
   buildAll,
   completePhase,
   createHarness,
   createTask,
+  fireRetry,
   failing,
   type Harness,
   linkSession,
@@ -159,9 +160,7 @@ describe('one agent session per task', () => {
         summary: 'Overloaded',
       });
     }
-    const gate = listOpenGates(harness.state, taskId)[0];
-    expect(gate?.type).toBe('failure');
-    harness.send({ type: 'task.retry', taskId });
+    fireRetry(harness, taskId);
     expect(harness.activeRun(taskId)).toMatchObject({
       role: 'answerer',
       resume: true,

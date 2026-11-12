@@ -26,6 +26,7 @@ import {
   listPendingDependencies,
   listSummarizedTasks,
   listTaskChecks,
+  MAX_AUTO_RETRIES,
   type PlanDocument,
   type PullRequest,
   type ReportCheck,
@@ -708,6 +709,10 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
   });
 }
 
+function listRetryCommands(task: Task): ShinsaCommand[] {
+  return task.autoRetry ? [{ type: 'task.auto_retry', taskId: task.id }] : [];
+}
+
 function listProcessSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   return Object.values(state.tasks).flatMap((task): ShinsaCommand[] => {
     const commands: ShinsaCommand[] = [];
@@ -732,6 +737,7 @@ function listProcessSystemCommands(state: ShinsaState, random: Random): ShinsaCo
         { type: 'usage_wait.resume', taskId: task.id, waitId: 'stale' }
       );
     }
+    commands.push(...listRetryCommands(task));
     for (const account of ACCOUNTS) {
       if (chance(random, 0.3)) commands.push({ type: 'account.signed_in', account });
       if (chance(random, 0.05)) commands.push({ type: 'account.removed', accountId: account.id });
@@ -933,6 +939,15 @@ function assertProcessInvariants(state: ShinsaState, task: Task, gates: Gate[], 
     task.monitor?.status === 'armed' && task.usageWait?.status === 'armed',
     `${context}: a monitor and a usage wait are both armed`
   ).toBe(false);
+  if (task.autoRetry?.status === 'armed') {
+    expect(runs, context).toHaveLength(0);
+    expect(isTaskSettled(task), context).toBe(false);
+    expect(
+      gates.some((gate) => gate.type === 'failure' || gate.type === 'sign_in'),
+      `${context}: a failure or Sign in gate while a retry is armed`
+    ).toBe(false);
+  }
+  expect(task.autoRetry?.attempt ?? 0, context).toBeLessThanOrEqual(MAX_AUTO_RETRIES);
   if (task.usageWait?.status === 'armed') {
     expect(runs, context).toHaveLength(0);
     expect(isTaskSettled(task), context).toBe(false);
@@ -1403,6 +1418,12 @@ interface SideRandoms {
   pushes: Random;
 }
 
+function listDueRetries(state: ShinsaState, now: number) {
+  return Object.values(state.tasks)
+    .filter((task) => task.autoRetry?.status === 'armed' && task.autoRetry.at <= now)
+    .map((task) => task.id);
+}
+
 function selectSideCommand(
   sideStream: SideStream,
   state: ShinsaState,
@@ -1588,6 +1609,9 @@ function simulate(
       const onBehalf = sideStream === 'on_behalf' || sideCommand.type === 'schedule.write';
       apply(step, now, sideCommand, () => `${seed}-${sideStream}-${++outageCounter}`, onBehalf);
     }
+    for (const taskId of listDueRetries(state, now)) {
+      apply(step, now, { type: 'task.auto_retry', taskId }, () => `${seed}-retry-${++outageCounter}`);
+    }
     if (step % 13 === 12) view = openDetail(state, view);
     if (step % 40 === 39) {
       assertSameView(state, view, `seed ${seed}, step ${step}`);
@@ -1644,6 +1668,8 @@ function listReachedStates(state: ShinsaState) {
     task.result?.step === 'answer' ? 'answered question' : null,
     task.monitor ? 'monitor' : null,
     task.usageWait ? 'usage wait' : null,
+    task.autoRetry ? 'automatic retry' : null,
+    task.autoRetry?.status === 'spent' ? 'automatic retry run' : null,
     task.pullRequestWatch?.stopped === 'unreadable' ? 'unreadable pull request' : null,
     task.suggestions?.some((suggestion) => suggestion.status === 'accepted')
       ? 'accepted suggested task'
@@ -1677,6 +1703,8 @@ describe('decide under random command sequences', () => {
         'answered delegation',
         'answered question',
         'answered secret',
+        'automatic retry',
+        'automatic retry run',
         'budget gate',
         'configuration gate',
         'courier task',
@@ -1891,7 +1919,7 @@ describe('decide under random command sequences', () => {
       const collect = (state: ShinsaState) => {
         for (const mark of listBundleMarks(state)) if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'bundles', collect);
+      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) simulate(seed, STEPS, 'bundles', collect);
       expect([...reached].sort()).toEqual([
         'based on several tasks',
         'based on the task below',
@@ -1899,7 +1927,7 @@ describe('decide under random command sequences', () => {
         'ready in its bundle',
       ]);
     },
-    SEEDS * 2_000
+    RARE_SEEDS * 2_000
   );
 
   test(
@@ -1959,7 +1987,7 @@ describe('decide under random command sequences', () => {
         for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
           if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= RARE_SEEDS + 20; seed += 1) simulate(seed, STEPS, 'rounds', collect);
+      for (let seed = 1; seed <= RARE_SEEDS + 30; seed += 1) simulate(seed, STEPS, 'rounds', collect);
       expect([...reached].sort()).toEqual([
         'carried merge step',
         'closed task',

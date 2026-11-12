@@ -2,6 +2,7 @@ import { Option } from 'effect';
 import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
   copyUnreachedTeammate,
+  describeRetriesSpent,
   DomainError,
   hasStep,
   isTaskResting,
@@ -343,11 +344,17 @@ export function removeWorktree(decider: Decider, command: CommandOf<'worktree.go
   finishMove(decider, command.taskId);
 }
 
-export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {
-  const repeated = decider.hasOpenGate(
+function isRepeatedFailure(decider: Decider, command: CommandOf<'effect.fail'>) {
+  const retry = decider.task(command.taskId).autoRetry;
+  if (retry?.status === 'armed') return retry.title === command.title && retry.detail === command.detail;
+  const bodies = [command.detail, describeRetriesSpent(command.detail)];
+  return decider.hasOpenGate(
     command.taskId,
-    (gate) => gate.type === 'failure' && gate.title === command.title && gate.body === command.detail
+    (gate) => gate.type === 'failure' && gate.title === command.title && bodies.includes(gate.body)
   );
-  if (repeated) return;
+}
+
+export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {
+  if (isRepeatedFailure(decider, command)) return;
   decider.fail(command.taskId, command.title, command.detail);
 }

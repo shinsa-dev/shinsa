@@ -3,12 +3,15 @@ import { RUN_AGENT_ROLE, resolveAgentModel, resolveAgentProvider } from '../agen
 import { quoteTitle } from '../chat/text.ts';
 import {
   describeHumanEdits,
+  describeRetriesSpent,
   type Gate,
   type GateCause,
   type GateType,
   isAgentQuestion,
+  MAX_AUTO_RETRIES,
   isDelegatedRun,
   isPausingGate,
+  isRetryArmed,
   isTaskSessionRole,
   isTaskSettled,
   isWatchSession,
@@ -20,6 +23,7 @@ import {
   type RunOutcome,
   type RunPurpose,
   type RunRole,
+  resolveAutoRetryDelay,
   resolveRoundStamp,
   TASK_SESSION_ROLES,
   type Task,
@@ -40,7 +44,7 @@ import { listChildRuns, listLiveChildRuns } from '../state/delegations.ts';
 import { createDraft, type StateChanges } from '../state/draft.ts';
 import { applyEvent, type ShinsaState } from '../state/project.ts';
 import { findTask, listActiveRuns, listOpenGates, resolveTaskProject } from '../state/queries.ts';
-import { resolveRecoveryFingerprint } from './fingerprints.ts';
+import { resolveRecoveryFingerprint, resolveRetryMilestone } from './fingerprints.ts';
 import { tellOverlaps } from './overlaps.ts';
 
 export interface DecideContext {
@@ -200,6 +204,9 @@ export class Decider {
   stage(taskId: string, stage: TaskStage, reason: string, by: 'you' | null = null) {
     const task = this.task(taskId);
     if (task.stage === stage && task.stageReason === reason) return;
+    if (task.stage !== stage && isRetryArmed(task)) {
+      this.emit({ type: 'task.retry_cleared', taskId, streak: 'kept' });
+    }
     this.emit({ type: 'task.staged', taskId, stage, reason, ...(by ? { by } : {}) });
   }
 
@@ -400,6 +407,7 @@ export class Decider {
     if (usageWait && usageWait.id !== keep.usageWaitId) {
       this.emit({ type: 'usage_wait.ended', taskId, waitId: usageWait.id, status: 'cleared' });
     }
+    if (isRetryArmed(this.task(taskId))) this.emit({ type: 'task.retry_cleared', taskId, streak: 'kept' });
   }
 
   hasOpenGate(taskId: string, predicate: (gate: Gate) => boolean) {
@@ -435,15 +443,55 @@ export class Decider {
     }
   }
 
-  fail(taskId: string, title: string, detail: string, runId: string | null = null, cause?: GateCause) {
-    if (isTaskSettled(this.task(taskId))) return;
+  #stopForFailure(taskId: string) {
     this.cancelRuns(taskId);
     this.clearWaits(taskId);
     this.withdrawGates(taskId, isPausingGate);
+  }
+
+  #openFailureGate(taskId: string, title: string, detail: string, runId: string | null, cause?: GateCause) {
     this.openGate(taskId, 'failure', title, detail, {
       runId,
       ...(cause ? { details: { cause } } : {}),
     });
+  }
+
+  #resolveRetryAttempt(task: Task, milestone: string) {
+    const last = task.autoRetry;
+    return last && last.milestone === milestone ? last.attempt + 1 : 1;
+  }
+
+  fail(taskId: string, title: string, detail: string, runId: string | null = null, cause?: GateCause) {
+    if (isTaskSettled(this.task(taskId))) return;
+    this.#stopForFailure(taskId);
+    const task = this.task(taskId);
+    const milestone = resolveRetryMilestone(task, Object.values(this.state.gates));
+    const attempt = this.#resolveRetryAttempt(task, milestone);
+    if (attempt > MAX_AUTO_RETRIES) {
+      this.#openFailureGate(taskId, title, describeRetriesSpent(detail), runId, cause);
+      return;
+    }
+    this.emit({
+      type: 'task.retry_scheduled',
+      taskId,
+      retry: {
+        at: this.context.now + resolveAutoRetryDelay(attempt),
+        attempt,
+        title,
+        detail,
+        runId,
+        cause: cause ?? null,
+        milestone,
+        status: 'armed',
+      },
+    });
+    this.requestBriefing(taskId);
+  }
+
+  hold(taskId: string, title: string, detail: string, runId: string | null = null, cause?: GateCause) {
+    if (isTaskSettled(this.task(taskId))) return;
+    this.#stopForFailure(taskId);
+    this.#openFailureGate(taskId, title, detail, runId, cause);
   }
 
   progressed(taskId: string) {
@@ -453,7 +501,10 @@ export class Decider {
     this.emit({ type: 'task.recovered', taskId, recoveries: 0 });
   }
 
-  resetRecoveries(taskId: string) {
-    if (this.task(taskId).recoveries > 0) this.emit({ type: 'task.recovered', taskId, recoveries: 0 });
+  resetRecoveries(taskId: string, streak: 'kept' | 'reset' = 'reset') {
+    const task = this.task(taskId);
+    if (task.recoveries > 0) this.emit({ type: 'task.recovered', taskId, recoveries: 0 });
+    const clears = streak === 'reset' ? task.autoRetry : isRetryArmed(task);
+    if (clears) this.emit({ type: 'task.retry_cleared', taskId, streak });
   }
 }

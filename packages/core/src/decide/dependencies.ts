@@ -186,9 +186,8 @@ function pauseForCancelled(decider: Decider, task: Task, cancelled: Task[], rema
     remaining.length > 0
       ? `Retry to keep waiting on ${quoteTitles(remaining)} only, wait for another task instead, or cancel this one.`
       : 'Retry to start without that work, wait for another task instead, or cancel this one.';
-  decider.openGate(
+  decider.hold(
     task.id,
-    'failure',
     `${quoteTitles(cancelled)} ${one ? 'was' : 'were'} cancelled`,
     `${waited} ${choices}`
   );
