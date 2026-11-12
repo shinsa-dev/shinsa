@@ -6255,8 +6255,10 @@ you: Settings → Browser ─────────┤
   folder (`--user-data-dir=<folder>`) is an earlier engine's Chrome, so it is stopped (SIGTERM, which Chrome treats as
   a quit and writes its cookies, then SIGKILL after `stopTimeout`) and logged as `[Browser] Stopped a Chrome an earlier
   Shinsa left running`. Any other live holder is never killed: the call fails with `profile_in_use`, whose message
-  names the process to quit. A lock whose process is gone, or from another machine, is left to Chrome, which takes it
-  over itself. When Chrome still exits with 21, the host reclaims and starts once more, then says the profile is in
+  names the process to quit. A lock whose process is gone is left to Chrome, which takes it over itself. A lock under
+  another host name is this Mac's own under an earlier name (macOS renames it with the network), which Chrome refuses
+  with 21 even when its process is gone: a live process opening that folder is stopped as above, and otherwise the
+  stale `Singleton*` files are removed (`[Browser] Removed a profile lock Chrome left under another host name`). When Chrome still exits with 21, the host reclaims and starts once more, then says the profile is in
   use. When the engine starts, it stops every headless Chrome an earlier engine left on a profile in `browserDir`
   before it launches any of its own (`sweepOrphans`, holding the host's lock); a sign-in window you left open stays,
   until that project's browser is next needed.

@@ -1,4 +1,13 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
@@ -21,6 +30,7 @@ case "$*" in *--headless=new*) ;; *) [ -f "$profile/pid" ] && kill -0 "$(cat "$p
 [ -f "$here/busy" ] && exit 21
 [ -f "$here/busy-once" ] && rm "$here/busy-once" && exit 21
 holder="$(readlink "$profile/SingletonLock" 2>/dev/null)"
+[ -n "$holder" ] && [ "\${holder%-*}" != "$(hostname)" ] && exit 21
 [ -n "$holder" ] && kill -0 "\${holder##*-}" 2>/dev/null && exit 21
 ln -sfn "$(hostname)-$$" "$profile/SingletonLock"
 echo $$ > "$profile/pid"
@@ -44,6 +54,7 @@ export interface FakeChrome {
   busy(): void;
   busyOnce(): void;
   lockProfile(profile: BrowserProfile, pid: number, host?: string): void;
+  renameLockHost(profile: BrowserProfile, host: string): void;
   startOrphan(profile: BrowserProfile, mode?: 'headless' | 'window'): number;
 }
 
@@ -71,6 +82,12 @@ export function createFakeChrome(): FakeChrome {
       const folder = join(home, 'data', 'browser', profile);
       mkdirSync(folder, { recursive: true });
       symlinkSync(`${host}-${pid}`, join(folder, 'SingletonLock'));
+    },
+    renameLockHost: (profile, host) => {
+      const lock = join(home, 'data', 'browser', profile, 'SingletonLock');
+      const pid = readlinkSync(lock).split('-').at(-1);
+      rmSync(lock);
+      symlinkSync(`${host}-${pid}`, lock);
     },
     startOrphan: (profile, mode = 'headless') => {
       const folder = join(home, 'data', 'browser', profile);

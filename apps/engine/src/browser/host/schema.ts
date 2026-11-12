@@ -81,6 +81,8 @@ export const ACTIVE_PORT_FILE = 'DevToolsActivePort';
 
 export const SINGLETON_LOCK = 'SingletonLock';
 
+export const SINGLETON_FILES: ReadonlyArray<string> = [SINGLETON_LOCK, 'SingletonCookie', 'SingletonSocket'];
+
 export const SINGLETON_LOCK_TARGET = /^(.+)-(\d+)$/;
 
 export const PROFILE_IN_USE_CODE = 21;
@@ -92,6 +94,7 @@ export interface ProfileLock {
 
 export type ProfileHolder =
   | { readonly kind: 'none' }
+  | { readonly kind: 'stale' }
   | { readonly kind: 'ours'; readonly pid: number; readonly headless: boolean }
   | { readonly kind: 'foreign'; readonly pid: number };
 

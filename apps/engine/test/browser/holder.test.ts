@@ -47,7 +47,7 @@ describe("a browser profile's lock holder", () => {
     expect(isHeadless('chrome --headless=old')).toBe(false);
   });
 
-  test('ignores a lock from another machine or from this process', async () => {
+  test('ignores a lock from this process, and counts one under another host name as stale', async () => {
     const elsewhere = lockedFolder(`another-mac-${process.pid}`);
     const mine = lockedFolder(`${hostname()}-${process.pid}`);
     const unlocked = join(createTempDir('shinsa-profile-'), 'profile');
@@ -58,7 +58,7 @@ describe("a browser profile's lock holder", () => {
         resolveProfileHolder(unlocked),
       ])
     );
-    expect(holders).toEqual([{ kind: 'none' }, { kind: 'none' }, { kind: 'none' }]);
+    expect(holders).toEqual([{ kind: 'stale' }, { kind: 'none' }, { kind: 'none' }]);
   });
 
   test('says the profile is in use when its holder cannot be stopped', async () => {

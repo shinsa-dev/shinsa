@@ -286,6 +286,36 @@ describe('the browser host', () => {
     expect(chrome.launches()).toHaveLength(1);
   });
 
+  test('stops a Chrome an earlier engine left under an earlier host name', async () => {
+    const chrome = createFakeChrome();
+    const orphan = chrome.startOrphan(SHINSA, 'window');
+    await Effect.runPromise(awaitPid(chrome, SHINSA));
+    chrome.renameLockHost(SHINSA, 'old-mac.local');
+    await runHost(
+      chrome,
+      BrowserHost.use((host) => host.acquire(SHINSA))
+    );
+    expect(isAlive(orphan)).toBe(false);
+    expect(chrome.launches()).toHaveLength(2);
+  });
+
+  test('clears a lock left under an earlier host name whose process is gone', async () => {
+    const chrome = createFakeChrome();
+    const gone = Bun.spawn(['true']);
+    await gone.exited;
+    chrome.lockProfile(SHINSA, gone.pid, 'old-mac.local');
+    const mode = await runHost(
+      chrome,
+      Effect.gen(function* () {
+        const host = yield* BrowserHost;
+        yield* host.acquire(SHINSA);
+        return yield* host.resolveMode(SHINSA);
+      })
+    );
+    expect(mode).toBe('headless');
+    expect(chrome.launches()).toHaveLength(1);
+  });
+
   test('starts again once when Chrome finds the profile in use', async () => {
     const chrome = createFakeChrome();
     chrome.busyOnce();

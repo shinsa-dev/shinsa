@@ -12,6 +12,7 @@ import {
   PROFILE_IN_USE_MESSAGE,
   type ProfileHolder,
   type ProfileLock,
+  SINGLETON_FILES,
   SINGLETON_LOCK,
   SINGLETON_LOCK_TARGET,
 } from './schema.ts';
@@ -45,18 +46,26 @@ const readCommandLine = (pid: number) =>
     spawner.string(ChildProcess.make('ps', ['-ww', '-o', 'args=', '-p', String(pid)]))
   ).pipe(Effect.orElseSucceed(constant('')));
 
+const readLiveCommandLine = (pid: number) => {
+  if (!isProcessAlive(pid)) return Effect.succeed('');
+  return readCommandLine(pid);
+};
+
 export const resolveProfileHolder = Effect.fn('BrowserHost.resolveProfileHolder')(function* (folder: string) {
   const fs = yield* FileSystem.FileSystem;
   const target = yield* fs.readLink(join(folder, SINGLETON_LOCK)).pipe(Effect.option);
   const lock = Option.flatMap(target, parseProfileLock);
   if (Option.isNone(lock)) return { kind: 'none' } satisfies ProfileHolder;
   const { host, pid } = lock.value;
-  if (host !== hostname() || pid === process.pid || !isProcessAlive(pid)) {
+  const elsewhere = host !== hostname();
+  if (!elsewhere && (pid === process.pid || !isProcessAlive(pid)))
     return { kind: 'none' } satisfies ProfileHolder;
+  const commandLine = yield* readLiveCommandLine(pid);
+  if (isOpenedOn(commandLine, folder)) {
+    return { kind: 'ours', pid, headless: isHeadless(commandLine) } satisfies ProfileHolder;
   }
-  const commandLine = yield* readCommandLine(pid);
-  if (!isOpenedOn(commandLine, folder)) return { kind: 'foreign', pid } satisfies ProfileHolder;
-  return { kind: 'ours', pid, headless: isHeadless(commandLine) } satisfies ProfileHolder;
+  if (elsewhere) return { kind: 'stale' } satisfies ProfileHolder;
+  return { kind: 'foreign', pid } satisfies ProfileHolder;
 });
 
 const signal = (pid: number, name: NodeJS.Signals) =>
@@ -86,8 +95,25 @@ export const reclaimProfile = Effect.fn('BrowserHost.reclaimProfile')(function* 
 ) {
   const holder = yield* resolveProfileHolder(folder);
   if (holder.kind === 'none') return;
+  if (holder.kind === 'stale') return yield* removeStaleLock(folder);
   if (holder.kind === 'foreign') return yield* profileInUse(holder.pid);
   yield* stopOrphan(folder, holder.pid, grace);
+  const left = yield* resolveProfileHolder(folder);
+  if (left.kind === 'stale') yield* removeStaleLock(folder);
+});
+
+const removeStaleLock = Effect.fn('BrowserHost.removeStaleLock')(function* (folder: string) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* Effect.forEach(
+    SINGLETON_FILES,
+    (name) => Effect.ignore(fs.remove(join(folder, name), { force: true })),
+    {
+      discard: true,
+    }
+  );
+  yield* Effect.logWarning('[Browser] Removed a profile lock Chrome left under another host name').pipe(
+    Effect.annotateLogs({ profile: folder })
+  );
 });
 
 const stopOrphan = Effect.fn('BrowserHost.stopOrphan')(function* (
