@@ -32,7 +32,6 @@ function createRecorder() {
 function createRemote() {
   const { calls, step, record } = createRecorder();
   const remote = {
-    tunnelHost: Effect.succeed(null),
     isEnabled: Effect.succeed(false),
     snapshot: Effect.succeed(SNAPSHOT),
     startPairing: step('startPairing'),

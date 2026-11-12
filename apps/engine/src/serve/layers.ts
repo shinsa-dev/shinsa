@@ -40,11 +40,11 @@ import { ServeLock } from '../instance/lock/service.ts';
 import { createSummaryAccountSource, Onboarding, Prerequisites, SetupCommands } from '../onboarding/index.ts';
 import { ProjectChanges } from '../projects/changes/service.ts';
 import {
-  createInstalledConnector,
   Handoffs,
   PlacementAsker,
   Previews,
   Remote,
+  RelayConnectorLayer,
   RemoteEdgeLayer,
   RemoteLayer,
   RemoteOrigin,
@@ -215,10 +215,8 @@ function createRemoteLayer(config: ServerConfig, options: ShinsaOptions, instanc
   );
   return remote.pipe(
     Layer.provide(
-      Layer.mergeAll(
-        options.remoteConnector ?? createInstalledConnector(config.dataDir),
-        RemoteEdgeLayer,
-        Layer.succeed(RemoteOrigin, config.remoteOrigin)
+      Layer.mergeAll(options.remoteConnector ?? RelayConnectorLayer, RemoteEdgeLayer).pipe(
+        Layer.provideMerge(Layer.succeed(RemoteOrigin, config.remoteOrigin))
       )
     )
   );

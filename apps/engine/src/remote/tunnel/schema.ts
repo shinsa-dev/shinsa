@@ -6,7 +6,11 @@ export const PING_INTERVAL = '30 seconds';
 
 export const PING_SCHEDULE = Schedule.spaced(PING_INTERVAL);
 
-export const HEARTBEAT_EVERY_PINGS = 4;
+export const HEARTBEAT_INTERVAL = '2 minutes';
+
+export const HEARTBEAT_SCHEDULE = Schedule.spaced(HEARTBEAT_INTERVAL);
+
+export const REFUSED_STATUS = 401;
 
 export const FAILED_PINGS_BEFORE_RESTART = 3;
 

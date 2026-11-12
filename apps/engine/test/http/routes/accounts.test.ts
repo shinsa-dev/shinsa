@@ -12,7 +12,6 @@ const KAI = { login: 'kai', name: 'Kai Lane', avatarUrl: null };
 const remote = {
   isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
   resolveActor: (userId: string | null) => Effect.succeed(userId === 'u-kai' ? KAI : null),
-  tunnelHost: Effect.succeed(null),
   isEnabled: Effect.succeed(true),
 };
 

@@ -57,8 +57,6 @@ const MONA = { id: '1', login: 'mona', name: 'Mona Lisa', avatarUrl: 'https://av
 const CREDENTIALS = {
   instanceId: 'inst1',
   machineToken: 'machine-token',
-  tunnelToken: 'tunnel',
-  tunnelHost: 't-inst1.shinsa.dev',
   connectKey: 'key',
 };
 
