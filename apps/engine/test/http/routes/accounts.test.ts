@@ -40,6 +40,7 @@ function createAccounts(extras: Record<string, unknown> = {}) {
         ? Effect.fail(new DomainError({ code: 'account_not_found', message: 'That account was removed.' }))
         : answer('update', { updated: true }, args),
     remove: record('remove', { removed: true }),
+    chooseProvider: record('chooseProvider', { chosen: true }),
   };
   const routes = startRoutes({ accounts: accounts as unknown as Accounts['Service'], ...extras });
   const post = async (path: string, body: string) =>
@@ -80,6 +81,9 @@ describe('account routes', () => {
       updated: true,
     });
     expect(await post('/api/accounts/remove', '{"accountId":"acc-1"}')).toEqual({ removed: true });
+    expect(await post('/api/accounts/provider', '{"provider":"codex","choice":"removed"}')).toEqual({
+      chosen: true,
+    });
     expect(calls).toEqual([
       ['refresh'],
       ['refreshUsage'],
@@ -89,6 +93,7 @@ describe('account routes', () => {
       ['importAccount', 'cswap', 'me@x.dev', null],
       ['update', 'acc-1', { paused: true }, null],
       ['remove', 'acc-1', null],
+      ['chooseProvider', 'codex', 'removed'],
     ]);
   });
 

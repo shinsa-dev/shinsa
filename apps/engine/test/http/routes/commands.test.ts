@@ -164,4 +164,16 @@ describe('GET /api/providers', () => {
     });
     expect(await (await send('/api/providers')).json()).toEqual(providers);
   });
+
+  test('leaves out a provider you removed or never signed in to', async () => {
+    const providers = [
+      { id: 'claude', label: 'Claude' },
+      { id: 'codex', label: 'Codex' },
+    ];
+    const { send } = startRoutes({
+      providers: { listProviders: Effect.succeed(providers) } as never,
+      accounts: { listHiddenProviders: Effect.succeed(new Set(['codex'])) } as never,
+    });
+    expect(await (await send('/api/providers')).json()).toEqual([{ id: 'claude', label: 'Claude' }]);
+  });
 });

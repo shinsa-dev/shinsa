@@ -158,6 +158,7 @@ const FEATURE_ROUTES = {
     'POST /api/browser/projects/([^/]+)/sign-out',
   ],
   'slack-channel-triggers': ['GET /api/slack/channels'],
+  'accounts.provider_choice': ['POST /api/accounts/provider'],
 };
 
 const LOCAL_ONLY = [
@@ -213,6 +214,7 @@ const OWNER_ONLY = [
   'POST /api/accounts/import',
   'POST /api/accounts/update',
   'POST /api/accounts/remove',
+  'POST /api/accounts/provider',
   'POST /api/schedules/([^/]+)/webhook',
   'POST /api/secrets/([^/]+)',
   'POST /api/extensions/check',
@@ -318,6 +320,7 @@ describe('EngineApi routes', () => {
         'POST /api/accounts/import',
         'POST /api/accounts/update',
         'POST /api/accounts/remove',
+        'POST /api/accounts/provider',
         'GET /api/github-token',
         'POST /api/github-token',
       ])
