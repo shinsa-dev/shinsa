@@ -450,6 +450,56 @@ if (group === 'issue' && command === 'list') {
   console.log(JSON.stringify(listed));
   process.exit(0);
 }
+function remoteRepository(slug: string) {
+  const root = Bun.env.FAKE_GH_REMOTES;
+  return root && /^[^/]+\/[^/]+$/.test(slug) ? join(root, slug.toLowerCase()) : null;
+}
+
+if (group === 'repo' && (command === 'view' || command === 'create') && Bun.env.FAKE_GH_FAIL_REPOS) {
+  save();
+  console.error(Bun.env.FAKE_GH_FAIL_REPOS);
+  process.exit(1);
+}
+if (group === 'repo' && command === 'view') {
+  save();
+  const slug = args[2] ?? '';
+  const folder = remoteRepository(slug);
+  if (!folder || !existsSync(folder)) {
+    console.error(`GraphQL: Could not resolve to a Repository with the name '${slug}'. (repository)`);
+    process.exit(1);
+  }
+  const refs = Bun.spawnSync(['git', 'for-each-ref', '--count=1'], { cwd: folder }).stdout.toString().trim();
+  console.log(JSON.stringify({ isEmpty: refs === '', url: `file://${folder}`, sshUrl: folder }));
+  process.exit(0);
+}
+if (group === 'repo' && command === 'create') {
+  save();
+  const slug = args[2] ?? '';
+  const folder = remoteRepository(slug);
+  if (!folder || existsSync(folder) || !args.includes('--private')) {
+    console.error(`GraphQL: Name already exists on this account (createRepository)`);
+    process.exit(1);
+  }
+  if (!Bun.env.FAKE_GH_CREATE_HIDDEN) {
+    mkdirSync(folder, { recursive: true });
+    Bun.spawnSync(['git', 'init', '--bare', '-q', folder]);
+  }
+  console.log(`https://github.com/${slug}`);
+  process.exit(0);
+}
+if (group === 'config' && command === 'get' && args[2] === 'git_protocol') {
+  save();
+  console.log(Bun.env.FAKE_GH_GIT_PROTOCOL || 'https');
+  process.exit(0);
+}
+if (group === 'api' && command === 'user/orgs') {
+  save();
+  if (Bun.env.FAKE_GH_FAIL_ORGS) console.error(Bun.env.FAKE_GH_FAIL_ORGS);
+  if (!Bun.env.FAKE_GH_LOGIN || Bun.env.FAKE_GH_FAIL_ORGS) process.exit(1);
+  const orgs = (Bun.env.FAKE_GH_ORGS ?? '').split(',').filter(Boolean);
+  console.log((args.includes('--paginate') ? orgs : orgs.slice(0, 30)).join('\n'));
+  process.exit(0);
+}
 if (group === 'api' && command === 'user') {
   save();
   if (!Bun.env.FAKE_GH_LOGIN) process.exit(1);

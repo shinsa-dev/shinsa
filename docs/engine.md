@@ -514,7 +514,8 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   folder Shinsa looks in (`resolveTaskRepoTarget`), registered under `<effect key>:repo.register` into the task's
   project (a task in none gets the project registering gives it, Projects and task identity). With no folder, or a
   folder that already holds files, it logs a warning and the task is triaged without a repository, so the setup gate
-  asks. Like a repository `create_task` makes, it has no remote until you add one.
+  asks. Like a repository `create_task` makes, it is then connected to GitHub (Agents manage Shinsa → A new
+  repository is created when asked).
 - **It runs without one.** An answer or research with no repository skips the setup step entirely (`startWork`:
   no `config.verify`, no "verifying the setup", no Find the repository step in the strip) and runs read-only in a
   scratch folder of its own, `data/scratch/<task id>` (`RunSupervisor`, made again before every run), never a
@@ -739,7 +740,16 @@ them in the order they need:
   makes the folder (refused when it already holds files, or when the name is more than letters, digits, `.`, `-` and
   `_`), starts it on git's `init.defaultBranch` (`main` when unset) with the empty first commit setup makes (Setup
   verification), and registers it into the project. A name that already matches is used as it is, so a repeated call
-  creates nothing. The repository has no remote, so its task cannot open a pull request until you add one.
+  creates nothing. Then `RepoRegistry.connectOrigin` gives it a GitHub `origin` (`RepoOrigins`, `repos/origin/`):
+  it looks for a repository of the folder's name under each owner in turn, the owners of the project's other GitHub
+  remotes first, most used first (`listProjectOwners`), then your `gh` login, then your organizations
+  (`gh api user/orgs`). The first that exists is used only when it is empty; with none it creates a private one under
+  the first owner (`gh repo create --private`). It adds the clone URL `gh config get git_protocol` asks for as
+  `origin`, sends the default branch up and records the remote. A repository that already has `origin` is left as it
+  is and `gh` is never asked. A lookup that fails stops before anything is created, so no duplicate lands under an
+  owner it could not read; a match that already has commits is refused; a failed upload removes `origin` again.
+  Connecting at creation is best effort: a failure logs a warning, the repository is still created, and the pull
+  request step tries again (Pushing the branch).
 - **Another project.** `create_task`'s `project` (a key, name or id) files the task in that project (`projectId` on
   `agent.create_task`): `repository` is then looked up among that project's repositories and folders, and without one
   the new task leaves its repository to triage in that project instead of taking this task's.
@@ -5505,7 +5515,11 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
 
 `pull_request.open` and `pull_request.push` (`Shipping`, `apps/engine/src/runtime/effects/shipping/service.ts`) take the branch from "approved" to
 GitHub in four steps, and report each one to the task as `pull_request.record_step`, which core turns into the stage
-reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open:
+reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open. First, a repository
+with no `origin` (one created while GitHub was out of reach, or one you started by hand) is connected the way a new one
+is (`RepoRegistry.connectOrigin`, Agents manage Shinsa → A new repository is created when asked). When it cannot be,
+the effect fails once with no retry (`OriginNotConnected`), and the failure gate says why and gives the `git remote
+add origin …` and first upload to run before you retry, instead of five fetches against a remote that is not there.
 
 1. **Commit your edits** from the Code tab, if any (as before).
 2. **Update onto the base.** The base is the pull request's base (`resolveRoundBase`: an earlier round's branch

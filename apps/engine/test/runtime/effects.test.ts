@@ -1444,6 +1444,59 @@ async function captureFailure(work: Promise<unknown>) {
 }
 
 describe('getting the branch to GitHub', () => {
+  async function createUnconnectedRepo() {
+    const repo = await createGitRepo({ remote: false });
+    const worktree = await createWorktree(repo.repo, createTempDir(), 'task-1', 'fix/tab-scroll', null);
+    writeFiles(worktree.path, { 'a.txt': 'a' });
+    await git(worktree.path, 'add', '-A');
+    await git(worktree.path, 'commit', '-q', '-m', 'fix: a');
+    const remotes = createTempDir('shinsa-remotes-');
+    restores.push(overrideEnv({ FAKE_GH_REMOTES: remotes, FAKE_GH_LOGIN: 'octo', FAKE_GH_ORGS: undefined }));
+    return { ...repo, worktree: worktree.path, remotes };
+  }
+
+  test('a repository with no origin is connected to a new GitHub repository before the push, and its remote recorded', async () => {
+    useFakeGitHub();
+    const shipping = await createUnconnectedRepo();
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    const folder = join(shipping.remotes, 'octo/app');
+    expect(dispatched[0]).toEqual({ type: 'repo.update', repoId: 'repo-1', patch: { remote: folder } });
+    expect(await git(folder, 'rev-parse', 'refs/heads/main')).toBe(
+      await git(shipping.path, 'rev-parse', 'main')
+    );
+    expect(await git(folder, 'rev-parse', 'refs/heads/fix/tab-scroll')).toBe(
+      await git(shipping.worktree, 'rev-parse', 'HEAD')
+    );
+    expect(dispatched.map((command) => command.type)).toContain('pull_request.record');
+    await runner.stop();
+  });
+
+  test('a repository GitHub cannot connect fails once with the command to run, and nothing is fetched or pushed', async () => {
+    useFakeGitHub();
+    const shipping = await createUnconnectedRepo();
+    restores.push(overrideEnv({ FAKE_GH_FAIL_REPOS: 'HTTP 502: Bad Gateway' }));
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    const error = await captureFailure(
+      runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext())
+    );
+    expect(error).toBeInstanceOf(ShippingFailed);
+    expect(error).toMatchObject({ step: 'pushing', retryable: false, delayMs: null });
+    expect((error as Error).message).toContain(
+      'gh could not check for github.com/octo/app: HTTP 502: Bad Gateway.'
+    );
+    expect((error as Error).message).toContain(
+      `git -C ${shipping.path} remote add origin https://github.com/octo/app.git && git -C ${shipping.path} push -u origin main`
+    );
+    expect(dispatched).toEqual([]);
+    expect(await git(shipping.path, 'remote')).toBe('');
+    await runner.stop();
+  });
+
   test('a branch behind its base gets the base merged in before the push, and each step is shown', async () => {
     useFakeGitHub();
     const shipping = await createShippingRepo();
