@@ -20,7 +20,7 @@ import { Clock, Duration, Effect, Option, Redacted } from 'effect';
 import { NO_SUCH_MACHINE } from '../auth/schema.ts';
 import { CloudConfig } from '../config/service.ts';
 import { CloudCrypto } from '../crypto/service.ts';
-import { Cloudflare } from '../integrations/cloudflare/service.ts';
+import { Relays } from '../integrations/relays/service.ts';
 import { revokeMachineUserTokens } from '../slack/user-tokens.ts';
 import { MachineAccess } from '../store/access/service.ts';
 import { Accounts } from '../store/accounts/service.ts';
@@ -106,9 +106,8 @@ export const listMachinePeople = Effect.fn('listMachinePeople')(function* (machi
 });
 
 export const removeMachine = Effect.fn('removeMachine')(function* (machine: Machine) {
-  const cloudflare = yield* Cloudflare;
   const machines = yield* Machines;
-  yield* cloudflare.removeTunnel(machine.tunnelId, machine.dnsRecordId);
   yield* revokeMachineUserTokens(machine.id);
   yield* machines.remove(machine.id);
+  yield* (yield* Relays).evict(machine.id);
 });

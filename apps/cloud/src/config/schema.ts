@@ -1,7 +1,7 @@
 import { PREVIEW_ORIGIN, REMOTE_APP_ORIGIN, REMOTE_PATHS, SLACK_RELAY_PATHS } from '@shinsa/core';
 import { Config, Redacted } from 'effect';
 
-const DEFAULT_MAX_INSTANCES = 50;
+const DEFAULT_MAX_INSTANCES = 10_000;
 
 const ORIGIN = Config.String('APP_ORIGIN').pipe(Config.withDefault(REMOTE_APP_ORIGIN));
 
@@ -16,9 +16,6 @@ export const CLOUD_CONFIG = Config.all({
   ),
   githubClientId: Config.String('GITHUB_CLIENT_ID').pipe(Config.withDefault('')),
   githubClientSecret: Config.Redacted('GITHUB_CLIENT_SECRET').pipe(Config.withDefault(Redacted.make(''))),
-  cloudflareAccountId: Config.String('CLOUDFLARE_ACCOUNT_ID').pipe(Config.withDefault('')),
-  cloudflareApiToken: Config.Redacted('CLOUDFLARE_API_TOKEN').pipe(Config.withDefault(Redacted.make(''))),
-  tunnelZone: Config.String('TUNNEL_ZONE').pipe(Config.withDefault('shinsa.dev')),
   previewOrigin: Config.String('PREVIEW_ZONE').pipe(
     Config.map((zone) => `https://${zone}`),
     Config.withDefault(PREVIEW_ORIGIN)

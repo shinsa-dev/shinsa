@@ -16,9 +16,6 @@ export const TEST_ENV = {
   APP_ORIGIN: 'https://app.shinsa.dev',
   GITHUB_CLIENT_ID: 'client-id',
   GITHUB_CLIENT_SECRET: 'client-secret',
-  CLOUDFLARE_ACCOUNT_ID: 'account-1',
-  CLOUDFLARE_API_TOKEN: 'api-token',
-  TUNNEL_ZONE: 'shinsa.dev',
   PREVIEW_ZONE: 'shinsa.page',
   MAX_INSTANCES: '50',
   SLACK_CLIENT_ID: 'slack-client',
@@ -70,32 +67,9 @@ export interface Upstream {
   readonly fetch: typeof globalThis.fetch;
 }
 
-function answerApi(result: unknown) {
-  return Response.json({ success: true, result });
-}
-
-function createCloudflareApi(): UpstreamHandler {
-  let tunnels = 0;
-  let records = 0;
-  return (call) => {
-    const { hostname, pathname } = new URL(call.url);
-    if (hostname !== 'api.cloudflare.com') return null;
-    if (call.method === 'GET' && pathname === '/client/v4/zones') return answerApi([{ id: 'zone-1' }]);
-    if (call.method === 'POST' && pathname.endsWith('/cfd_tunnel'))
-      return answerApi({ id: `tunnel-${++tunnels}` });
-    if (call.method === 'PUT' && pathname.endsWith('/configurations')) return answerApi({});
-    if (call.method === 'GET' && pathname.endsWith('/token')) return answerApi(`tunnel-token-${tunnels}`);
-    if (call.method === 'POST' && pathname.endsWith('/dns_records'))
-      return answerApi({ id: `record-${++records}` });
-    if (call.method === 'DELETE') return answerApi({});
-    return null;
-  };
-}
-
 export function createUpstream(): Upstream {
   const calls: UpstreamCall[] = [];
   const handlers: UpstreamHandler[] = [];
-  const cloudflare = createCloudflareApi();
   const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const call: UpstreamCall = {
@@ -105,7 +79,7 @@ export function createUpstream(): Upstream {
       body: await request.text(),
     };
     calls.push(call);
-    for (const handler of [...handlers, cloudflare]) {
+    for (const handler of handlers) {
       const answer = handler(call);
       if (answer) return answer;
     }

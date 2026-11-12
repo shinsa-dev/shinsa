@@ -446,6 +446,18 @@ describe('the relay hub', () => {
     expect(body.text()).rejects.toBeDefined();
   });
 
+  test('evicts a removed machine, closing its socket and every stream, and is a no-op with none', async () => {
+    const { hub, peers, run } = await createHub();
+    expect((await run(hub.fetch(roomRequest('evict')))).status).toBe(204);
+    const machine = await connectMachine(hub, peers);
+    const browser = await openBrowser(hub, peers, machine);
+    const evicted = await run(hub.fetch(roomRequest('evict')));
+    expect(evicted.status).toBe(204);
+    expect(machine.closed).toEqual({ code: RELAY_CLOSE.refused, reason: 'This machine was removed.' });
+    expect(browser.closed?.code).toBe(RELAY_CLOSE.machineGone);
+    expect((await run(hub.fetch(roomRequest('http', '/api/hooks/a/b')))).status).toBe(503);
+  });
+
   test('answers a ping and ignores what it cannot read or place', async () => {
     const { hub, peers, run } = await createHub();
     const machine = await connectMachine(hub, peers);

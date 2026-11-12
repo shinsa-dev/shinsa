@@ -6,8 +6,6 @@ import { RELAY_MACHINE_SEGMENT, RELAY_PATH_PREFIX } from './relay/schema.ts';
 
 export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
 
-export const REMOTE_TUNNEL_DOMAIN = 'shinsa.dev';
-
 export const REMOTE_CHANNEL_PATH = '/remote';
 
 export const REMOTE_CONNECT_PARAM = 'token';
@@ -403,10 +401,6 @@ export const TeamScopesRequest = Schema.Struct({
 });
 
 export type TeamScopesRequest = typeof TeamScopesRequest.Type;
-
-export function resolveTunnelHost(instanceId: string) {
-  return `t-${instanceId}.${REMOTE_TUNNEL_DOMAIN}`;
-}
 
 export function resolveRelayPath(instanceId: string) {
   return `${RELAY_PATH_PREFIX}${encodeURIComponent(instanceId)}`;

@@ -223,10 +223,18 @@ export function createRelayHub(room: RelayRoom): RelayHub {
     return room.accept({ role: 'machine' }, null);
   });
 
+  const evictMachine = Effect.fn('RelayHub.evictMachine')(function* () {
+    for (const peer of room.listPeers())
+      if (peer.tag.role === 'machine') yield* close(peer, RELAY_CLOSE.refused, RELAY_CLOSE_REASONS.removed);
+    yield* dropStreams();
+    return new Response(null, { status: 204 });
+  });
+
   const fetch = Effect.fn('RelayHub.fetch')(function* (request: Request) {
     const role = decodeRole(request.headers.get(RELAY_ROLE_HEADER));
     if (Option.isNone(role)) return respondRefusal('unknown');
     if (role.value === 'machine') return yield* connectMachine();
+    if (role.value === 'evict') return yield* evictMachine();
     if (role.value === 'socket') return yield* openSocket(request);
     return yield* requestHttp(request);
   });

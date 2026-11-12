@@ -30,9 +30,6 @@ export interface CloudConfig {
   origin: string;
   githubClientId: string;
   githubClientSecret: string;
-  cloudflareAccountId: string;
-  cloudflareApiToken: string;
-  tunnelZone: string;
   previewOrigin: string;
   maxInstances: number;
   slackClientId: string;
@@ -45,9 +42,6 @@ export const TEST_CONFIG: CloudConfig = {
   origin: REMOTE_APP_ORIGIN,
   githubClientId: 'client-id',
   githubClientSecret: 'client-secret',
-  cloudflareAccountId: 'account-1',
-  cloudflareApiToken: 'api-token',
-  tunnelZone: 'shinsa.dev',
   previewOrigin: 'https://shinsa.page',
   maxInstances: 50,
   slackClientId: 'slack-client',
@@ -61,9 +55,6 @@ function resolveEnv(config: CloudConfig) {
     APP_ORIGIN: config.origin,
     GITHUB_CLIENT_ID: config.githubClientId,
     GITHUB_CLIENT_SECRET: config.githubClientSecret,
-    CLOUDFLARE_ACCOUNT_ID: config.cloudflareAccountId,
-    CLOUDFLARE_API_TOKEN: config.cloudflareApiToken,
-    TUNNEL_ZONE: config.tunnelZone,
     PREVIEW_ZONE: new URL(config.previewOrigin).host,
     MAX_INSTANCES: String(config.maxInstances),
     SLACK_CLIENT_ID: config.slackClientId,
@@ -116,27 +107,6 @@ interface UpstreamCall {
 type UpstreamHandler = (call: UpstreamCall) => Response | Promise<Response>;
 
 const PASS = 599;
-
-function answerApi(result: unknown) {
-  return Response.json({ success: true, result });
-}
-
-function createCloudflareApi() {
-  let tunnels = 0;
-  let records = 0;
-  return (call: UpstreamCall): Response | null => {
-    const path = new URL(call.url).pathname;
-    if (call.method === 'GET' && path === '/client/v4/zones') return answerApi([{ id: 'zone-1' }]);
-    if (call.method === 'POST' && path.endsWith('/cfd_tunnel'))
-      return answerApi({ id: `tunnel-${++tunnels}` });
-    if (call.method === 'PUT' && path.endsWith('/configurations')) return answerApi({});
-    if (call.method === 'GET' && path.endsWith('/token')) return answerApi(`tunnel-token-${tunnels}`);
-    if (call.method === 'POST' && path.endsWith('/dns_records'))
-      return answerApi({ id: `record-${++records}` });
-    if (call.method === 'DELETE') return answerApi({});
-    return null;
-  };
-}
 
 export async function createCodeChallenge(verifier: string) {
   return serializeBase64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', encodeText(verifier))));
@@ -229,7 +199,6 @@ async function answerGitHub(upstream: UpstreamCall) {
 export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
   const db = createTestDatabase();
   const calls: UpstreamCall[] = [];
-  const cloudflare = createCloudflareApi();
   const handlers: UpstreamHandler[] = [];
   const clock = { now: 1_800_000_000_000 };
   const deferred: Promise<unknown>[] = [];
@@ -248,9 +217,7 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
       const answer = await handler(upstream);
       if (answer.status !== PASS) return answer;
     }
-    return (
-      (await answerGitHub(upstream)) ?? cloudflare(upstream) ?? new Response('no upstream', { status: 404 })
-    );
+    return (await answerGitHub(upstream)) ?? new Response('no upstream', { status: 404 });
   };
 
   const config = new Proxy(

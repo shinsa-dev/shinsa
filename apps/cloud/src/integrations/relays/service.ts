@@ -18,6 +18,7 @@ export class Relays extends Context.Service<
       init: RelayRequestInit
     ): Effect.Effect<Response, RelayUnreachable>;
     connect(instanceId: InstanceId): Effect.Effect<Response, RelayUnreachable>;
+    evict(instanceId: InstanceId): Effect.Effect<void>;
   }
 >()('shinsa/cloud/integrations/Relays') {
   static readonly layer = Layer.effect(
@@ -51,6 +52,15 @@ export class Relays extends Context.Service<
         connect: Effect.fn('Relays.connect')((instanceId: InstanceId) =>
           send(instanceId, '/', 'machine', { headers: { upgrade: 'websocket' } })
         ),
+        evict: Effect.fn('Relays.evict')(function* (instanceId: InstanceId) {
+          yield* send(instanceId, '/', 'evict', { method: 'POST' }).pipe(
+            Effect.catchTag('RelayUnreachable', (error) =>
+              Effect.logWarning('[Cloud] Could not close a removed machine’s relay').pipe(
+                Effect.annotateLogs({ instanceId, cause: error.message })
+              )
+            )
+          );
+        }),
       });
     })
   );

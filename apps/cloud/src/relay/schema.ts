@@ -7,7 +7,7 @@ export const RELAY_ROLE_HEADER = 'x-shinsa-relay-role';
 
 export const RELAY_ADDRESS_HEADER = 'x-shinsa-relay-address';
 
-export const RelayRole = Schema.Literals(['machine', 'socket', 'http']);
+export const RelayRole = Schema.Literals(['machine', 'socket', 'http', 'evict']);
 
 export type RelayRole = typeof RelayRole.Type;
 
@@ -37,6 +37,7 @@ export type RelayRefusal = keyof typeof RELAY_REFUSALS;
 
 export const RELAY_CLOSE_REASONS = {
   replaced: 'The machine connected again.',
+  removed: 'This machine was removed.',
   machineGone: 'The machine disconnected.',
   tooLarge: 'The message is too large.',
   cancelled: 'The request was cancelled.',

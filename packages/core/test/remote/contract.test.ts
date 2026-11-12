@@ -24,7 +24,6 @@ import {
   resolveRelayPath,
   resolveRelayUrl,
   resolveRemoteHookUrl,
-  resolveTunnelHost,
   TEAM_ACTIONS,
   TEAM_NAME_LIMIT,
   TeamCreateRequest,
@@ -40,8 +39,7 @@ describe('the remote contract', () => {
     expect(REMOTE_PATHS.machineRemove).toBe('/__remote/machine/remove');
   });
 
-  test('names an instance tunnel host and its dashboard paths', () => {
-    expect(resolveTunnelHost('k3x9')).toBe('t-k3x9.shinsa.dev');
+  test('names an instance’s dashboard paths', () => {
     expect(resolveInstancePath('k3x9')).toBe('/__remote/instances/k3x9');
     expect(resolveInstanceConnectPath('k3x9')).toBe('/__remote/instances/k3x9/connect');
     expect(resolveInstanceRemovePath('k3x9')).toBe('/__remote/instances/k3x9/remove');
