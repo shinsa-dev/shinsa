@@ -146,9 +146,10 @@ sign-ins across runs and tasks, so a site the human signed it in to once stays s
 - **Open the page first.** It may be signed in already; sign in or ask only when it asks you to.
 - **The repository's own test users come first.** When the repository says how agents sign in (test accounts, a
   test-user MCP server, a seeded user), do that and never use the human's own session.
-- **Ask with `request_browser_sign_in`**, with the full address of the sign-in page and one sentence on what you need
-  there. The human copies the sign-in from their everyday browser or signs in by hand in a window on their machine;
-  when the tool answers that they did, open the page again. Ask once per site, never per task, and never ask for a
+- **Ask with `request_browser_sign_in`**, with the full address of the page you want to see (the one that sent you to
+  a sign-in page, never the sign-in page itself, which opens fine signed out) and one sentence on what you need there.
+  The human copies the sign-in from their everyday browser or signs in by hand in a window on their machine; when the
+  tool answers that they did, open the page again. Ask once per site, never per task, and never ask for a
   password or a code with `ask`. Before it answers, Shinsa opens the address in the shared browser: when the page
   still ends on another site, the answer says so and where it landed, and you are not signed in.
 - **A local dev server's sign-in belongs to its exact port.** Many apps keep their session in the page's storage,

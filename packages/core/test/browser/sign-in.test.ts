@@ -56,7 +56,7 @@ describe('reading request_browser_sign_in', () => {
     expect(result.ok).toBe(false);
     const errors = result.ok ? [] : result.errors.join('\n');
     expect(errors).toContain(
-      'url must be the full http or https address of the page that asks you to sign in.'
+      'url must be the full http or https address of the page you want to see, not the sign-in page it sends you to.'
     );
     expect(errors).toContain('reason');
     expect(validateBrowserSignInRequest({}).ok).toBe(false);

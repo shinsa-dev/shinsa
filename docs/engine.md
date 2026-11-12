@@ -6293,7 +6293,7 @@ you: Settings → Browser ─────────┤
   a hint that copying carries cookies only and a local app keeps its sign-in for that exact port. Reject tells the
   agent to carry on without it. Approve is checked before the agent hears it (since 2026-11-11): `BrowserSignInCheck`
   (`apps/engine/src/browser/check/`) takes a lease on the project's Chrome (`BrowserHost.acquire`), opens the gate's
-  `url` in a new page over the browser connection (`Target.createTarget`, which no agent's connection sees), reads the
+  `url`, the page the agent wants to see and never the sign-in page it was sent to (the tool's field says so, since a sign-in page opens fine signed out), in a new page over the browser connection (`Target.createTarget`, which no agent's connection sees), reads the
   page's `document.readyState` and `location.href` every 250 ms until it has loaded and its address has held still for
   1.5 s, at most 12 s (`BrowserSignInCheckSettings`), and closes the page. The result (`SignInCheck`: `landed {url}`,
   or `unchecked {reason}` when Chrome is missing, does not start, the sign-in window is open, the page never settles

@@ -5,7 +5,7 @@ import { resolveSignInSite } from './site.ts';
 export const BROWSER_SIGN_IN_LIMITS = { url: 2_000, reason: 300 } as const;
 
 export const SIGN_IN_URL_MESSAGE =
-  '{path} must be the full http or https address of the page that asks you to sign in.';
+  '{path} must be the full http or https address of the page you want to see, not the sign-in page it sends you to.';
 
 export interface BrowserSignInRequest {
   url: string;
