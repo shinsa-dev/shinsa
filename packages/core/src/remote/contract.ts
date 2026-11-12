@@ -2,6 +2,7 @@ import { Option, Schema } from 'effect';
 import { AccessScopes } from '../scopes/schema.ts';
 import { URL_SAFE_SEGMENT } from './bytes.ts';
 import { isSigningPublicKey } from './keys.ts';
+import { RELAY_MACHINE_SEGMENT, RELAY_PATH_PREFIX } from './relay/schema.ts';
 
 export const REMOTE_APP_ORIGIN = 'https://app.shinsa.dev';
 
@@ -151,8 +152,6 @@ export type PairPollRequest = typeof PairPollRequest.Type;
 export const MachineCredentials = Schema.Struct({
   instanceId: Schema.String,
   machineToken: Schema.String,
-  tunnelToken: Schema.String,
-  tunnelHost: Schema.String,
   connectKey: Schema.String,
 });
 
@@ -407,6 +406,18 @@ export type TeamScopesRequest = typeof TeamScopesRequest.Type;
 
 export function resolveTunnelHost(instanceId: string) {
   return `t-${instanceId}.${REMOTE_TUNNEL_DOMAIN}`;
+}
+
+export function resolveRelayPath(instanceId: string) {
+  return `${RELAY_PATH_PREFIX}${encodeURIComponent(instanceId)}`;
+}
+
+export function resolveRelayUrl(instanceId: string, origin: string = REMOTE_APP_ORIGIN) {
+  return `${origin.replace(/^http/, 'ws')}${resolveRelayPath(instanceId)}`;
+}
+
+export function resolveRelayMachineUrl(instanceId: string, origin: string = REMOTE_APP_ORIGIN) {
+  return `${resolveRelayUrl(instanceId, origin)}/${RELAY_MACHINE_SEGMENT}`;
 }
 
 export function resolveInstanceConnectPath(instanceId: string) {

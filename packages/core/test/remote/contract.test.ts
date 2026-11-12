@@ -8,6 +8,7 @@ import {
   InstanceId,
   PairPollResponse,
   PairStartRequest,
+  parseMachineCredentials,
   parseEnrollFragment,
   REMOTE_PATHS,
   REMOTE_TEXT_LIMITS,
@@ -19,6 +20,9 @@ import {
   resolveInstanceRemovePath,
   resolvePairApprovePath,
   resolvePairPath,
+  resolveRelayMachineUrl,
+  resolveRelayPath,
+  resolveRelayUrl,
   resolveRemoteHookUrl,
   resolveTunnelHost,
   TEAM_ACTIONS,
@@ -44,6 +48,29 @@ describe('the remote contract', () => {
     expect(resolveInstanceLeavePath('k3x9')).toBe('/__remote/instances/k3x9/leave');
     expect(resolvePairPath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345');
     expect(resolvePairApprovePath('WXYZ2345')).toBe('/__remote/pairs/WXYZ2345/approve');
+  });
+
+  test('reaches a machine through its relay on app.shinsa.dev, or on a local wrangler dev', () => {
+    expect(resolveRelayPath('k3x9')).toBe('/__relay/k3x9');
+    expect(resolveRelayUrl('k3x9')).toBe('wss://app.shinsa.dev/__relay/k3x9');
+    expect(resolveRelayMachineUrl('k3x9')).toBe('wss://app.shinsa.dev/__relay/k3x9/machine');
+    expect(resolveRelayMachineUrl('k3x9', 'http://127.0.0.1:5183')).toBe(
+      'ws://127.0.0.1:5183/__relay/k3x9/machine'
+    );
+  });
+
+  test('reads the credentials of a machine paired before the relay, leaving its tunnel fields behind', () => {
+    const paired = {
+      instanceId: 'studio000001',
+      machineToken: 'machine',
+      tunnelToken: 'tunnel',
+      tunnelHost: 't-studio000001.shinsa.dev',
+      connectKey: 'key',
+    };
+    expect(parseMachineCredentials(JSON.stringify(paired))).toEqual(
+      Option.some({ instanceId: 'studio000001', machineToken: 'machine', connectKey: 'key' })
+    );
+    expect(Option.isNone(parseMachineCredentials(JSON.stringify({ instanceId: 'studio000001' })))).toBe(true);
   });
 
   test('gives a webhook one stable URL on app.shinsa.dev', () => {
@@ -139,8 +166,6 @@ describe('the remote contract schemas', () => {
     const credentials = {
       instanceId: 'studio000001',
       machineToken: 'machine',
-      tunnelToken: 'tunnel',
-      tunnelHost: 't-studio000001.shinsa.dev',
       connectKey: 'key',
     };
     const decodePoll = Schema.decodeUnknownSync(PairPollResponse);
