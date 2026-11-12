@@ -312,6 +312,37 @@ describe('the CI stage', () => {
     );
   });
 
+  it('marks a CI check that fails on the base branch too, and holds a required one as failed', () => {
+    const inherited = (name: string, required: boolean | null): CiRun => ({
+      name,
+      status: 'failure',
+      required,
+      url: null,
+      failsOnBase: true,
+    });
+    const rows = (base?: string) =>
+      resolveChecksView(
+        { repos: {}, evidence: {}, gates: {} },
+        createTask({
+          id: 'p',
+          pullRequest: createPullRequest({
+            number: 1,
+            checks: 'failing',
+            ...(base ? { base } : {}),
+            checkRuns: [RUNS[0] as CiRun, inherited('docs', false), inherited('deploy', true)],
+          }),
+        })
+      )?.stages[0];
+    const stage = rows('main');
+    expect(stage?.rows.map((row) => [row.label, row.state, row.note])).toEqual([
+      ['build', 'passed', null],
+      ['docs', 'fails_on_base', 'Fails on main too, so it does not block'],
+      ['deploy', 'failed', 'Fails on main too, so the merge waits until it passes there'],
+    ]);
+    expect(stage?.summary).toBe('1 of 3 failed');
+    expect(rows()?.rows[1]?.note).toBe('Fails on the base branch too, so it does not block');
+  });
+
   it('leads the summary with Building when both stages share its status', () => {
     const subject = task({
       checkResults: [
