@@ -73,6 +73,14 @@ export const ContextNode = Schema.Struct({
 });
 export type ContextNode = typeof ContextNode.Type;
 
+const CheckRollup = Schema.NullOr(
+  Schema.Struct({ contexts: Schema.Struct({ nodes: Schema.Array(ContextNode) }) })
+);
+
+const BaseRef = Schema.Struct({
+  target: Schema.NullOr(Schema.Struct({ statusCheckRollup: Schema.optional(CheckRollup) })),
+});
+
 export const PullRequestDetailsPull = Schema.Struct({
   author: Schema.NullOr(Login),
   mergeQueueEntry: Schema.NullOr(
@@ -83,13 +91,12 @@ export const PullRequestDetailsPull = Schema.Struct({
     nodes: Schema.Array(
       Schema.Struct({
         commit: Schema.Struct({
-          statusCheckRollup: Schema.NullOr(
-            Schema.Struct({ contexts: Schema.Struct({ nodes: Schema.Array(ContextNode) }) })
-          ),
+          statusCheckRollup: CheckRollup,
         }),
       })
     ),
   }),
+  baseRef: Schema.optional(Schema.NullOr(BaseRef)),
   comments: Comments,
   reviews: Schema.Struct({ totalCount: Schema.Number, nodes: Schema.Array(ReviewNode) }),
   reviewThreads: Schema.Struct({ totalCount: Schema.Number, nodes: Schema.Array(ThreadNode) }),
@@ -171,7 +178,7 @@ export const MEANINGFUL_REVIEWS = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DIS
 
 const COMMENT_FIELDS = 'totalCount nodes{id author{login __typename} createdAt lastEditedAt body url}';
 
-export const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){viewer{login} repository(owner:$owner,name:$name){pullRequest(number:$number){author{login} mergeQueueEntry{state position} autoMergeRequest{enabledAt} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion detailsUrl isRequired(pullRequestNumber:$number)} ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}} comments(last:100){${COMMENT_FIELDS}} reviews(last:100){totalCount nodes{id author{login __typename} submittedAt lastEditedAt state body url}} reviewThreads(first:100){totalCount nodes{id isResolved isOutdated path comments(last:50){${COMMENT_FIELDS}}}} timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}`;
+export const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){viewer{login} repository(owner:$owner,name:$name){pullRequest(number:$number){author{login} mergeQueueEntry{state position} autoMergeRequest{enabledAt} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion detailsUrl isRequired(pullRequestNumber:$number)} ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}} baseRef{target{... on Commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion} ... on StatusContext{context state}}}}}}} comments(last:100){${COMMENT_FIELDS}} reviews(last:100){totalCount nodes{id author{login __typename} submittedAt lastEditedAt state body url}} reviewThreads(first:100){totalCount nodes{id isResolved isOutdated path comments(last:50){${COMMENT_FIELDS}}}} timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}`;
 
 export const PULL_REQUEST_FIELDS =
   'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup,additions,deletions,changedFiles';

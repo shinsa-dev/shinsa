@@ -53,13 +53,29 @@ export function resolveCheckRuns(nodes: readonly ContextNode[]): CiRun[] {
   }));
 }
 
+const FAILED_RUN: ReadonlySet<PullRequestCheckStatus> = new Set(['failure', 'cancelled', 'action_required']);
+
+function isFailedRun(check: CiRun) {
+  return FAILED_RUN.has(check.status);
+}
+
 export function resolveCheckRunsState(checks: readonly CiRun[]): CiState {
   if (checks.length === 0) return 'none';
-  if (checks.some((check) => ['failure', 'cancelled', 'action_required'].includes(check.status)))
-    return 'failing';
+  if (checks.some(isFailedRun)) return 'failing';
   const required = checks.filter((check) => check.required === true);
   const gate = required.length > 0 ? required : checks;
   return gate.some((check) => check.status === 'pending') ? 'pending' : 'passing';
+}
+
+function markFailsOnBase(checks: readonly CiRun[], base: readonly ContextNode[] | null): CiRun[] {
+  const failing = new Set(
+    resolveCheckRuns(base ?? [])
+      .filter(isFailedRun)
+      .map((check) => check.name)
+  );
+  return checks.map((check) =>
+    isFailedRun(check) && failing.has(check.name) ? { ...check, failsOnBase: true } : check
+  );
 }
 
 function isBot(author: Login | null) {
@@ -152,7 +168,8 @@ export function serializePullRequest(
   );
   const unresolved = threads.length;
   const contexts = pull?.commits.nodes.at(-1)?.commit.statusCheckRollup?.contexts.nodes ?? null;
-  const checkRuns = contexts ? resolveCheckRuns(contexts) : null;
+  const base = pull?.baseRef?.target?.statusCheckRollup?.contexts.nodes ?? null;
+  const checkRuns = contexts ? markFailsOnBase(resolveCheckRuns(contexts), base) : null;
   return {
     number: view.number,
     url: view.url,
