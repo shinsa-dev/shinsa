@@ -19,7 +19,7 @@ export const BrowserSignInInput = HandOverRecord({
   reason: Required(BROWSER_SIGN_IN_LIMITS.reason),
 });
 
-export const SIGN_IN_CHECK_FAILURES = [
+const SIGN_IN_CHECK_FAILURES = [
   'not_installed',
   'launch_failed',
   'signing_in',
