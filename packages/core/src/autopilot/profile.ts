@@ -15,6 +15,7 @@ import {
   type AutopilotProfile,
   type AutopilotScoredKind,
   type AutopilotTally,
+  AUTOPILOT_SCORE_LIMITS,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
 
@@ -146,6 +147,9 @@ export function recordAutopilotDecisions(
   return {
     total: current.total + decisions.length,
     decisions: [...current.decisions, ...decisions].slice(-AUTOPILOT_PROFILE_LIMITS.kept),
+    scored: [...current.scored, ...decisions.filter((decision) => decision.guess !== null)].slice(
+      -AUTOPILOT_SCORE_LIMITS.window
+    ),
     tallies: [...tallies.values()].slice(-AUTOPILOT_PROFILE_LIMITS.tallies),
   };
 }

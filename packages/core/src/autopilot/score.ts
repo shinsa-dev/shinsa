@@ -1,7 +1,6 @@
 import type { ShinsaState } from '../state/project.ts';
 import {
   AUTOPILOT_SCORE_LIMITS,
-  type AutopilotDecision,
   type AutopilotDecisionAnswer,
   type AutopilotScore,
   type AutopilotVerdict,
@@ -18,13 +17,9 @@ export function isAutopilotAgreement(guess: AutopilotVerdict, answer: AutopilotD
   return AGREEING_VERDICT[answer] === guess;
 }
 
-function isScored(decision: AutopilotDecision) {
-  return decision.guess !== null;
-}
-
 export function resolveAutopilotScore(state: Pick<ShinsaState, 'autopilotProfile'>): AutopilotScore {
   const profile = state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE;
-  const scored = profile.decisions.filter(isScored).slice(-AUTOPILOT_SCORE_LIMITS.window);
+  const { scored } = profile;
   const agreed = scored.filter(
     (decision) => decision.guess !== null && isAutopilotAgreement(decision.guess, decision.answer)
   ).length;

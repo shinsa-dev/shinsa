@@ -1030,6 +1030,7 @@ describe('Autopilot judges each gate', () => {
       type: 'merge',
       autopilotHeld: 'Your edits are not pushed yet.',
     });
+    expect(harness.openGate(taskId).autopilotGuess).toBeUndefined();
     expectMergeWaits(harness, taskId);
   });
 });
@@ -1102,6 +1103,15 @@ describe('Autopilot guesses at what it brings to you', () => {
         shadow: false,
       }).events
     ).toEqual([]);
+  });
+
+  test('asks for no guess on a merge only a merge block holds, such as a review you approved yourself', () => {
+    const { harness, taskId } = reachMerge({ policy: { gates: ['plans'] } });
+    const gate = mergeGate(harness, taskId);
+    expect(gate).toMatchObject({ status: 'open', autopilotHeld: 'You approved the review yourself.' });
+    const guesses = harness.effectsOf('autopilot.judge').filter((effect) => effect.gateId === gate?.id);
+    expect(guesses).toHaveLength(0);
+    expect(gate?.autopilotGuess).toBeUndefined();
   });
 
   test('asks for no guess on an agent question or while Autopilot is off', () => {

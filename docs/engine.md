@@ -2177,10 +2177,10 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   through as it was, and Settings shows it as What it learned.
 - **Your decision profile** (`autopilot/profile.ts`, `state.autopilotProfile`). Every decision you make, whether
   Autopilot touched the gate or not, is kept: each answer on a plan, question, review, merge or your OK gate, each
-  review finding you mark fix or dismiss, and each suggested task you accept or dismiss
+  review finding you mark fix or dismiss, and each suggested task you accept, dismiss or keep in its task
   (`listGateDecisionDrafts`, recorded from `decide/lessons.ts` as `autopilot.decided {decisions}`). An
   `AutopilotDecision` keeps its kind (`AutopilotDecisionKind`), your answer (`AutopilotDecisionAnswer`: `approved`,
-  `revised`, `rejected`, `replied`, `fixed`, `dismissed` or `accepted`), the project, the reviewer's risk, the plan's
+  `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted` or `kept`), the project, the reviewer's risk, the plan's
   scope, whether the task was urgent or filed by a watchdog, whether Autopilot had brought it to you (`touched`),
   its guess (below) and your words (280 characters). Nothing an agent or a schedule does on your behalf counts, nor
   a guest's answers on a handed-off task. The profile keeps the last 200 decisions, their total and counts per kind,
@@ -2193,8 +2193,11 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
   stored on the gate (`autopilot.guessed`, `Gate.autopilotGuess`) and acts on nothing. A gate it judged and then
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
-  Your answer is kept with the guess (`AutopilotDecision.guess`), and `resolveAutopilotScore` reads the last 100
-  scored decisions (`AUTOPILOT_SCORE_LIMITS`): approving agrees with `act`, changing or rejecting with `forward`;
+  A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
+  guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
+  (`AutopilotDecision.guess`), and the profile keeps the last 100 scored decisions apart from the other 200
+  (`AutopilotProfile.scored`), so findings and questions never push them out; `resolveAutopilotScore` reads them
+  (`AUTOPILOT_SCORE_LIMITS`): approving agrees with `act`, changing or rejecting with `forward`;
   questions are not scored, since a reply has no yes or no. It suggests `most` once at least 50 are scored and 9 in
   10 agree, `balanced` otherwise; it never changes your level, which moves only when you choose one.
 - **Suggested tasks** (`suggestions` gate, off by default). Each new suggested task is weighed when an agent

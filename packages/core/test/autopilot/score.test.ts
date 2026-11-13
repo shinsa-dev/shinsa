@@ -93,4 +93,24 @@ describe('the Autopilot score', () => {
       ready: true,
     });
   });
+
+  test('keeps scored guesses apart, so findings and questions never push them out', () => {
+    const unscored = (kind: AutopilotDecision['kind']) => ({ ...decision(null), kind });
+    let profile = recordAutopilotDecisions(undefined, []);
+    for (let review = 0; review < 100; review += 1) {
+      profile = recordAutopilotDecisions(profile, [
+        { ...decision('act'), kind: 'review' },
+        ...Array.from({ length: 4 }, () => unscored('finding')),
+        unscored('question'),
+      ]);
+    }
+    expect(profile.decisions.length).toBeLessThan(600);
+    expect(resolveAutopilotScore({ autopilotProfile: profile })).toMatchObject({
+      learned: 600,
+      scored: 100,
+      agreed: 100,
+      ready: true,
+      suggested: 'most',
+    });
+  });
 });

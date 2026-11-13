@@ -156,6 +156,7 @@ export const AUTOPILOT_DECISION_ANSWERS = [
   'fixed',
   'dismissed',
   'accepted',
+  'kept',
 ] as const;
 
 export type AutopilotDecisionAnswer = (typeof AUTOPILOT_DECISION_ANSWERS)[number];
@@ -188,6 +189,7 @@ export interface AutopilotTally {
 export interface AutopilotProfile {
   total: number;
   decisions: AutopilotDecision[];
+  scored: AutopilotDecision[];
   tallies: AutopilotTally[];
 }
 
@@ -199,7 +201,7 @@ export const AUTOPILOT_PROFILE_LIMITS = {
   summary: 1200,
 } as const;
 
-export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = { total: 0, decisions: [], tallies: [] };
+export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = { total: 0, decisions: [], scored: [], tallies: [] };
 
 export const AUTOPILOT_SCORED_KINDS = [
   'plan',

@@ -1166,7 +1166,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `autopilot.judging` | Autopilot asked for a judgment on a gate (`gateId`) |
 | `autopilot.forwarded` | Autopilot brought a gate to you (`gateId`, `reason`, `teaches`) |
 | `autopilot.guessed` | Autopilot's background guess at a gate it left to you (`gateId`, `verdict`) |
-| `autopilot.decided` | your decisions were kept in your profile (`decisions`, each an `AutopilotDecision`; `state.autopilotProfile`, the last 200 with counts) |
+| `autopilot.decided` | your decisions were kept in your profile (`decisions`, each an `AutopilotDecision`; `state.autopilotProfile`, the last 200 with counts and the last 100 scored apart in `scored`) |
 | `autopilot.learned` | lessons from your answer were kept (`lessons`, each an `AutopilotLesson`; `state.autopilotLessons`, the last 50) |
 | `autopilot.seen` | you marked what Autopilot did at these gates seen (`gateIds`) |
 | `task.escalated` | Autopilot sent the urgent change to your team (`reason`, `handoff`; sets `Task.escalation`) |

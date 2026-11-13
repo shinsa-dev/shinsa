@@ -144,6 +144,7 @@ export function applyAutopilotMerge(decider: Decider, gate: Gate) {
 interface Refusal {
   reason: string;
   teaches: boolean;
+  guesses: boolean;
 }
 
 function forward(decider: Decider, gateId: string, { reason, teaches }: Refusal) {
@@ -184,12 +185,12 @@ function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): 
     decider.context.now,
     gate.escalation !== undefined
   ).limits;
-  if (!act.allowed) return { reason: act.reason, teaches: !act.setting };
+  const block = kind === 'merge' ? resolveMergeRefusal(decider, task) : null;
+  const guesses = block === null;
+  if (!act.allowed) return { reason: act.reason, teaches: !act.setting, guesses };
   const lesson = resolveLessonLimit(decider.state, kind);
-  if (!lesson.allowed) return { reason: lesson.reason, teaches: true };
-  if (kind !== 'merge') return null;
-  const block = resolveMergeRefusal(decider, task);
-  return block === null ? null : { reason: MERGE_BLOCK_TEXT[block], teaches: false };
+  if (!lesson.allowed) return { reason: lesson.reason, teaches: true, guesses };
+  return block === null ? null : { reason: MERGE_BLOCK_TEXT[block], teaches: false, guesses };
 }
 
 export function askAutopilot(decider: Decider, gate: Gate) {
@@ -203,7 +204,8 @@ export function askAutopilot(decider: Decider, gate: Gate) {
     return;
   }
   const firstTime = gate.autopilotHeld === undefined;
-  if (forward(decider, gate.id, refusal) && firstTime) requestShadowJudgment(decider, gate, kind);
+  if (forward(decider, gate.id, refusal) && firstTime && refusal.guesses)
+    requestShadowJudgment(decider, gate, kind);
 }
 
 const NOT_SURE = 'Autopilot was not sure what to answer, so the question waits for you.';
@@ -234,15 +236,19 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
   const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason);
   const refusal = resolveAutopilotPolicy(decider.state.settings).enabled
     ? resolveRefusal(decider, gate, kind)
-    : { reason: 'Autopilot is off.', teaches: false };
+    : { reason: 'Autopilot is off.', teaches: false, guesses: true };
   if (refusal !== null) {
     forward(decider, gate.id, refusal);
-    recordGuess(decider, gate, kind, command.verdict);
+    if (refusal.guesses) recordGuess(decider, gate, kind, command.verdict);
     return;
   }
   if (command.verdict === 'forward') {
     recordGuess(decider, gate, kind, 'forward');
-    forward(decider, gate.id, { reason: reason || 'Autopilot judged this needs you.', teaches: true });
+    forward(decider, gate.id, {
+      reason: reason || 'Autopilot judged this needs you.',
+      teaches: true,
+      guesses: true,
+    });
     return;
   }
   const why = reason || NO_REASON;
@@ -260,7 +266,7 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
     case 'question': {
       const reply = clip(command.reply, AUTOPILOT_JUDGMENT_LIMITS.reply);
       if (reply) answerGateForYou(decider, gate, 'reply', reply, why);
-      else forward(decider, gate.id, { reason: NOT_SURE, teaches: true });
+      else forward(decider, gate.id, { reason: NOT_SURE, teaches: true, guesses: true });
       return;
     }
   }

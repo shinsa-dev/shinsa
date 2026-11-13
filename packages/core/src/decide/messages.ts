@@ -34,6 +34,7 @@ import { queueMessageForWake } from './delegations.ts';
 import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { requestIteration } from './iterations.ts';
+import { recordDecisions } from './lessons.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
 import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
@@ -389,6 +390,9 @@ export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.
   const task = decider.task(command.taskId);
   assertTakesMessages(task);
   const resting = isTaskResting(task) || task.stage === 'answered';
+  recordDecisions(decider, [
+    { task, gate: null, kind: 'suggestion', answer: 'kept', note: suggestion.title },
+  ]);
   decider.emit({
     type: 'suggestion.settled',
     taskId: task.id,

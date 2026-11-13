@@ -165,6 +165,7 @@ export function createAutopilotProfile(parts: {
   return {
     total: decisions.length,
     decisions,
+    scored: decisions.filter((entry) => entry.guess !== null),
     tallies: (parts.tallies ?? []).map((tally) => ({
       ...tally,
       key: tally.kind,

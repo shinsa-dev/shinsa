@@ -96,6 +96,21 @@ describe('suggested tasks', () => {
     expect(harness.task(taskId).activity.at(-1)?.text).toBe('Added the suggested task “Retry the export”');
   });
 
+  test('accepting, dismissing or keeping one in its task is kept in your decision profile', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    suggest(harness, taskId, [suggestion('Cache the session'), suggestion('Retry the export')]);
+    const [first, second] = harness.task(taskId).suggestions ?? [];
+    harness.send({ type: 'suggestion.dismiss', taskId, suggestionId: first?.id ?? '' });
+    harness.send({ type: 'suggestion.keep', taskId, suggestionId: second?.id ?? '' });
+    expect(
+      harness.state.autopilotProfile.decisions.map((entry) => [entry.kind, entry.answer, entry.note])
+    ).toEqual([
+      ['suggestion', 'dismissed', 'Cache the session'],
+      ['suggestion', 'kept', 'Retry the export'],
+    ]);
+  });
+
   test('dismissing one closes it, and a closed suggestion cannot be decided again', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
