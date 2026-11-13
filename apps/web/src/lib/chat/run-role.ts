@@ -1,6 +1,7 @@
 import {
   describeCount,
   type ChatEntry,
+  resolveModelLabel,
   type FixFocus,
   type Run,
   type RunPurpose,
@@ -26,6 +27,10 @@ export const RUN_ROLE: Record<Run['role'], RoleMark> = {
   investigator: { name: 'Investigator', icon: 'IconMagnifyingGlass' },
   researcher: { name: 'Researcher', icon: 'IconBook' },
 };
+
+export function resolveRunModelLabel(run: Pick<Run, 'model'>) {
+  return run.model ? resolveModelLabel(run.model) : null;
+}
 
 const FIX_HEADLINE: Record<FixFocus, { live: string; done: string }> = {
   checks: { live: 'Fixing the failing checks', done: 'Fixed the failing checks' },

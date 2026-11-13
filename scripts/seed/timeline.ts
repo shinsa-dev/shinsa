@@ -3,6 +3,7 @@ import {
   type PipelineStep,
   type PlanDocument,
   type PullRequest,
+  type RunPurpose,
   type RunRole,
   type TaskStage,
   isDecisionGate,
@@ -179,8 +180,9 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
   }
 }
 
-function resolveRunModel(task: SeedTask, role: RunRole) {
+function resolveRunModel(task: SeedTask, role: RunRole, purpose: RunPurpose | null) {
   if (task.provider === 'codex') return 'gpt-6-astra';
+  if (purpose === 'plan' && task.size === 'large') return 'claude-fable-5-1';
   return role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
 }
 
@@ -371,7 +373,7 @@ function pushTaskRun(task: SeedTask, index: number, progress: SeedProgress, push
       ...(run.purpose ? { purpose: run.purpose } : {}),
       ...resolveRunPhase(progress, run),
       provider: task.provider ?? 'claude',
-      model: resolveRunModel(task, run.role),
+      model: resolveRunModel(task, run.role, run.purpose ?? null),
       sessionId: agent ? resolveAgentSession(task.id) : `session-${runId}`,
       sessionProvider: task.provider ?? 'claude',
       ...(agent && progress.agentRuns > 0 ? { resume: true } : {}),

@@ -369,6 +369,19 @@ describe('folding at a step boundary', () => {
     expect(isSessionCacheWarm(context({ ...run, cacheExpiresAt: 9_999 }, []), 's', 0)).toBe(false);
   });
 
+  test('a cache written on another model is cold for this run, so a step on a new model folds first', () => {
+    const run = createRun({ id: 'r2', sessionId: 's', startedAt: 20, model: 'opus' });
+    const plan = createRun({
+      id: 'r1',
+      sessionId: 's',
+      startedAt: 10,
+      cacheExpiresAt: 1_000,
+      model: 'fable',
+    });
+    expect(isSessionCacheWarm(context(run, [plan]), 's', 500)).toBe(false);
+    expect(isSessionCacheWarm(context(run, [{ ...plan, model: 'opus' }]), 's', 500)).toBe(true);
+  });
+
   test('an eunoe fold or cut keeps the session’s first message, so the house rules are not sent again; Claude Code’s own summary drops them', async () => {
     const rules = resolveHouseRules('agent');
     const run = createRun({ id: 'run-3', sessionId: 'session-1', role: 'agent', purpose: 'build' });

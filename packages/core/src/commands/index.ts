@@ -1,4 +1,5 @@
 import type {
+  ModelRoomReading,
   BundleConflict,
   CheckEvidence,
   ConfigProblem,
@@ -326,6 +327,7 @@ type SystemCommand =
       endingPace: number | null;
       resetEndsAt: number | null;
     }
+  | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand

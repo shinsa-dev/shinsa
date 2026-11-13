@@ -158,6 +158,7 @@ const FEATURE_ROUTES = {
     'POST /api/browser/projects/([^/]+)/sign-out',
   ],
   'slack-channel-triggers': ['GET /api/slack/channels'],
+  'models.routing': [],
   'accounts.provider_choice': ['POST /api/accounts/provider'],
 };
 
