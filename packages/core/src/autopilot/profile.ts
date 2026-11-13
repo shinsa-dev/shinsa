@@ -1,13 +1,16 @@
+import { Option } from 'effect';
 import type { FindingVerdict } from '../domain/schema.ts';
 import type { Gate, GateDecision, Task } from '../domain/types.ts';
 import type { ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { isUrgentTask } from './limits.ts';
 import {
+  AUTOPILOT_DECISION_ANSWERS,
   AUTOPILOT_PROFILE_LIMITS,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
   type AutopilotDecisionKind,
+  type AutopilotGateKind,
   type AutopilotProfile,
   type AutopilotTally,
   EMPTY_AUTOPILOT_PROFILE,
@@ -141,4 +144,93 @@ export function listAutopilotTallies(
   kind: AutopilotDecisionKind
 ): AutopilotTally[] {
   return (state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE).tallies.filter((tally) => tally.kind === kind);
+}
+
+const GATE_DECISION_KINDS: Record<AutopilotGateKind, readonly AutopilotDecisionKind[]> = {
+  plan: ['plan'],
+  question: ['question'],
+  review: ['review', 'finding'],
+  merge: ['merge'],
+};
+
+const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
+  plan: 'plans',
+  question: 'agent questions',
+  review: 'reviews',
+  merge: 'merges',
+  proposal: 'proposals for your OK',
+  finding: 'review findings',
+  suggestion: 'suggested tasks',
+};
+
+function describeTally(tally: AutopilotTally) {
+  const answers = AUTOPILOT_DECISION_ANSWERS.filter((answer) => (tally.answers[answer] ?? 0) > 0)
+    .map((answer) => `${answer} ${tally.answers[answer]}`)
+    .join(', ');
+  return `${tally.total} decided: ${answers}`;
+}
+
+function selectTally(
+  tallies: readonly AutopilotTally[],
+  kind: AutopilotDecisionKind,
+  projectId: string | null,
+  risk: ReviewRating | null
+) {
+  return Option.fromNullishOr(tallies.find((tally) => tally.key === resolveTallyKey(kind, projectId, risk)));
+}
+
+function listKindLines(
+  profile: AutopilotProfile,
+  kind: AutopilotDecisionKind,
+  context: AutopilotProfileContext
+) {
+  const all = selectTally(profile.tallies, kind, null, null);
+  if (Option.isNone(all)) return [];
+  const lines = [`- All ${KIND_NOUN[kind]}: ${describeTally(all.value)}`];
+  if (context.projectId) {
+    const project = selectTally(profile.tallies, kind, context.projectId, null);
+    if (Option.isSome(project)) lines.push(`- In this project: ${describeTally(project.value)}`);
+  }
+  if (context.risk) {
+    const risk = selectTally(profile.tallies, kind, null, context.risk);
+    if (Option.isSome(risk)) lines.push(`- At ${context.risk} risk: ${describeTally(risk.value)}`);
+  }
+  return lines;
+}
+
+function listNoteLines(profile: AutopilotProfile, kinds: readonly AutopilotDecisionKind[]) {
+  return profile.decisions
+    .filter((decision) => decision.note !== null && kinds.includes(decision.kind))
+    .slice(-AUTOPILOT_PROFILE_LIMITS.notes)
+    .reverse()
+    .map((decision) => `- ${KIND_NOUN[decision.kind]}, ${decision.answer}: “${decision.note}”`);
+}
+
+function fitToBudget(lines: readonly string[]) {
+  const fitted: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    if (used + line.length + 1 > AUTOPILOT_PROFILE_LIMITS.summary) break;
+    fitted.push(line);
+    used += line.length + 1;
+  }
+  return fitted;
+}
+
+export interface AutopilotProfileContext {
+  projectId: string | null;
+  risk: ReviewRating | null;
+}
+
+export function listAutopilotProfileLines(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  gate: AutopilotGateKind,
+  context: AutopilotProfileContext
+): string[] {
+  const profile = state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE;
+  const kinds = GATE_DECISION_KINDS[gate];
+  const counts = kinds.flatMap((kind) => listKindLines(profile, kind, context));
+  if (counts.length === 0) return [];
+  const notes = listNoteLines(profile, kinds);
+  return fitToBudget([...counts, ...(notes.length > 0 ? ['Their recent words:', ...notes] : [])]);
 }

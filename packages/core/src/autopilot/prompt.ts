@@ -3,6 +3,7 @@ import type { Gate, GateType, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listAutopilotLessonLines } from './lessons.ts';
 import { resolveAutopilotFacts } from './limits.ts';
+import { listAutopilotProfileLines } from './profile.ts';
 import { AUTOPILOT_JUDGMENT_LIMITS, type AutopilotFacts, type AutopilotGateKind } from './schema.ts';
 
 export const AUTOPILOT_JUDGE_SYSTEM = [
@@ -16,6 +17,7 @@ export const AUTOPILOT_JUDGE_SYSTEM = [
   'To answer an agent’s question, write the reply the developer would give, in plain words, in `reply`; otherwise leave `reply` empty.',
   `Write \`reason\` as one plain sentence the developer reads later, at most ${AUTOPILOT_JUDGMENT_LIMITS.reason} characters.`,
   'Weigh what the developer taught you at earlier decisions like this one: do what they approved, bring what they changed.',
+  'Weigh how they usually decide this kind of point, in this project and at this risk: the counts and their recent words are their habits.',
   'Answer with one JSON object and nothing else.',
 ].join('\n');
 
@@ -68,11 +70,17 @@ function describeLessons(lessons: readonly string[]) {
   return ['', 'What the developer taught you at earlier ones, most recent first:', ...lessons];
 }
 
+function describeProfile(profile: readonly string[]) {
+  if (profile.length === 0) return [];
+  return ['', 'How the developer decides points like this one, with or without you:', ...profile];
+}
+
 export function resolveAutopilotJudgePrompt(
   task: Task,
   gate: Gate,
   facts: AutopilotFacts,
-  lessons: readonly string[] = []
+  lessons: readonly string[] = [],
+  profile: readonly string[] = []
 ) {
   const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
   return [
@@ -88,6 +96,7 @@ export function resolveAutopilotJudgePrompt(
     clip(gate.body, limit * 2),
     ...describeChoices(gate),
     ...describeLessons(lessons),
+    ...describeProfile(profile),
   ]
     .filter((line, index, lines) => line !== '' || lines[index - 1] !== '')
     .join('\n');
@@ -111,9 +120,13 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
   return Option.map(selectJudgedGateKind(gate), (kind) => {
     const facts = resolveAutopilotFacts(state, task, kind, gate.openedAt, now);
     const lessons = listAutopilotLessonLines(state, kind);
+    const profile = listAutopilotProfileLines(state, kind, {
+      projectId: task.projectId ?? null,
+      risk: facts.risk,
+    });
     return {
       system: AUTOPILOT_JUDGE_SYSTEM,
-      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons),
+      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, profile),
     };
   });
 }

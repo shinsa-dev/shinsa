@@ -3,12 +3,15 @@ import {
   AUTOPILOT_PROFILE_LIMITS,
   type AutopilotDecision,
   EMPTY_AUTOPILOT_PROFILE,
+  listAutopilotProfileLines,
   listAutopilotTallies,
   type ReviewFinding,
   type ReviewRatings,
   recordAutopilotDecisions,
 } from '../../src/index.ts';
 import { buildAll, createHarness, createTask, type Harness, PASSING } from '../harness.ts';
+
+const NO_CONTEXT = { projectId: null, risk: null };
 
 const HIGH_LOW: ReviewRatings = { confidence: 'high', risk: 'low' };
 
@@ -174,5 +177,59 @@ describe('the profile', () => {
     expect(profile.tallies).toHaveLength(AUTOPILOT_PROFILE_LIMITS.tallies);
     expect(profile.tallies.slice(-2).map((tally) => tally.key)).toEqual(['plan||', 'plan|p0|']);
     expect(profile.tallies.some((tally) => tally.key === 'plan|p1|')).toBe(false);
+  });
+});
+
+describe('the profile summary for a judgment', () => {
+  const profile = (learned: AutopilotDecision[]) => ({
+    autopilotProfile: recordAutopilotDecisions(undefined, learned),
+  });
+
+  test('is empty until you decided that kind of point', () => {
+    expect(
+      listAutopilotProfileLines({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'plan', NO_CONTEXT)
+    ).toEqual([]);
+    const state = profile([decision({ kind: 'merge' })]);
+    expect(listAutopilotProfileLines(state, 'plan', NO_CONTEXT)).toEqual([]);
+  });
+
+  test('counts the review and its findings overall, in this project and at this risk, then your recent words', () => {
+    const state = profile([
+      decision({ kind: 'review', answer: 'approved', projectId: 'p1', risk: 'low', note: 'first' }),
+      decision({ kind: 'review', answer: 'revised', projectId: 'p2', risk: 'high', note: 'second' }),
+      decision({ kind: 'finding', answer: 'dismissed', projectId: 'p1', risk: 'low', note: 'third' }),
+      decision({ kind: 'finding', answer: 'fixed', projectId: 'p1', risk: 'low', note: 'fourth' }),
+      decision({ kind: 'merge', answer: 'approved', note: 'not a review' }),
+    ]);
+    expect(listAutopilotProfileLines(state, 'review', { projectId: 'p1', risk: 'low' })).toEqual([
+      '- All reviews: 2 decided: approved 1, revised 1',
+      '- In this project: 1 decided: approved 1',
+      '- At low risk: 1 decided: approved 1',
+      '- All review findings: 2 decided: fixed 1, dismissed 1',
+      '- In this project: 2 decided: fixed 1, dismissed 1',
+      '- At low risk: 2 decided: fixed 1, dismissed 1',
+      'Their recent words:',
+      '- review findings, fixed: “fourth”',
+      '- review findings, dismissed: “third”',
+      '- reviews, revised: “second”',
+    ]);
+  });
+
+  test('leaves out a project or risk you never decided at, and words when there are none', () => {
+    const state = profile([decision({ kind: 'plan', answer: 'approved', projectId: 'p1', risk: 'low' })]);
+    expect(listAutopilotProfileLines(state, 'plan', { projectId: 'p9', risk: 'high' })).toEqual([
+      '- All plans: 1 decided: approved 1',
+    ]);
+  });
+
+  test('stays inside its budget', () => {
+    const long = 'x'.repeat(AUTOPILOT_PROFILE_LIMITS.summary / 2);
+    const state = profile(
+      Array.from({ length: 6 }, () => decision({ kind: 'question', answer: 'replied', note: long }))
+    );
+    const lines = listAutopilotProfileLines(state, 'question', NO_CONTEXT);
+    expect(lines.join('\n').length).toBeLessThanOrEqual(AUTOPILOT_PROFILE_LIMITS.summary);
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe('- All agent questions: 6 decided: replied 6');
   });
 });

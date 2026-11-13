@@ -5,7 +5,12 @@ export {
   resolveAutopilotLessonSummary,
   resolveLessonLimit,
 } from './lessons.ts';
-export { listAutopilotTallies, recordAutopilotDecisions } from './profile.ts';
+export {
+  type AutopilotProfileContext,
+  listAutopilotProfileLines,
+  listAutopilotTallies,
+  recordAutopilotDecisions,
+} from './profile.ts';
 export {
   isUrgentTask,
   resolveAutopilotFacts,

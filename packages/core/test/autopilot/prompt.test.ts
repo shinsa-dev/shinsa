@@ -6,6 +6,7 @@ import {
   type AutopilotFacts,
   type Gate,
   resolveAutopilotJudgePrompt,
+  recordAutopilotDecisions,
   selectAutopilotJudgeRequest,
   selectJudgedGateKind,
 } from '../../src/index.ts';
@@ -109,6 +110,27 @@ describe('the judge prompt', () => {
     ).toEndWith('Choices:\n- A');
   });
 
+  test('adds how you decide points like this one after the lessons', () => {
+    const { task, gate } = setup();
+    const prompt = resolveAutopilotJudgePrompt(
+      task,
+      gate,
+      FACTS,
+      ['- a lesson'],
+      ['- All agent questions: 1 decided']
+    );
+    expect(prompt).toEndWith(
+      [
+        'What the developer taught you at earlier ones, most recent first:',
+        '- a lesson',
+        '',
+        'How the developer decides points like this one, with or without you:',
+        '- All agent questions: 1 decided',
+      ].join('\n')
+    );
+    expect(resolveAutopilotJudgePrompt(task, gate, FACTS)).not.toContain('with or without you');
+  });
+
   test('cuts a long request and body to their budgets', () => {
     const { task, gate } = setup();
     const long = 'x'.repeat(AUTOPILOT_JUDGMENT_LIMITS.context * 3);
@@ -135,5 +157,34 @@ describe('the judge request', () => {
     const other = { ...harness.state, gates: { [gate.id]: { ...gate, type: 'failure' as const } } };
     expect(Option.isNone(selectAutopilotJudgeRequest(other, gate.id, harness.now))).toBe(true);
     expect(Option.isNone(selectJudgedGateKind({ ...gate, type: 'secret' }))).toBe(true);
+  });
+
+  test('carries the summary of every plan you decided', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true } } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const gate = harness.openGate(taskId);
+    const learned = recordAutopilotDecisions(undefined, [
+      {
+        at: 1,
+        taskId: 'other',
+        gateId: null,
+        kind: 'plan',
+        answer: 'revised',
+        projectId: null,
+        risk: null,
+        scope: null,
+        urgent: false,
+        watchdog: false,
+        touched: false,
+        note: 'Keep it smaller',
+      },
+    ]);
+    const state = { ...harness.state, autopilotProfile: learned };
+    const prompt = Option.getOrNull(selectAutopilotJudgeRequest(state, gate.id, harness.now))?.prompt;
+    expect(prompt).toContain('- All plans: 1 decided: revised 1');
+    expect(prompt).toContain('- plans, revised: “Keep it smaller”');
   });
 });

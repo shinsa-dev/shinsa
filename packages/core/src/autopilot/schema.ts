@@ -190,6 +190,8 @@ export const AUTOPILOT_PROFILE_LIMITS = {
   kept: 200,
   tallies: 300,
   note: 280,
+  notes: 3,
+  summary: 1200,
 } as const;
 
 export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = { total: 0, decisions: [], tallies: [] };
