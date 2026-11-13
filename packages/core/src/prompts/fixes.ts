@@ -1,6 +1,6 @@
 import { describeCount } from '../chat/text.ts';
-import { hasBlockingCiFailure, listInheritedCiFailures } from '../domain/ci.ts';
 import { isBlockingCheck } from '../domain/checks.ts';
+import { hasBlockingCiFailure, listInheritedCiFailures } from '../domain/ci.ts';
 import type { PullRequest, PullRequestWatchChange, ReviewComment } from '../domain/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import { describeLineComments } from './comments.ts';
