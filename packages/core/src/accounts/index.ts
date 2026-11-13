@@ -12,6 +12,7 @@ export {
   selectNextAccount,
 } from './pick.ts';
 export { resolvePlanKey, resolvePlanLabel } from './plan.ts';
+export { isModelRoomMoved, listModelRoom, ROUTED_FAMILIES } from './room.ts';
 export {
   isModelMarkFor,
   listRelevantWindows,

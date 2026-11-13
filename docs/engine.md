@@ -119,6 +119,30 @@ empty answer is not kept, so the next read asks again; meanwhile the read serves
 list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
 default provider's list, the one setup's Model step offers.
 
+**Automatic.** A Claude role's model can be `auto` (`AUTO_MODEL`, "Automatic"), saved in `agentModels` like any other
+choice and offered first in every model picker, on its own above the providers' groups with the arrow-split icon and no
+hint, on an engine that announces `models.routing`. It only ever picks Claude models for a step. `startRun` resolves
+it when the step starts (`resolveStepModel` in `packages/core/src/agent-models/routing.ts`), so `run.model` is always
+a real model and replay gives the same one: a plan on a large task takes Fable then Opus, any other plan or step
+Opus then Sonnet (`MODEL_ROUTES`), so Fable never builds. Each step takes the first usable choice with at least 10%
+of its room left (`LOW_ROOM_PERCENT`), or else the usable one with the most room, so the preferred model comes back
+as soon as it has room again. A step reads the room of the account its run or task is bound to, when the record
+holds that account, and the pooled room otherwise, so a task bound to an account that spent Fable plans on Opus.
+The move from Fable's plan to Opus at build phase 1 folds to the round brief (Boundary folds). A cache written
+on another model never counts as warm (`isSessionCacheWarm`), so that first step on the new model always folds and
+writes only the brief into its cache, never the planning conversation. Quick jobs, the reviewer's own session and
+delegations are separate requests and sessions, so routing never touches the Agent's cache. A model is usable unless
+`state.modelRoom` says no signed-in, unpaused account can run its family (a family never recorded counts as usable).
+The account roster records that room (`usage.models_recorded`, `listModelRoom`: per Claude family, whether any account
+can run it, the most room any one account has left, and each signed-in account's own reading) on an accounts refresh
+when a family or one account's reading turns usable or spent or its room moves by 5 points (`isModelRoomMoved`); recording it re-checks waits on a model's own limit, so a step on
+Automatic waiting on Fable starts again on Opus. Everything that needs a concrete model before a step starts (the
+account list, the safe pace, delegations) reads `resolveAgentModel`, which gives the role's default for `auto`. The
+quick jobs are not routed: the classifier on Automatic answers on Sonnet, and the writer on Automatic writes with Codex
+first, on Codex's writer model, and falls back to Claude's Sonnet when Codex cannot answer (`resolveQuickProvider`,
+`AUTO_QUICK_PROVIDERS`), because Codex writes the better copy. Every step's header in the chat names the model it ran
+on beside its account (`resolveRunModelLabel`).
+
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
 
@@ -6778,8 +6802,8 @@ nothing before its turn is left as it is, and so is a step whose history is unde
 `foldFloor`) while its cache is still warm: there a fold would rewrite more of the cache than it saves, so the fold is
 dropped and the step reads its warm cache. Whether it is warm is the expiry the session's last run recorded when it
 ended (`resolveCacheExpiry`, the same reading idle compaction uses, kept on the run by `run.cached` so it survives a
-restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
-no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
+restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, when
+that run was on another model (a provider caches per model), or when no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
 first and writes only the folded prefix.
 
 *Routing a session* (`providers/claude/route.ts`). Each Claude session and idle compaction resolves a route before it

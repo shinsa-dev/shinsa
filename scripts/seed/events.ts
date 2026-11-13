@@ -27,6 +27,7 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
       ...createSettings(),
       taskUsageLimit: 10,
       autoPace: true,
+      agentModels: { agent: 'auto', reviewer: 'auto', answerer: 'auto' },
       autoPaceResets: true,
     },
   });
@@ -37,6 +38,14 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
     resetPace: 72,
     endingPace: 58,
     resetEndsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
+  });
+  push(NOW - HOUR, {
+    type: 'usage.models_recorded',
+    models: [
+      { family: 'fable', usable: true, left: 38, accounts: [] },
+      { family: 'opus', usable: true, left: 61, accounts: [] },
+      { family: 'sonnet', usable: true, left: 80, accounts: [] },
+    ],
   });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);

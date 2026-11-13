@@ -1,4 +1,4 @@
-import { resolveAgentFastMode, resolveAgentModel, resolveAgentProvider } from '@shinsa/core';
+import { resolveAgentFastMode, resolveAgentModel, resolveQuickProvider } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import type { JsonSchema } from '../providers/index.ts';
@@ -44,7 +44,7 @@ export class QuickCalls extends Context.Service<
                 fastMode: resolveAgentFastMode(settings, role),
                 ...(readFastMode ? { readFastMode } : {}),
               },
-              listQuickProviders(resolveAgentProvider(settings, role))
+              listQuickProviders(resolveQuickProvider(settings, role))
             ).pipe(Effect.map((result) => result.value))
           );
 

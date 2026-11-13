@@ -1,5 +1,6 @@
 import { Option } from 'effect';
-import { RUN_AGENT_ROLE, resolveAgentModel, resolveAgentProvider } from '../agent-models/index.ts';
+import { RUN_AGENT_ROLE, resolveAgentProvider } from '../agent-models/index.ts';
+import { resolveStepModel } from '../agent-models/routing.ts';
 import { quoteTitle } from '../chat/text.ts';
 import {
   describeHumanEdits,
@@ -361,7 +362,14 @@ export class Decider {
       ...(told ? { told } : {}),
       resume: resumeFrom !== null,
       provider: resolveAgentProvider(this.state.settings, RUN_AGENT_ROLE[role]),
-      model: resolveAgentModel(this.state.settings, RUN_AGENT_ROLE[role]),
+      model: resolveStepModel({
+        settings: this.state.settings,
+        room: this.state.modelRoom,
+        size: task.size,
+        role,
+        purpose,
+        account: account?.id ?? task.account?.id ?? null,
+      }),
       sessionId: resumeFrom?.sessionId ?? null,
       startedAt: this.context.now,
       endedAt: null,

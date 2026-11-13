@@ -10,6 +10,8 @@ import {
   isSharedMachine,
   listActiveRuns,
   listOpenGates,
+  isModelRoomMoved,
+  listModelRoom,
   listProviderPaces,
   type ProviderLogin,
   resolveAgentModel,
@@ -330,6 +332,23 @@ export class Accounts extends Context.Service<
         }
       });
 
+      const recordModelRoom = Effect.fn('Accounts.recordModelRoom')(function* (next: AccountsSnapshot) {
+        if (inspect) return;
+        const state = yield* engine.state;
+        const models = listModelRoom(next.accounts, state.settings, yield* Clock.currentTimeMillis);
+        if (!isModelRoomMoved(state.modelRoom, models)) return;
+        const key = models
+          .map((model) => `${model.family}=${model.usable ? (model.left ?? '?') : 'spent'}`)
+          .join(',');
+        yield* dispatch({ type: 'usage.models_recorded', models }, `usage-models:${key}:${state.seq}`).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning('[Accounts] Could not record the room each model has').pipe(
+              Effect.annotateLogs({ error: describeError(failure) })
+            )
+          )
+        );
+      });
+
       const changed = Effect.gen(function* () {
         if (yield* Ref.get(stopped)) return;
         const next = yield* snapshot;
@@ -339,6 +358,7 @@ export class Accounts extends Context.Service<
         for (const listener of yield* Ref.get(listeners)) yield* listener(next);
         yield* recordPlans(next.accounts);
         yield* recordPaces(next);
+        yield* recordModelRoom(next);
       });
 
       const subscribe = (listener: (snapshot: AccountsSnapshot) => Effect.Effect<void>) =>

@@ -22,6 +22,7 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  type RunAccount,
   type TaskOwner,
   type UserCommand,
   selectOpenIteration,
@@ -258,6 +259,7 @@ export function createTask(
     planFirst?: boolean;
     backlog?: boolean;
     owner?: TaskOwner;
+    account?: RunAccount;
   } = {}
 ) {
   const repoId = options.repoId ?? (Object.keys(harness.state.repos)[0] || registerRepo(harness));
@@ -272,6 +274,7 @@ export function createTask(
       stacksOn: options.stacksOn,
       planFirst: options.planFirst,
       backlog: options.backlog,
+      ...(options.account ? { account: options.account } : {}),
     },
     { actor: options.owner ?? null }
   );
