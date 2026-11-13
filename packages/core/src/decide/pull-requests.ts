@@ -20,6 +20,7 @@ import {
   type ShippingStepKind,
   type Task,
 } from '../domain/index.ts';
+import { parseGitHubSso, resolveGitHubSsoGate, resolveTaskGitHubOwner } from '../github/index.ts';
 import {
   resolveCodeFence,
   resolvePullRequestFixPrompt,
@@ -439,9 +440,15 @@ export function recordPullRequestReadFailure(
   if (failures !== task.pullRequestReadFailures) {
     decider.emit({ type: 'pull_request.read_failed', taskId: task.id, failures, detail: command.detail });
   }
-  if (failures < PULL_REQUEST_READ_FAILURE_LIMIT || !isShipping(task)) return;
+  const sso = parseGitHubSso(command.detail, resolveTaskGitHubOwner(decider.state, task));
+  if ((failures < PULL_REQUEST_READ_FAILURE_LIMIT && Option.isNone(sso)) || !isShipping(task)) return;
   if (hasMergeGate(decider, task.id) || listActiveRuns(decider.state, task.id).length > 0) return;
   recordWatch(decider, task.id, { ...watch, stopped: 'unreadable' }, []);
+  if (Option.isSome(sso)) {
+    const gate = resolveGitHubSsoGate(sso.value);
+    decider.hold(task.id, gate.title, gate.body, null, gate.cause, { githubSso: gate.githubSso });
+    return;
+  }
   decider.fail(
     task.id,
     'Could not read the pull request',

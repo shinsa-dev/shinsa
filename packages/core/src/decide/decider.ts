@@ -103,6 +103,7 @@ type GateDetails = Partial<
     | 'account'
     | 'secret'
     | 'browserSignIn'
+    | 'githubSso'
     | 'commit'
     | 'notes'
   >
@@ -457,10 +458,17 @@ export class Decider {
     this.withdrawGates(taskId, isPausingGate);
   }
 
-  #openFailureGate(taskId: string, title: string, detail: string, runId: string | null, cause?: GateCause) {
+  #openFailureGate(
+    taskId: string,
+    title: string,
+    detail: string,
+    runId: string | null,
+    cause?: GateCause,
+    details: GateDetails = {}
+  ) {
     this.openGate(taskId, 'failure', title, detail, {
       runId,
-      ...(cause ? { details: { cause } } : {}),
+      ...(cause ? { details: { ...details, cause } } : {}),
     });
   }
 
@@ -496,10 +504,17 @@ export class Decider {
     this.requestBriefing(taskId);
   }
 
-  hold(taskId: string, title: string, detail: string, runId: string | null = null, cause?: GateCause) {
+  hold(
+    taskId: string,
+    title: string,
+    detail: string,
+    runId: string | null = null,
+    cause?: GateCause,
+    details: GateDetails = {}
+  ) {
     if (isTaskSettled(this.task(taskId))) return;
     this.#stopForFailure(taskId);
-    this.#openFailureGate(taskId, title, detail, runId, cause);
+    this.#openFailureGate(taskId, title, detail, runId, cause, details);
   }
 
   progressed(taskId: string) {

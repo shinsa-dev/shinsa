@@ -21,6 +21,7 @@ import {
   type TaskShape,
   type TriageDecisions,
 } from '../domain/index.ts';
+import { parseGitHubSso, resolveGitHubSsoGate, resolveTaskGitHubOwner } from '../github/index.ts';
 import { resolveFocusProject } from '../queue/rank.ts';
 import { resolveNextHandle } from '../state/project.ts';
 import { findProject, findRepo } from '../state/queries.ts';
@@ -353,7 +354,23 @@ function isRepeatedFailure(decider: Decider, command: CommandOf<'effect.fail'>) 
   );
 }
 
+function holdGitHubSso(decider: Decider, command: CommandOf<'effect.fail'>) {
+  const owner = resolveTaskGitHubOwner(decider.state, decider.task(command.taskId));
+  const sso = parseGitHubSso(command.detail, owner);
+  if (Option.isNone(sso)) return false;
+  const gate = resolveGitHubSsoGate(sso.value);
+  const repeated = decider.hasOpenGate(
+    command.taskId,
+    (open) => open.type === 'failure' && open.title === gate.title && open.body === gate.body
+  );
+  if (!repeated) {
+    decider.hold(command.taskId, gate.title, gate.body, null, gate.cause, { githubSso: gate.githubSso });
+  }
+  return true;
+}
+
 export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {
+  if (holdGitHubSso(decider, command)) return;
   if (isRepeatedFailure(decider, command)) return;
   decider.fail(command.taskId, command.title, command.detail);
 }
