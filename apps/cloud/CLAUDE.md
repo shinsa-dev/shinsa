@@ -469,7 +469,12 @@ model. The Worker's part of it:
   `pair_sessions`). In `wrangler deployments list` those are the Worker versions deployed before 2026-11-04 21:44 UTC,
   the first on the new schema being version `d2e271eb` (a Worker version id, not a commit). Rolling the Worker back to
   one of them, or restoring D1 to before its rebuild (`wrangler d1 time-travel restore`), fails every request that
-  reads D1 with `no such table`. Undo one only with the other, in the same minute.
+  reads D1 with `no such table`. Undo one only with the other, in the same minute. `0004_drop_tunnel_columns.sql` is
+  a second such boundary: every Worker built before it still names `tunnel_id` and `dns_record_id`, so the Worker
+  versions deployed before the one that applied `0004` (the first after its merge in `wrangler deployments list`)
+  fail on the new schema with `no such column`. A Worker from the relay change (#257) fails only pairing approval; one
+  from before the relay also reads the columns, so it fails every request that reads a machine. Roll back past it
+  only together with `wrangler d1 time-travel restore` to before `0004` applied, in the same minute.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`
