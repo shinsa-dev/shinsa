@@ -17,7 +17,11 @@ const HEADER =
 const REVEAL = 'opacity-0 group-hover/disclosure:opacity-100';
 
 export function CompactSections({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <HoverHighlight className={cn('flex flex-col', className)}>{children}</HoverHighlight>;
+  return (
+    <HoverHighlight holdOverGaps className={cn('flex flex-col', className)}>
+      {children}
+    </HoverHighlight>
+  );
 }
 
 export function CompactSection({

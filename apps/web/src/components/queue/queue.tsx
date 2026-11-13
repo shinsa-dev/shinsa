@@ -85,7 +85,9 @@ export function WideSection({
           {count === 0 ? (
             <p className='p-2.5 text-2xs text-fg-2'>{empty}</p>
           ) : (
-            <HoverHighlight className='flex flex-col gap-px'>{children}</HoverHighlight>
+            <HoverHighlight holdOverGaps className='flex flex-col gap-px'>
+              {children}
+            </HoverHighlight>
           )}
         </div>
       )}

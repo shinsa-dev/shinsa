@@ -60,15 +60,21 @@ function HighlightList({
  * that slides to the hovered `[data-highlight-item]` and
  * rests on the current one (`data-active="true"`) when the pointer leaves.
  * Items draw no hover or selected background of their own.
+ *
+ * `holdOverGaps` keeps the highlight on the last hovered item while the
+ * pointer crosses the space between items (a gap, an indent, a guide line),
+ * so it slides from row to row instead of snapping back to rest.
  */
 function HoverHighlight({
   children,
   className,
   indicatorClassName,
+  holdOverGaps = false,
 }: {
   children: React.ReactNode;
   className?: string;
   indicatorClassName?: string;
+  holdOverGaps?: boolean;
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null);
   const indicatorRef = useAnimatedIndicator(rootRef, { attribute: 'data-hovered', parkWhenEmpty: true });
@@ -90,7 +96,7 @@ function HoverHighlight({
       pointerInside = true;
       const item = itemFrom(event.target);
       if (item) mark(item);
-      else rest();
+      else if (!holdOverGaps) rest();
     };
     const onLeave = () => {
       pointerInside = false;
@@ -114,7 +120,7 @@ function HoverHighlight({
       root.removeEventListener('pointerleave', onLeave);
       mark(null);
     };
-  }, []);
+  }, [holdOverGaps]);
 
   return (
     <div ref={rootRef} className={cn('relative isolate', className)}>
