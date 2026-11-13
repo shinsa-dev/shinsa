@@ -1,3 +1,4 @@
+import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { Activity, Evidence, Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -112,6 +113,10 @@ export function listSummarizedTasks(state: ShinsaState): Set<string> {
   );
 }
 
+function isGateKeptInSummary(gate: Gate) {
+  return gate.status === 'open' || isAutopilotDoneSeeable(gate);
+}
+
 function viewTaskEntry(
   key: TaskRecordKey,
   entry: WireRun | Gate | Evidence | undefined,
@@ -119,7 +124,7 @@ function viewTaskEntry(
 ) {
   if (!entry || !summarized.has(entry.taskId)) return entry;
   if (key === 'runs') return summarizeRun(entry as WireRun);
-  if (key === 'gates') return (entry as Gate).status === 'open' ? entry : undefined;
+  if (key === 'gates') return isGateKeptInSummary(entry as Gate) ? entry : undefined;
   return undefined;
 }
 

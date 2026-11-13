@@ -19,6 +19,10 @@ const LESSON_GATES: readonly AutopilotGateKind[] = ['plan', 'question', 'review'
 
 const DECIDED_GATES: ReadonlySet<Gate['type']> = new Set<Gate['type']>(['plan', 'review', 'merge']);
 
+const CORRECTS: Partial<Record<Gate['type'], ReadonlySet<Gate['type']>>> = {
+  merge: new Set<Gate['type']>(['review']),
+};
+
 const ANSWER: Record<GateDecision, AutopilotLessonAnswer> = {
   approve: 'approved',
   revise: 'revised',
@@ -102,7 +106,12 @@ interface LessonDraft {
   reason: string;
 }
 
-function listActedGates(state: ShinsaState, answered: Gate): LessonDraft[] {
+function isJudgedBy(gate: Gate, answered: Gate, decision: GateDecision) {
+  if (decision === 'approve') return true;
+  return CORRECTS[answered.type]?.has(gate.type) === true;
+}
+
+function listActedGates(state: ShinsaState, answered: Gate, decision: GateDecision): LessonDraft[] {
   if (!DECIDED_GATES.has(answered.type)) return [];
   return Object.values(state.gates)
     .filter(
@@ -111,7 +120,8 @@ function listActedGates(state: ShinsaState, answered: Gate): LessonDraft[] {
         gate.id !== answered.id &&
         gate.autopilotAnswer !== undefined &&
         gate.autopilotLearned !== true &&
-        isGateKind(gate.type)
+        isGateKind(gate.type) &&
+        isJudgedBy(gate, answered, decision)
     )
     .sort((a, b) => (a.answeredAt ?? 0) - (b.answeredAt ?? 0))
     .map((gate) => ({ gate, kind: 'acted' as const, reason: gate.autopilotAnswer ?? '' }));
@@ -138,24 +148,26 @@ export function listAutopilotLessonsToLearn(
   const task = state.tasks[answer.gate.taskId];
   if (!task) return [];
   const note = clipNote(answer.response);
-  return [...listActedGates(state, answer.gate), ...listForwardedGate(answer.gate)].flatMap((draft) => {
-    const gate = draft.gate.type;
-    if (!isGateKind(gate)) return [];
-    return [
-      {
-        id: newId(),
-        at: now,
-        taskId: task.id,
-        gateId: draft.gate.id,
-        gate,
-        kind: draft.kind,
-        answer: ANSWER[answer.decision],
-        reason: draft.reason,
-        note,
-        facts: resolveLessonFacts(state, task, gate, now),
-      },
-    ];
-  });
+  return [...listActedGates(state, answer.gate, answer.decision), ...listForwardedGate(answer.gate)].flatMap(
+    (draft) => {
+      const gate = draft.gate.type;
+      if (!isGateKind(gate)) return [];
+      return [
+        {
+          id: newId(),
+          at: now,
+          taskId: task.id,
+          gateId: draft.gate.id,
+          gate,
+          kind: draft.kind,
+          answer: ANSWER[answer.decision],
+          reason: draft.reason,
+          note,
+          facts: resolveLessonFacts(state, task, gate, now),
+        },
+      ];
+    }
+  );
 }
 
 export function listAutopilotLessons(state: AutopilotLessonsState, gate?: AutopilotGateKind) {

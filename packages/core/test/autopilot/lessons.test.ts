@@ -212,7 +212,7 @@ describe('what Autopilot learns from a plan it approved', () => {
 });
 
 describe('what Autopilot learns when it did more than one thing', () => {
-  test('sending back the merge corrects both the plan and the review it approved, oldest first, but not Auto merge being off', () => {
+  test('sending back the merge corrects the review it approved, not the plan, and the plan is confirmed by the later approve', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     enable(harness);
@@ -236,9 +236,9 @@ describe('what Autopilot learns when it did more than one thing', () => {
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
     answer(harness, taskId, 'revise', 'Not like this.');
     expect(lessons(harness).map((found) => [found.gate, found.kind, found.answer])).toEqual([
-      ['plan', 'acted', 'revised'],
       ['review', 'acted', 'revised'],
     ]);
+    expect(resolveLessonLimit(harness.state, 'plan')).toEqual({ allowed: true });
   });
 });
 

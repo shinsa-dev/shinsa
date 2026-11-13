@@ -83,6 +83,20 @@ describe('the view state a socket gets on connect', () => {
     expect(JSON.stringify(view).length).toBeLessThan(JSON.stringify(serializeState(harness.state)).length);
   });
 
+  test('keeps an answer Autopilot gave on a finished task until you have seen it', () => {
+    const { harness, merged } = seed();
+    const gate = Object.values(harness.state.gates).find(
+      (found) => found.taskId === merged && found.status === 'answered'
+    );
+    if (!gate) throw new Error('no answered gate');
+    harness.state.gates[gate.id] = { ...gate, autopilotAnswer: 'Low risk and every check green.' };
+    const kept = serializeViewState(harness.state, listSummarizedTasks(harness.state));
+    expect(kept.gates[gate.id]?.autopilotAnswer).toBe('Low risk and every check green.');
+    harness.state.gates[gate.id] = { ...gate, autopilotAnswer: 'Low risk.', autopilotSeen: true };
+    const seen = serializeViewState(harness.state, listSummarizedTasks(harness.state));
+    expect(seen.gates[gate.id]).toBeUndefined();
+  });
+
   test('is the wire state itself when nothing is summarized', () => {
     const { harness } = seed();
     expect(serializeViewState(harness.state, new Set())).toEqual(serializeState(harness.state));
