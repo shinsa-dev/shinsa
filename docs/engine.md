@@ -538,7 +538,8 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
   folder Shinsa looks in (`resolveTaskRepoTarget`), registered under `<effect key>:repo.register` into the task's
   project (a task in none gets the project registering gives it, Projects and task identity). With no folder, or a
   folder that already holds files, it logs a warning and the task is triaged without a repository, so the setup gate
-  asks. Like a repository `create_task` makes, it has no remote until you add one.
+  asks. Like a repository `create_task` makes, it is then connected to GitHub (Agents manage Shinsa → A new
+  repository is created when asked).
 - **It runs without one.** An answer or research with no repository skips the setup step entirely (`startWork`:
   no `config.verify`, no "verifying the setup", no Find the repository step in the strip) and runs read-only in a
   scratch folder of its own, `data/scratch/<task id>` (`RunSupervisor`, made again before every run), never a
@@ -763,7 +764,16 @@ them in the order they need:
   makes the folder (refused when it already holds files, or when the name is more than letters, digits, `.`, `-` and
   `_`), starts it on git's `init.defaultBranch` (`main` when unset) with the empty first commit setup makes (Setup
   verification), and registers it into the project. A name that already matches is used as it is, so a repeated call
-  creates nothing. The repository has no remote, so its task cannot open a pull request until you add one.
+  creates nothing. Then `RepoRegistry.connectOrigin` gives it a GitHub `origin` (`RepoOrigins`, `repos/origin/`):
+  it looks for a repository of the folder's name under each owner in turn, the owners of the project's other GitHub
+  remotes first, most used first (`listProjectOwners`), then your `gh` login, then your organizations
+  (`gh api user/orgs`). The first that exists is used only when it is empty; with none it creates a private one under
+  the first owner (`gh repo create --private`). It adds the clone URL `gh config get git_protocol` asks for as
+  `origin`, sends the default branch up and records the remote. A repository that already has `origin` is left as it
+  is and `gh` is never asked. A lookup that fails stops before anything is created, so no duplicate lands under an
+  owner it could not read; a match that already has commits is refused; a failed upload removes `origin` again.
+  Connecting at creation is best effort: a failure logs a warning, the repository is still created, and the pull
+  request step tries again (Pushing the branch).
 - **Another project.** `create_task`'s `project` (a key, name or id) files the task in that project (`projectId` on
   `agent.create_task`): `repository` is then looked up among that project's repositories and folders, and without one
   the new task leaves its repository to triage in that project instead of taking this task's.
@@ -2294,11 +2304,16 @@ checks it ran.
   meter's window, else the best learned rate, and stays in dollars with none. The task's cost popover shows it
   under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
 - **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
-  readings are, so the engine's account roster works out each provider's safe pace (`listProviderPaces`, the forecast
-  with every usable reset grant that clears the weekly limit counted as a full refill; for Claude it runs for the agent
-  model, so an account's weekly budget is the tighter of its all-models weekly window and that model's own weekly
-  window, and Settings' forecast does the same) on every accounts refresh and records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
-  own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
+  readings are, so the engine's account roster works out two safe paces for each provider on every accounts refresh
+  (`listProviderPaces`; for Claude it runs for the agent model, so an account's weekly budget is the tighter of its
+  all-models weekly window and that model's own weekly window, and Settings' forecast does the same): `pace`, the
+  forecast without usage resets, and `resetPace`, the forecast with each usable
+  reset as a budget of its own (The usage forecast, below), `endingPace`, the same with only the resets that end within
+  3 days (`isResetEnding`, `FORECAST_LIMITS.resetEndingMs`), and `resetEndsAt`, when the soonest of those resets ends.
+  It records them when any pace moved by a whole point (`isProviderPaceMoved`, `isPaceMoved`,
+  `FORECAST_LIMITS.paceStep`), `resetEndsAt` changed, or the pace appeared or went away. A log migration
+  (`reset-paces.ts`) gave older records `resetPace` and `endingPace` equal to their pace and `resetEndsAt` null. Settings' own forecast
+  still leaves resets out, since you use them in the Claude app.
 - **Auto pace** (`autoPace`, off by default, only yours, in
   `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
   as above. With it on, a task's first build run in a round waits for admission (`holdForAdmission` in
@@ -2308,7 +2323,14 @@ checks it ran.
   with no recorded pace or no estimate does not wait either.
   - **The budget** is the recorded safe pace for the next 24 hours, less 10% kept for urgent tasks
     (`ADMISSION_LIMITS.reserve`; an urgent build may use all of it), minus the provider's last 24 hours and the
-    estimated rest of every build already started (`resolveAdmission`). A build fits when its estimate does; one
+    estimated rest of every build already started (`resolveAdmission`). The safe pace is `pace`, without resets,
+    unless you switched on **Count on usage resets** (`autoPaceResets`, off by default, only yours, in
+    `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace_resets`): then an urgent or high build
+    uses `resetPace`, and while a usable reset ends within 3 days a normal or low build uses `endingPace`, which counts
+    only those ending resets, so none is left to end unused (`resolveAdmissionPace`). Normal and low builds never count
+    on a reset that ends later. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Agent usage → Auto pace
+    says so under the provider's budget ("Urgent and high-priority builds may use up to 160%, counting on you using a
+    reset in Claude", or "A usage reset ends in 2 days, so every build may use up to 130%, counting on you using it in Claude"). A build fits when its estimate does; one
     larger than the whole budget counts as the budget, so it starts once nothing else is using it.
   - **The queue** (`sortAdmissionQueue`), with nothing to set: task priority (urgent first), then the focus project,
     then the projects you act on most, learned as the median time from a gate opening to your answer over the last 14
@@ -2342,7 +2364,12 @@ checks it ran.
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
   every reset gives 100% for another week (an account with no known reset keeps what it has for the whole
-  horizon). For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
+  horizon). With resets counted (`ForecastOptions.grants`, for `resetPace`), each usable reset with some left is one
+  more budget that ends at its `endsAt` and never refills (`ForecastAccount.refills` false), worth what it gives
+  back to the weekly limit (`resolveGrantRefill`): 100% for each left if it clears `seven_day`, Fable's share of the
+  weekly limit (`weeklyShare`) if it only clears the Fable limit and gives that back (`givesBackWeekly`), else
+  nothing. Spending the soonest to end first means the reset that ends soonest is the first planned on.
+  For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
   from the account that resets soonest, which is the best order for budgets that expire. A binary search finds
   the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
   the recommendation, which Auto pace builds within; the forecast also names the tightest reset (the one
@@ -3704,7 +3731,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
+  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `usage.auto_pace_resets` for `autoPaceResets` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
   Settings → Teams, the review's Fix and approve choice and
   What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
   `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
@@ -5512,7 +5539,11 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
 
 `pull_request.open` and `pull_request.push` (`Shipping`, `apps/engine/src/runtime/effects/shipping/service.ts`) take the branch from "approved" to
 GitHub in four steps, and report each one to the task as `pull_request.record_step`, which core turns into the stage
-reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open:
+reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open. First, a repository
+with no `origin` (one created while GitHub was out of reach, or one you started by hand) is connected the way a new one
+is (`RepoRegistry.connectOrigin`, Agents manage Shinsa → A new repository is created when asked). When it cannot be,
+the effect fails once with no retry (`OriginNotConnected`), and the failure gate says why and gives the `git remote
+add origin …` and first upload to run before you retry, instead of five fetches against a remote that is not there.
 
 1. **Commit your edits** from the Code tab, if any (as before).
 2. **Update onto the base.** The base is the pull request's base (`resolveRoundBase`: an earlier round's branch
@@ -5711,6 +5742,22 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   that failed, a new comment or a conflict. Checks that start after the gate opened, or GitHub
   recomputing mergeability (`mergeable: null`), do not take it back; only a new head, a failure or
   a new comment does, so a gate never opens and closes again on one commit.
+- **A failure inherited from the base is not the Agent's.** The same GraphQL read asks for the check
+  runs of the base branch's newest commits (`baseRef.target.history`, `BASE_HISTORY_DEPTH` of them), and
+  a failing run is marked `failsOnBase` when the newest base commit that finished a run of that name
+  failed it, so a base still building its head reads as the commit before (`serializePullRequest`,
+  `apps/engine/src/github/pulls`); a deleted base, one without checks or one whose runs of that name are
+  all still going marks nothing. Such a failure is left out of what the watch
+  reports, of the stall key and of what needs a fix (`hasBlockingCiFailure`, `domain/ci.ts`). A pull request
+  whose only failures are inherited starts no fix turn: the task stays shipping with the reason
+  "“‹check›” fails on ‹base› too" and the watch keeps reading it. An inherited required check keeps the
+  merge gate closed, and closes one already open on the same head (`isCiHoldingMerge`), since GitHub
+  would refuse the merge, until it passes; inherited optional checks do not hold it. Any other failure still starts a fix, whose prompt names the inherited ones as not the
+  Agent's to fix; the task page shows them as failing on the base too, and `read_task` lists them so.
+  Before this, a check broken on `main` sent the Agent eight fix turns that changed nothing.
+- **A fix that changed nothing ends the loop.** A `pull_request` fix whose push left the head where
+  it was, read with the same failures and no news, opens "Fixing is not making progress" at once
+  (`isUnchangedFix`, `failUnchangedFix`) instead of starting the next of eight rounds.
 - **Required-gate growth.** "All checks passed" counts only the required checks when there are
   any, otherwise every check. It is reported again when a new required check shows up already
   passed (created and finished between two reads), never for another passing advisory check.
@@ -6255,13 +6302,27 @@ you: Settings → Browser ─────────┤
   first; a kill would lose the sign-ins made since the last write. Both modes run with `--use-mock-keychain`, so the
   profile encrypts the same way in each and Chrome never asks for your Keychain. Browser state lives in these folders,
   never in the event log.
+- **A profile an earlier engine left open** (`host/holder.ts`, since 2026-11-11). The host keeps its browsers only in
+  memory, so an engine that was killed (a crash, a forced quit, an update) leaves its Chrome running, and Chrome refuses
+  a second one on the same folder (exit code 21, `PROFILE_IN_USE_CODE`). Before each launch the host reads the
+  profile's `SingletonLock` (`<host>-<pid>`): a live process on this machine whose command line opens exactly that
+  folder (`--user-data-dir=<folder>`) is an earlier engine's Chrome, so it is stopped (SIGTERM, which Chrome treats as
+  a quit and writes its cookies, then SIGKILL after `stopTimeout`) and logged as `[Browser] Stopped a Chrome an earlier
+  Shinsa left running`. Any other live holder is never killed: the call fails with `profile_in_use`, whose message
+  names the process to quit. A lock whose process is gone is left to Chrome, which takes it over itself. A lock under
+  another host name is this Mac's own under an earlier name (macOS renames it with the network), which Chrome refuses
+  with 21 even when its process is gone: a live process opening that folder is stopped as above, and otherwise the
+  stale `Singleton*` files are removed (`[Browser] Removed a profile lock Chrome left under another host name`). When Chrome still exits with 21, the host reclaims and starts once more, then says the profile is in
+  use. When the engine starts, it stops every headless Chrome an earlier engine left on a profile in `browserDir`
+  before it launches any of its own (`sweepOrphans`, holding the host's lock); a sign-in window you left open stays,
+  until that project's browser is next needed.
 - **Agents reach it through the engine** (`BrowserProxy`). Each run of a task in a project is issued a key
   (`RunSupervisor.issueBrowser`) that the run's scope revokes when it ends, closing its connections; the endpoint,
   `ws://127.0.0.1:<port>/browser/cdp/<key>`, goes into the run's environment as `PLAYWRIGHT_MCP_CDP_ENDPOINT`
   (`resolveBrowserEnv`), for Claude's process and Codex's app server alike, never into the prompt (Caching, below).
   The route refuses a connection from outside this machine, from another site's Origin, or with a key that is not a
-  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start or the sign-in
-  window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
+  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start, finds its profile
+  held by another program or the sign-in window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
   agent cannot take every other agent's pages down. Every agent shares the default context, so the cookies are one
   jar, but each connection sees only its own pages (`createTargetFilter`): a page counts as its own when it opened it
   (`Target.createTarget`) or a page of its own opened it (a popup, by `openerId`). Every other page is hidden from its
@@ -6295,11 +6356,27 @@ you: Settings → Browser ─────────┤
   waits on it like a question (Gates, above); a task with no project is refused (`browser_no_project`). The task
   overview shows it as a card (`BrowserSignInCard`): Copy from your default browser copies that site and answers the
   gate in one click when that browser is signed in to it (not offered for Google sites), Open sign-in window then Done answers it the same way, Choose
-  sites… opens the copy dialog, and Skip rejects it. Approve tells the agent the browser is signed in and to open the
-  page again; reject to carry on without it (`resolveBrowserSignInReply`). Only you answer it, and copying and the
-  window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip, and a guest or a
-  teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page first, to use the
-  repository's own test users where it has them, and never to launch a browser of their own to sign in.
+  sites… opens the copy dialog, and Skip rejects it. For a local address (`localhost`, `127.0.0.1`, `[::1]`,
+  `*.localhost`, or any address with a port: `isLocalSignInUrl`) Open sign-in window comes first and Copy second, with
+  a hint that copying carries cookies only and a local app keeps its sign-in for that exact port. Reject tells the
+  agent to carry on without it. Approve is checked before the agent hears it (since 2026-11-11): `BrowserSignInCheck`
+  (`apps/engine/src/browser/check/`) takes a lease on the project's Chrome (`BrowserHost.acquire`), opens the gate's
+  `url`, the page the agent wants to see and never the sign-in page it was sent to (the tool's field says so, since a sign-in page opens fine signed out), in a new page over the browser connection (`Target.createTarget`, which no agent's connection sees), reads the
+  page's `document.readyState` and `location.href` every 250 ms until it has loaded and its address has held still for
+  1.5 s, at most 12 s (`BrowserSignInCheckSettings`), and closes the page. The result (`SignInCheck`: `landed {url}`,
+  or `unchecked {reason}` when Chrome is missing, does not start, the sign-in window is open, the page never settles
+  or Chrome refuses) goes into `resolveBrowserSignInReply` and the resume prompt for a run that was let go while
+  waiting (`Questions`). Only a page that ends on the requested origin, port included, is "signed in", and the reply
+  names where it landed; a page sent to another origin (a sign-in host such as `…authkit.app`) is "still not signed
+  in", with where it landed, that copying carries cookies only and that a local app's session belongs to one port,
+  and the agent asks again for the window; an unchecked one says why and tells the agent to ask again if the page
+  still asks for a sign-in. A failed check does not reopen the gate. It cannot tell an app that redirects more than
+  1.5 s after loading. Before it, every approve replied "signed in": copying `localhost` cookies from Dia never
+  carried a WorkOS AuthKit session kept in localStorage, and the agent was told it was signed in. Only you answer it,
+  and copying and the window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip,
+  and a guest or a teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page
+  first, to use the repository's own test users where it has them, never to launch a browser of their own to sign in,
+  and for a local dev server to ask with the exact address of the run they screenshot and keep that run.
 - **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
   started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
   never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
@@ -6310,8 +6387,8 @@ you: Settings → Browser ─────────┤
   /api/browser/projects/:projectId`, `GET /api/browser/sources`, `GET /api/browser/sources/:sourceId/sites`, and
   `POST` `copy`, `window`, `window/close`, `sites/remove` and `sign-out` under `/api/browser/projects/:projectId/`. The section is hidden on app.shinsa.dev.
 - **Limits.** Agents of one project share one cookie jar, so two tasks that need different users of the same site
-  collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage does not carry
-  across a task's ports.
+  collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage belongs to one
+  origin, port included: it is never copied, and a service restarted on a new port needs a new sign-in in the window.
 
 ## The agent loop
 
@@ -6830,7 +6907,18 @@ sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
 Agent usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
-tools check lists only codex itself, as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
+tools check no longer lists codex. **Which providers Shinsa uses** is `config.json`'s `providerLogins`
+(`{ codex: 'added' | 'removed' }`, decoded leniently): with no entry a provider shows only while it is signed in, and
+the first time it is seen signed in it is recorded as `added`, so a lapsed sign-in keeps its row and its Sign in gate;
+`removed` hides it even while `codex login` is still signed in. A hidden provider drops out of the snapshot's
+`providers`, its usage is no longer polled, and `GET /api/providers` leaves its models out (`isProviderShown`,
+`accounts/providers.ts`); a step already running on it still keeps the limits it reports and is metered against
+them, unless it is `removed`. `POST /api/accounts/provider { provider, choice }` (feature `accounts.provider_choice`,
+human-only, `shinsa accounts provider`) records the choice: removing moves every role and the default provider that
+used it back to Claude (`resolveProviderReset`, one `settings.change`) and never runs `codex logout`; adding reads its
+sign-in and usage again at once. In Settings the provider's row menu has Remove Codex, behind a confirm dialog, and
+Add account lists each provider not shown (Codex), which adds it back with the `codex login` command on its row until
+it is signed in. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
 arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
 names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Paused: ‹email› needs signing in", and
 every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
@@ -6939,8 +7027,12 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
   on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
   and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember` (each with its resets left and total, the windows it clears, whether it is usable now and when it
-  ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  ends, and `givesBackWeekly` from `gives_back_weekly` with `weeklyShare`, the percent of the weekly limit the
+  scoped limits used, summed from `weekly_scoped_shares[].used_percent_of_weekly`, only on a grant that gives back;
+  a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
   credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
+  A usable reset that ends within 3 days (`ADMISSION_LIMITS.resetEndingMs`) is said in amber, on its row ("Clears the
+  weekly Fable limit · ends in 2 days") and in the usage menu ("1 usage reset ends in 2 days"), so none ends unused.
   Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
   the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
@@ -7403,7 +7495,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
   (the folders that hold repositories), `worktreesDir` (where new worktrees go, Where agents work), `port`,
-  `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
+  `hostname`, `editor`, `terminal`, `onboardedAt` and `providerLogins`. With no `port`
   the engine takes 7446 (`APP_IDENTITY`), in the unassigned 7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
   server. Is port 7446 in use? Quit the program on it, or set another `port` in <config.json>." (`listenOnPort` in
   `http/server/service.ts`; the Mac app shows it as Port 7446 is taken). The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds

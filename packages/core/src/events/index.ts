@@ -92,7 +92,14 @@ type EventBody =
   | { type: 'focus.changed'; focus: Focus }
   | { type: 'away.recorded'; from: number; to: number }
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
-  | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
+  | {
+      type: 'usage.pace_recorded';
+      provider: string;
+      pace: number | null;
+      resetPace: number | null;
+      endingPace: number | null;
+      resetEndsAt: number | null;
+    }
   | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'settings.changed'; settings: Settings }
   | {

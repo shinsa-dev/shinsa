@@ -3,6 +3,9 @@ import {
   type AccountsSnapshot,
   type AccountUsage,
   CLAUDE_PROVIDER,
+  DAY_MS,
+  describeCount,
+  isResetEnding,
   listRelevantWindows,
   MINUTE_MS,
   type ProviderLogin,
@@ -57,6 +60,12 @@ export interface UsageNoteRow {
   label: string;
   value: string;
   detail: string | null;
+  ending: boolean;
+}
+
+export interface UsageResetsNote {
+  text: string;
+  ending: boolean;
 }
 
 export interface UsageRow {
@@ -299,10 +308,22 @@ function describeCleared(clears: string[]) {
   return `Clears the ${LIST_FORMAT.format(limits)} ${limits.length === 1 ? 'limit' : 'limits'}`;
 }
 
+function isGrantEnding(grant: UsageResetGrant, now: number) {
+  return grant.usableNow && grant.left > 0 && isResetEnding(grant.endsAt, now);
+}
+
+export function describeEndsIn(endsAt: number, now: number) {
+  const days = Math.floor((endsAt - now) / DAY_MS);
+  if (days >= 1) return `in ${describeCount(days, 'day')}`;
+  return `in ${formatDuration(Math.max(MINUTE_MS, endsAt - now))}`;
+}
+
 function describeGrantDetail(grant: UsageResetGrant, now: number) {
   const reach = grant.usableNow ? describeCleared(grant.clears) : USAGE_EXTRA_LABEL.notUsable;
   if (grant.endsAt === null) return reach;
-  const ends = formatMoment(grant.endsAt, now);
+  const ends = isGrantEnding(grant, now)
+    ? describeEndsIn(grant.endsAt, now)
+    : formatMoment(grant.endsAt, now);
   return reach === null ? `Ends ${ends}` : `${reach} · ends ${ends}`;
 }
 
@@ -318,6 +339,7 @@ function createGrantRow(grant: UsageResetGrant, now: number): UsageNoteRow {
     label: resolveGrantLabel(grant),
     value: `${grant.left} of ${grant.total} left`,
     detail: describeGrantDetail(grant, now),
+    ending: isGrantEnding(grant, now),
   };
 }
 
@@ -341,20 +363,38 @@ export function listUsageNotes(usage: AccountUsage, now: number): UsageNoteRow[]
             label: USAGE_EXTRA_LABEL.extraUsage,
             value: describeExtraUsageValue(extra.enabled, extra.noLimit),
             detail: null,
+            ending: false,
           },
         ]
       : []),
     ...(credit && hasWholeCredit(credit)
-      ? [{ id: 'credit', label: USAGE_EXTRA_LABEL.credit, value: formatUsageMoney(credit), detail: null }]
+      ? [
+          {
+            id: 'credit',
+            label: USAGE_EXTRA_LABEL.credit,
+            value: formatUsageMoney(credit),
+            detail: null,
+            ending: false,
+          },
+        ]
       : []),
     ...listLiveGrants(usage, now).map((grant) => createGrantRow(grant, now)),
   ];
 }
 
-export function describeResetsAvailable(usage: AccountUsage, now: number) {
-  const count = listLiveGrants(usage, now)
-    .filter((grant) => grant.usableNow)
-    .reduce((total, grant) => total + grant.left, 0);
+export function describeResetsAvailable(usage: AccountUsage, now: number): UsageResetsNote | null {
+  const usable = listLiveGrants(usage, now).filter((grant) => grant.usableNow);
+  const ending = usable.filter((grant) => isGrantEnding(grant, now));
+  if (ending.length > 0) {
+    const soonest = Math.min(...ending.map((grant) => grant.endsAt ?? Number.POSITIVE_INFINITY));
+    const count = ending.reduce((total, grant) => total + grant.left, 0);
+    const verb = count === 1 ? 'ends' : 'end';
+    return {
+      text: `${describeCount(count, 'usage reset')} ${verb} ${describeEndsIn(soonest, now)}`,
+      ending: true,
+    };
+  }
+  const count = usable.reduce((total, grant) => total + grant.left, 0);
   if (count === 0) return null;
-  return `${count} usage ${count === 1 ? 'reset' : 'resets'} available`;
+  return { text: `${describeCount(count, 'usage reset')} available`, ending: false };
 }

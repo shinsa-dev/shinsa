@@ -103,6 +103,13 @@ export {
   listFeedbackLeaks,
   resolveFeedbackText,
 } from './feedback.ts';
+export {
+  hasBlockingCiFailure,
+  isBlockingCiFailure,
+  isFailedCiRun,
+  isInheritedCiFailure,
+  listInheritedCiFailures,
+} from './ci.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
 export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {
@@ -205,6 +212,7 @@ export {
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
   resolveAutoPace,
+  resolveAutoPaceResets,
   isSharedMachine,
   isSharedWithTeam,
   resolveSharedTeams,

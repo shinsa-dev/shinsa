@@ -3,6 +3,7 @@ import { EngineApi } from '@shinsa/core/engine-api';
 import { RequestFailed } from '@shinsa/core/engine-api/schema';
 import { Clock, Effect, Option } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
+import { Accounts } from '../../../accounts/roster/service.ts';
 import { Providers } from '../../../agents/providers/registry/service.ts';
 import { EngineConfig } from '../../../config/service.ts';
 import { createServerInstance, resolveEngineActivity, resolveHealth } from '../../../instance/index.ts';
@@ -20,6 +21,15 @@ export const ServerHandlers = HttpApiBuilder.group(
     const config = yield* EngineConfig;
     const models = yield* EngineModels;
     const providers = Option.getOrUndefined(yield* Effect.serviceOption(Providers));
+    const accounts = Option.getOrUndefined(yield* Effect.serviceOption(Accounts));
+    const listProviders = providers
+      ? Effect.gen(function* () {
+          const listed = yield* providers.listProviders;
+          if (!accounts) return listed;
+          const hidden = yield* accounts.listHiddenProviders;
+          return listed.filter((provider) => !hidden.has(provider.id));
+        })
+      : Effect.succeed(KNOWN_PROVIDERS);
     const restarter = Option.getOrUndefined(yield* Effect.serviceOption(EngineRestarter));
     const given = yield* ServedInstance;
     const instance = given ?? createServerInstance(null, yield* Clock.currentTimeMillis);
@@ -45,7 +55,7 @@ export const ServerHandlers = HttpApiBuilder.group(
           : Effect.fail(new RequestFailed(RESTART_UNSUPPORTED))
       )
       .handle('models', () => models.listModels)
-      .handle('providers', () => (providers ? providers.listProviders : Effect.succeed(KNOWN_PROVIDERS)))
+      .handle('providers', () => listProviders)
       .handle('queue', ({ request }) =>
         Effect.zipWith(Clock.currentTimeMillis, engine.state, (now, state) =>
           resolveQueueSummary(state, now, new URL(request.originalUrl).origin)

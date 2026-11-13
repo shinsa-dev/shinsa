@@ -432,6 +432,16 @@ function failReads(harness: Harness, taskId: string, count: number, detail: stri
   return events;
 }
 
+const INHERITED = {
+  name: 'Workers Builds: superwall-docs',
+  status: 'failure' as const,
+  required: true,
+  url: null,
+  failsOnBase: true,
+};
+
+const LINT = { name: 'lint', status: 'failure' as const, required: true, url: null };
+
 function record(
   harness: Harness,
   taskId: string,
@@ -497,6 +507,158 @@ describe('watching the pull request', () => {
       'check:test',
       'check:build',
     ]);
+  });
+
+  test('a required check that fails on the base too starts no fix and waits, naming it, until it passes', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      base: 'main',
+      checks: 'failing',
+      checkRuns: [INHERITED, { name: 'build', status: 'success', required: true, url: null }],
+    });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: '“Workers Builds: superwall-docs” fails on main too',
+      fixRounds: 0,
+    });
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    record(harness, taskId, {
+      base: 'main',
+      checks: 'passing',
+      checkRuns: [{ ...INHERITED, status: 'success', failsOnBase: undefined }],
+    });
+    expect(harness.openGate(taskId).type).toBe('merge');
+  });
+
+  test('several inherited failures are all named in the waiting reason', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      checks: 'failing',
+      checkRuns: ['a', 'b', 'c'].map((name) => ({ ...INHERITED, name })),
+    });
+    expect(harness.task(taskId).stageReason).toBe('“a”, “b” and “c” fail on the base branch too');
+  });
+
+  test('a check that fails only on the pull request is fixed, and the prompt says the inherited one is not the agent’s', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      base: 'main',
+      checks: 'failing',
+      checkRuns: [INHERITED, { name: 'lint', status: 'failure', required: true, url: 'https://ci/lint' }],
+    });
+    const prompt = harness.activeRun(taskId).prompt;
+    expect(prompt).toContain('  - lint https://ci/lint');
+    expect(prompt).not.toContain('  - Workers Builds');
+    expect(prompt).toContain(
+      '- These checks fail on `main` too, so no change here can clear them: leave them alone. Workers Builds: superwall-docs.'
+    );
+    expect(harness.task(taskId).fixFingerprints?.at(-1)?.signature).toBe('check:lint');
+  });
+
+  test('an inherited failure the base no longer has goes to the agent', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, { checks: 'failing', checkRuns: [INHERITED] });
+    expect(harness.task(taskId).stage).toBe('shipping');
+    record(harness, taskId, { checks: 'failing', checkRuns: [{ ...INHERITED, failsOnBase: undefined }] });
+    expect(harness.task(taskId).stage).toBe('fixing');
+  });
+
+  test('an optional check that fails on the base too does not hold the merge gate once the required ones pass', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      checks: 'failing',
+      checkRuns: [
+        { ...INHERITED, required: false },
+        { name: 'build', status: 'success', required: true, url: null },
+      ],
+    });
+    expect(harness.openGate(taskId).type).toBe('merge');
+  });
+
+  test('a required check that fails on the base too closes an open merge gate on the same head', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, { base: 'main' });
+    expect(harness.openGate(taskId).type).toBe('merge');
+    record(harness, taskId, { base: 'main', checks: 'failing', checkRuns: [INHERITED] });
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: '“Workers Builds: superwall-docs” fails on main too',
+      fixRounds: 0,
+    });
+  });
+
+  test('an optional check that fails on the base too keeps an open merge gate', () => {
+    const { harness, taskId } = shipping();
+    const build = { name: 'build', status: 'success' as const, required: true, url: null };
+    record(harness, taskId, { checks: 'passing', checkRuns: [build] });
+    const gate = harness.openGate(taskId);
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, { ...INHERITED, required: false }] });
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+
+  test('an optional inherited failure keeps an open merge gate while a late required check runs', () => {
+    const { harness, taskId } = shipping();
+    const build = { name: 'build', status: 'success' as const, required: true, url: null };
+    const optional = { ...INHERITED, required: false };
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, optional] });
+    const gate = harness.openGate(taskId);
+    const late = { name: 'deploy', status: 'pending' as const, required: true, url: null };
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, optional, late] });
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+
+  test('an inherited failure with no required checks known keeps the task waiting', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      checks: 'failing',
+      checkRuns: [
+        { ...INHERITED, required: null },
+        { name: 'build', status: 'success', required: null, url: null },
+      ],
+    });
+    expect(harness.task(taskId).stage).toBe('shipping');
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('a fix that leaves the head, the tree and the failure unchanged stops at once', () => {
+    const { harness, taskId } = shipping();
+    const fixOn = (treeHash: string) => {
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        treeHash,
+      });
+      pushed(harness, taskId, 'h1');
+    };
+    record(harness, taskId, { checks: 'failing', headSha: 'h0', checkRuns: [LINT] });
+    fixOn('t1');
+    record(harness, taskId, { checks: 'failing', headSha: 'h1', checkRuns: [LINT] });
+    expect(harness.task(taskId).stage).toBe('fixing');
+    fixOn('t1');
+    record(harness, taskId, { checks: 'failing', headSha: 'h1', checkRuns: [LINT] });
+    const gate = harness.openGate(taskId);
+    expect(gate.title).toBe('Fixing is not making progress');
+    expect(gate.body).toContain('did not change after a fix round that changed nothing');
+    expect(harness.task(taskId).fixRounds).toBe(2);
+  });
+
+  test('a fix that changed the tree is followed by another fix when the same check still fails', () => {
+    const { harness, taskId } = shipping();
+    for (const treeHash of ['t1', 't2', 't3']) {
+      record(harness, taskId, { checks: 'failing', headSha: 'h1', checkRuns: [LINT] });
+      expect(harness.task(taskId).stage).toBe('fixing');
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        treeHash,
+      });
+      pushed(harness, taskId, 'h1');
+    }
+    expect(harness.task(taskId).fixRounds).toBe(3);
   });
 
   test('failing reads without check names are a stall only when the fix left the tree unchanged', () => {

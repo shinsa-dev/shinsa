@@ -88,6 +88,7 @@ const SAMPLE_ACCOUNT_ACTIONS: AccountActions = {
   importLogin: () => void acknowledgeSample(),
   update: acknowledgeSample,
   remove: () => void acknowledgeSample(),
+  chooseProvider: () => void acknowledgeSample(),
   refresh: acknowledgeSample,
 };
 

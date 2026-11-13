@@ -5,7 +5,9 @@ import {
   type AccountUsage,
   type ForecastAccount,
   FORECAST_LIMITS,
+  DAY_MS,
   HOUR_MS,
+  isResetEnding,
   type AccountsSnapshot,
   listForecastAccounts,
   listForecastProviders,
@@ -335,6 +337,8 @@ function grant(overrides: Partial<UsageResetGrant>): UsageResetGrant {
     clears: ['five_hour', 'seven_day'],
     usableNow: true,
     endsAt: null,
+    givesBackWeekly: false,
+    weeklyShare: null,
     ...overrides,
   };
 }
@@ -343,29 +347,62 @@ function snapshot(overrides: Partial<AccountsSnapshot>): AccountsSnapshot {
   return { accounts: [], login: null, imports: [], ...overrides };
 }
 
-describe('resolveGrantRefill', () => {
-  test('counts each usable reset that clears the weekly limit as a full refill', () => {
+describe('usage resets in the forecast', () => {
+  const FABLE = {
+    clears: ['seven_day_overage_included'],
+    givesBackWeekly: true,
+    weeklyShare: 30,
+  };
+
+  test('values a reset by what it gives back to the weekly limit', () => {
+    expect(resolveGrantRefill(grant({}))).toBe(FORECAST_LIMITS.fullPercent);
+    expect(resolveGrantRefill(grant(FABLE))).toBe(30);
+    expect(resolveGrantRefill(grant({ ...FABLE, weeklyShare: null }))).toBe(0);
+    expect(resolveGrantRefill(grant({ ...FABLE, weeklyShare: 400 }))).toBe(FORECAST_LIMITS.fullPercent);
+    expect(resolveGrantRefill(grant({ ...FABLE, givesBackWeekly: false }))).toBe(0);
+    expect(resolveGrantRefill(grant({ clears: ['five_hour'] }))).toBe(0);
+  });
+
+  test('lists each usable reset as its own budget that ends with the reset, only when asked', () => {
     const usage = {
-      ...weekly(60, null),
+      ...weekly(60, NOW + 10 * HOUR_MS),
       resetGrants: [
-        grant({ left: 2 }),
+        grant({ left: 2, endsAt: NOW + 48 * HOUR_MS }),
+        grant({ id: 'fable', ...FABLE }),
         grant({ id: 'session', clears: ['five_hour'] }),
         grant({ id: 'later', usableNow: false }),
         grant({ id: 'ended', endsAt: NOW - HOUR_MS }),
-        grant({ id: 'open', endsAt: NOW + HOUR_MS }),
-        grant({ id: 'spent', left: -1 }),
+        grant({ id: 'spent', left: 0 }),
       ],
     };
-    expect(resolveGrantRefill(usage, NOW)).toBe(3 * FORECAST_LIMITS.fullPercent);
-    expect(resolveGrantRefill(weekly(60, null), NOW)).toBe(0);
+    const accounts = [summary({ usage })];
+    expect(listForecastAccounts(accounts, NOW).map((entry) => entry.id)).toEqual(['work']);
+    expect(listForecastAccounts(accounts, NOW, { grants: true })).toEqual([
+      { id: 'work', label: 'work@example.com', left: 40, resetsAt: NOW + 10 * HOUR_MS },
+      {
+        id: 'work:launch',
+        label: 'work@example.com',
+        left: 200,
+        resetsAt: NOW + 48 * HOUR_MS,
+        refills: false,
+      },
+      { id: 'work:fable', label: 'work@example.com', left: 30, resetsAt: null, refills: false },
+    ]);
   });
 
-  test('adds the refill to an account only when the forecast asks for grants', () => {
-    const usage = { ...weekly(60, NOW + 10 * HOUR_MS), resetGrants: [grant({})] };
-    expect(Option.getOrNull(resolveForecastAccount('work', 'work', usage, null, NOW))?.left).toBe(40);
-    expect(
-      Option.getOrNull(resolveForecastAccount('work', 'work', usage, null, NOW, { grants: true }))?.left
-    ).toBe(140);
+  test('spends the reset that ends soonest first, and loses what is left of a reset once it ends', () => {
+    const soon = { ...account('soon', 100, 24), refills: false };
+    const late = { ...account('late', 100, 120), refills: false };
+    const forecast = Option.getOrThrow(resolveUsageForecast([late, soon], NOW));
+    expect(forecast.accounts.map((entry) => entry.id)).toEqual(['soon', 'late']);
+    expect(forecast.resets).toEqual([]);
+    const timeline = resolveForecastTimeline(forecast, 50);
+    const soonSegment = timeline.segments.find((segment) => segment.accountId === 'soon');
+    expect(soonSegment?.emptyAt).toBeNull();
+    expect(timeline.outages[0]?.from).toBe(NOW + 72 * HOUR_MS);
+    expect(forecast.safePace).toBeLessThan(
+      Option.getOrThrow(resolveUsageForecast([{ ...soon, resetsAt: null }, late], NOW)).safePace
+    );
   });
 });
 
@@ -405,17 +442,56 @@ describe('the forecast of each provider in a snapshot', () => {
     expect(listProviderForecastAccounts(unlabelled, 'codex', NOW)).toEqual([]);
   });
 
-  test('gives each provider its safe pace with usable resets counted, or none with nothing to forecast', () => {
+  test('gives each provider its safe pace without and with usable resets, and when the soonest reset ends', () => {
     const out = weekly(100, NOW + 144 * HOUR_MS);
+    const endsAt = NOW + 96 * HOUR_MS;
+    const resets = [grant({ endsAt }), grant({ id: 'open' })];
     const [claude] = listProviderPaces(
-      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [grant({})] } })] }),
+      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: resets } })] }),
       NOW,
       null
     );
     const [plain] = listProviderPaces(snapshot({ accounts: [summary({ usage: out })] }), NOW, null);
-    expect(plain?.pace).toBe(0);
-    expect(claude?.pace ?? 0).toBeGreaterThan(10);
-    expect(listProviderPaces(snapshot({}), NOW, null)).toEqual([{ provider: 'claude', pace: null }]);
+    expect(plain).toEqual({ provider: 'claude', pace: 0, resetPace: 0, endingPace: 0, resetEndsAt: null });
+    expect(claude?.pace).toBe(0);
+    expect(claude?.resetPace ?? 0).toBeGreaterThan(10);
+    expect(claude?.endingPace).toBe(0);
+    expect(claude?.resetEndsAt).toBe(endsAt);
+    expect(listProviderPaces(snapshot({}), NOW, null)).toEqual([
+      { provider: 'claude', pace: null, resetPace: null, endingPace: null, resetEndsAt: null },
+    ]);
+  });
+
+  test('counts only the resets that end within three days in the ending pace', () => {
+    const out = weekly(90, NOW + 144 * HOUR_MS);
+    const soon = grant({
+      id: 'soon',
+      endsAt: NOW + 48 * HOUR_MS,
+      clears: [],
+      givesBackWeekly: true,
+      weeklyShare: 5,
+    });
+    const later = grant({ id: 'later', endsAt: NOW + 100 * DAY_MS });
+    const [claude] = listProviderPaces(
+      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [soon, later] } })] }),
+      NOW,
+      null
+    );
+    const [onlySoon] = listProviderPaces(
+      snapshot({ accounts: [summary({ usage: { ...out, resetGrants: [soon] } })] }),
+      NOW,
+      null
+    );
+    expect(claude?.endingPace ?? 0).toBeGreaterThan(claude?.pace ?? Number.POSITIVE_INFINITY);
+    expect(claude?.endingPace).toBe(onlySoon?.resetPace ?? Number.NaN);
+    expect(claude?.resetPace ?? 0).toBeGreaterThan(claude?.endingPace ?? 0);
+  });
+
+  test('tells a reset that ends within three days from one that ended or ends later', () => {
+    expect(isResetEnding(NOW + 2 * DAY_MS, NOW)).toBe(true);
+    expect(isResetEnding(NOW + 4 * DAY_MS, NOW)).toBe(false);
+    expect(isResetEnding(NOW - 1, NOW)).toBe(false);
+    expect(isResetEnding(null, NOW)).toBe(false);
   });
 
   test('paces Claude against the agent model’s own weekly window', () => {
