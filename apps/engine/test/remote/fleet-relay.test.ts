@@ -65,8 +65,6 @@ const PAIRED: Partial<RemoteFile> = {
   credentials: {
     instanceId: 'studio',
     machineToken: 'studio-token',
-    tunnelToken: 't',
-    tunnelHost: 'h',
     connectKey: 'c',
   },
   teams: [TEAM],

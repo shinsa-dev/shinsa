@@ -1,7 +1,9 @@
 import { Option } from 'effect';
 import {
   type Activity,
+  type CiRun,
   type Gate,
+  isInheritedCiFailure,
   resolveCurrentRound,
   resolveGuestFirstName,
   type Task,
@@ -127,6 +129,12 @@ function describeWatchdogs(task: Task) {
   ];
 }
 
+function describeCiLine(run: CiRun, base: string | null) {
+  const status = run.status.replaceAll('_', ' ');
+  const inherited = isInheritedCiFailure(run) ? `, fails on ${base ?? 'the base branch'} too` : '';
+  return `- ${run.name} (${status}${inherited})`;
+}
+
 function describeTaskCheckLines(state: ShinsaState, task: Task) {
   const repo = task.repoId ? (state.repos[task.repoId] ?? null) : null;
   const built = describeTaskChecks(task, repo);
@@ -134,10 +142,7 @@ function describeTaskCheckLines(state: ShinsaState, task: Task) {
   return [
     ...(built ? [built] : []),
     ...(runs.length > 0
-      ? [
-          'CI on the pull request:',
-          ...runs.map((run) => `- ${run.name} (${run.status.replaceAll('_', ' ')})`),
-        ]
+      ? ['CI on the pull request:', ...runs.map((run) => describeCiLine(run, task.pullRequest?.base ?? null))]
       : []),
   ];
 }

@@ -5,6 +5,9 @@ import { Remote } from '../../git/remote/service.ts';
 import type { DispatchOptions } from '../../runtime/engine/schema.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
 import { RepoFolders } from '../folders/service.ts';
+import { listProjectOwners } from '../origin/owners.ts';
+import type { OriginNotConnected } from '../origin/schema.ts';
+import { RepoOrigins } from '../origin/service.ts';
 import { resolveNewRepoParent } from '../parent.ts';
 import { resolveOwnerProjectName } from '../project-name.ts';
 import { REPOSITORY_NAME, RepoNotCreated, RepoNotRegistered } from '../schema.ts';
@@ -15,6 +18,7 @@ export class RepoRegistry extends Context.Service<
   RepoRegistry,
   {
     syncRemote(repo: Repo): Effect.Effect<Repo, RegistryFailure>;
+    connectOrigin(repo: Repo): Effect.Effect<Repo, OriginNotConnected | RegistryFailure>;
     upsert(
       path: string,
       login: LoginLookup | null,
@@ -38,6 +42,7 @@ export class RepoRegistry extends Context.Service<
       const remotes = yield* Remote;
       const folders = yield* RepoFolders;
       const setup = yield* RepoSetup;
+      const origins = yield* RepoOrigins;
 
       const selectRepoByPath = (state: ShinsaState, path: string) =>
         Object.values(state.repos).find((repo) => repo.path === path) ?? null;
@@ -54,6 +59,12 @@ export class RepoRegistry extends Context.Service<
         if (repo.remote) return repo;
         const remote = yield* remotes.resolveOrigin(repo.path);
         if (!remote) return repo;
+        return yield* recordRepoRemote(repo, remote);
+      });
+
+      const connectOrigin = Effect.fn('RepoRegistry.connectOrigin')(function* (repo: Repo) {
+        const remote = yield* origins.connect(repo, listProjectOwners(yield* definition.state, repo));
+        if (repo.remote) return repo;
         return yield* recordRepoRemote(repo, remote);
       });
 
@@ -112,7 +123,15 @@ export class RepoRegistry extends Context.Service<
         const known = selectRepoByPath(yield* definition.state, path);
         if (known) return known;
         yield* setup.create(path);
-        return yield* upsert(path, options.login ?? null, projectId, options.from);
+        const created = yield* upsert(path, options.login ?? null, projectId, options.from);
+        return yield* connectOrigin(created).pipe(
+          Effect.catchTag('OriginNotConnected', (failure) =>
+            Effect.logWarning('[GitHub] Could not connect the new repository').pipe(
+              Effect.annotateLogs({ path, error: failure.message }),
+              Effect.as(created)
+            )
+          )
+        );
       });
 
       const createInProject = Effect.fn('RepoRegistry.createInProject')(function* (
@@ -128,7 +147,14 @@ export class RepoRegistry extends Context.Service<
         return yield* create(parent, name, projectId);
       });
 
-      return RepoRegistry.of({ syncRemote, upsert, upsertProjectFolder, create, createInProject });
+      return RepoRegistry.of({
+        syncRemote,
+        connectOrigin,
+        upsert,
+        upsertProjectFolder,
+        create,
+        createInProject,
+      });
     })
   );
 }

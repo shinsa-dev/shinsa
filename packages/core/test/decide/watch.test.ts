@@ -416,3 +416,28 @@ describe('what a fix round is keyed to', () => {
     expect(conflict).toEqual({ kind: 'conflicting' });
   });
 });
+
+describe('failures that the base branch has too', () => {
+  const inherited: CiRun = { ...check('deploy', 'failure', true), failsOnBase: true };
+
+  test('are never reported as newly failed or remembered as failed checks', () => {
+    const read = detail({ checks: 'failing', checkRuns: [inherited, check('lint', 'failure', true)] });
+    const report = evaluatePullRequestWatch(watch(), read, [], VIEWER);
+    expect(report.changes).toEqual([{ kind: 'checks_failed', failed: [check('lint', 'failure', true)] }]);
+    expect(report.next.failedChecks).toEqual(['lint']);
+  });
+
+  test('still keep the required checks from counting as passed', () => {
+    const read = detail({ checks: 'failing', checkRuns: [inherited, check('lint', 'success', true)] });
+    const report = evaluatePullRequestWatch(watch(), read, [], VIEWER);
+    expect(report.changes).toEqual([]);
+    expect(report.next.passed).toBe(false);
+  });
+
+  test('stay out of the fix signature', () => {
+    const read = detail({ checks: 'failing', checkRuns: [inherited, check('lint', 'failure')] });
+    expect(Option.getOrNull(resolvePullRequestSignature(read, watch()))).toBe('check:lint');
+    const only = detail({ checks: 'failing', checkRuns: [inherited] });
+    expect(Option.getOrNull(resolvePullRequestSignature(only, watch()))).toBeNull();
+  });
+});

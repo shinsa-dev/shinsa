@@ -12,6 +12,12 @@ export const MachinePort = Schema.Int.check(Schema.isBetween({ minimum: 0, maxim
 
 const MachineTime = Schema.Finite.check(Schema.isGreaterThan(0));
 
+export const ProviderChoice = Schema.Literals(['added', 'removed']);
+export type ProviderChoice = typeof ProviderChoice.Type;
+
+const ProviderChoices = Schema.Record(MachineText, ProviderChoice);
+export type ProviderChoices = typeof ProviderChoices.Type;
+
 export const MachineConfig = Schema.Struct({
   version: Schema.Literal(1),
   roots: Schema.mutable(MachineRoots),
@@ -21,6 +27,7 @@ export const MachineConfig = Schema.Struct({
   editor: Schema.NullOr(MachineText),
   terminal: Schema.NullOr(MachineText),
   worktreesDir: Schema.NullOr(MachineFolder),
+  providerLogins: ProviderChoices,
 });
 export type MachineConfig = typeof MachineConfig.Type;
 
@@ -32,6 +39,7 @@ export const MachineFields = Schema.Struct({
   editor: Schema.NullishOr(MachineText),
   terminal: Schema.NullishOr(MachineText),
   worktreesDir: Schema.NullishOr(MachineFolder),
+  providerLogins: Schema.NullishOr(ProviderChoices),
 });
 
 export type MachineField = keyof typeof MachineFields.fields;
@@ -44,6 +52,7 @@ export const MACHINE_FIELD_PROBLEMS: Record<MachineField, string> = {
   editor: 'editor must be text; it was ignored.',
   terminal: 'terminal must be text; it was ignored.',
   worktreesDir: 'worktreesDir must be the full path of a folder; it was ignored.',
+  providerLogins: 'providerLogins must map each provider to added or removed; it was ignored.',
 };
 
 export const NOT_AN_OBJECT_PROBLEM = 'The file is not a JSON object.';

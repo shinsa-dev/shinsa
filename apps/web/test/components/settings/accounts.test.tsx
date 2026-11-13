@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { type AccountsSnapshot, createSettings, type ProviderLogin } from '@shinsa/core';
+import { type AccountsSnapshot, createSettings, type ProviderLogin, resolveEngineInfo } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AccountSettings } from '@/components/settings/accounts.tsx';
@@ -9,7 +9,7 @@ import { createAccount, createProviderLogin, createSnapshot, createWindow } from
 import { spyOnToasts } from '../../support/commands.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
-import { pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import { pushAccounts, pushEngine, startFakeServer, stopFakeServer } from '../../support/server.ts';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -58,6 +58,7 @@ beforeEach(() => {
   fake = startFakeOnboarding({
     'POST /api/accounts/update': { answer: ACCOUNTS },
     'POST /api/accounts/remove': { answer: ACCOUNTS },
+    'POST /api/accounts/provider': { answer: ACCOUNTS },
     'POST /api/accounts/import': { answer: ACCOUNTS },
     'POST /api/accounts/login': { answer: createSnapshot() },
     'POST /api/accounts/refresh': {
@@ -77,7 +78,8 @@ afterEach(() => {
   stopFakeServer();
 });
 
-function renderAccounts(snapshot: AccountsSnapshot) {
+function renderAccounts(snapshot: AccountsSnapshot, engine = resolveEngineInfo('1.0.0')) {
+  pushEngine(engine);
   pushAccounts(snapshot);
   return render(
     <TooltipProvider>
@@ -324,6 +326,7 @@ describe('the Accounts settings', () => {
     await openOptions('Codex');
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Check the Codex sign-in again',
+      'Remove Codex',
     ]);
     await pickItem('Check the Codex sign-in again');
     await waitFor(() => expect(screen.getByText('Signed in with ChatGPT')).toBeTruthy());
@@ -346,6 +349,7 @@ describe('the Accounts settings', () => {
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Copy the sign-in command',
       'Check the Codex sign-in again',
+      'Remove Codex',
     ]);
     await pickItem('Copy the sign-in command');
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Copied'));
@@ -373,10 +377,64 @@ describe('the Accounts settings', () => {
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Sign in with another account',
       'Sign in to two@example.comFrom claude-swap',
+      'Codex',
     ]);
     await pickItem(/Sign in to two@example.com/);
     expect(fake.requests.at(-1)?.body).toEqual({ origin: 'cswap', email: 'two@example.com' });
     expect(screen.getByRole('status', { name: 'Sign-in dialog' }).textContent).toBe('open two@example.com');
+  });
+
+  it('removes Codex after you confirm, and keeps the Codex CLI signed in', async () => {
+    renderAccounts({ ...ACCOUNTS, providers: [createProviderLogin({})] });
+    await openOptions('Codex · codex@example.com');
+    await pickItem('Remove Codex');
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('Remove Codex from Shinsa?')).toBeTruthy();
+    expect(
+      within(dialog).getByText('Shinsa forgets Codex, and your Codex CLI stays signed in.')
+    ).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove Codex' }));
+    await waitFor(() =>
+      expect(fake.requests.find((request) => request.path === '/api/accounts/provider')?.body).toEqual({
+        provider: 'codex',
+        choice: 'removed',
+      })
+    );
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Codex removed.'));
+  });
+
+  it('adds Codex back from the Add account menu when it is not shown', async () => {
+    renderAccounts(ACCOUNTS);
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    await settle();
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Sign in with another account',
+      'Codex',
+    ]);
+    await pickItem('Codex');
+    await waitFor(() =>
+      expect(fake.requests.find((request) => request.path === '/api/accounts/provider')?.body).toEqual({
+        provider: 'codex',
+        choice: 'added',
+      })
+    );
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Codex added.'));
+  });
+
+  it('offers neither removing nor adding Codex on an engine that cannot choose providers', async () => {
+    renderAccounts(
+      { ...ACCOUNTS, providers: [CODEX_SIGNED_OUT] },
+      { ...resolveEngineInfo('1.0.0'), features: [] }
+    );
+    await openOptions('Codex');
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Check the Codex sign-in again',
+    ]);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    await settle();
+    expect(screen.queryByRole('menuitem', { name: 'Codex' })).toBeNull();
   });
 
   it('says why a copied claude-swap login needs signing in again', () => {

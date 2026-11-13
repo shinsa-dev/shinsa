@@ -112,6 +112,7 @@ describe('finding a spec', () => {
       'accounts sign-in',
       'accounts import',
       'accounts remove',
+      'accounts provider',
       'schedules webhook-secret',
       'command',
     ]) {

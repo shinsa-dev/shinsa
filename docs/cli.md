@@ -1860,6 +1860,21 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<account>` | text, required | The account (id or email). |
 
+#### shinsa accounts provider
+
+Remove a provider such as Codex from Shinsa, or add it back. Its own sign-in is never signed out.
+
+```
+shinsa accounts provider <provider> --choice <added|removed> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<provider>` | text, required | The provider, such as codex. |
+| `--choice` | choice, required | removed forgets it; added shows it again. |
+
 ### usage
 
 #### shinsa usage
@@ -2366,7 +2381,7 @@ Every task agent's tool: `remote_status` (reads).
 
 #### shinsa remote pair
 
-Turn on remote access: sign in with GitHub in the browser to give this machine its tunnel.
+Turn on remote access: sign in with GitHub in the browser to connect this machine to Shinsa Cloud.
 
 ```
 shinsa remote pair [--json]
@@ -2376,7 +2391,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote enable
 
-Start the tunnel again after pausing it.
+Connect to Shinsa Cloud again after pausing remote access.
 
 ```
 shinsa remote enable [--json]
@@ -2386,7 +2401,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote disable
 
-Pause remote access: stop the tunnel and close every open session.
+Pause remote access: disconnect from Shinsa Cloud and close every open session.
 
 ```
 shinsa remote disable [--json]
@@ -2396,7 +2411,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa remote remove
 
-Remove this machine from Shinsa Cloud and forget its tunnel and devices.
+Remove this machine from Shinsa Cloud and forget its devices.
 
 ```
 shinsa remote remove [--json]

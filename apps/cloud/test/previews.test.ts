@@ -100,7 +100,9 @@ describe('a preview link', () => {
     expect(answer.headers.getSetCookie()).toEqual(['a=1', 'b=2; Path=/; Secure', 'domain=foo; Path=/']);
     expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
     const call = harness.calls.at(-1);
-    expect(call?.url).toBe(`https://${credentials.tunnelHost}/__preview/${PREVIEW_ID}/app/page?x=1`);
+    expect(call?.url).toBe(
+      `https://${credentials.instanceId}.relay.test/__preview/${PREVIEW_ID}/app/page?x=1`
+    );
     expect(call?.headers.get(PREVIEW_KEY_HEADER)).toBe(KEY);
     expect(call?.headers.get('cookie')).toBe('theme=dark');
     expect(call?.headers.get('accept')).toBe('text/html');
@@ -175,22 +177,37 @@ describe('a preview link', () => {
     const stale = await visit(harness, `${origin}/`, withKey());
     expect(stale.status).toBe(503);
     expect(await stale.text()).toContain(PREVIEW_OFFLINE.slice(0, 40));
-    expect(logged).toHaveBeenCalledTimes(2);
+    expect(logged).toHaveBeenCalledTimes(3);
+    expect(logged.mock.calls[2]).toEqual([
+      '[Cloud] Machine offline',
+      expect.objectContaining({ surface: 'preview', reason: 'stale', lastSeenAt: expect.any(Number) }),
+    ]);
     expect(errors).not.toHaveBeenCalled();
     logged.mockRestore();
     errors.mockRestore();
   });
 
-  test('passes on the machine’s own page for a stopped service, not the offline page', async () => {
+  test('passes on the machine’s own page for a stopped service and warns that the service stopped', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);
-    harness.handlers.push(
-      () => new Response(PREVIEW_STOPPED, { status: 503, headers: { [PREVIEW_PAGE_HEADER]: '1' } })
+    const logged = spyOn(console, 'warn').mockImplementation(() => undefined);
+    harness.handlers.push((call) =>
+      call.url.endsWith('/gone')
+        ? new Response('gone', { status: 404, headers: { [PREVIEW_PAGE_HEADER]: '1' } })
+        : new Response(PREVIEW_STOPPED, { status: 503, headers: { [PREVIEW_PAGE_HEADER]: '1' } })
     );
     const stopped = await visit(harness, `${origin}/`, withKey());
     expect(stopped.status).toBe(503);
     expect(stopped.headers.has(PREVIEW_PAGE_HEADER)).toBe(false);
     expect(await stopped.text()).toBe(PREVIEW_STOPPED);
+    expect((await visit(harness, `${origin}/gone`, withKey())).status).toBe(404);
+    expect(logged.mock.calls).toEqual([
+      [
+        '[Cloud] Preview service stopped',
+        expect.objectContaining({ instanceId: expect.any(String), previewId: PREVIEW_ID, status: 503 }),
+      ],
+    ]);
+    logged.mockRestore();
   });
 
   test('answers a failure inside the Worker as an error, not the app', async () => {
@@ -372,7 +389,7 @@ describe('a private address', () => {
     const forged = { [PREVIEW_ACCESS_HEADER]: 'forged', [PREVIEW_KEY_HEADER]: 'forged' };
     await visit(harness, `${origin}/page`, withAccess('signed', { headers: forged }));
     const sent = harness.calls.at(-1);
-    expect(sent?.url).toBe(`https://${credentials.tunnelHost}/__preview/${PREVIEW_ID}/page`);
+    expect(sent?.url).toBe(`https://${credentials.instanceId}.relay.test/__preview/${PREVIEW_ID}/page`);
     expect(sent?.headers.get(PREVIEW_ACCESS_HEADER)).toBe('signed');
     expect(sent?.headers.has(PREVIEW_KEY_HEADER)).toBe(false);
     expect(sent?.headers.get('cookie')).toBe('theme=dark');

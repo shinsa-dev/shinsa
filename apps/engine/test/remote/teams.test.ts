@@ -43,8 +43,6 @@ import { adaptRemote, adaptTeams, createRemoteTest } from './harness.ts';
 const CREDENTIALS = {
   instanceId: 'inst1',
   machineToken: 'machine-token',
-  tunnelToken: 'tunnel',
-  tunnelHost: 't-inst1.shinsa.dev',
   connectKey: 'key',
 };
 

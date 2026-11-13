@@ -136,7 +136,8 @@ src/
 │   │                hook rejection (recordHookFailure, `fixFor: 'hook'`; the same failures again open the `push_hook`
 │   │                gate, retryHookFix answers it); after the checks of such a fix the push follows (checks.ts)
 │   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
-│   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key,
+│   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
+│   │                (failures inherited from the base, CiRun.failsOnBase, left out of both, domain/ci.ts),
 │   │                whether no checks on a head means no CI (ciAbsent: the repository's RepoCi and CI_GRACE_MS
 │   │                from the push, resolvePullRequestCi)
 │   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on_tasks), releasing
@@ -322,7 +323,7 @@ src/
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
 ├── remote/          Remote access, shared by the engine, the web app and the hosted Worker (`apps/cloud`), on
 │                    WebCrypto only: the append-only wire contract with the Worker (contract.ts: REMOTE_PATHS, the
-│                    tunnel host, the stable webhook URL and its engine path, the enrollment link's fragment, and
+│                    relay URLs, the stable webhook URL and its engine path, the enrollment link's fragment, and
 │                    every request and answer as an Effect Schema with its type beside it: RemoteUser, RemoteTeam,
 │                    HeartbeatResponse…, their limits in REMOTE_TEXT_LIMITS, the branded path ids InstanceId, TeamId,
 │                    RemoteUserId and ClaimCode), the Worker's failures (errors.ts: one Schema.TaggedError per wire

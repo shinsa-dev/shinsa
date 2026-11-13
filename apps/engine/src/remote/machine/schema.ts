@@ -77,7 +77,6 @@ export interface RemoteHandle {
   readonly machineName: string;
   readonly snapshot: Effect.Effect<RemoteSnapshot>;
   readonly isEnabled: Effect.Effect<boolean>;
-  readonly tunnelHost: Effect.Effect<string | null>;
   readonly startPairing: Effect.Effect<PairingView, RemoteCallFailure>;
   readonly cancelPairing: Effect.Effect<void>;
   resolveHookUrl(scheduleId: string, token: string): Effect.Effect<string | null>;

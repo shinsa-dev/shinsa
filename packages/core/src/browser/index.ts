@@ -4,6 +4,8 @@ export {
   type BrowserSignInRequest,
   BrowserSignInInput,
   SIGN_IN_URL_MESSAGE,
+  SignInCheck,
+  type SignInCheckFailure,
 } from './schema.ts';
-export { resolveSignInSite } from './site.ts';
+export { isLocalSignInUrl, resolveSignInSite } from './site.ts';
 export { validateBrowserSignInRequest } from './validate.ts';

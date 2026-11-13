@@ -6,6 +6,7 @@ import {
   MAX_TEAM_MEMBERS,
   type MachineCredentials,
   REMOTE_CHANNEL_PATH,
+  resolveRelayPath,
   REMOTE_PATHS,
   type RemoteMember,
   type RemoteTeam,
@@ -292,8 +293,8 @@ describe('team connect tokens', () => {
       await harness.post(resolveTeamConnectPath(team.id), { instanceId: studio.instanceId }, { session: kai })
     );
     const url = new URL(answer.url);
-    expect(url.host).toBe(`t-${studio.instanceId}.shinsa.dev`);
-    expect(url.pathname).toBe('/team');
+    expect(url.host).toBe('app.shinsa.dev');
+    expect(url.pathname).toBe(`/__relay/${studio.instanceId}/team`);
     const token = url.searchParams.get('token') ?? '';
     const teamChannel = { instanceId: studio.instanceId, channel: 'team' } as const;
     const claim = await Effect.runPromise(
@@ -329,7 +330,7 @@ describe('team connect tokens', () => {
       await act(harness, laptop, team.id, 'connect/remote', { instanceId: studio.instanceId })
     );
     const url = new URL(answer.url);
-    expect(url.pathname).toBe(REMOTE_CHANNEL_PATH);
+    expect(url.pathname).toBe(`${resolveRelayPath(studio.instanceId)}${REMOTE_CHANNEL_PATH}`);
     const token = url.searchParams.get('token') ?? '';
     const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
     expect(

@@ -36,7 +36,6 @@ const WIRE = [
   ['InvalidRedirect', 'invalid_redirect', 400],
   ['InvalidChallenge', 'invalid_challenge', 400],
   ['UrlInvalid', 'url_invalid', 400],
-  ['CloudflareFailed', 'cloudflare_failed', 502],
   ['SignatureInvalid', 'signature_invalid', 401],
   ['SlackDenied', 'slack_denied', 400],
   ['SlackExpired', 'slack_expired', 400],
