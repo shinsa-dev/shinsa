@@ -45,13 +45,15 @@ second copy of the bar without `data-desktop`, the wordmark and no lights, swapp
 nothing changes when the islands mount. Both bars are `inert`; the demo below them is the part you use.
 `Backdrop.astro` draws a circuit board behind it (`lib/board.ts`): each demo
 window is a chip, two traces per side run from one chip to the next, and a signal travels down them as you scroll.
+On a chip too short for the full insets (`resolveInsets`), the incoming traces enter near its top and the outgoing ones leave near its bottom, and a short first or last chip takes its traces at its middle.
 
 ## Layout
 
 ```
 src/
   pages/index.astro         The page: hero, then one Section per feature, then Closing
-  layouts/Site.astro        Meta, the theme class from the system setting, Header (no footer)
+  layouts/Site.astro        Meta, the theme class from the system setting, Header (no footer); every image, video
+                            and SVG on the site can be neither selected nor dragged (`global.css`, and a script that cancels a drag)
   components/layout/        Header (solid, with a fade under it once you scroll; its links point at `/#section`, so they work from every page), Section (centred title, text, then the
                             demo), Backdrop (the circuit board and its scroll signal)
   components/sections/      Hero, Closing (principles and the last call)
@@ -66,13 +68,15 @@ src/
                             DemoRoot (installs the stand-in server), Window (the app's top bar and traffic lights over
                             the demo's page) and Stage; focus.ts (`useFocus`) plays a demo only
                             while it is the main thing on screen (half of it in view, or 45% of the screen), and its first step comes 300ms after
-  lib/content.ts            Every headline and paragraph on the page, the principles and the feature grid
+  lib/content.ts            Every headline and paragraph on the page, the principles and the feature grid, and Koe's
+                            page (`koe`, `koeFeatures`)
   lib/site.ts               Name, URL, description, the download and GitHub links: every download button (Header,
                             Hero, Closing, the open page) links canaryUrl (`/download/canary`), labelled Canary, while
                             there is no stable release and the beta is held back; betaUrl is the small link under the
                             Closing CTA and llms.txt's second download. Nothing links `/download` itself.
                             cloudUrl (app.shinsa.dev, which starts GitHub sign-in) is the Header's outline Sign in;
-                            the Header's GitHub button is icon only, and every GitHub glyph on the site draws at 16px
+                            the Header's GitHub button is icon only, and every GitHub glyph on the site draws at 16px.
+                            koeSite holds Koe's page path, title, description and its download link (`/koe/download`)
   lib/scene.ts              The sample project (Northwind) and the Home and All tasks state
   lib/*-scene.ts            One file of sample state per demo. onboarding-code.ts is the Northwind change the gates and
                             Code demos show. tint-scene.ts is the Review demo's task, a real Shinsa change (SW-214, the
@@ -87,6 +91,31 @@ src/
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   lib/design.ts             `/design.md`, the whole design system in one file (below)
+  pages/koe.astro           Koe's product page (`/koe`), under its own header (layout/KoeHeader.astro: Koe's icon and
+                            name, "by Shinsa" back to `/`, its section links, GitHub and Download for Mac): the icon
+                            (public/koe/koe.svg), headline, Download for Mac and View on GitHub (`koeSite.githubUrl`), the hero recording (in the hero section, `#demo`), one `Section` per tool, the bundle,
+                            the speed (measured numbers in `koeSpeed`; measure again before changing them; each card a `koe-speed` with its own
+                            blurred lights held at its edges, still under prefers-reduced-motion; the method under them sits in
+                            Section's `after` slot, outside the chip, so the board's traces meet the cards), the models (one card the chip's width)
+                            and a short feature row. `#soon` is the "coming soon" note, shown by CSS `:target` alone: a Koe
+                            download with no release behind it redirects there. Shinsa's Header leads to it with an
+                            "Also from us: Koe" chip beside the wordmark, and sections/KoeCallout.astro, an "Also from
+                            us" block under Closing, with a Meet Koe button and the pill
+  components/koe/           Koe's page, shown with real recordings of the Mac app, never redrawn: KoeVideo.astro (one
+                            recording from public/koe/: `<name>.webm`, `.mp4` and its `.webp` poster; it plays muted
+                            on a loop from a small script, only while it is the recording most in view (at least 35%
+                            of it on screen), from its start each time it takes the focus, and under
+                            prefers-reduced-motion stays on its poster with controls; encoded at the capture's full
+                            Retina size, 60 fps; `captions` are the words spoken in it, in seconds of the recording, shown over its top
+                            edge as it plays, each word appearing when it is said (`resolveCaptionWords` spreads a line's words over its
+                            time by length), since the pill sits at the bottom), KoeTools.astro (one `Section` per tool,
+                            the comment, screenshot and clip recordings at full width, from `koeTools`)
+                            and KoeBundle.astro (what one recorded session put on the clipboard: its two images and
+                            the exact text Koe copied, numbered [1] and [2]). public/koe/koe-session is the hero, and
+                            koe-pill.webp the real pill in KoeCallout. Every recording is Koe over the seeded Shinsa (the
+                            `seeded` service) in dark, never a made-up app; the comment one pins two comments in a row, each with ⇧⌘-click, so the second click attaches the first.
+                            Record them again from the installed Koe when its look changes, crop the bottom edge and 6px off each side (Koe's frame
+                            around the screen while you pick) and time the captions again
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
                             own review as a page, the task page's header pinned on top (title, the two buttons, and the web's TaskSharedFacts:
                             handle, status, repository, branch, pull request, checks, coverage, started; under the title
@@ -112,9 +141,10 @@ src/
                             `respondWorker` (app.ts) with `WorkerLayer`. Its services: `Bucket` (bucket/, the R2 reads,
                             failing with `BucketUnbound` or `BucketFailed`), `EdgeCache` (cache/, `caches.default`),
                             `Assets`, `ReleaseFeed` (releases/, the Atom feed through `HttpClient`), and one per
-                            answer: `Downloads` (download/, the download paths and `/download/version[/beta|/canary]`,
+                            answer: `Downloads` (download/, Shinsa's and Koe's download paths, one `Product` each in
+                            releases/schema.ts, and `/download/version[/beta|/canary]`,
                             the channel's version as text, for the install script), `Updates` (updates/, the Mac app's
-                            update files) and `OpenPage` (open/, which writes the open page's tab title from the query
+                            update files and Koe's appcasts and disk images) and `OpenPage` (open/, which writes the open page's tab title from the query
                             with HTMLRewriter). The pure steps sit beside them (bytes.ts, download/paths.ts and
                             conditions.ts, releases/versions.ts and pointer.ts, updates/files.ts); logger.ts writes
                             Effect's logs to the console. Tested through `respondWorker` (test/worker/harness.ts) at
@@ -173,7 +203,8 @@ web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `m
 workers.dev with a URL per branch and per deployment (`previews` turns it on, and repeats the R2 binding, since a
 preview inherits no binding). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There
 is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download`,
-`/download/*` (the version path included), `/open` and `/updates/*` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
+`/download/*` (the version path included), `/open`, `/updates/*` and Koe's `/koe/download`, `/koe/download/*`,
+`/koe/appcast/*` and `/koe/releases/*` (`assets.run_worker_first`); every other request is a plain static asset hit. `bun run
 preview` serves `/open` without the Worker, so its tab keeps the generic title; `bunx wrangler dev`
 after a build shows it as production does.
 
@@ -192,7 +223,12 @@ channels/canary.json                               what /download/canary serves
 updates/latest-mac.yml                             the Stable update channel's file
 updates/beta-mac.yml                               the Beta update channel's file
 updates/canary-mac.yml                             the Canary update channel's file
+koe/releases/<version>/Koe.dmg                     every Koe release's disk image, never overwritten
+koe/channels/<channel>.json                        what /koe/download[/canary] serves (stable, canary)
+koe/appcast/<channel>.xml                          Koe's Sparkle appcast for the channel
 ```
+
+Koe's keys are written by Koe's own Release workflow (shinsa-dev/koe, `docs/release.md`) in the same pointer shape.
 
 A channel file is a pointer, `{version, key, size, sha256, publishedAt}` (`parseDownloadPointer`), written after the
 GitHub release is published and only when its version is not older than the one there by semver (so a stable release
@@ -239,6 +275,16 @@ pointer (`docs/release.md` → Downloads).
   `Cache-Control: no-store` and logs an error, which `logger.ts` writes to `console.error` and Workers Logs keeps
   (`observability` in `wrangler.jsonc`), and the app checks again later. There is no fallback to GitHub
   (`updates/service.ts`).
+- **Koe.** Koe has two channels, stable and canary, and no beta. `/koe/download` and `/koe/download/canary` are served
+  by the same `Downloads` code with Koe's `Product`: the pointer under `koe/channels/`,
+  `Content-Disposition: attachment; filename="Koe-<version>.dmg"` and the same headers, ranges and validators.
+  `/koe/download` falls back to the canary pointer until there is a stable release (`stableFallback`), and
+  `/koe/download/beta` answers 404, as does `/koe/appcast/beta.xml`. Koe's repository is private, so
+  there is no GitHub fallback: whenever R2 cannot serve, the answer is a `302` to `/koe#soon` with
+  `Cache-Control: no-store`, and the page shows its coming-soon note. An R2 error on that path logs
+  `Download read from R2 failed` first, so an outage is never mistaken for a missing release. `/koe/appcast/<channel>.xml` serves
+  `koe/appcast/<channel>.xml` as `application/xml` with `max-age=60`, and `/koe/releases/<version>/Koe.dmg` the
+  immutable disk image the appcast's enclosure points at, both through `Updates`; any other path under them answers 404.
 - **Workers limits that apply.** A streamed response has no size limit, an R2 body costs no CPU time per byte, and an
   HTTP request has no wall-clock limit while the client stays connected. A download is two R2 operations (the pointer,
   on a cache miss, and the object), both Class B reads, of which ten million a month are free. Memory (128 MB) is never

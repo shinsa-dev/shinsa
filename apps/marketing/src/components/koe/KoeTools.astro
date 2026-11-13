@@ -1,0 +1,13 @@
+---
+import { koeTools } from '../../lib/content';
+import Section from '../layout/Section.astro';
+import KoeVideo from './KoeVideo.astro';
+---
+
+{
+  koeTools.map((tool) => (
+    <Section copy={tool}>
+      <KoeVideo name={tool.video} width={2548} height={1492} label={tool.label} captions={tool.captions} />
+    </Section>
+  ))
+}

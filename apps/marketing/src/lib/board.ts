@@ -36,6 +36,7 @@ const LANE_INSET = 28;
 const PIN_GAP = 16;
 const EXIT_INSET = 72;
 const ENTRY_INSET = 152;
+const SHORT_INSET = 24;
 const CHAMFER = 10;
 const MIN_EDGE = 12;
 const STUB_ROOM = 96;
@@ -68,14 +69,27 @@ function countLanes(side: Side, edge: number, width: number) {
   return 0;
 }
 
-function routeLane(side: Side, from: ChipRect, to: ChipRect, lane: number, lanes: number) {
+export function resolveInsets(chip: ChipRect, lanes: number, ends: { incoming: boolean; outgoing: boolean }) {
+  const height = chip.bottom - chip.top;
+  if (height >= ENTRY_INSET + EXIT_INSET + 2 * lanes * PIN_GAP)
+    return { entry: ENTRY_INSET, exit: EXIT_INSET };
+  if (ends.incoming && ends.outgoing) return { entry: SHORT_INSET, exit: SHORT_INSET };
+  const centered = (height - (lanes - 1) * PIN_GAP) / 2;
+  return { entry: centered, exit: centered };
+}
+
+function routeLane(side: Side, chips: ChipRect[], index: number, lane: number, lanes: number) {
+  const from = chips[index]!;
+  const to = chips[index + 1]!;
   const direction = side === 'left' ? -1 : 1;
   const fromEdge = side === 'left' ? from.left : from.right;
   const toEdge = side === 'left' ? to.left : to.right;
   const edge = side === 'left' ? Math.min(fromEdge, toEdge) : Math.max(fromEdge, toEdge);
   const x = resolveLaneX(side, edge, lane);
-  const exit = from.bottom - EXIT_INSET - lane * PIN_GAP;
-  const entry = to.top + ENTRY_INSET + (lanes - 1 - lane) * PIN_GAP;
+  const fromInsets = resolveInsets(from, lanes, { incoming: index > 0, outgoing: true });
+  const toInsets = resolveInsets(to, lanes, { incoming: true, outgoing: index + 2 < chips.length });
+  const exit = from.bottom - fromInsets.exit - lane * PIN_GAP;
+  const entry = to.top + toInsets.entry + (lanes - 1 - lane) * PIN_GAP;
   const turn = -direction * CHAMFER;
   return {
     d: [
@@ -138,7 +152,7 @@ function addSide(board: Board, chips: ChipRect[], index: number, side: Side, pag
   }
   if (!to) return;
   for (let lane = 0; lane < lanes; lane += 1) {
-    const route = routeLane(side, from, to, lane, lanes);
+    const route = routeLane(side, chips, index, lane, lanes);
     board.traces.push(route.d);
     board.pins.push({ ...route.pins[0]!, chip: index }, { ...route.pins[1]!, chip: index + 1 });
     if (lane === 0) board.buses.push({ d: route.d, from: route.exit, to: route.entry });

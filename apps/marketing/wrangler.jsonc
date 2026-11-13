@@ -7,7 +7,16 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/download", "/download/*", "/open", "/updates/*"],
+    "run_worker_first": [
+      "/download",
+      "/download/*",
+      "/open",
+      "/updates/*",
+      "/koe/download",
+      "/koe/download/*",
+      "/koe/appcast/*",
+      "/koe/releases/*"
+    ],
     "html_handling": "drop-trailing-slash",
     "not_found_handling": "404-page"
   },

@@ -1,0 +1,120 @@
+---
+import { type KoeCaption, resolveCaptionWords } from '../../lib/content';
+
+interface Props {
+  name: string;
+  width: number;
+  height: number;
+  label: string;
+  captions: KoeCaption[];
+  class?: string;
+  id?: string;
+}
+
+const { name, width, height, label, captions, class: className, id } = Astro.props;
+const lines = captions.map((caption) => ({ ...caption, words: resolveCaptionWords(caption) }));
+---
+
+<div id={id} class:list={['relative overflow-hidden rounded-2xl bg-bg-1 ring-1 ring-bg-3', className]}>
+  <video
+    class='block h-auto w-full'
+    width={width}
+    height={height}
+    poster={`/koe/${name}.webp`}
+    aria-label={label}
+    data-koe-video
+    muted
+    loop
+    playsinline
+    preload='metadata'
+  >
+    <source src={`/koe/${name}.webm`} type='video/webm' />
+    <source src={`/koe/${name}.mp4`} type='video/mp4' />
+  </video>
+  <div class='pointer-events-none absolute inset-x-0 top-[6%] grid justify-items-center px-4' aria-hidden='true'>
+    {
+      lines.map((line) => (
+        <p
+          class='koe-caption col-start-1 row-start-1 rounded-xl bg-background/85 px-3.5 py-1.5 text-center font-medium text-fg-4 text-sm ring-1 ring-bg-3 backdrop-blur-md md:text-lg'
+          data-koe-caption
+          data-start={line.start}
+          data-end={line.end}
+        >
+          {line.words.map((word, index) => (
+            <>
+              {index > 0 && ' '}
+              <span class='koe-word' data-koe-word data-at={word.at}>
+                {word.text}
+              </span>
+            </>
+          ))}
+        </p>
+      ))
+    }
+  </div>
+</div>
+
+<script>
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function followCaptions(video: HTMLVideoElement) {
+    const lines = [...(video.parentElement?.querySelectorAll<HTMLElement>('[data-koe-caption]') ?? [])];
+    if (lines.length === 0) return;
+    const sync = () => {
+      const time = video.currentTime;
+      for (const line of lines) {
+        const shown = time >= Number(line.dataset.start) && time < Number(line.dataset.end);
+        if (line.hasAttribute('data-shown') !== shown) line.toggleAttribute('data-shown', shown);
+        for (const word of line.querySelectorAll<HTMLElement>('[data-koe-word]')) {
+          const said = shown && time >= Number(word.dataset.at);
+          if (word.hasAttribute('data-said') !== said) word.toggleAttribute('data-said', said);
+        }
+      }
+      requestAnimationFrame(sync);
+    };
+    sync();
+  }
+
+  const videos = [...document.querySelectorAll<HTMLVideoElement>('[data-koe-video]')];
+  const shares = new Map<HTMLVideoElement, number>();
+
+  function visibleShare(video: HTMLVideoElement) {
+    const box = video.getBoundingClientRect();
+    const seen = Math.min(box.bottom, innerHeight) - Math.max(box.top, 0);
+    return Math.max(0, seen) / Math.min(box.height, innerHeight);
+  }
+
+  function focusMostVisible() {
+    let focused: HTMLVideoElement | undefined;
+    let best = 0.35;
+    for (const video of videos) {
+      const share = shares.get(video) ?? 0;
+      if (share > best) {
+        best = share;
+        focused = video;
+      }
+    }
+    for (const video of videos) {
+      if (video === focused) {
+        if (video.paused) {
+          video.currentTime = 0;
+          void video.play().catch(() => video.setAttribute('controls', ''));
+        }
+      } else if (!video.paused) video.pause();
+    }
+  }
+
+  for (const video of videos) followCaptions(video);
+
+  if (reduced.matches) for (const video of videos) video.setAttribute('controls', '');
+  else {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) shares.set(entry.target as HTMLVideoElement, visibleShare(entry.target as HTMLVideoElement));
+        focusMostVisible();
+      },
+      { threshold: Array.from({ length: 21 }, (_, index) => index / 20) },
+    );
+    for (const video of videos) observer.observe(video);
+  }
+</script>
