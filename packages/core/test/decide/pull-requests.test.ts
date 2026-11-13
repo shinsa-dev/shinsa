@@ -598,6 +598,17 @@ describe('watching the pull request', () => {
     expect(harness.openGate(taskId).id).toBe(gate.id);
   });
 
+  test('an optional inherited failure keeps an open merge gate while a late required check runs', () => {
+    const { harness, taskId } = shipping();
+    const build = { name: 'build', status: 'success' as const, required: true, url: null };
+    const optional = { ...INHERITED, required: false };
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, optional] });
+    const gate = harness.openGate(taskId);
+    const late = { name: 'deploy', status: 'pending' as const, required: true, url: null };
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, optional, late] });
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+
   test('an inherited failure with no required checks known keeps the task waiting', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, {

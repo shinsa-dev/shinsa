@@ -4,6 +4,7 @@ import {
   type BundleConflict,
   hasBlockingCiFailure,
   hasStep,
+  isFailedCiRun,
   isTaskSettled,
   listInheritedCiFailures,
   type MergeQueueEntry,
@@ -95,7 +96,11 @@ function isMergeReady(pullRequest: PullRequest, watch: PullRequestWatch) {
 }
 
 function isCiHoldingMerge(pullRequest: PullRequest, watch: PullRequestWatch) {
-  return pullRequest.checks === 'failing' && !hasPassingCi(pullRequest, watch);
+  if (pullRequest.checks !== 'failing' || hasPassingCi(pullRequest, watch)) return false;
+  const runs = pullRequest.checkRuns;
+  if (!runs) return true;
+  const required = runs.filter((check) => check.required === true);
+  return (required.length > 0 ? required : runs).some(isFailedCiRun);
 }
 
 function needsPullRequestFix(pullRequest: PullRequest) {
