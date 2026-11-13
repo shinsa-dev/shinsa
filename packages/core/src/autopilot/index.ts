@@ -1,10 +1,5 @@
 export { isAutopilotDoneSeeable, listAutopilotDone } from './done.ts';
-export {
-  describeAutopilotLesson,
-  listAutopilotLessons,
-  resolveAutopilotLessonSummary,
-  resolveLessonLimit,
-} from './lessons.ts';
+export { describeAutopilotLesson, listAutopilotLessons, resolveLessonLimit } from './lessons.ts';
 export {
   type AutopilotProfileContext,
   listAutopilotKindLines,
@@ -49,12 +44,10 @@ export {
   type AutopilotFacts,
   type AutopilotGateKind,
   type AutopilotJudgment,
-  type AutopilotGateLessons,
   type AutopilotLesson,
   type AutopilotLessonAnswer,
   type AutopilotLessonFacts,
   type AutopilotLessonKind,
-  type AutopilotLessonSummary,
   type AutopilotLimit,
   type AutopilotLimits,
   type AutopilotPresence,

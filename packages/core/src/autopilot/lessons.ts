@@ -4,12 +4,10 @@ import { resolveAutopilotFacts } from './limits.ts';
 import {
   AUTOPILOT_LESSON_LIMITS,
   type AutopilotGateKind,
-  type AutopilotGateLessons,
   type AutopilotLesson,
   type AutopilotLessonAnswer,
   type AutopilotLessonFacts,
   type AutopilotLessonKind,
-  type AutopilotLessonSummary,
   type AutopilotLimit,
 } from './schema.ts';
 
@@ -97,10 +95,6 @@ function resolveLessonFacts(
 
 function isCorrection(lesson: AutopilotLesson) {
   return lesson.kind === 'acted' && (lesson.answer === 'revised' || lesson.answer === 'rejected');
-}
-
-function isCouldHaveActed(lesson: AutopilotLesson) {
-  return lesson.kind === 'forwarded' && lesson.answer === 'approved';
 }
 
 interface LessonDraft {
@@ -213,26 +207,4 @@ export function listAutopilotLessonLines(state: AutopilotLessonsState, gate: Aut
   return listAutopilotLessons(state, gate)
     .slice(0, AUTOPILOT_LESSON_LIMITS.prompt)
     .map((lesson) => `- ${describeAutopilotLesson(lesson)}`);
-}
-
-function summariseGate(state: AutopilotLessonsState, gate: AutopilotGateKind): AutopilotGateLessons {
-  const lessons = listAutopilotLessons(state, gate);
-  const acted = lessons.filter((lesson) => lesson.kind === 'acted');
-  const corrected = acted.filter(isCorrection).length;
-  return {
-    gate,
-    acted: acted.length,
-    kept: acted.length - corrected,
-    corrected,
-    forwarded: lessons.length - acted.length,
-    couldHaveActed: lessons.filter(isCouldHaveActed).length,
-    paused: isPaused(lessons),
-  };
-}
-
-export function resolveAutopilotLessonSummary(state: AutopilotLessonsState): AutopilotLessonSummary {
-  return {
-    gates: LESSON_GATES.map((gate) => summariseGate(state, gate)),
-    recent: listAutopilotLessons(state).slice(0, AUTOPILOT_LESSON_LIMITS.recent),
-  };
 }

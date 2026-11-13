@@ -253,12 +253,12 @@ describe('the Autopilot settings', () => {
     expect(resolveAutopilotScoreView({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'balanced')).toEqual({
       learned: {
         detail: 'None yet. It learns from everything you decide and every message you send.',
-        count: null,
-      },
-      progress: {
-        detail: 'It fills as Autopilot guesses your plans, reviews and merges and you decide them.',
-        value: 0,
+        percent: 0,
         label: 'Learning',
+      },
+      agreement: {
+        detail: 'Once Autopilot guesses your plans, reviews and merges and you decide them.',
+        percent: null,
       },
       suggested: {
         level: 'balanced',
@@ -283,12 +283,12 @@ describe('the Autopilot settings', () => {
     const view = resolveAutopilotScoreView({ autopilotProfile: few }, 'ask_first');
     expect(view.learned).toEqual({
       detail: 'Every one counts, the recent ones the most. Most of them are reviews, plans and merges.',
-      count: '12',
-    });
-    expect(view.progress).toEqual({
-      detail: 'It guessed you right on 10 of 10 so far and needs more to be sure.',
-      value: 0.2,
+      percent: 20,
       label: 'Learning',
+    });
+    expect(view.agreement).toEqual({
+      detail: 'It guessed you right on 10 of 10 so far and needs more to be sure.',
+      percent: '100%',
     });
     expect(view.suggested).toMatchObject({ level: 'balanced', apply: 'Use Balanced' });
     const unsure = createAutopilotProfile({
@@ -298,23 +298,20 @@ describe('the Autopilot settings', () => {
     });
     const unsureView = resolveAutopilotScoreView({ autopilotProfile: unsure }, 'balanced');
     expect(unsureView).toMatchObject({
-      learned: { detail: expect.stringMatching(/Most of them are reviews\.$/) },
-      progress: {
-        detail: 'It guessed you right on 40 of 60, but not often enough lately.',
-        label: 'Learning',
-      },
+      learned: { detail: expect.stringMatching(/Most of them are reviews\.$/), label: 'Learning' },
+      agreement: { detail: 'It guessed you right on 40 of 60, but not often enough lately.', percent: '75%' },
       suggested: { level: 'balanced', apply: null },
     });
-    expect(unsureView.progress.value).toBeLessThan(1);
+    expect(unsureView.learned.percent).toBeLessThan(100);
   });
 
   it('suggests Most things once the bar is full', () => {
     const sure = createAutopilotProfile({ agreed: 46, disagreed: 4 });
     const view = resolveAutopilotScoreView({ autopilotProfile: sure }, 'balanced');
-    expect(view.progress).toEqual({
+    expect(view.learned).toMatchObject({ percent: 100, label: 'Ready' });
+    expect(view.agreement).toEqual({
       detail: 'It guessed you right on 46 of 50 and keeps learning.',
-      value: 1,
-      label: 'Ready',
+      percent: '94%',
     });
     expect(view.suggested).toEqual({
       level: 'most',

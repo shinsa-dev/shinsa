@@ -204,6 +204,8 @@ const GATE_DECISION_KINDS: Record<AutopilotGateKind, readonly AutopilotDecisionK
   proposal: ['proposal'],
 };
 
+const STEERING_KINDS: readonly AutopilotDecisionKind[] = ['message', 'priority', 'cancel'];
+
 const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
   plan: 'plans',
   question: 'agent questions',
@@ -291,7 +293,10 @@ export function listAutopilotProfileLines(
   gate: AutopilotGateKind,
   context: AutopilotProfileContext
 ): string[] {
-  return listAutopilotKindLines(state, GATE_DECISION_KINDS[gate], context);
+  const own = listAutopilotKindLines(state, GATE_DECISION_KINDS[gate], context);
+  const steering = listAutopilotKindLines(state, STEERING_KINDS, context);
+  const steeringLines = steering.length > 0 ? ['How they steer their tasks:', ...steering] : [];
+  return fitToBudget([...own, ...steeringLines]);
 }
 
 export function listAutopilotKindLines(

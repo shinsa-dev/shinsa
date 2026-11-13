@@ -72,14 +72,13 @@ import {
   recordHandoff,
   removeHandoff,
 } from './handoffs.ts';
-import { learnFromMessage } from './lessons.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
 import {
   dropMessage,
   keepSuggestion,
-  messageTask,
+  messageTaskAsYou,
   receiveMessage,
   redeliverMessage,
   routeMessage,
@@ -264,12 +263,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return pauseTask(decider, command);
     case 'task.retry':
       return retryTaskCommand(decider, command);
-    case 'task.message': {
-      const before = decider.events.length;
-      messageTask(decider, command);
-      if (decider.events.length > before) learnFromMessage(decider, command.taskId, command.text);
-      return;
-    }
+    case 'task.message':
+      return messageTaskAsYou(decider, command);
     case 'message.deliver':
       return redeliverMessage(decider, command);
     case 'message.receive':

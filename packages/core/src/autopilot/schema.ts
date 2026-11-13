@@ -112,25 +112,9 @@ export interface AutopilotLesson {
   facts: AutopilotLessonFacts;
 }
 
-export interface AutopilotGateLessons {
-  gate: AutopilotGateKind;
-  acted: number;
-  kept: number;
-  corrected: number;
-  forwarded: number;
-  couldHaveActed: number;
-  paused: boolean;
-}
-
-export interface AutopilotLessonSummary {
-  gates: AutopilotGateLessons[];
-  recent: AutopilotLesson[];
-}
-
 export const AUTOPILOT_LESSON_LIMITS = {
   kept: 50,
   prompt: 8,
-  recent: 5,
   note: 280,
   window: 4,
   corrections: 2,
@@ -217,7 +201,7 @@ export const AUTOPILOT_PROFILE_LIMITS = {
   halfLifeDays: 30,
 } as const;
 
-export const EMPTY_AUTOPILOT_AGREEMENT: AutopilotAgreement = {
+const EMPTY_AUTOPILOT_AGREEMENT: AutopilotAgreement = {
   scored: 0,
   agreed: 0,
   weight: 0,

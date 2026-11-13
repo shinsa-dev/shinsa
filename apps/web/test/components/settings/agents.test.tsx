@@ -294,12 +294,13 @@ describe('Settings → Agents → Autopilot', () => {
     renderAgents(ESCALATING);
     await settle();
     expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
-    expect(
-      screen.getByRole('progressbar', { name: 'Ready for Most things' }).getAttribute('aria-valuenow')
-    ).toBe('100');
+    expect(screen.getByRole('progressbar', { name: 'Your decisions' }).getAttribute('aria-valuenow')).toBe(
+      '100'
+    );
     expect(screen.getByText('Ready')).toBeTruthy();
+    expect(screen.getByText('94%')).toBeTruthy();
+    expect(screen.queryByText('50')).toBeNull();
     expect(screen.queryByText('What it learned')).toBeNull();
-    expect(screen.getByText('50')).toBeTruthy();
     expect(listSentCommands()).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
     expect(listSentCommands()).toEqual([
@@ -311,6 +312,10 @@ describe('Settings → Agents → Autopilot', () => {
     spyOnEngine();
     renderAgents(ESCALATING);
     await settle();
+    expect(screen.getByRole('progressbar', { name: 'Your decisions' }).getAttribute('aria-valuenow')).toBe(
+      '0'
+    );
+    expect(screen.getByText('Learning')).toBeTruthy();
     expect(screen.getByText('In use')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();
   });

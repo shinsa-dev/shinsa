@@ -228,6 +228,30 @@ describe('the profile summary for a judgment', () => {
     ]);
   });
 
+  test('adds how you steer your tasks to every kind of point, after that point’s own counts', () => {
+    const state = profile([
+      decision({ kind: 'plan', answer: 'approved' }),
+      decision({ kind: 'message', answer: 'sent', note: 'Keep it small.' }),
+      decision({ kind: 'priority', answer: 'raised' }),
+      decision({ kind: 'cancel', answer: 'cancelled' }),
+    ]);
+    expect(listAutopilotProfileLines(state, 'plan', NO_CONTEXT)).toEqual([
+      '- All plans: 1 decided: approved 1; lately approved 100%',
+      'How they steer their tasks:',
+      '- All messages to agents: 1 decided: sent 1; lately sent 100%',
+      '- All priority changes: 1 decided: raised 1; lately raised 100%',
+      '- All cancelled tasks: 1 decided: cancelled 1; lately cancelled 100%',
+      'Their recent words:',
+      '- messages to agents, sent: “Keep it small.”',
+    ]);
+    expect(
+      listAutopilotProfileLines(profile([decision({ kind: 'message', answer: 'sent' })]), 'merge', NO_CONTEXT)
+    ).toEqual([
+      'How they steer their tasks:',
+      '- All messages to agents: 1 decided: sent 1; lately sent 100%',
+    ]);
+  });
+
   test('leaves out a project or risk you never decided at, and words when there are none', () => {
     const state = profile([decision({ kind: 'plan', answer: 'approved', projectId: 'p1', risk: 'low' })]);
     expect(listAutopilotProfileLines(state, 'plan', { projectId: 'p9', risk: 'high' })).toEqual([

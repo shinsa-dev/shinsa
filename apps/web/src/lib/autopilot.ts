@@ -153,7 +153,7 @@ export const AUTOPILOT_BLOCKS = {
 
 export const AUTOPILOT_SCORE_ROWS = {
   learned: 'Your decisions',
-  progress: 'Ready for Most things',
+  agreement: 'Agrees with you',
   suggested: 'Suggested level',
 } as const;
 
@@ -177,8 +177,8 @@ const LEVEL_LABEL: Record<AutopilotLevel, string> = {
 };
 
 export interface AutopilotScoreView {
-  learned: { detail: string; count: string | null };
-  progress: { detail: string; value: number; label: string };
+  learned: { detail: string; percent: number; label: string };
+  agreement: { detail: string; percent: string | null };
   suggested: { level: AutopilotLevel; detail: string; apply: string | null };
 }
 
@@ -197,9 +197,8 @@ function describeLearnedDecisions(state: Pick<ShinsaState, 'autopilotProfile'>, 
   return `Every one counts, the recent ones the most. Most of them are ${most}.`;
 }
 
-function describeProgress(score: AutopilotScore) {
-  if (score.scored === 0)
-    return 'It fills as Autopilot guesses your plans, reviews and merges and you decide them.';
+function describeAgreement(score: AutopilotScore) {
+  if (score.scored === 0) return 'Once Autopilot guesses your plans, reviews and merges and you decide them.';
   if (score.ready) return `It guessed you right on ${score.agreed} of ${score.scored} and keeps learning.`;
   if (score.scored < AUTOPILOT_SCORE_LIMITS.minScored)
     return `It guessed you right on ${score.agreed} of ${score.scored} so far and needs more to be sure.`;
@@ -219,12 +218,12 @@ export function resolveAutopilotScoreView(
   return {
     learned: {
       detail: describeLearnedDecisions(state, score.learned),
-      count: score.learned === 0 ? null : String(score.learned),
-    },
-    progress: {
-      detail: describeProgress(score),
-      value: score.progress,
+      percent: Math.round(score.progress * 100),
       label: score.ready ? 'Ready' : 'Learning',
+    },
+    agreement: {
+      detail: describeAgreement(score),
+      percent: score.agreement === null ? null : `${Math.round(score.agreement * 100)}%`,
     },
     suggested: {
       level: score.suggested,

@@ -21,6 +21,7 @@ import { toast } from '@shinsa/ui/components/sonner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -265,25 +266,21 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
       header={<BlockHeader icon={AUTOPILOT_BLOCKS.score.icon} title={AUTOPILOT_BLOCKS.score.title} />}
     >
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.learned} description={view.learned.detail}>
-        {view.learned.count && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.learned.count}</span>}
-      </DescribedRow>
-      <DescribedRow title={AUTOPILOT_SCORE_ROWS.progress} description={view.progress.detail}>
         <div className='flex items-center gap-2 pr-1.5'>
           <span
             role='progressbar'
-            aria-label={AUTOPILOT_SCORE_ROWS.progress}
+            aria-label={AUTOPILOT_SCORE_ROWS.learned}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-valuenow={Math.round(view.progress.value * 100)}
-            className='relative block h-1.5 w-32 overflow-hidden rounded-full bg-bg-a2'
+            aria-valuenow={view.learned.percent}
           >
-            <span
-              className='absolute inset-y-0 start-0 rounded-full bg-primary-4'
-              style={{ width: `${view.progress.value * 100}%` }}
-            />
+            <UsageBar row={{ percent: view.learned.percent, tone: 'blue' }} className='w-32' />
           </span>
-          <span className={TOKEN_TEXT}>{view.progress.label}</span>
+          <span className={TOKEN_TEXT}>{view.learned.label}</span>
         </div>
+      </DescribedRow>
+      <DescribedRow title={AUTOPILOT_SCORE_ROWS.agreement} description={view.agreement.detail}>
+        {view.agreement.percent && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.agreement.percent}</span>}
       </DescribedRow>
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.suggested} description={view.suggested.detail}>
         {view.suggested.apply ? (

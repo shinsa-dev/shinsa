@@ -41,7 +41,7 @@ export const AutopilotWeighAnswer = Schema.Struct({
   reason: Schema.String,
 });
 
-export interface AutopilotWeighing {
+interface AutopilotWeighing {
   verdict: AutopilotSuggestionVerdict;
   reason: string;
 }
