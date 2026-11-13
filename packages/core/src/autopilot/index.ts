@@ -2,12 +2,19 @@ export { isAutopilotDoneSeeable, listAutopilotDone } from './done.ts';
 export { describeAutopilotLesson, listAutopilotLessons, resolveLessonLimit } from './lessons.ts';
 export {
   type AutopilotProfileContext,
+  type AutopilotScoredDecision,
   listAutopilotKindLines,
   listAutopilotProfileLines,
   listAutopilotTallies,
   recordAutopilotDecisions,
 } from './profile.ts';
-export { isAutopilotAgreement, resolveAutopilotScore } from './score.ts';
+export {
+  isAutopilotAgreement,
+  resolveAutopilotBaseRate,
+  resolveAutopilotCombinedVerdict,
+  resolveAutopilotLoss,
+  resolveAutopilotScore,
+} from './score.ts';
 export {
   AUTOPILOT_MODEL_HEADS,
   AUTOPILOT_MODEL_LIMITS,
@@ -34,8 +41,14 @@ export {
   AUTOPILOT_PROFILE_LIMITS,
   EMPTY_AUTOPILOT_PROFILE,
   AUTOPILOT_SCORE_LIMITS,
+  AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_SCORED_KINDS,
+  AUTOPILOT_TRACKS,
+  type AutopilotAgreement,
+  type AutopilotRate,
   type AutopilotScore,
+  type AutopilotTrack,
+  type AutopilotTrackScore,
   type AutopilotScoredKind,
   type AutopilotDecision,
   type AutopilotDecisionFacts,

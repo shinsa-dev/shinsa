@@ -1,6 +1,7 @@
 import type { AutopilotLevel } from '../domain/settings.ts';
 import type { TaskShape } from '../domain/shapes.ts';
 import type { ReviewRating } from '../report/types.ts';
+import type { AutopilotModelHead } from './model/schema.ts';
 
 export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal';
 
@@ -204,17 +205,29 @@ export interface AutopilotTally {
   at: number;
 }
 
+export const AUTOPILOT_TRACKS = ['model', 'call', 'combined', 'base'] as const;
+
+export type AutopilotTrack = (typeof AUTOPILOT_TRACKS)[number];
+
 export interface AutopilotAgreement {
   scored: number;
   agreed: number;
   weight: number;
   agreedWeight: number;
+  baseWeight: number;
+  loss: number;
+}
+
+export interface AutopilotRate {
+  positive: number;
+  negative: number;
 }
 
 export interface AutopilotProfile {
   total: number;
   decisions: AutopilotDecision[];
-  agreement: AutopilotAgreement;
+  tracks: Record<AutopilotTrack, AutopilotAgreement>;
+  rates: Record<AutopilotModelHead, AutopilotRate>;
   tallies: AutopilotTally[];
 }
 
@@ -231,12 +244,22 @@ const EMPTY_AUTOPILOT_AGREEMENT: AutopilotAgreement = {
   agreed: 0,
   weight: 0,
   agreedWeight: 0,
+  baseWeight: 0,
+  loss: 0,
 };
+
+const EMPTY_AUTOPILOT_RATE: AutopilotRate = { positive: 0, negative: 0 };
 
 export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = {
   total: 0,
   decisions: [],
-  agreement: EMPTY_AUTOPILOT_AGREEMENT,
+  tracks: {
+    model: EMPTY_AUTOPILOT_AGREEMENT,
+    call: EMPTY_AUTOPILOT_AGREEMENT,
+    combined: EMPTY_AUTOPILOT_AGREEMENT,
+    base: EMPTY_AUTOPILOT_AGREEMENT,
+  },
+  rates: { gate: EMPTY_AUTOPILOT_RATE, finding: EMPTY_AUTOPILOT_RATE, suggestion: EMPTY_AUTOPILOT_RATE },
   tallies: [],
 };
 
@@ -248,19 +271,37 @@ export const AUTOPILOT_SCORED_KINDS = [
 
 export type AutopilotScoredKind = (typeof AUTOPILOT_SCORED_KINDS)[number];
 
+export interface AutopilotTrackScore {
+  scored: number;
+  agreed: number;
+  agreement: number | null;
+  base: number | null;
+  margin: number | null;
+  loss: number | null;
+}
+
 export interface AutopilotScore {
   learned: number;
   scored: number;
   agreed: number;
   agreement: number | null;
+  margin: number | null;
   value: number;
   progress: number;
   ready: boolean;
   suggested: AutopilotLevel;
+  tracks: Record<AutopilotTrack, AutopilotTrackScore>;
 }
 
 export const AUTOPILOT_SCORE_LIMITS = {
   halfLife: 50,
   minScored: 50,
   agreement: 0.9,
+  margin: 0.05,
+  clamp: 0.01,
+} as const;
+
+export const AUTOPILOT_COMBINE_LIMITS = {
+  act: 0.85,
+  confidence: 0.5,
 } as const;

@@ -6,6 +6,8 @@ import { resolveLocalSlot } from '../presence/hours.ts';
 import type { ReviewFinding, ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { isHeldPlan, isUrgentTask, resolveAutopilotPresence } from './limits.ts';
+import { isAutopilotPositive } from './model/learn.ts';
+import { AUTOPILOT_HEAD_OF_KIND, type AutopilotModelGuess } from './model/schema.ts';
 import {
   AUTOPILOT_DECISION_ANSWERS,
   AUTOPILOT_PROFILE_LIMITS,
@@ -19,11 +21,19 @@ import {
   type AutopilotDecisionKind,
   type AutopilotGateKind,
   type AutopilotProfile,
+  type AutopilotRate,
   type AutopilotScoredKind,
   type AutopilotTally,
+  type AutopilotTrack,
+  type AutopilotVerdict,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
-import { isAutopilotAgreement } from './score.ts';
+import {
+  isAutopilotAgreement,
+  resolveAutopilotBaseRate,
+  resolveAutopilotCombinedVerdict,
+  resolveAutopilotLoss,
+} from './score.ts';
 
 const GATE_KIND: Partial<Record<Gate['type'], AutopilotDecisionKind>> = {
   plan: 'plan',
@@ -199,29 +209,88 @@ function countDecision(tallies: Map<string, AutopilotTally>, decision: Autopilot
   }
 }
 
-function scoreDecision(agreement: AutopilotAgreement, decision: AutopilotDecision): AutopilotAgreement {
-  if (decision.guess === null) return agreement;
+export type AutopilotScoredDecision = AutopilotDecision & { modelGuess?: AutopilotModelGuess | null };
+
+interface TrackJudgment {
+  right: boolean;
+  p: number;
+}
+
+function scoreTrack(
+  agreement: AutopilotAgreement,
+  judgment: TrackJudgment,
+  positive: boolean,
+  baseRight: boolean
+): AutopilotAgreement {
   const factor = resolveDecay(AUTOPILOT_SCORE_LIMITS.halfLife, 1);
-  const agreed = isAutopilotAgreement(decision.guess, decision.answer);
   return {
     scored: agreement.scored + 1,
-    agreed: agreement.agreed + (agreed ? 1 : 0),
+    agreed: agreement.agreed + (judgment.right ? 1 : 0),
     weight: agreement.weight * factor + 1,
-    agreedWeight: agreement.agreedWeight * factor + (agreed ? 1 : 0),
+    agreedWeight: agreement.agreedWeight * factor + (judgment.right ? 1 : 0),
+    baseWeight: agreement.baseWeight * factor + (baseRight ? 1 : 0),
+    loss: agreement.loss * factor + resolveAutopilotLoss(judgment.p, positive),
   };
+}
+
+function judgeVerdict(verdict: AutopilotVerdict, decision: AutopilotDecision): TrackJudgment {
+  return { right: isAutopilotAgreement(verdict, decision.answer), p: verdict === 'act' ? 1 : 0 };
+}
+
+function judgeChance(p: number, positive: boolean): TrackJudgment {
+  return { right: p >= 0.5 === positive, p };
+}
+
+function listTrackJudgments(decision: AutopilotScoredDecision, base: TrackJudgment, positive: boolean) {
+  const judgments: [AutopilotTrack, TrackJudgment][] = [['base', base]];
+  const modelGuess = decision.modelGuess ?? null;
+  if (modelGuess) judgments.push(['model', judgeChance(modelGuess.p, positive)]);
+  if (decision.guess !== null) {
+    judgments.push(['call', judgeVerdict(decision.guess, decision)]);
+    const combined = resolveAutopilotCombinedVerdict(decision.guess, modelGuess);
+    judgments.push(['combined', judgeVerdict(combined, decision)]);
+  }
+  return judgments;
+}
+
+function stepRate(rate: AutopilotRate, positive: boolean): AutopilotRate {
+  const factor = resolveDecay(AUTOPILOT_SCORE_LIMITS.halfLife, 1);
+  return {
+    positive: rate.positive * factor + (positive ? 1 : 0),
+    negative: rate.negative * factor + (positive ? 0 : 1),
+  };
+}
+
+function scoreDecision(
+  profile: Pick<AutopilotProfile, 'tracks' | 'rates'>,
+  decision: AutopilotScoredDecision
+): Pick<AutopilotProfile, 'tracks' | 'rates'> {
+  const head = AUTOPILOT_HEAD_OF_KIND[decision.kind];
+  if (!head) return profile;
+  const positive = isAutopilotPositive(head, decision);
+  const base = judgeChance(resolveAutopilotBaseRate(profile.rates[head]), positive);
+  const tracks = { ...profile.tracks };
+  for (const [track, judgment] of listTrackJudgments(decision, base, positive))
+    tracks[track] = scoreTrack(tracks[track], judgment, positive, base.right);
+  return { tracks, rates: { ...profile.rates, [head]: stepRate(profile.rates[head], positive) } };
 }
 
 export function recordAutopilotDecisions(
   profile: AutopilotProfile | undefined,
-  decisions: readonly AutopilotDecision[]
+  decisions: readonly AutopilotScoredDecision[]
 ): AutopilotProfile {
   const current = profile ?? EMPTY_AUTOPILOT_PROFILE;
   const tallies = new Map(current.tallies.map((tally) => [tally.key, tally]));
   for (const decision of decisions) countDecision(tallies, decision);
+  const scored = decisions.reduce(scoreDecision, { tracks: current.tracks, rates: current.rates });
   return {
     total: current.total + decisions.length,
-    decisions: [...current.decisions, ...decisions].slice(-AUTOPILOT_PROFILE_LIMITS.words),
-    agreement: decisions.reduce(scoreDecision, current.agreement),
+    decisions: [
+      ...current.decisions,
+      ...decisions.map(({ modelGuess: _guess, ...decision }) => decision),
+    ].slice(-AUTOPILOT_PROFILE_LIMITS.words),
+    tracks: scored.tracks,
+    rates: scored.rates,
     tallies: [...tallies.values()],
   };
 }

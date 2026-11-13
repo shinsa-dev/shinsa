@@ -3,11 +3,19 @@ import {
   AUTOPILOT_SCORE_LIMITS,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
+  type AutopilotModelGuess,
+  type AutopilotScoredDecision,
   type AutopilotVerdict,
   isAutopilotAgreement,
   recordAutopilotDecisions,
+  resolveAutopilotBaseRate,
+  resolveAutopilotCombinedVerdict,
+  resolveAutopilotLoss,
   resolveAutopilotScore,
 } from '../../src/index.ts';
+
+const SURE: AutopilotModelGuess = { head: 'gate', p: 0.95, confidence: 0.8, similar: 40 };
+const DOUBTFUL: AutopilotModelGuess = { head: 'gate', p: 0.2, confidence: 0.8, similar: 40 };
 
 function decision(
   guess: AutopilotVerdict | null,
@@ -31,7 +39,15 @@ function decision(
   };
 }
 
-function scoreOf(decisions: AutopilotDecision[]) {
+function guessed(
+  guess: AutopilotVerdict | null,
+  answer: AutopilotDecisionAnswer,
+  modelGuess: AutopilotModelGuess | null
+): AutopilotScoredDecision {
+  return { ...decision(guess, answer), modelGuess };
+}
+
+function scoreOf(decisions: AutopilotScoredDecision[]) {
   return resolveAutopilotScore({ autopilotProfile: recordAutopilotDecisions(undefined, decisions) });
 }
 
@@ -46,17 +62,50 @@ describe('agreeing with you', () => {
   });
 });
 
+describe('combining the model with the model call', () => {
+  test('acts only when the call says act and the model is sure you would approve', () => {
+    expect(resolveAutopilotCombinedVerdict('act', SURE)).toBe('act');
+    expect(resolveAutopilotCombinedVerdict('forward', SURE)).toBe('forward');
+    expect(resolveAutopilotCombinedVerdict('act', DOUBTFUL)).toBe('forward');
+    expect(resolveAutopilotCombinedVerdict('act', { ...SURE, confidence: 0.3 })).toBe('forward');
+    expect(resolveAutopilotCombinedVerdict('act', null)).toBe('forward');
+  });
+});
+
+describe('the base rate and log loss', () => {
+  test('the base rate starts at even and leans to the more common answer', () => {
+    expect(resolveAutopilotBaseRate({ positive: 0, negative: 0 })).toBe(0.5);
+    expect(resolveAutopilotBaseRate({ positive: 8, negative: 0 })).toBe(0.9);
+  });
+
+  test('log loss is small for a sure right guess, large and bounded for a sure wrong one', () => {
+    expect(resolveAutopilotLoss(0.5, true)).toBeCloseTo(Math.log(2));
+    expect(resolveAutopilotLoss(1, true)).toBeCloseTo(-Math.log(0.99));
+    expect(resolveAutopilotLoss(1, false)).toBeCloseTo(-Math.log(0.01));
+  });
+});
+
 describe('the Autopilot score', () => {
   test('has no agreement and suggests Balanced before any guess is scored', () => {
-    expect(resolveAutopilotScore({ autopilotProfile: undefined as never })).toEqual({
+    const empty = resolveAutopilotScore({ autopilotProfile: undefined as never });
+    expect(empty).toMatchObject({
       learned: 0,
       scored: 0,
       agreed: 0,
       agreement: null,
+      margin: null,
       value: 0,
       progress: 0,
       ready: false,
       suggested: 'balanced',
+    });
+    expect(empty.tracks.base).toEqual({
+      scored: 0,
+      agreed: 0,
+      agreement: null,
+      base: null,
+      margin: null,
+      loss: null,
     });
     expect(scoreOf([decision(null), decision(null)])).toMatchObject({
       learned: 2,
@@ -66,58 +115,87 @@ describe('the Autopilot score', () => {
     });
   });
 
-  test('counts every decision as learned and only guessed ones as scored', () => {
+  test('scores each track only where it guessed, and the base rate on every decision with a choice', () => {
     const score = scoreOf([
-      decision('act'),
-      decision('act', 'revised'),
-      decision(null),
-      decision('forward', 'rejected'),
+      guessed('act', 'approved', SURE),
+      guessed('act', 'revised', SURE),
+      guessed(null, 'approved', SURE),
+      guessed('forward', 'rejected', DOUBTFUL),
+      { ...decision(null, 'sent'), kind: 'message' },
     ]);
-    expect(score).toMatchObject({ learned: 4, scored: 3, agreed: 2, ready: false, suggested: 'balanced' });
+    expect(score.learned).toBe(5);
+    expect(score.tracks.call).toMatchObject({ scored: 3, agreed: 2 });
+    expect(score.tracks.combined).toMatchObject({ scored: 3, agreed: 2 });
+    expect(score.tracks.model).toMatchObject({ scored: 4, agreed: 3 });
+    expect(score.tracks.base).toMatchObject({ scored: 4 });
+    expect(score).toMatchObject({ scored: 3, agreed: 2, ready: false, suggested: 'balanced' });
     expect(score.agreement).toBeCloseTo(2 / 3);
   });
 
-  test('suggests Most things once it agrees often enough over enough decisions', () => {
-    const agreeing = Array.from({ length: AUTOPILOT_SCORE_LIMITS.minScored }, () => decision('act'));
+  test('the combined verdict brings a gate to you when the model doubts what the call would do', () => {
+    const score = scoreOf([guessed('act', 'revised', DOUBTFUL), guessed('act', 'approved', DOUBTFUL)]);
+    expect(score.tracks.call.agreed).toBe(1);
+    expect(score.tracks.combined.agreed).toBe(1);
+    expect(scoreOf([guessed('act', 'revised', DOUBTFUL)]).tracks).toMatchObject({
+      call: { agreed: 0 },
+      combined: { agreed: 1 },
+    });
+  });
+
+  test('compares each track with the base rate on the same decisions', () => {
+    const score = scoreOf([
+      guessed('act', 'approved', SURE),
+      guessed('act', 'approved', SURE),
+      guessed('act', 'approved', SURE),
+    ]);
+    expect(score.tracks.combined.agreement).toBe(1);
+    expect(score.tracks.combined.base).toBeCloseTo(1);
+    expect(score.margin).toBeCloseTo(0);
+    expect(score.tracks.model.loss).toBeLessThan(score.tracks.base.loss ?? 0);
+  });
+
+  test('never suggests Most things while always approving would score as well', () => {
+    const agreeing = Array.from({ length: AUTOPILOT_SCORE_LIMITS.minScored }, () =>
+      guessed('act', 'approved', SURE)
+    );
     expect(scoreOf(agreeing)).toMatchObject({
       scored: 50,
       agreement: 1,
       value: 100,
       progress: 1,
-      ready: true,
-      suggested: 'most',
-    });
-    expect(scoreOf(agreeing.slice(1))).toMatchObject({
-      value: 88,
-      progress: 0.98,
       ready: false,
-      suggested: 'balanced',
     });
-    expect(scoreOf(agreeing.slice(25)).value).toBe(45);
-    const early = [...Array.from({ length: 5 }, () => decision('act', 'revised')), ...agreeing.slice(5)];
-    const late = [...agreeing.slice(5), ...Array.from({ length: 5 }, () => decision('act', 'revised'))];
-    expect(scoreOf(early)).toMatchObject({ scored: 50, agreed: 45, ready: true });
-    expect(scoreOf(late)).toMatchObject({ scored: 50, agreed: 45, ready: false });
-    expect(scoreOf(late).progress).toBeLessThan(1);
-    expect(scoreOf(late).value).toBeLessThan(90);
-    expect(scoreOf(early).value).toBeGreaterThanOrEqual(90);
+    expect(scoreOf(agreeing).suggested).toBe('balanced');
+  });
+
+  test('suggests Most things at 90% agreement and a clear lead over the base rate', () => {
+    const mixed = Array.from({ length: 60 }, (_, index) =>
+      index % 3 === 0 ? guessed('forward', 'revised', DOUBTFUL) : guessed('act', 'approved', SURE)
+    );
+    const score = scoreOf(mixed);
+    expect(score).toMatchObject({ scored: 60, agreed: 60, agreement: 1, ready: true, suggested: 'most' });
+    expect(score.margin).toBeGreaterThanOrEqual(AUTOPILOT_SCORE_LIMITS.margin);
+    expect(scoreOf(mixed.slice(11))).toMatchObject({ scored: 49, progress: 0.98, ready: false });
   });
 
   test('counts every guess it ever made, the recent ones the most', () => {
-    const old = Array.from({ length: 200 }, () => decision('act', 'revised'));
-    const recent = Array.from({ length: 300 }, () => decision('act'));
+    const wrong = () => guessed('act', 'revised', SURE);
+    const right = (index: number) =>
+      index % 3 === 0 ? guessed('forward', 'revised', DOUBTFUL) : guessed('act', 'approved', SURE);
+    const old = Array.from({ length: 200 }, wrong);
+    const recent = Array.from({ length: 300 }, (_, index) => right(index));
     const score = scoreOf([...old, ...recent]);
-    expect(score).toMatchObject({ learned: 500, scored: 500, agreed: 300, ready: true });
+    expect(score).toMatchObject({ learned: 500, scored: 500, ready: true });
     expect(score.agreement).toBeGreaterThan(0.9);
     expect(scoreOf([...recent, ...old])).toMatchObject({ scored: 500, ready: false });
   });
 
   test('keeps scoring apart from the words it keeps, so findings and questions never push guesses out', () => {
-    const unscored = (kind: AutopilotDecision['kind']) => ({ ...decision(null), kind });
+    const unscored = (kind: AutopilotDecision['kind']) => ({ ...decision(null, 'fixed'), kind });
     let profile = recordAutopilotDecisions(undefined, []);
     for (let review = 0; review < 100; review += 1) {
       profile = recordAutopilotDecisions(profile, [
-        { ...decision('act'), kind: 'review' },
+        { ...guessed('act', 'approved', SURE), kind: 'review' },
         ...Array.from({ length: 4 }, () => unscored('finding')),
         unscored('question'),
       ]);
@@ -126,8 +204,8 @@ describe('the Autopilot score', () => {
       learned: 600,
       scored: 100,
       agreed: 100,
-      ready: true,
-      suggested: 'most',
     });
+    expect(profile.decisions.every((kept) => !('modelGuess' in kept))).toBe(true);
+    expect(profile.rates.finding.positive).toBeGreaterThan(0);
   });
 });

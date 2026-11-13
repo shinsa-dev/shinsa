@@ -49,7 +49,7 @@ export function applyAutopilotLearned(state: ShinsaState, event: EventOf<'autopi
 
 function recordDecisions(state: ShinsaState, decisions: readonly AutopilotDecision[]) {
   const { model, learned } = learnAutopilotDecisions(state.autopilotModel, decisions);
-  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, decisions);
+  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, learned);
   state.autopilotModel = model;
   state.autopilotHistory = [...(state.autopilotHistory ?? []), ...learned];
 }
