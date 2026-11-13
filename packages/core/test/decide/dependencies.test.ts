@@ -12,11 +12,79 @@ import {
 import {
   createHarness,
   createTask,
+  type Harness,
   pullRequest,
   reachReviewGate,
+  reachShipping,
   readyWorktree,
   shipAndMerge,
 } from '../harness.ts';
+
+const MOVES_ON_AFTER_MERGE: [string, (harness: Harness, taskId: string) => void][] = [
+  [
+    'checks a watchdog',
+    (harness, taskId) =>
+      harness.replay({ type: 'task.staged', taskId, stage: 'watching', reason: 'checking the watchdog' }),
+  ],
+  [
+    'answers a follow-up',
+    (harness, taskId) => harness.send({ type: 'task.message', taskId, text: 'Why this way?' }),
+  ],
+  [
+    'starts its next round',
+    (harness, taskId) =>
+      harness.send({ type: 'task.message', taskId, text: 'Add retries too.', kind: 'new_round' }),
+  ],
+];
+
+describe('a task that merged and moved on', () => {
+  test.each(MOVES_ON_AFTER_MERGE)(
+    'still counts as merged for a task waiting to start while it %s',
+    (_, moveOn) => {
+      const harness = createHarness();
+      const first = createTask(harness, { request: 'First' });
+      const second = createTask(harness, { request: 'Second' });
+      const child = createTask(harness, { request: 'Child', waitsOn: [first, second] });
+      shipAndMerge(harness, first);
+      moveOn(harness, first);
+      expect(harness.task(first).stage).not.toBe('merged');
+      expect(harness.task(child).stage).toBe('waiting_on_tasks');
+      expect(harness.task(child).stageReason).toBe('waiting for “Second” to finish');
+
+      shipAndMerge(harness, second);
+      expect(harness.task(child).stage).toBe('triage');
+      readyWorktree(harness, child);
+      expect(harness.activeRun(child).prompt).toContain(
+        'builds on "First" and "Second", which are all finished'
+      );
+    }
+  );
+
+  test.each(MOVES_ON_AFTER_MERGE)('still counts as merged at the merge gate while it %s', (_, moveOn) => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    const child = createTask(harness, { request: 'Child', waitsOn: [first] });
+    shipAndMerge(harness, first);
+    moveOn(harness, first);
+    expect(listWaitsOn(harness.state, harness.task(child))).toEqual([]);
+    readyWorktree(harness, child);
+    expect(harness.activeRun(child).prompt).toContain('builds on "First", which has merged');
+
+    reachShipping(harness, child);
+    harness.send({ type: 'pull_request.record', taskId: child, pullRequest: pullRequest() });
+    expect(harness.task(child).stage).toBe('awaiting_merge');
+    expect(harness.openGate(child).type).toBe('merge');
+  });
+
+  test.each(MOVES_ON_AFTER_MERGE)('is not waited on when named after it %s', (_, moveOn) => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    shipAndMerge(harness, first);
+    moveOn(harness, first);
+    const child = createTask(harness, { request: 'Child', waitsOn: [first] });
+    expect(harness.task(child).waitsOn).toEqual([]);
+  });
+});
 
 describe('dependencies', () => {
   test('a task with no dependency starts at once, however many decisions are waiting', () => {

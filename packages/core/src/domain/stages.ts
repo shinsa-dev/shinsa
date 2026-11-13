@@ -44,6 +44,15 @@ export function isTaskComplete(task: Task) {
   return task.stage === 'answered' || task.stage === 'merged' || task.stage === 'done';
 }
 
+export function hasMergedPullRequest(task: Pick<Task, 'pullRequest' | 'rounds'>) {
+  if (task.pullRequest?.state === 'merged') return true;
+  return (task.rounds ?? []).some((round) => round.pullRequest?.state === 'merged');
+}
+
+export function isDependencyComplete(task: Task) {
+  return isTaskComplete(task) || hasMergedPullRequest(task);
+}
+
 export function hasArmedWait(task: Task) {
   return task.monitor?.status === 'armed' || task.usageWait?.status === 'armed' || isRetryArmed(task);
 }

@@ -3,9 +3,11 @@ import {
   DomainError,
   type DomainRefusal,
   type Gate,
+  hasMergedPullRequest,
   hasStep,
   isAgentQuestion,
   isDelegatedRun,
+  isDependencyComplete,
   isSettingUpWorkspace,
   isTaskComplete,
   isTaskSettled,
@@ -78,7 +80,9 @@ function listDependencies(state: ShinsaState, task: Task) {
 }
 
 export function listOpenBlockers(state: ShinsaState, task: Task) {
-  return listDependencies(state, task).filter((dependency) => !isTaskSettled(dependency));
+  return listDependencies(state, task).filter(
+    (dependency) => !isTaskSettled(dependency) && !hasMergedPullRequest(dependency)
+  );
 }
 
 export function listStackParents(state: Pick<ShinsaState, 'tasks'>, task: Task) {
@@ -257,7 +261,7 @@ export function listPendingStackParents(state: ShinsaState, task: Task) {
 }
 
 export function listPendingDependencies(state: ShinsaState, task: Task) {
-  const pending = listDependencies(state, task).filter((dependency) => !isTaskComplete(dependency));
+  const pending = listDependencies(state, task).filter((dependency) => !isDependencyComplete(dependency));
   const parents = listPendingStackParents(state, task).filter((parent) => !pending.includes(parent));
   return [...pending, ...parents];
 }

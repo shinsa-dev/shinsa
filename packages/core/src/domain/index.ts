@@ -279,7 +279,9 @@ export {
 export {
   compareTasks,
   hasArmedWait,
+  hasMergedPullRequest,
   isAskTask,
+  isDependencyComplete,
   isRoundFinished,
   isTaskComplete,
   isTaskSettled,

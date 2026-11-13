@@ -3,6 +3,7 @@ import type { CommandOf } from '../commands/index.ts';
 import {
   compareTasks,
   DomainError,
+  isDependencyComplete,
   isTaskComplete,
   isTaskSettled,
   resolveCurrentRound,
@@ -38,7 +39,7 @@ export function resolveDependencies(decider: Decider, task: Task | null, ids: st
     if (dependency.stage === 'cancelled') {
       throw new DomainError({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
     }
-    if (isTaskComplete(dependency)) continue;
+    if (isDependencyComplete(dependency)) continue;
     if (task && isDependencyOf(decider.state, task.id, id)) {
       throw new DomainError({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
     }
