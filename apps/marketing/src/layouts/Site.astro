@@ -83,5 +83,10 @@ const structuredData = {
     <main id='content' class='relative z-10 flex-1'>
       <slot />
     </main>
+    <script>
+      document.addEventListener('dragstart', (event) => {
+        if (event.target instanceof Element && event.target.closest('img, video, svg, picture')) event.preventDefault();
+      });
+    </script>
   </body>
 </html>

@@ -75,9 +75,46 @@ const lines = captions.map((caption) => ({ ...caption, words: resolveCaptionWord
     sync();
   }
 
-  for (const video of document.querySelectorAll<HTMLVideoElement>('[data-koe-video]')) {
-    followCaptions(video);
-    if (!reduced.matches) void video.play().catch(() => video.setAttribute('controls', ''));
-    else video.setAttribute('controls', '');
+  const videos = [...document.querySelectorAll<HTMLVideoElement>('[data-koe-video]')];
+  const shares = new Map<HTMLVideoElement, number>();
+
+  function visibleShare(video: HTMLVideoElement) {
+    const box = video.getBoundingClientRect();
+    const seen = Math.min(box.bottom, innerHeight) - Math.max(box.top, 0);
+    return Math.max(0, seen) / Math.min(box.height, innerHeight);
+  }
+
+  function focusMostVisible() {
+    let focused: HTMLVideoElement | undefined;
+    let best = 0.35;
+    for (const video of videos) {
+      const share = shares.get(video) ?? 0;
+      if (share > best) {
+        best = share;
+        focused = video;
+      }
+    }
+    for (const video of videos) {
+      if (video === focused) {
+        if (video.paused) {
+          video.currentTime = 0;
+          void video.play().catch(() => video.setAttribute('controls', ''));
+        }
+      } else if (!video.paused) video.pause();
+    }
+  }
+
+  for (const video of videos) followCaptions(video);
+
+  if (reduced.matches) for (const video of videos) video.setAttribute('controls', '');
+  else {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) shares.set(entry.target as HTMLVideoElement, visibleShare(entry.target as HTMLVideoElement));
+        focusMostVisible();
+      },
+      { threshold: Array.from({ length: 21 }, (_, index) => index / 20) },
+    );
+    for (const video of videos) observer.observe(video);
   }
 </script>

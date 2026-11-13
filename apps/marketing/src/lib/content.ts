@@ -240,7 +240,7 @@ export const koeTools: {
   {
     id: 'screenshot',
     title: 'Screenshot as you talk.',
-    text: 'The screenshot lands in your words at the moment you took it, and what you say next becomes its note.',
+    text: 'Drag over what you mean. The screenshot lands in your words at the moment you took it, and whatever you say right after becomes its note.',
     video: 'koe-screenshot',
     label: 'Koe taking a screenshot of Shinsa’s task box while you describe it',
     captions: [

@@ -314,3 +314,11 @@ body {
     transition: none;
   }
 }
+
+img,
+video,
+svg,
+picture {
+  user-select: none;
+  -webkit-user-drag: none;
+}

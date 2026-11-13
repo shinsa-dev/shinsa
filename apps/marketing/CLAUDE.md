@@ -52,7 +52,8 @@ On a chip too short for the full insets (`resolveInsets`), the incoming traces e
 ```
 src/
   pages/index.astro         The page: hero, then one Section per feature, then Closing
-  layouts/Site.astro        Meta, the theme class from the system setting, Header (no footer)
+  layouts/Site.astro        Meta, the theme class from the system setting, Header (no footer); every image, video
+                            and SVG on the site is unselectable and undraggable (`global.css` and a `dragstart` guard)
   components/layout/        Header (solid, with a fade under it once you scroll; its links point at `/#section`, so they work from every page), Section (centred title, text, then the
                             demo), Backdrop (the circuit board and its scroll signal)
   components/sections/      Hero, Closing (principles and the last call)
@@ -102,8 +103,10 @@ src/
                             us" block under Closing, with a Meet Koe button and the pill
   components/koe/           Koe's page, shown with real recordings of the Mac app, never redrawn: KoeVideo.astro (one
                             recording from public/koe/: `<name>.webm`, `.mp4` and its `.webp` poster; it plays muted
-                            on a loop from a small script, and under prefers-reduced-motion stays on its poster with
-                            controls; `captions` are the words spoken in it, in seconds of the recording, shown over its top
+                            on a loop from a small script, only while it is the recording most in view (at least 35%
+                            of it on screen), from its start each time it takes the focus, and under
+                            prefers-reduced-motion stays on its poster with controls; encoded at the capture's full
+                            Retina size, 60 fps; `captions` are the words spoken in it, in seconds of the recording, shown over its top
                             edge as it plays, each word appearing when it is said (`resolveCaptionWords` spreads a line's words over its
                             time by length), since the pill sits at the bottom), KoeTools.astro (one `Section` per tool,
                             the comment, screenshot and clip recordings at full width, from `koeTools`)
