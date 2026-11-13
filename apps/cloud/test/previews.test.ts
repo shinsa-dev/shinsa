@@ -175,22 +175,37 @@ describe('a preview link', () => {
     const stale = await visit(harness, `${origin}/`, withKey());
     expect(stale.status).toBe(503);
     expect(await stale.text()).toContain(PREVIEW_OFFLINE.slice(0, 40));
-    expect(logged).toHaveBeenCalledTimes(2);
+    expect(logged).toHaveBeenCalledTimes(3);
+    expect(logged.mock.calls[2]).toEqual([
+      '[Cloud] Machine offline',
+      expect.objectContaining({ surface: 'preview', reason: 'stale', lastSeenAt: expect.any(Number) }),
+    ]);
     expect(errors).not.toHaveBeenCalled();
     logged.mockRestore();
     errors.mockRestore();
   });
 
-  test('passes on the machine’s own page for a stopped service, not the offline page', async () => {
+  test('passes on the machine’s own page for a stopped service and warns that the service stopped', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);
-    harness.handlers.push(
-      () => new Response(PREVIEW_STOPPED, { status: 503, headers: { [PREVIEW_PAGE_HEADER]: '1' } })
+    const logged = spyOn(console, 'warn').mockImplementation(() => undefined);
+    harness.handlers.push((call) =>
+      call.url.endsWith('/gone')
+        ? new Response('gone', { status: 404, headers: { [PREVIEW_PAGE_HEADER]: '1' } })
+        : new Response(PREVIEW_STOPPED, { status: 503, headers: { [PREVIEW_PAGE_HEADER]: '1' } })
     );
     const stopped = await visit(harness, `${origin}/`, withKey());
     expect(stopped.status).toBe(503);
     expect(stopped.headers.has(PREVIEW_PAGE_HEADER)).toBe(false);
     expect(await stopped.text()).toBe(PREVIEW_STOPPED);
+    expect((await visit(harness, `${origin}/gone`, withKey())).status).toBe(404);
+    expect(logged.mock.calls).toEqual([
+      [
+        '[Cloud] Preview service stopped',
+        expect.objectContaining({ instanceId: expect.any(String), previewId: PREVIEW_ID, status: 503 }),
+      ],
+    ]);
+    logged.mockRestore();
   });
 
   test('answers a failure inside the Worker as an error, not the app', async () => {
