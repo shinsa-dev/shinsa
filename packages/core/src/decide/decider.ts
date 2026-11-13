@@ -98,6 +98,7 @@ type GateDetails = Partial<
     | 'account'
     | 'secret'
     | 'browserSignIn'
+    | 'githubSso'
     | 'commit'
     | 'notes'
   >
@@ -435,14 +436,21 @@ export class Decider {
     }
   }
 
-  fail(taskId: string, title: string, detail: string, runId: string | null = null, cause?: GateCause) {
+  fail(
+    taskId: string,
+    title: string,
+    detail: string,
+    runId: string | null = null,
+    cause?: GateCause,
+    details: GateDetails = {}
+  ) {
     if (isTaskSettled(this.task(taskId))) return;
     this.cancelRuns(taskId);
     this.clearWaits(taskId);
     this.withdrawGates(taskId, isPausingGate);
     this.openGate(taskId, 'failure', title, detail, {
       runId,
-      ...(cause ? { details: { cause } } : {}),
+      ...(cause ? { details: { ...details, cause } } : {}),
     });
   }
 

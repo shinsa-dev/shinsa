@@ -821,6 +821,29 @@ describe('a pull request GitHub cannot read', () => {
     expect(harness.task(taskId).pullRequestWatch?.stopped).toBeNull();
   });
 
+  test('an SSO refusal stops the watch with the SSO gate on the first failure', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, { checks: 'pending' });
+    failReads(
+      harness,
+      taskId,
+      1,
+      'gh pr view failed: GraphQL: Resource protected by organization SAML enforcement. You must grant your OAuth token access to this organization. (repository) Authorize in your web browser: https://github.com/orgs/superwall/sso?authorization_request=ABC123'
+    );
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'failure',
+      title: 'GitHub needs SSO authorization for superwall',
+      cause: 'github_sso',
+      githubSso: {
+        organization: 'superwall',
+        url: 'https://github.com/orgs/superwall/sso?authorization_request=ABC123',
+      },
+    });
+    expect(harness.task(taskId).pullRequestWatch?.stopped).toBe('unreadable');
+    harness.send({ type: 'task.retry', taskId });
+    expect(harness.task(taskId).pullRequestWatch?.stopped).toBeNull();
+  });
+
   test('the count survives a replay of the log, so a restart does not reset it', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, { checks: 'pending' });

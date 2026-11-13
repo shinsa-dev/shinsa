@@ -161,6 +161,27 @@ describe('system commands that arrive twice', () => {
     expect(harness.openGate(taskId).body).toBe('GitHub is down.');
   });
 
+  test('a GitHub SSO refusal opens the SSO gate instead of the raw error, once', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const failure = {
+      type: 'effect.fail',
+      taskId,
+      title: 'Could not push the branch',
+      detail:
+        "remote: The `acme' organization has enabled or enforced SAML SSO. To access\nremote: this repository, you must use a personal access token that has been authorized for this organization.",
+    } as const;
+    harness.send(failure);
+    const gate = harness.openGate(taskId);
+    expect(gate).toMatchObject({
+      title: 'GitHub needs SSO authorization for acme',
+      cause: 'github_sso',
+      githubSso: { organization: 'acme', url: 'https://github.com/orgs/acme/sso' },
+    });
+    expect(harness.send(failure).events).toEqual([]);
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+
   test('the same worktree reported ready again changes nothing, and is removed once for a finished task', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

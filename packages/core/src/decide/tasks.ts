@@ -20,6 +20,7 @@ import {
   type TaskShape,
   type TriageDecisions,
 } from '../domain/index.ts';
+import { parseGitHubSso, resolveGitHubSsoGate, resolveTaskGitHubOwner } from '../github/index.ts';
 import { resolveFocusProject } from '../queue/rank.ts';
 import { resolveNextHandle } from '../state/project.ts';
 import { findProject, findRepo } from '../state/queries.ts';
@@ -343,11 +344,22 @@ export function removeWorktree(decider: Decider, command: CommandOf<'worktree.go
   finishMove(decider, command.taskId);
 }
 
+function resolveEffectFailure(decider: Decider, command: CommandOf<'effect.fail'>) {
+  const owner = resolveTaskGitHubOwner(decider.state, decider.task(command.taskId));
+  return Option.match(parseGitHubSso(command.detail, owner), {
+    onNone: () => ({ title: command.title, body: command.detail, cause: undefined, githubSso: null }),
+    onSome: resolveGitHubSsoGate,
+  });
+}
+
 export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {
+  const failure = resolveEffectFailure(decider, command);
   const repeated = decider.hasOpenGate(
     command.taskId,
-    (gate) => gate.type === 'failure' && gate.title === command.title && gate.body === command.detail
+    (gate) => gate.type === 'failure' && gate.title === failure.title && gate.body === failure.body
   );
   if (repeated) return;
-  decider.fail(command.taskId, command.title, command.detail);
+  decider.fail(command.taskId, failure.title, failure.body, null, failure.cause, {
+    githubSso: failure.githubSso,
+  });
 }
