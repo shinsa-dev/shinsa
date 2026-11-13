@@ -1,3 +1,4 @@
+import { DECISION_FACTS } from './decision-facts.ts';
 import { FOCUS_PROJECTS } from './focus-projects.ts';
 import { PROPOSAL_RECOMMEND } from './proposal-recommend.ts';
 import { RESET_PACES } from './reset-paces.ts';
@@ -21,6 +22,7 @@ export const LOG_MIGRATIONS: readonly LogMigration[] = [
   SLACK_THREAD_UPDATES,
   RESET_PACES,
   REVIEW_RATINGS,
+  DECISION_FACTS,
 ];
 
 export function resolveLogVersion(migrations: readonly LogMigration[] = LOG_MIGRATIONS) {

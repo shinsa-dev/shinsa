@@ -58,7 +58,7 @@ function learnOne(
 ) {
   const task = state.tasks[taskId];
   if (!task) return;
-  const decision = createAutopilotDecision({ ...draft, task, gate: null }, at);
+  const decision = createAutopilotDecision(state, { ...draft, task, gate: null }, at);
   state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, [decision]);
 }
 

@@ -1,10 +1,11 @@
 import { Option } from 'effect';
-import { DAY_MS } from '../domain/index.ts';
+import { DAY_MS, MINUTE_MS, resolveTaskShape } from '../domain/index.ts';
 import type { FindingVerdict } from '../domain/schema.ts';
 import type { Gate, GateDecision, Task } from '../domain/types.ts';
-import type { ReviewRating } from '../report/types.ts';
+import { resolveLocalSlot } from '../presence/hours.ts';
+import type { ReviewFinding, ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { isUrgentTask } from './limits.ts';
+import { isHeldPlan, isUrgentTask, resolveAutopilotPresence } from './limits.ts';
 import {
   AUTOPILOT_DECISION_ANSWERS,
   AUTOPILOT_PROFILE_LIMITS,
@@ -13,6 +14,8 @@ import {
   type AutopilotAgreement,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
+  type AutopilotDecisionFacts,
+  type AutopilotFindingCounts,
   type AutopilotDecisionKind,
   type AutopilotGateKind,
   type AutopilotProfile,
@@ -97,7 +100,40 @@ function resolveDecisionGuess(draft: DecisionDraft) {
   return isScoredKind(draft.kind) ? (draft.gate?.autopilotGuess ?? null) : null;
 }
 
-export function createAutopilotDecision(draft: DecisionDraft, at: number): AutopilotDecision {
+const FINDING_COUNT: Record<ReviewFinding['severity'], keyof AutopilotFindingCounts> = {
+  blocking: 'blocking',
+  should_fix: 'shouldFix',
+  optional: 'optional',
+};
+
+function countFindings(findings: readonly ReviewFinding[]): AutopilotFindingCounts {
+  const counts: AutopilotFindingCounts = { blocking: 0, shouldFix: 0, optional: 0 };
+  for (const finding of findings) counts[FINDING_COUNT[finding.severity]] += 1;
+  return counts;
+}
+
+function resolveDecisionFacts(state: ShinsaState, draft: DecisionDraft, at: number): AutopilotDecisionFacts {
+  const { task, gate } = draft;
+  const presence = resolveAutopilotPresence(state, at);
+  return {
+    confidence: task.reviewRatings?.confidence ?? null,
+    shape: resolveTaskShape(task),
+    repoId: task.repoId,
+    revisions: Math.max(0, (task.plan?.version ?? 1) - 1),
+    findings: countFindings(task.findings),
+    heldPlan: isHeldPlan(task),
+    waitedMinutes: gate ? Math.max(0, Math.floor((at - gate.openedAt) / MINUTE_MS)) : null,
+    active: presence.active,
+    inHours: presence.inHours,
+    hour: resolveLocalSlot(state.timeZone ?? 'UTC', at).hour,
+  };
+}
+
+export function createAutopilotDecision(
+  state: ShinsaState,
+  draft: DecisionDraft,
+  at: number
+): AutopilotDecision {
   const { task, gate } = draft;
   return {
     at,
@@ -113,6 +149,7 @@ export function createAutopilotDecision(draft: DecisionDraft, at: number): Autop
     touched: gate?.autopilotHeld !== undefined,
     guess: resolveDecisionGuess(draft),
     note: clipNote(draft.note),
+    facts: resolveDecisionFacts(state, draft, at),
   };
 }
 

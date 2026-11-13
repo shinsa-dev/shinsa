@@ -4,19 +4,23 @@ import {
   type AutopilotDecision,
   DAY_MS,
   EMPTY_AUTOPILOT_PROFILE,
+  HOUR_MS,
+  MINUTE_MS,
   listAutopilotProfileLines,
   listAutopilotTallies,
   type ReviewFinding,
   type ReviewRatings,
   recordAutopilotDecisions,
 } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, type Harness, PASSING } from '../harness.ts';
+import { buildAll, createHarness, createTask, type Harness, PASSING, proposePlan } from '../harness.ts';
 
 const NO_CONTEXT = { projectId: null, risk: null };
 
 const HIGH_LOW: ReviewRatings = { confidence: 'high', risk: 'low' };
 
 const OPTIONAL: ReviewFinding = { severity: 'optional', file: 'a.ts', line: 3, message: 'Rename it.' };
+
+const SHOULD_FIX: ReviewFinding = { severity: 'should_fix', file: 'b.ts', line: 7, message: 'Name it.' };
 
 function reachReview(harness: Harness, findings: ReviewFinding[] = []) {
   const taskId = createTask(harness);
@@ -51,6 +55,7 @@ function decision(overrides: Partial<AutopilotDecision>): AutopilotDecision {
     touched: false,
     guess: null,
     note: null,
+    facts: null,
     ...overrides,
   };
 }
@@ -79,6 +84,55 @@ describe('the decisions Autopilot learns from', () => {
     ]);
     expect(decisions(harness)[0]?.scope).toEqual({ phases: expect.any(Number), files: expect.any(Number) });
     expect(harness.state.autopilotProfile.total).toBe(2);
+  });
+
+  test('a decided gate keeps what the gate knew: the ratings, findings, plan, wait, presence and your hour', () => {
+    const harness = createHarness();
+    harness.send({ type: 'clock.record', timeZone: 'Asia/Tokyo' });
+    const taskId = reachReview(harness, [OPTIONAL, SHOULD_FIX, OPTIONAL]);
+    const gate = harness.openGate(taskId);
+    harness.advance(90 * MINUTE_MS);
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    const tokyoHour = Math.floor(((harness.now + 9 * HOUR_MS) % DAY_MS) / HOUR_MS);
+    expect(decisions(harness)[0]?.facts).toEqual({
+      confidence: 'high',
+      shape: 'change',
+      repoId: harness.task(taskId).repoId,
+      revisions: 0,
+      findings: { blocking: 0, shouldFix: 1, optional: 2 },
+      heldPlan: false,
+      waitedMinutes: Math.floor((harness.now - gate.openedAt) / MINUTE_MS),
+      active: expect.any(Boolean),
+      inHours: null,
+      hour: tokyoHour,
+    });
+    expect(decisions(harness)[0]?.facts?.waitedMinutes).toBeGreaterThanOrEqual(90);
+  });
+
+  test('a plan you revised counts its revisions, and a decision with no gate has no wait', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'Smaller.',
+    });
+    proposePlan(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    harness.send({ type: 'task.message', taskId, text: 'Thanks.' });
+    const [first, second, message] = decisions(harness);
+    expect([first?.facts?.revisions, second?.facts?.revisions]).toEqual([0, 1]);
+    expect(second?.facts?.hour).toBe(Math.floor((harness.now % DAY_MS) / HOUR_MS));
+    expect(message?.kind).toBe('message');
+    expect(message?.facts?.waitedMinutes).toBeNull();
   });
 
   test('each finding you decide is learned beside the review answer', () => {

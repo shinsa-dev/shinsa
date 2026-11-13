@@ -142,6 +142,7 @@ export function createAutopilotProfile(parts: {
     touched: false,
     guess,
     note: null,
+    facts: null,
   });
   const decisions = [
     ...Array.from({ length: parts.disagreed }, () => decision('revised', 'act')),

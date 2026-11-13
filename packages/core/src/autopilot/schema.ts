@@ -1,4 +1,5 @@
 import type { AutopilotLevel } from '../domain/settings.ts';
+import type { TaskShape } from '../domain/shapes.ts';
 import type { ReviewRating } from '../report/types.ts';
 
 export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal';
@@ -156,6 +157,25 @@ export const AUTOPILOT_DECISION_ANSWERS = [
 
 export type AutopilotDecisionAnswer = (typeof AUTOPILOT_DECISION_ANSWERS)[number];
 
+export interface AutopilotFindingCounts {
+  blocking: number;
+  shouldFix: number;
+  optional: number;
+}
+
+export interface AutopilotDecisionFacts {
+  confidence: ReviewRating | null;
+  shape: TaskShape;
+  repoId: string | null;
+  revisions: number;
+  findings: AutopilotFindingCounts;
+  heldPlan: boolean;
+  waitedMinutes: number | null;
+  active: boolean;
+  inHours: boolean | null;
+  hour: number;
+}
+
 export interface AutopilotDecision {
   at: number;
   taskId: string;
@@ -170,6 +190,7 @@ export interface AutopilotDecision {
   touched: boolean;
   guess: AutopilotVerdict | null;
   note: string | null;
+  facts: AutopilotDecisionFacts | null;
 }
 
 export interface AutopilotTally {

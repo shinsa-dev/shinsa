@@ -43,7 +43,7 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes, stamps what proposals recommend and marks old projects as chosen turns a focused project into a list and turns Slack thread updates on and gives old paces a reset pace and gives older reviews no ratings, ten versions past the baseline', () => {
+  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes, stamps what proposals recommend and marks old projects as chosen turns a focused project into a list and turns Slack thread updates on and gives old paces a reset pace and gives older reviews no ratings and older decisions no facts, eleven versions past the baseline', () => {
     expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'stack-lists',
       'slack-channel-names',
@@ -55,8 +55,9 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
-    expect(resolveLogVersion()).toBe(LOG_BASELINE + 10);
+    expect(resolveLogVersion()).toBe(LOG_BASELINE + 11);
     expect(resolveLogVersion(TWO_MIGRATIONS)).toBe(LOG_BASELINE + 2);
   });
 
@@ -66,7 +67,7 @@ describe('event log migrations', () => {
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('a log that already holds events is never stamped on open', () => {
@@ -175,6 +176,7 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       { type: 'task.stack_changed', taskId: 't1', stacksOn: ['p1'], by: 'you', seq: 2, at: 1 },
@@ -185,7 +187,7 @@ describe('event log migrations', () => {
       { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'], seq: 7, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('slack-channel-names gives an older Slack thread link a null channel name, and keeps a known one', () => {
@@ -228,6 +230,7 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -246,7 +249,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('review-seen gives an older review a null input it saw, and keeps a stamped one', () => {
@@ -276,6 +279,7 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -300,7 +304,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('share-scopes turns each share preset into the view scopes it showed, and keeps a share with scopes', () => {
@@ -331,6 +335,7 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
     const shared = log.readEvents().events.slice(1);
     expect(shared).toEqual([
@@ -372,7 +377,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('proposal-recommend has an older proposal recommend going on, and keeps a stamped one', () => {
@@ -407,6 +412,7 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -431,7 +437,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('task-auto-project marks the project of an older task as chosen, and keeps a stamped one', () => {
@@ -485,6 +491,7 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -516,7 +523,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('focus-projects turns a focused project into a list of one, no project into an empty list, and keeps a list', () => {
@@ -543,6 +550,7 @@ describe('event log migrations', () => {
       'slack-thread-updates',
       'reset-paces',
       'review-ratings',
+      'decision-facts',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -567,7 +575,7 @@ describe('event log migrations', () => {
     const engine = new Engine(log, { readOnly: true });
     expect(engine.state.focus).toEqual({ projectIds: ['p1', 'p2'], except: true, teamId: null, until: null });
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('slack-thread-updates turns updates on for an older Slack trigger, and keeps a set one and other triggers', () => {
@@ -590,7 +598,12 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['slack-thread-updates', 'reset-paces', 'review-ratings']);
+    expect(log.migrate()).toEqual([
+      'slack-thread-updates',
+      'reset-paces',
+      'review-ratings',
+      'decision-facts',
+    ]);
     expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'schedule.written',
@@ -612,7 +625,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('reset-paces gives an older recorded pace the same pace with resets and with ending resets, and keeps a cleared one', () => {
@@ -634,7 +647,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['reset-paces', 'review-ratings']);
+    expect(log.migrate()).toEqual(['reset-paces', 'review-ratings', 'decision-facts']);
     expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'usage.pace_recorded',
@@ -668,7 +681,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('review-ratings gives an older review null ratings, and keeps rated ones', () => {
@@ -690,7 +703,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['review-ratings']);
+    expect(log.migrate()).toEqual(['review-ratings', 'decision-facts']);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'review.reported',
@@ -714,17 +727,61 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
+  });
+
+  test('decision-facts gives each older Autopilot decision null facts, and keeps the facts a decision has', () => {
+    const path = createLogPath();
+    writeLog(path, LOG_BASELINE + 10);
+    const db = new Database(path);
+    const facts = { hour: 9 };
+    const rows = [
+      {
+        type: 'autopilot.decided',
+        decisions: [
+          { kind: 'plan', at: 1 },
+          { kind: 'review', at: 2, facts },
+        ],
+      },
+      { type: 'autopilot.decided', decisions: [{ kind: 'merge', at: 3, facts: null }] },
+      { type: 'autopilot.decided', decisions: [] },
+    ];
+    for (const [index, row] of rows.entries()) {
+      db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
+        index + 2,
+        1,
+        row.type,
+        JSON.stringify(row),
+      ]);
+    }
+    db.close();
+    const log = openEventLog(path);
+    expect(log.migrate()).toEqual(['decision-facts']);
+    expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
+      {
+        type: 'autopilot.decided',
+        decisions: [
+          { kind: 'plan', at: 1, facts: null },
+          { kind: 'review', at: 2, facts },
+        ],
+        seq: 2,
+        at: 1,
+      },
+      { type: 'autopilot.decided', decisions: [{ kind: 'merge', at: 3, facts: null }], seq: 3, at: 1 },
+      { type: 'autopilot.decided', decisions: [], seq: 4, at: 1 },
+    ]);
+    log.close();
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
   test('a log a newer Shinsa wrote opens as it is', () => {
     const path = createLogPath();
-    writeLog(path, LOG_BASELINE + 10);
+    writeLog(path, LOG_BASELINE + 11);
     const log = openEventLog(path);
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     expect(new Engine(log, { readOnly: true }).state.seq).toBe(1);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 10);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 });

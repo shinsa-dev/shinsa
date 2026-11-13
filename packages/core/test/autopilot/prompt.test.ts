@@ -201,6 +201,7 @@ describe('the judge request', () => {
         touched: false,
         guess: null,
         note: 'Keep it smaller',
+        facts: null,
       },
     ]);
     const state = { ...harness.state, autopilotProfile: learned };

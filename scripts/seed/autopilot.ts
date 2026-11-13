@@ -100,6 +100,7 @@ function createSeedDecision(index: number): AutopilotDecision {
     touched: index % 4 === 0,
     guess: resolveSeedGuess(kind, answer, index),
     note: SEED_NOTES[index] ?? null,
+    facts: null,
   };
 }
 

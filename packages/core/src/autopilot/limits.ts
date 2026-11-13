@@ -66,7 +66,7 @@ function resolveScope(task: Task): AutopilotScope | null {
   return document ? { phases: document.phases.length, files: document.files.length } : null;
 }
 
-function isHeldPlan(task: Task) {
+export function isHeldPlan(task: Task) {
   const document = task.plan?.document;
   return (
     hasStep(task, 'operate') ||

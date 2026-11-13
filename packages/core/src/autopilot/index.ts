@@ -27,6 +27,8 @@ export {
   type AutopilotScore,
   type AutopilotScoredKind,
   type AutopilotDecision,
+  type AutopilotDecisionFacts,
+  type AutopilotFindingCounts,
   type AutopilotDecisionAnswer,
   type AutopilotDecisionKind,
   type AutopilotProfile,

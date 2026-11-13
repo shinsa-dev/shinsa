@@ -27,6 +27,7 @@ function decision(
     touched: true,
     guess,
     note: null,
+    facts: null,
   };
 }
 
