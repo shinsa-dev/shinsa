@@ -1,4 +1,4 @@
-import { Duration, Effect, FileSystem, Layer, Option } from 'effect';
+import { Duration, Effect, FileSystem, Layer } from 'effect';
 import { constant } from 'effect/Function';
 import { Accounts, AccountsInput, AccountsLayer } from '../accounts/index.ts';
 import { AccountBroker } from '../agents/accounts/schema.ts';
@@ -41,7 +41,6 @@ import {
 import { ServeLock } from '../instance/lock/service.ts';
 import { createSummaryAccountSource, Onboarding, Prerequisites, SetupCommands } from '../onboarding/index.ts';
 import { ProjectChanges } from '../projects/changes/service.ts';
-import { FleetRelay } from '../remote/fleet-relay/service.ts';
 import {
   createInstalledConnector,
   Handoffs,
@@ -327,15 +326,11 @@ function createRunsLayer(options: ShinsaOptions) {
       const projects = yield* ProjectChanges;
       const router = yield* CommandRouter;
       const schedules = yield* Schedules;
-      const fleet = yield* Effect.serviceOption(FleetRelay);
       return ManageAccess.of({
         baseUrl: address.current,
         projects,
         route: router.route,
         hookSecrets: (taskId) => schedules.hookSecrets(taskId),
-        ...(Option.isSome(fleet)
-          ? { relay: (instanceId, request) => fleet.value.request(instanceId, '/api/commands', request) }
-          : {}),
       });
     })
   );
