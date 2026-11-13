@@ -1,9 +1,19 @@
-import { describeCount, type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  describeCount,
+  type Gate,
+  type InitiativeSheet,
+  listOpenGates,
+  resolveInitiativeSheet,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import * as React from 'react';
 import { EvidencePointer } from '@/components/evidence/evidence-pointer.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
+import { InitiativeOverview, TeamInitiativeOverview } from '@/components/initiatives/sheet.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
@@ -23,7 +33,11 @@ import { TaskComposer } from '@/components/task/task-composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useOnHide } from '@/hooks/use-on-hide.ts';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
-import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
+import { useTeamFeed } from '@/lib/connection/socket.ts';
+import { selectLedInitiative } from '@/lib/initiatives/lead.ts';
+import { selectLeadTeamInitiative } from '@/lib/initiatives/team.ts';
+import { listInitiativeActivity } from '@/lib/initiatives/view.ts';
+import { listActivityNewestFirst, mergeActivity, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { selectShownReply } from '@/lib/overview/exchanges.ts';
 import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
 import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
@@ -106,13 +120,17 @@ function PostMergePanel({ state, task, gate }: { state: ShinsaState; task: Task;
 function ActivityPanel({
   state,
   task,
+  sheet,
   onOpenRun,
 }: {
   state: ShinsaState;
   task: Task;
+  sheet: InitiativeSheet | null;
   onOpenRun: (runId: string) => void;
 }) {
-  const entries = listActivityNewestFirst(task);
+  const entries = sheet
+    ? mergeActivity(listActivityNewestFirst(task), listInitiativeActivity(state, sheet))
+    : listActivityNewestFirst(task);
   const [limit, setLimit] = React.useState(ACTIVITY_PAGE);
   const shown = useProgressiveCount(Math.min(entries.length, limit), FIRST_ACTIVITY);
   const older = entries.length - limit;
@@ -162,13 +180,21 @@ export function OverviewTab({
   const readOnly = useReadOnly();
   const hint = readOnly ? null : resolveMessageHint(state, task);
   const fade = useTaskScrollFade();
+  const led = selectLedInitiative(state, task);
+  const sheet = led ? Option.getOrNull(resolveInitiativeSheet(state, led.id, Date.now())) : null;
+  const feed = useTeamFeed();
+  const shared = !led && readOnly ? selectLeadTeamInitiative(feed, task) : null;
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
       <PageScroll fade={fade}>
         <TaskScrollHeader />
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <PostMergePanel state={state} task={task} gate={gate} />
-          <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
+          {((!sheet && !shared) || gate || task.stage !== 'leading') && (
+            <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
+          )}
+          {sheet && <InitiativeOverview state={state} sheet={sheet} />}
+          {shared && <TeamInitiativeOverview initiative={shared} />}
           <RequestsPanel task={task} shownId={resolveShownReplyId(state, task, gate)} />
           <SuggestionsPanel task={task} />
           <WatchdogsPanel state={state} task={task} />
@@ -188,7 +214,12 @@ export function OverviewTab({
           <EvidencePlace state={state} task={task} onOpen={onOpen} />
           {code && <ChangesPanel task={task} onOpen={onOpen} />}
           <RoundsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
-          <ActivityPanel state={state} task={task} onOpenRun={(runId) => onOpen('agent', runId)} />
+          <ActivityPanel
+            state={state}
+            task={task}
+            sheet={sheet}
+            onOpenRun={(runId) => onOpen('agent', runId)}
+          />
         </div>
       </PageScroll>
       {hint && <TaskComposer state={state} task={task} hint={hint} />}

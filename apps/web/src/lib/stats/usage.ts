@@ -66,6 +66,7 @@ const WORK_LABEL: Record<StatsWork, string> = {
   operate: 'Operations',
   watch: 'Watchdogs',
   intake: 'Watches',
+  lead: 'Initiative leads',
   agent: RUN_ROLE.agent.name,
   planner: RUN_ROLE.planner.name,
   builder: RUN_ROLE.builder.name,

@@ -31,7 +31,7 @@ export class BriefingWriter extends Context.Service<
           return yield* Effect.logInfo(
             '[Briefing] Dropped a briefing that was written after the server stopped'
           ).pipe(Effect.annotateLogs({ seq: state.seq }));
-        yield* engine.writeBriefing(briefingKey(queue.focus), {
+        yield* engine.writeBriefing(briefingKey(queue.focus, queue.focusInitiativeId), {
           text: serializeBriefing(briefing, yield* engine.state),
           briefing,
         });

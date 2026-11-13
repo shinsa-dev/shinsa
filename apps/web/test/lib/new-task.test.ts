@@ -103,6 +103,7 @@ describe('createNewTaskCommand', () => {
   it('sends each part you picked, Start now as no tasks to wait on and No project as null', () => {
     expect(
       createNewTaskCommand('Fix it', {
+        kind: 'auto',
         project: 'p1',
         start: 'now',
         after: [],
@@ -116,6 +117,12 @@ describe('createNewTaskCommand', () => {
       projectId: 'p1',
       priority: 'urgent',
       waitsOn: [],
+    });
+    expect(createNewTaskCommand('Effort\nWhat for', { ...AUTO_CHOICES, kind: 'initiative' })).toEqual({
+      type: 'task.create',
+      request: 'Effort\nWhat for',
+      repoId: null,
+      initiative: true,
     });
     expect(
       createNewTaskCommand('Fix it', { ...AUTO_CHOICES, start: 'after', after: ['a', 'b'] })

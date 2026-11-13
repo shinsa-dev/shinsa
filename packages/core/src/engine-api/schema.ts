@@ -3,6 +3,7 @@ import type { AgentModel, AgentProviderInfo } from '../agent-models/index.ts';
 import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/schema.ts';
 import type { Feedback, FeedbackLeak } from '../domain/feedback.ts';
+import type { InitiativePhase } from '../domain/initiatives.ts';
 import type { MemoryEntry } from '../domain/memory.ts';
 import type { OnBehalfAction } from '../domain/on-behalf.ts';
 import type { Schedule, WatchSuggestion } from '../domain/schedules.ts';
@@ -10,6 +11,7 @@ import type { WebhookSignature } from '../domain/schema.ts';
 import type { Settings } from '../domain/settings.ts';
 import type { Focus, Gate, Project, Repo, Run, Task, TaskSuggestion } from '../domain/types.ts';
 import type { Watchdog } from '../domain/watchdogs.ts';
+import type { InitiativeDecisionKind } from '../initiatives/types.ts';
 import type { AccountsSnapshot } from '../protocol/accounts.ts';
 import type {
   FileContent,
@@ -558,6 +560,68 @@ export const ProjectsAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is { readonly projects: readonly ProjectView[]; readonly focus: Focus } =>
     Predicate.isObject(value)
   )
+);
+
+export interface InitiativeTaskRef {
+  readonly id: string;
+  readonly handle: string | null;
+  readonly title: string;
+  readonly status: string;
+}
+
+export interface InitiativeProgressView {
+  readonly phase: InitiativePhase | null;
+  readonly total: number;
+  readonly shipped: number;
+  readonly dropped: number;
+}
+
+export interface InitiativeView {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly phases: readonly InitiativePhase[];
+  readonly lead: InitiativeTaskRef | null;
+  readonly members: number;
+  readonly progress: readonly InitiativeProgressView[];
+  readonly createdAt: number;
+  readonly updatedAt: number;
+  readonly url: string;
+}
+
+export interface InitiativeReportView {
+  readonly narrative: string;
+  readonly at: number;
+}
+
+export interface InitiativeSheetView {
+  readonly initiative: InitiativeView;
+  readonly report: InitiativeReportView | null;
+  readonly needsYou: readonly { readonly task: TaskView; readonly reason: string }[];
+  readonly now: readonly TaskView[];
+  readonly next: readonly {
+    readonly phase: InitiativePhase | null;
+    readonly tasks: readonly { readonly task: TaskView; readonly waitsOn: readonly InitiativeTaskRef[] }[];
+  }[];
+  readonly shipped: readonly TaskView[];
+  readonly dropped: readonly { readonly task: TaskView; readonly reason: string }[];
+  readonly decisions: readonly {
+    readonly task: InitiativeTaskRef;
+    readonly kind: InitiativeDecisionKind;
+    readonly title: string;
+    readonly text: string;
+    readonly at: number;
+  }[];
+}
+
+export const InitiativesAnswer = Schema.Unknown.pipe(
+  Schema.refine((value): value is { readonly initiatives: readonly InitiativeView[] } =>
+    Predicate.isObject(value)
+  )
+);
+
+export const InitiativeSheetAnswer = Schema.Unknown.pipe(
+  Schema.refine((value): value is InitiativeSheetView => Predicate.isObject(value))
 );
 
 export const SchedulesAnswer = Schema.Unknown.pipe(

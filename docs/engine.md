@@ -1080,10 +1080,12 @@ folds in `state/shapes.ts`).
   **operation** `[plan, operate]` (something to run in the repository, a script, a migration or a cleanup: the plan always
   waits for you, then the Agent that planned it runs it in the same session and reports with `report_outcome`; no
   pull request). `resolveTaskShape` names a
-  pipeline back (an answer that became a change reads as a change).
+  pipeline back (an answer that became a change reads as a change). A seventh, **lead** `[plan, lead]`, is an initiative itself
+  (Initiatives, below): only `task.create` with `initiative` and `initiative.adopt_task` make one, no agent composes its step (`Only Shinsa
+  starts a lead, for an initiative.`) and it is never one of the presets below (`PresetShape`).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
-  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
+  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it, but for Initiative, which only you start). `task.create`
   takes no `shape`: only triage and the Agent, while it plans, shape a task. The Agent of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with
@@ -1488,7 +1490,10 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   In progress lists only the tasks of a bundle still being worked on, several at once when they run side by side; a
   ready task, the lead included, moves to Waiting on another task while any other task of its bundle is not ready,
   and a ready follower stays there on the lead once all are (`listBundleBlockers`, `resolveQueue`), its row naming
-  what it waits on, "Waits on ‹A›". The tree indents every level up to six
+  what it waits on, "Waits on ‹A›". Two or more tasks of one bundle in the same section of Home or the queue (In
+  progress, Waiting, Snoozed; never Needs you) sit under one thin header named after the first of them in bundle order,
+  with how many of the bundle's tasks are ready; it opens the latest of them still being worked on; a single one stays a plain row
+  (`listSectionEntries`, `lib/queue.ts`). The tree indents every level up to six
   (`resolveDepthIndent`, the task list, the popover and the pickers alike), so a long line never reads as tasks side
   by side; a row deeper than that sits at the sixth level with its depth beside the arrow, "‹n› steps down the chain"
   on hover (`DepthMark`). A ready
@@ -1511,6 +1516,151 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   stalls, work that needs the earlier change live on the default branch first (a migration run, a deploy, a flag), or
   work in another repository. A bundle holds every merge until its last task is ready, so a large bundle delays the
   first piece; waiting delivers each piece as it merges.
+
+### Initiatives
+
+An initiative groups the tasks of one effort that outgrows a task and a bundle: a rewrite split into twenty pull
+requests over three repositories and a week, each merging on its own as it is ready. **An initiative is a task**: a task
+of kind `lead` whose agent, the lead, supervises the group, and whose Overview is the initiative's report sheet. There
+is no separate page and no navigation entry; Home lists the open ones and ⌘K finds each by name. It sits above tasks,
+bundles and projects (its tasks may sit in any repository of any project), so it is not called a project: projects are
+the directories you focus on. The record is core (`domain/initiatives.ts`, `decide/initiatives.ts`, `decide/leads.ts`,
+the fold in `state/initiatives.ts`, the sheet in `initiatives/`); the engine serves it
+(`apps/engine/src/surface/initiatives.ts`, `http/initiative-views.ts`, `initiatives/service.ts`) and the web app draws
+it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
+
+- **Starting one.** You start one like any task: Home's composer with Kind of task set to Initiative, or `shinsa tasks
+  create --initiative` (`task.create` with `initiative: true`). The request's first line names it and the rest
+  describes it; Shinsa creates the `Initiative` record and its lead task in one command (`createInitiativeTask`), the
+  lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
+  either: **Make an initiative from this task** (`initiative.adopt_task`: the task's menus, ⌘K, `shinsa initiatives
+  adopt`) and a plan that asks for one (below) make it for you.
+- **The record.** `Initiative { id, name, description, phases, leadTaskId, createdAt, updatedAt }`, plus the lead's
+  `milestones` queue and its latest `report`. `initiative.write` changes the name, description and phases (Edit the
+  initiative in the lead task's menu and ⌘K, `shinsa initiatives write <initiative>`), recorded as
+  `initiative.written` with the whole record. Limits are `INITIATIVE_LIMITS`: a name of 80 characters, a description of
+  2,000, 12 phases of 60 characters each with distinct names, and 50 open initiatives (`initiative_limit`).
+- **Finishing and cancelling.** Marking the lead task done finishes the initiative: the record stays with its last
+  report and its sheet stays on the lead task, but it takes no new tasks (`initiative_finished`), its members' new
+  tasks no longer inherit it, and Home and ⌘K leave it out. While it is open, two or more of its tasks in one section
+  of Home or the queue (In progress, Waiting, Snoozed; never Needs you) sit under one small row, the initiative's name
+  and its progress (`listInitiativeProgress`), that opens the lead task; once the lead is done its tasks are plain
+  rows again (`selectGroupInitiative` asks `selectInitiativeLead`); a task in a bundle and an initiative groups
+  with the initiative, so a group never nests. Cancelling the lead task dissolves it (`syncCancelledLeads`):
+  every member leaves, a focus on it is cleared and `initiative.removed` drops the record.
+- **Phases are labels, not gates.** A phase is `{ id, name }` in the initiative's order. A task carries
+  `initiativeId` and `initiativePhaseId` and joins one initiative at a time. Order inside and between phases is the
+  waits you already have (`waitsOn`, `after_this`): phase 2's first tasks wait on phase 1's last ones, and each piece
+  merges as it is ready. A phase whose pieces must land at once is a bundle inside it (Bundles, above). Writing the
+  phases keeps a phase's id while its row stays (the dialog keeps it across a rename; the command line matches by
+  name, so a phase renamed there is a new phase), and a removed phase drops its tasks to no phase.
+- **Membership.** `task.join_initiative` (`initiativeId` and `phaseId`, or `initiativeId: null` to leave) records
+  `task.initiative_changed` and a line on the task's activity. You add a task from its `•••` and context menus (Add to
+  an initiative, Move to another initiative, Phase, Take out of the initiative), ⌘K, or `shinsa tasks
+  join-initiative|leave-initiative`, and so can any agent with the same tools: the lead is told of every task that
+  joins. The Overview's facts name the initiative and phase and open the lead task. A task created with an
+  `initiativeId` joins it, and every task a member files inherits its initiative and phase, by `create_task`,
+  `split_task` or a fork (`resolveCreatedMembership`, from `parentTaskId`, `createdBy` or `forkOf`), so an effort's later
+  pieces never fall out of it.
+- **Making one from a task** (`initiative.adopt_task`) creates an initiative named after the task, adds the task and
+  every descendant found through `createdBy`, `parentTaskId` and `forkOf`, transitively (`listTaskDescendants`), and
+  starts its lead forked from the task's chat, so the lead begins with everything that task knows. A descendant
+  already in another initiative stays there; a task already in one is refused (`initiative_exists`). This is how an
+  effort like SW-101's chat split moves in after the fact.
+- **A plan can propose one.** A plan with a `split` may set `initiative: true` when the parts are one effort that will
+  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). The plan card
+  and its markdown say so under the other tasks (`PLAN_INITIATIVE_NOTE`), and approving the plan splits the parts off
+  and then adopts the task (`startPlanInitiative`), so the task, its parts and a lead forked from it become the
+  initiative in one click. A task already in an initiative keeps it, and its parts join it.
+- **The sheet** (`resolveInitiativeSheet`, pure, no model call) is the lead task's Overview, `shinsa initiatives show`
+  and `GET /api/initiatives/<ref>`: the lead's report (Where it stands), the phases' progress, **Needs you** (members'
+  open decisions, ranked like the queue), **Now** (working), **Next** (every other open task, grouped by phase in order,
+  each with the tasks it waits or stacks on), **Shipped** (merged or done, with pull requests), **Dropped** (cancelled,
+  with the reason) and **Decisions** (each accepted plan's goal and each judgement call the members handed over, newest
+  first, at most 100). A lead is never one of the initiative's tasks there or in any count (`listInitiativeWork`).
+  The Overview shows these as the All tasks list does (a gate's group, In progress, one section per phase named after it, Done and
+  Cancelled) and puts Decisions into the lead's Activity (`listInitiativeTaskSections`, `listInitiativeActivity` in
+  `apps/web/src/lib/initiatives/view.ts`). Home and the queue list the members where any task sits and leave the lead out, so an initiative never stands in for its tasks (`listQueueSections`, `apps/web/src/lib/queue.ts`); both routes are
+  behind the `initiatives` engine feature, whose views link the lead task.
+- **Focus.** `Focus.initiativeId` is a third focus target beside projects and a team, one at a time (`focus_refused`
+  for two), from the Focus menu, ⌘K or `shinsa focus initiative`. `resolveQueue` then keeps only the initiative's
+  tasks and decisions (`resolveFocusInitiative`), so Home, the queue button, the guide and notifications narrow to it.
+- **The lead.** The `lead` kind (`SHAPE_PIPELINES.lead`, `plan` then `lead`; no agent may compose `lead` and triage
+  never picks it: `PresetShape` is the six you see) does no repository work, opens no pull request and has no gate
+  tools. It is the task's one Agent session (the engine's first rule), and it keeps a task's notions: a plan, your
+  answers, its chat.
+  - **It plans first.** A new initiative's lead plans like any task (`purpose: plan`, `resolveLeadPlanningPrompt`,
+    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead): its `phases` are the
+    initiative's phases and its `split` the first tasks to file, each with the `phase` it belongs to (its number) and a
+    request naming its repository. `validatePlanRules` lets a lead's plan split but refuses `files` and `initiative`.
+    The split always opens the plan gate. Approving it files the parts (`startPlanSplit`, forked from the lead's chat,
+    so each starts knowing the plan; triage picks each one's repository), adds the plan's phases the initiative does
+    not have yet (`startLeadPlan`, matched by name), puts each part in its phase and starts the lead's first turn. A
+    lead made from tasks that exist already (Make an initiative from this task, a plan's `initiative`) has nothing to
+    plan: `task.reshaped` drops its `plan` step and it starts leading at once.
+  - **Its turns.** Every turn after the plan is a run of purpose `lead` on the same session; between turns it rests in
+    the `leading` stage (never done), and each turn ends with `report_initiative`, a `narrative` of at most 2,000
+    characters that `initiative.reported` keeps as `Initiative.report` and its Overview shows as Where it stands.
+  - **Its questions are questions.** What only you can settle it asks with `ask`, so it waits in Needs you like any
+    agent's question and its turn waits for your answer; a report carries none. Milestones that arrive meanwhile
+    stay queued, since a lead with an open gate is not idle.
+  - **Its context.** One session for the initiative's life: each wake adds a short digest and the milestones since
+    the last turn, never a member's transcript; it reads a member with `read_task` only when it needs to, boundary
+    folds keep the session small, and every member works in its own session. You talk to it in its chat.
+- **What wakes the lead.** After every command `syncInitiativeMilestones` reads the new events for member milestones:
+  a task joined, a plan accepted (at its gate or without one), a decision gate opened, merged, done or cancelled. It
+  skips the lead itself, tasks the lead filed (it knows), and initiatives without a live lead, queues them on the
+  initiative (`initiative.milestones_queued`, the last 40) and emits an `initiative.wake` effect. The engine's
+  `LeadWakes` debounces it per initiative (30 s, `LeadWakeDebounce`, one waiting fiber per initiative), then sends
+  `initiative.wake_lead`, which starts a turn only when the lead rests idle in `leading`; a lead that is busy gets
+  the queue on the wake its next report asks for, and on start the engine reschedules every initiative with milestones queued. The
+  turn's prompt carries the digest of the sheet and the milestones since the last turn at the tail of the user turn,
+  and `initiative.lead_woken` empties the queue, so the session's cached prefix never changes (Caching). A message to
+  the lead, yours or a member's (`tasks_message`), starts a turn straight away (`answering your message`, or
+  `answering a member`). A message sent on your behalf reaches the lead as that agent's, naming the task it came
+  from and saying it is no instruction from you, so a member's scope note never reads as your decision.
+- **Members know their lead.** A member's first brief names its initiative and phase and links the lead, and tells
+  it to message the lead with `tasks_message` when its scope changes or another task should wait for it
+  (`describeInitiativeMembership`).
+- **What it may do.** The lead files members with `create_task` and `split_task` (they join by themselves), orders
+  them with `tasks_wait_on`, sets their phase with `tasks_join_initiative`, prioritises, messages and reads them, and
+  delegates like any task (Agents manage Shinsa, below). Plans, reviews and merges stay yours: its tool list is every
+  task session's, and every gate is human-only as before (Who can change Shinsa).
+- **Shared with a team.** An initiative is one record on its owner's machine; `Initiative.teamIds` lists the teams
+  that see it, written only by you (`initiative.add_to_team`, `initiative.remove_from_team`: Share with a team in the
+  lead task's `•••` menu and ⌘K, `shinsa initiatives add-to-team|remove-from-team`; human-only, since it opens the
+  effort to other people). Ownership stays per task, never per initiative: the lead is owned by whoever made it, and
+  each member by whoever owns it.
+  - **What teammates see.** A shared initiative's lead task is a team task whatever its project (`isSharedLead`), and
+    the team list carries the initiative itself (`TeamListView.initiatives`, `TeamInitiative`: name, description,
+    phases, lead, the report without its run, finished), kept in the signed snapshot like the tasks, so it still shows
+    while your machine is offline. Your own members show to the team only when their own project is in it, so sharing
+    an initiative never shows a task from a project you did not share.
+  - **A teammate's task joins from their machine.** It stays there with its own owner and carries
+    `Task.teamInitiative { teamId, instanceId, initiativeId, phaseId, name }` (`task.join_initiative` with `team`,
+    `task.team_initiative_changed`), from the task's menu, ⌘K (the teammates' initiatives their team sees are listed
+    beside their own) or `shinsa tasks join-initiative`, which also finds an initiative a teammate shared with your
+    team. Only a task the team already sees may join (`initiative_not_shared`), a lead never joins another's, and
+    every task it files inherits the reference, as members inherit their own.
+  - **The lead's machine counts them.** Their `TeamTask` names the initiative, and a watcher on the lead's machine
+    (`TeamMembers`, `apps/engine/src/initiatives/team-members/`) reads the team feeds whenever they change and records
+    each team's members (`initiative.record_team_members`, `initiative.team_members_recorded`, at most 200,
+    `Initiative.teamMembers`: handle, title, owner, stage, phase, open gate). Core diffs them into the lead's
+    milestones like its own members' (joined, plan accepted, gate opened, merged, done, cancelled), so phase progress,
+    the sheet's counts and the lead's digest include them, each named as its owner's task. The lead task's Overview
+    lists their live rows beside yours, switching to the team table (Repository and Owner, `TEAM_TASK_LIST_COLUMNS`)
+    once one is there; a teammate's row opens read-only, as on All tasks. Taking the initiative out of a team, or a
+    member's task leaving it or the team, drops their rows.
+  - **Their agents can message the lead.** `tasks_message` (and `shinsa tasks message`) to a lead not on this
+    machine relays to the teammate's machine through this machine's own relay route
+    (`/api/teams/relay/<machine>/api/commands`, `surface/relay.ts`). An agent's message carries the sender task's
+    handle and title (`fromTeammateTask`), and may skip the team's `message` scope, but only as plain feedback
+    (no `--as`) to the lead of an initiative shared with that team while the lead rests in `leading` with no gate
+    open (`isLeadMessage`, `remote/scope.ts`). At a failure, setup or plan gate a message would retry, approve or
+    withdraw it, so there it needs the `message` scope like any other; so does a message a teammate writes
+    themselves. The lead reads it as that task's agent, never as you.
+  - **Gates stay with each task's owner.** The lead has no gate tool, and its machine sends nothing but a message to
+    a teammate's machine, so it never closes anyone's gate.
 
 ### The backlog
 
@@ -2870,7 +3020,8 @@ and the run supervisor.
   question). A sub-task would bring a worktree, a branch, triage, a plan, checks, gates and a pull
   request: everything a delegated review or survey must not have. A sub-run shares the task's
   worktree, budget, cost and transcript store, ends with a reply instead of a hand-over, and never
-  moves the task's stage. Work that should become its own change is a new task (couriers, below).
+  moves the task's stage. Work that should become its own change is a new task (couriers, below), which joins the
+  filing task's initiative and phase when it has one (Initiatives).
 - **Tools.** Every working role gets `delegate_task`, `delegation_status`, `delegation_cancel` and
   `delegation_answer`; the last three name a delegation by `delegation_id`. `delegate_task` takes the `brief`, a title, a `role` (`planner`
   to investigate without changing files, `reviewer` to review or test without changing files, `builder` to change
@@ -3350,7 +3501,8 @@ beside your run (Runs for a task, below).
 
 There is no separate conversation with Shinsa. Every task agent can do what you can do in Shinsa, and a task is how
 you talk to it: an Answer task (no repository work) is a conversation, and any task's chat is a place to ask its
-agent to change a priority, suggest tasks, pause a schedule or finish. Ported from Kanna's delegator and orchestration
+agent to change a priority, suggest tasks, pause a schedule or finish. For one effort of many tasks, an initiative's
+lead is that conversation, scoped to the effort and woken as its tasks move (Initiatives). Ported from Kanna's delegator and orchestration
 tools and T3's MCP toolkits.
 
 - **The tools.** Every task run (not a delegated run, not an idle compaction) gets, besides its role's tools
@@ -3598,7 +3750,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     authorization header in git's config through `GIT_CONFIG_COUNT` (never on the command line, so it shows in no process list or push
     error; an SSH remote still pushes with the machine's key), and commits and merges are authored as the owner while
     the machine stays the committer. A member with no token yet ships with the machine's own login, and the pull
-    request's description says so (`serializeMachineLoginNote`).
+    request's description says so (`serializeMachineLoginNote`). With the machine's own login, pushes and fetches to
+    `https://github.com` take their credentials from `gh` (`MACHINE_GIT_CREDENTIALS`: an empty
+    `credential.https://github.com.helper`, which drops the helpers before it, then `!gh auth git-credential`, as
+    `gh auth setup-git` writes it, through `GIT_CONFIG_COUNT`), so git uses the same login `gh` reads with. Without
+    it git falls back to the system's helper (macOS keychain), which can hold an older token GitHub refuses for an
+    SSO organization while `gh` works.
   - **The web app.** On a shared machine All tasks opens on your own tasks with an Owner column (removing the filter
     writes `owner=everyone`, which sticks), Home, the queue and the "N need you" count only ever show yours
     (`useOwnQueue`), a task's facts name its Owner ("You", the
@@ -4217,7 +4374,8 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   Teams, `shinsa projects add-to-team|remove-from-team`). Both are human-only: their surface specs are `humanOnly`
   and core refuses them on your behalf (`human_only`), since they open tasks to other people. A task is in a team when
   its project is (`isTeamTask`, through `resolveTaskProject`), except an automation's home. A task without a project
-  is never shown to a team.
+  is never shown to a team. A shared initiative's lead task is also a team task, and a teammate's own task can join it
+  (Scheduling → Initiatives, Shared with a team).
 - **The team channel** (`TEAM_CHANNEL_PATH`, `/team` through the relay; core's `remote/teams.ts`, the engine's
   `remote/teams/service.ts`, `Teams`). A viewer asks app.shinsa.dev for a team connect token
   (`POST /__remote/teams/<team>/connect { instanceId }`, signed in, from a page; `/__remote/machine/teams/<team>/connect`
@@ -5225,14 +5383,14 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   repository with its path (the task's own marked) and its folders, and the repository the task works in when it is
   outside the project (`resolveProjectContext`, appended in `Decider.startRun`), so you never have to say which
   repository "the server" is.
-- **The focus is projects or a team** (`Focus { projectIds, except, teamId, until }`, `domain/focus.ts`; neither for
-  your work). `projectIds` with `except` false shows only those projects; with `except` true it shows every project
+- **The focus is projects, a team or an initiative** (`Focus { projectIds, except, teamId, initiativeId, until }`,
+  `domain/focus.ts`; none for your work; an initiative focus keeps only its tasks, Initiatives). `projectIds` with `except` false shows only those projects; with `except` true it shows every project
   but those, so you can leave the work project out on a weekend. One predicate, `isProjectInFocus`, decides it
   everywhere: `resolveQueue` keeps only the decisions and tasks in focus, or those of the team's projects, and every
   list built on it (Home, the queue button, the guide, ⌘K's decisions, the tab count and notifications) shows nothing
   else. A task with no project shows under all but some and hides under a list of projects. `focus.change` takes
   `projectIds` and `except`, or the older `projectId` a page from before them sends; `changeFocus` sorts and dedupes
-  the list, drops `except` when it is empty, and refuses projects with a team (`focus_refused`). Removing a project
+  the list, drops `except` when it is empty, and refuses two kinds of target at once (`focus_refused`). Removing a project
   drops it from the focus, and the focus clears when none are left. `resolveFocusProject` names a project only when
   exactly one is included, for the new task's default project and the terminal's default folder. `shinsa focus set`
   takes several projects and `--except`; `focus show` names them (`describeFocusProjects`). The page offers the
@@ -5838,6 +5996,24 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   rate limit is logged and not counted, since waiting is the fix. At eight the watch stops (`stopped:
   'unreadable'`) and a failure gate says how often and why. It is not acted on while an agent works on the
   task or while the merge gate is open; the count stays at eight and the next failed read acts once it can.
+- **GitHub's SAML single sign-on stops the watch at once.** When an organization enforces SAML SSO and
+  the GitHub login Shinsa uses is not authorized for it, every read fails the same way, so counting to
+  eight only delays the pause. `parseGitHubSso` (core, `github/sso.ts`) reads GitHub's refusal in the
+  GraphQL, REST and `git push` wordings: the organization, and the `orgs/<org>/sso?authorization_request=…`
+  link when GitHub gives one. A read it matches stops the watch on the first failure (with the same holds
+  while an agent works or the merge gate is open), and any other effect that fails with it (a push, opening
+  the pull request, reading CI) goes through `effect.fail` to the same gate. It opens through
+  `Decider.hold`, not `fail`: no automatic retry is armed, since nothing changes until you authorize the
+  login. The gate is a failure gate with cause `github_sso` and `githubSso { organization, url }`, titled for the organization, whose body says the
+  login is not authorized and leaves out GitHub's raw text (kept in the log). Without a link (a personal
+  access token) the URL is the organization's SSO page, or the token settings when no organization is
+  known (none named and none in the pull request or remote URL), and the body says to authorize the token.
+  The paused card adds "Authorize on GitHub", which opens that URL. With the machine's own `gh` login the
+  body also says to run `gh auth refresh -h github.com`: `gh`'s token is an OAuth app token, which GitHub
+  authorizes for an organization only when the app is authorized during an active SSO session, so a token
+  made before the organization enforced SSO stays refused until `gh` signs in again. Pushes use that same
+  `gh` login (see Shared machines → GitHub), so once `gh` works for the organization, so does the push. Retry restarts the
+  watch as for any failure gate, and nothing resumes on its own once the login is authorized.
 - **A stopped watch** is not read by the periodic sync. Retry restarts it (the push or the
   recheck it starts), and so does a read that finds the pull request clean: that one opens the
   merge gate and withdraws the failure gate.

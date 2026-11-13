@@ -19,7 +19,7 @@ import {
 import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Schema } from 'effect';
 import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { CloudConfig } from '../../config/service.ts';
-import { isMachineOnline } from '../../domain/machines.ts';
+import { selectOfflineCause } from '../../domain/machines.ts';
 import { serializeCookie } from '../../http/cookies.ts';
 import {
   isTunnelOffline,
@@ -199,8 +199,9 @@ export class PreviewHost extends Context.Service<
         if (!(pass.key || pass.access)) return respondPage('gone', 404);
         const machine = yield* selectMachine(address);
         if (Option.isNone(machine)) return respondPage('gone', 404);
-        if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis)) {
-          yield* recordMachineOffline('preview', machine.value.id, { lastSeenAt: machine.value.lastSeenAt });
+        const offline = selectOfflineCause(machine.value, yield* Clock.currentTimeMillis);
+        if (Option.isSome(offline)) {
+          yield* recordMachineOffline('preview', machine.value.id, offline.value);
           return respondPage('offline', 503);
         }
         return yield* forward(url, machine.value, address, pass);

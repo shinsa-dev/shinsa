@@ -20,6 +20,7 @@ import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
 import { requestIteration } from './iterations.ts';
+import { startPlanInitiative } from './leads.ts';
 import { settleTask, startPlanning } from './lifecycle.ts';
 import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
@@ -236,6 +237,7 @@ function answerDecision(
     decider.emit({ type: 'plan.approved', taskId, version });
     if (response?.trim()) decider.emit({ type: 'plan.answered', taskId, answers: response.trim() });
     startPlanSplit(decider, taskId);
+    startPlanInitiative(decider, taskId);
     startApprovedPlan(decider, taskId);
     return;
   }

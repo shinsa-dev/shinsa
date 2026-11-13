@@ -2,6 +2,7 @@ import {
   type ChangeProposalInput,
   type ShinsaEvent,
   validateDelivery,
+  validateInitiativeReport,
   validateReadReport,
   validateReshape,
 } from '@shinsa/core';
@@ -40,6 +41,11 @@ export const handleShapeTool = Effect.fn('ShapeTool.handle')(function* (
   if (name === 'report_read') {
     const read = yield* assertToolInput(validateReadReport(input));
     yield* call.dispatch({ type: 'agent.report_read', runId, attemptId, ...read });
+    return HANDED_OVER;
+  }
+  if (name === 'report_initiative') {
+    const report = yield* assertToolInput(validateInitiativeReport(input));
+    yield* call.dispatch({ type: 'agent.report_initiative', runId, attemptId, ...report });
     return HANDED_OVER;
   }
   if (name === 'reshape_task') {

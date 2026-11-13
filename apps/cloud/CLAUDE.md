@@ -175,14 +175,17 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   `service_full`.
 - **Machines.** A heartbeat (machine token as bearer) records the `features` the engine names (`machines.features`)
   and marks the instance online, with the machine's loopback address; any address but loopback is refused. Online means a heartbeat in
-  the last 5 minutes and no offline call since. An unknown machine token is 401, which the machine reads as revoked.
+  the last 5 minutes, no offline call since and `relay` among its features (`selectOfflineCause` in
+  `domain/machines.ts`), so an engine from before the relay that still beats lists as offline everywhere: instances,
+  teams, shares, Slack and previews. An unknown machine token is 401, which the machine reads as revoked.
   Removing an instance, from its owner's dashboard or by the machine, deletes the row with its members, guests,
   invites and hand-off links, then tells its relay to close the machine's socket and every open stream (a relay that
   cannot be reached is a warning; the machine token is gone either way). The heartbeat answers `{ ok, owner, members, guests, teams }`
   (`HeartbeatResponse`), the machine's owner, its members and its guests as users, so the machine keeps its own copy
   and forgets the devices of anyone no longer listed.
 - **The relay.** Each machine keeps one outbound WebSocket to `/__relay/<instance>/machine`, its machine token as a
-  bearer (401 otherwise, which the machine reads as revoked once a heartbeat agrees), ending in that machine's own
+  bearer, checked before the instance is looked up (401 otherwise, an unknown instance included, which the machine
+  reads as revoked once a heartbeat agrees), ending in that machine's own
   `MachineRelay` Durable Object (`relay/durable.ts`, named by the instance id through `RelayRooms`). Everything that
   reaches the machine is a stream on that socket in core's relay frames (`remote/relay/`): a browser's channel, share
   and team socket (`/__relay/<instance>/remote|share|team`, its cookies and authorization dropped, its address kept as
@@ -319,14 +322,16 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
   machine checks the token. A relay that does not answer (no machine socket, 502, 503, 504) is 503 with
   `Retry-After: 60`, so the sender tries again.
-- **An offline machine is a warning, not an error.** A webhook, a Slack mention or a preview whose relay does not
-  answer writes one warn line, `[Cloud] Machine offline` (`recordMachineOffline` in `http/forward.ts`), with
-  `surface` (`webhook`, `slack` or `preview`), `instanceId` and `reason`: `unreachable` with the fetch's `error`,
-  `status` with the relay's status, or (a preview only, never asked over the relay) `stale` with the machine's
-  `lastSeenAt`, when it is marked offline or its last heartbeat is older than `ONLINE_WINDOW`. A machine asleep or off
+- **An offline machine is a warning, not an error.** A webhook, a Slack mention, a preview or a browser socket on
+  `/__relay/` whose machine the relay cannot reach writes one warn line, `[Cloud] Machine offline`
+  (`recordMachineOffline` in `http/forward.ts`), with `surface` (`webhook`, `slack`, `preview` or `relay`),
+  `instanceId` and `reason`: `unreachable` with the fetch's `error`, `status` with the relay's status, `not_joined`
+  when the machine beats without naming `relay` (an engine from before the relay), or (a preview or a Slack mention,
+  never asked over the relay) `stale` with the machine's `lastSeenAt`, when it is marked offline or its last heartbeat
+  is older than `ONLINE_WINDOW`. A machine asleep or off
   its network is expected, so a watch counts this line on its own. Workers Logs still marks the webhook's 503 request
   itself as error level, as it does any 5xx, with no `console.error` behind it, so a watch on the Worker's errors must
-  leave out a 503 on `/hooks/` (and on a preview host) that comes with this warn line, and count the warn line apart.
+  leave out a 503 on `/hooks/`, on `/__relay/` (and on a preview host) that comes with this warn line, and count the warn line apart.
   A preview host's 5xx that comes with `[Cloud] Preview service stopped` is the machine's own page for a service
   that is not running, and is left out the same way.
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
@@ -428,7 +433,8 @@ model. The Worker's part of it:
   other account, a Slack workspace's id as `workspace_id` (never `team_id`, which is one of our teams), a sealed
   value as `sealed_*`; a JSON column (`features`, `scopes`) is checked with `json_valid`. The test fails on a table missing from its list, one not strict, a foreign key without an index
   a value of the wrong type and text that is not JSON. A change to the schema is a new file after it (`0002_…`), never an edit to one D1
-  has applied.
+  has applied. `0004_drop_tunnel_columns.sql` drops `machines.tunnel_id` and `dns_record_id`, the per-machine tunnel's
+  ids the relay replaced; the test pins the columns of `machines`.
 - **What logs keep.** Failures of 500 or more with their cause, and the ids and statuses of what a machine or Slack
   refused (`WorkerLogger`); never a body, and every secret is `Redacted`, so a cause prints it as `<redacted>`.
   Workers Logs record each request's URL too, which for a webhook includes its token.
@@ -468,7 +474,12 @@ model. The Worker's part of it:
   `pair_sessions`). In `wrangler deployments list` those are the Worker versions deployed before 2026-11-04 21:44 UTC,
   the first on the new schema being version `d2e271eb` (a Worker version id, not a commit). Rolling the Worker back to
   one of them, or restoring D1 to before its rebuild (`wrangler d1 time-travel restore`), fails every request that
-  reads D1 with `no such table`. Undo one only with the other, in the same minute.
+  reads D1 with `no such table`. Undo one only with the other, in the same minute. `0004_drop_tunnel_columns.sql` is
+  a second such boundary: every Worker built before it still names `tunnel_id` and `dns_record_id`, so the Worker
+  versions deployed before the one that applied `0004` (the first after its merge in `wrangler deployments list`)
+  fail on the new schema with `no such column`. A Worker from the relay change (#257) fails only pairing approval; one
+  from before the relay also reads the columns, so it fails every request that reads a machine. Roll back past it
+  only together with `wrangler d1 time-travel restore` to before `0004` applied, in the same minute.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`

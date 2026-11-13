@@ -7,6 +7,7 @@ import {
   isTeamPerson,
   isTeamTask,
   listMachineExtraScopes,
+  listTeamInitiatives,
   listTeamProjectIds,
   listTeamTasks,
   openTeamKey,
@@ -28,6 +29,7 @@ import {
   type TeamKeyDelivery,
   TEAM_SHARE_SCOPES,
   type TeamId,
+  type TeamInitiative,
   type TeamListView,
   type TeamTask,
   verifyTeamHello,
@@ -429,12 +431,19 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
       const signList = Effect.fn('Teams.signList')(function* (
         teamId: string,
         tasks: TeamTask[],
+        initiatives: TeamInitiative[],
         updatedAt: number
       ) {
         const instanceId = (yield* store.file).credentials?.instanceId;
         if (!instanceId) return null;
         const { privateKey } = yield* store.resolveSigningKey;
-        return yield* signTeamSnapshot(privateKey, { teamId, instanceId, tasks, updatedAt });
+        return yield* signTeamSnapshot(privateKey, {
+          teamId,
+          instanceId,
+          tasks,
+          ...(initiatives.length > 0 ? { initiatives } : {}),
+          updatedAt,
+        });
       });
 
       const resolveLive = Effect.fn('Teams.resolveLive')(function* (subject: TeamSubject) {
@@ -443,21 +452,24 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
             .resolveLive(subject.view.taskId, TEAM_SHARE_SCOPES)
             .pipe(Effect.mapError(broke));
         const file = yield* store.file;
-        const listed = listTeamTasks(yield* engine.state, subject.teamId, {
+        const state = yield* engine.state;
+        const listed = listTeamTasks(state, subject.teamId, {
           owner: file.owner,
           ownerProfile: resolveOwnerProfile(file),
           machine: remote.machineName,
         });
         const tasks = EgressGate.listTeamTasks(listed);
+        const initiatives = EgressGate.listTeamInitiatives(listTeamInitiatives(state, subject.teamId));
         const { publicKey } = yield* store.resolveMachineKey;
         const grant = yield* remote.resolveTeamGrant(subject.userId, subject.teamId);
         const updatedAt = yield* Clock.currentTimeMillis;
-        const snapshot = yield* signList(subject.teamId, tasks, updatedAt);
+        const snapshot = yield* signList(subject.teamId, tasks, initiatives, updatedAt);
         const held = yield* feeds.listHeld(subject.teamId);
         const team = yield* store.selectTeam(subject.teamId);
         const present = team ? yield* presence.listTeam(team, file.access?.owner.id ?? null) : [];
         const view: TeamListView = {
           tasks,
+          ...(initiatives.length > 0 ? { initiatives } : {}),
           machineKey: publicKey,
           ...(grant ? { grant } : {}),
           updatedAt,

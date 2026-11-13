@@ -163,9 +163,9 @@ export function OverviewSpecimens() {
           <TaskFacts state={state} task={tasks.keyed} />
         </Card>
       </Specimen>
-      <Specimen label='PausedCard · a failure · a usage limit · a wait that ran out of checks'>
+      <Specimen label='PausedCard · a failure · a usage limit · a wait that ran out of checks · GitHub wants SSO authorization'>
         <Card>
-          {(['failure', 'budget', 'ranOut'] as const).map((key) => (
+          {(['failure', 'budget', 'ranOut', 'githubSso'] as const).map((key) => (
             <PausedCard
               key={key}
               state={state}
