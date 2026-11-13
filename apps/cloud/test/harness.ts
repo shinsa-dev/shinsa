@@ -338,7 +338,7 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
   return { db, world, calls, handlers, clock, settle, request, call, post, signIn, signInNative };
 }
 
-export function resolveRelayTestUrl(instanceId: string, roomUrl: string) {
+function resolveRelayTestUrl(instanceId: string, roomUrl: string) {
   return roomUrl.replace(RELAY_ROOM_ORIGIN, `https://${instanceId}.relay.test`);
 }
 

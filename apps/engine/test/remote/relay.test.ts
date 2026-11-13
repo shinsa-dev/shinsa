@@ -284,6 +284,23 @@ describe('the relay connector', () => {
     });
   });
 
+  test('holds an answer’s body while the relay pauses the stream, and sends it once the relay resumes', async () => {
+    const relay = startRelay();
+    const engine = startEngine();
+    await withLink(relay, engine.url, async () => {
+      sendControl(relay, { type: 'pause', stream: 99 as RelayStreamId });
+      sendOpen(relay, { stream: 4, kind: 'http', method: 'GET', path: '/held', headers: [] });
+      sendControl(relay, { type: 'pause', stream: 4 as RelayStreamId });
+      sendControl(relay, { type: 'end', stream: 4 as RelayStreamId });
+      await until('the answer starts', () => selectControl(relay, 4, 'response') !== undefined);
+      expect(readBody(relay, 4)).toBe('');
+      expect(selectControl(relay, 4, 'end')).toBeUndefined();
+      sendControl(relay, { type: 'resume', stream: 4 as RelayStreamId });
+      await until('the answer ends', () => selectControl(relay, 4, 'end') !== undefined);
+      expect(readBody(relay, 4)).toBe('echo GET /held');
+    });
+  });
+
   test('passes redirects and compressed bodies through untouched, and marks a request with no address', async () => {
     const relay = startRelay();
     const engine = startEngine();

@@ -387,6 +387,7 @@ export {
 } from './relay/codec.ts';
 export {
   RELAY_CHUNK_BYTES,
+  RELAY_BODY_WATERMARKS,
   RELAY_CLOSE,
   RELAY_CLOSE_REASON_LIMIT,
   RELAY_DATA_HEADER_BYTES,
@@ -402,9 +403,11 @@ export {
   RelayEnd,
   RelayHeaders,
   RelayOpen,
+  RelayPause,
   RelayPing,
   RelayPong,
   RelayResponse,
+  RelayResume,
   RelayStreamClose,
   RelayStreamId,
   RelayStreamKind,

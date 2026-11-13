@@ -18,7 +18,19 @@ import {
   serializeRelayControl,
   serializeRelayData,
 } from '@shinsa/core';
-import { Context, Deferred, Effect, Fiber, Layer, Option, Queue, Redacted, type Scope, Stream } from 'effect';
+import {
+  Context,
+  Deferred,
+  Effect,
+  Fiber,
+  Latch,
+  Layer,
+  Option,
+  Queue,
+  Redacted,
+  type Scope,
+  Stream,
+} from 'effect';
 import { Socket } from 'effect/socket';
 import { RemoteOrigin } from '../client/schema.ts';
 import {
@@ -94,7 +106,8 @@ export class RelayConnector extends Context.Service<
         const answerHttp = Effect.fn('RelayConnector.answerHttp')(function* (
           stream: RelayStreamId,
           request: RelayOpen,
-          body: Bytes
+          body: Bytes,
+          flow: Latch.Latch
         ) {
           const response = yield* Effect.tryPromise({
             try: (signal) =>
@@ -121,7 +134,9 @@ export class RelayConnector extends Context.Service<
               onError: (error) => new RelayDialFailed({ message: String(error) }),
             }).pipe(
               Stream.runForEach((chunk: Bytes) =>
-                Effect.forEach(listRelayBodyFrames(stream, chunk), write, { discard: true })
+                Effect.forEach(listRelayBodyFrames(stream, chunk), (frame) => flow.whenOpen(write(frame)), {
+                  discard: true,
+                })
               )
             );
           yield* writeControl({ type: 'end', stream });
@@ -135,7 +150,7 @@ export class RelayConnector extends Context.Service<
             offset += chunk.length;
           }
           entry.chunks.length = 0;
-          return answerHttp(stream, entry.open, body).pipe(
+          return answerHttp(stream, entry.open, body, entry.flow).pipe(
             Effect.catch(() => writeClose(stream, RELAY_STREAM_FAILED, RELAY_MESSAGES.unanswered)),
             Effect.ensuring(release(stream, entry))
           );
@@ -211,7 +226,14 @@ export class RelayConnector extends Context.Service<
           if (streams.size >= RELAY_MAX_STREAMS)
             return yield* writeClose(request.stream, RELAY_CLOSE.refused, RELAY_MESSAGES.busy);
           if (request.kind === 'http') {
-            streams.set(request.stream, { kind: 'http', open: request, chunks: [], size: 0, fiber: null });
+            streams.set(request.stream, {
+              kind: 'http',
+              open: request,
+              chunks: [],
+              size: 0,
+              fiber: null,
+              flow: yield* Latch.make(true),
+            });
             return;
           }
           const entry: RelayStream = { kind: 'socket', inbox: yield* Queue.unbounded<RelayInbound>() };
@@ -257,12 +279,20 @@ export class RelayConnector extends Context.Service<
           entry.chunks.push(frame.payload.slice());
         });
 
+        const flowStream = (stream: RelayStreamId, flowing: boolean) => {
+          const entry = streams.get(stream);
+          if (entry?.kind !== 'http') return Effect.void;
+          return Effect.asVoid(flowing ? entry.flow.open : entry.flow.close);
+        };
+
         const receiveControl = Effect.fn('RelayConnector.receiveControl')(function* (frame: RelayControl) {
           if (frame.type === 'pong') {
             for (const pong of pongs) yield* Deferred.succeed(pong, undefined);
             return;
           }
           if (frame.type === 'open') return yield* startStream(frame);
+          if (frame.type === 'pause') return yield* flowStream(frame.stream, false);
+          if (frame.type === 'resume') return yield* flowStream(frame.stream, true);
           if (frame.type === 'end') return yield* endStream(frame.stream);
           if (frame.type === 'close') return yield* closeStream(frame.stream, frame.code, frame.reason);
         });

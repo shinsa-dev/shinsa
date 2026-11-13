@@ -34,7 +34,7 @@ export const HookRoutes = Layer.unwrap(
       const answer = yield* requestOnlineMachine(
         'webhook',
         machine.value.id,
-        relays.request(machine.value.id, `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}${url.search}`, {
+        relays.request(machine.value, `${REMOTE_ENGINE_HOOK_PREFIX}${scheduleId}/${token}${url.search}`, {
           method: request.method,
           headers: resolveForwardHeaders(new Headers(request.headers), FORWARDED_AWAY),
           ...(body ? { body } : {}),

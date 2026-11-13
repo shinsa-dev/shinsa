@@ -217,6 +217,42 @@ describe('the relay hub', () => {
     expect((await pending).status).toBe(400);
   });
 
+  test('pauses the machine while an answer waits unread, and resumes it once the reader catches up', async () => {
+    const { hub, peers, run } = await createHub();
+    const machine = await connectMachine(hub, peers);
+    const pending = run(hub.fetch(roomRequest('http', '/__preview/p/download')));
+    const open = await waitForOpen(machine);
+    await run(
+      hub.receive(machine, control({ type: 'response', stream: open.stream, status: 200, headers: [] }))
+    );
+    const answer = await pending;
+    const flow = () =>
+      listControls(machine)
+        .filter((frame) => frame.type === 'pause' || frame.type === 'resume')
+        .map((frame) => frame.type);
+    const chunk = new Uint8Array(RELAY_CHUNK_BYTES).fill(1);
+    for (let index = 0; index < 16; index++)
+      await run(hub.receive(machine, data({ stream: open.stream, kind: 'binary', payload: chunk })));
+    expect(flow()).toEqual([]);
+    for (let index = 0; index < 4; index++)
+      await run(hub.receive(machine, data({ stream: open.stream, kind: 'binary', payload: chunk })));
+    expect(flow()).toEqual(['pause']);
+    expect(listControls(machine).find((frame) => frame.type === 'pause')).toEqual({
+      type: 'pause',
+      stream: open.stream,
+    });
+    await run(hub.receive(machine, control({ type: 'end', stream: open.stream })));
+    const reader = answer.body?.getReader();
+    let read = 0;
+    while (reader) {
+      const next = await reader.read();
+      if (next.done) break;
+      read += next.value.length;
+    }
+    expect(read).toBe(20 * RELAY_CHUNK_BYTES);
+    expect(flow()).toEqual(['pause', 'resume']);
+  });
+
   test('tells the machine to stop when the reader cancels the body', async () => {
     const { hub, peers, run } = await createHub();
     const machine = await connectMachine(hub, peers);
@@ -270,7 +306,7 @@ describe('the relay hub', () => {
       Effect.gen(function* () {
         const fiber = yield* Effect.forkChild(hub.fetch(roomRequest('http', '/api/hooks/a/b')));
         yield* Effect.promise(() => waitForOpen(machine));
-        yield* TestClock.adjust('61 seconds');
+        yield* TestClock.adjust('101 seconds');
         return yield* Fiber.join(fiber);
       }).pipe(Effect.provide(TestClock.layer()))
     );
@@ -288,7 +324,7 @@ describe('the relay hub', () => {
       Effect.gen(function* () {
         const fiber = yield* Effect.forkChild(hub.fetch(roomRequest('socket', '/remote')));
         yield* Effect.promise(() => waitForOpen(machine));
-        yield* TestClock.adjust('61 seconds');
+        yield* TestClock.adjust('101 seconds');
         return yield* Fiber.join(fiber);
       }).pipe(Effect.provide(TestClock.layer()))
     );

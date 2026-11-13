@@ -25,9 +25,8 @@
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "RELAY", "class_name": "MachineRelay" }]
+    "bindings": [{ "name": "RELAY", "class_name": "MachineRelay", "script_name": "shinsa-relay" }]
   },
-  "migrations": [{ "tag": "v1-relay", "new_sqlite_classes": ["MachineRelay"] }],
   "vars": {
     "PREVIEW_ZONE": "shinsa.page",
     "MAX_INSTANCES": "10000"

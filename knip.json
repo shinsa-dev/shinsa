@@ -31,7 +31,7 @@
       ]
     },
     "apps/cloud": {
-      "entry": ["test/**/*.test.ts"]
+      "entry": ["test/**/*.test.ts", "src/relay/worker.ts"]
     },
     "apps/marketing": {
       "entry": ["test/**/*.test.ts"],

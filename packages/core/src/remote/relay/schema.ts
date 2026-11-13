@@ -13,6 +13,8 @@ export const RELAY_DATA_HEADER_BYTES = 5;
 
 export const RELAY_MAX_STREAMS = 1024;
 
+export const RELAY_BODY_WATERMARKS = { high: 1024 * 1024, low: 256 * 1024 } as const;
+
 export const RELAY_MAX_STREAM_ID = 0xff_ff_ff_ff;
 
 export const RELAY_CLOSE_REASON_LIMIT = 120;
@@ -78,6 +80,10 @@ export const RelayStreamClose = Schema.Struct({
 
 export type RelayStreamClose = typeof RelayStreamClose.Type;
 
+export const RelayPause = Schema.Struct({ type: Schema.Literal('pause'), stream: RelayStreamId });
+
+export const RelayResume = Schema.Struct({ type: Schema.Literal('resume'), stream: RelayStreamId });
+
 export const RelayPing = Schema.Struct({ type: Schema.Literal('ping') });
 
 export const RelayPong = Schema.Struct({ type: Schema.Literal('pong') });
@@ -87,6 +93,8 @@ export const RelayControl = Schema.Union([
   RelayResponse,
   RelayEnd,
   RelayStreamClose,
+  RelayPause,
+  RelayResume,
   RelayPing,
   RelayPong,
 ]);

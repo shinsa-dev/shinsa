@@ -144,7 +144,7 @@ function sealedUserTokens(harness: Harness) {
 async function bringOnline(harness: Harness, machine: MachineCredentials, features: string[] = []) {
   await harness.post(
     REMOTE_PATHS.heartbeat,
-    { localUrl: 'http://127.0.0.1:7446', features },
+    { localUrl: 'http://127.0.0.1:7446', features: ['relay', ...features] },
     { bearer: machine.machineToken }
   );
 }

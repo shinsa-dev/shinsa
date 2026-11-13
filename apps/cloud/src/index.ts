@@ -4,8 +4,6 @@ import { makeCloudHandler } from './app.ts';
 import { Assets, RelayRooms, WorkerContext } from './http/worker.ts';
 import { SQL_NAMES } from './store/shared/schema.ts';
 
-export { MachineRelay } from './relay/durable.ts';
-
 interface WorkerEnv {
   readonly DB: D1Client.D1ClientConfig['db'];
   readonly ASSETS: { fetch: (request: Request) => Promise<Response> };

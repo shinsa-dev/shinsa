@@ -898,6 +898,7 @@ describe('pairing this machine', () => {
         'slack-linked-threads',
         'slack-task-owner',
         'slack-channel-triggers',
+        'relay',
       ],
     });
     expect((await readSnapshot(await local('/api/remote/pair', {}))).pairing?.claimCode).toBe('K7PQ');

@@ -110,6 +110,7 @@ export const MACHINE_FEATURES = [
   'slack-linked-threads',
   'slack-task-owner',
   'slack-channel-triggers',
+  'relay',
 ] as const;
 
 export type MachineFeature = (typeof MACHINE_FEATURES)[number];

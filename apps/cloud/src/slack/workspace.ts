@@ -27,7 +27,7 @@ export const requestSignedMachine = Effect.fn('requestSignedMachine')(function* 
   const body = JSON.stringify(payload);
   const timestamp = yield* Clock.currentTimeMillis;
   const signature = yield* createSlackForwardSignature(Redacted.value(machine.connectKey), timestamp, body);
-  return yield* relays.request(machine.id, path, {
+  return yield* relays.request(machine, path, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

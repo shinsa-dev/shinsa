@@ -54,7 +54,7 @@ export const RelayRoutes = Layer.unwrap(
         return Option.isSome(accepted) ? HttpServerResponse.raw(accepted.value) : respondOffline();
       }
       const answer = yield* Effect.option(
-        relays.request(instanceId, `${path}${url.search}`, {
+        relays.request(machine.value, `${path}${url.search}`, {
           method: 'GET',
           headers: resolveForwardHeaders(new Headers(request.headers), RELAY_FORWARDED_AWAY),
           address: request.headers['cf-connecting-ip'] ?? null,

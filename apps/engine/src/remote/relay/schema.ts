@@ -4,6 +4,7 @@ import {
   type Duration,
   type Effect,
   type Fiber,
+  type Latch,
   type Layer,
   type Queue,
   type Redacted,
@@ -115,6 +116,7 @@ export type RelayStream =
       readonly chunks: Bytes[];
       size: number;
       fiber: Fiber.Fiber<void> | null;
+      readonly flow: Latch.Latch;
     }
   | {
       readonly kind: 'socket';

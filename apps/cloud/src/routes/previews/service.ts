@@ -116,7 +116,7 @@ export class PreviewHost extends Context.Service<
           HttpServerRequest.HttpServerRequest.pipe(Effect.flatMap(HttpServerRequest.toWeb))
         );
         const answer = yield* relays
-          .request(machine.id, `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`, {
+          .request(machine, `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`, {
             method: request.method,
             headers: resolvePreviewHeaders(request.headers, pass),
             body: BODILESS_METHODS.has(request.method) ? null : request.body,

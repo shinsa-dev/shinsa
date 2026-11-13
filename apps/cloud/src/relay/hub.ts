@@ -5,6 +5,7 @@ import {
   listRelayBodyFrames,
   parseRelayControl,
   parseRelayData,
+  RELAY_BODY_WATERMARKS,
   RELAY_CLOSE,
   RELAY_CLOSE_REASON_LIMIT,
   RELAY_DATA_HEADER_BYTES,
@@ -30,6 +31,7 @@ import {
   RELAY_RESPONSE_TIMEOUT,
   RELAY_ROLE_HEADER,
   RelayBodyBroken,
+  type RelayBodyFlow,
   type RelayHub,
   type RelayPeer,
   type RelayRefusal,
@@ -40,7 +42,7 @@ import {
 export function createRelayHub(room: RelayRoom): RelayHub {
   const decodeRole = Schema.decodeUnknownOption(RelayRole);
   const answers = new Map<number, Deferred.Deferred<Option.Option<RelayResponse>>>();
-  const bodies = new Map<number, Queue.Queue<Bytes, RelayBodyBroken | Cause.Done>>();
+  const bodies = new Map<number, RelayBodyFlow>();
   let nextStream = 1;
 
   const send = (peer: RelayPeer, message: string | Bytes) =>
@@ -88,7 +90,7 @@ export function createRelayHub(room: RelayRoom): RelayHub {
     answers.delete(stream);
     const body = bodies.get(stream);
     bodies.delete(stream);
-    if (body) yield* Queue.fail(body, new RelayBodyBroken({ message: RELAY_REFUSALS.dropped.text }));
+    if (body) yield* Queue.fail(body.queue, new RelayBodyBroken({ message: RELAY_REFUSALS.dropped.text }));
   });
 
   const cancelStream = Effect.fn('RelayHub.cancelStream')(function* (stream: RelayStreamId) {
@@ -173,13 +175,27 @@ export function createRelayHub(room: RelayRoom): RelayHub {
     yield* sendControl(machine, { type: 'end', stream });
   });
 
+  const sendFlow = (stream: RelayStreamId, type: 'pause' | 'resume') => {
+    const machine = selectMachine();
+    return Option.isSome(machine) ? sendControl(machine.value, { type, stream }) : Effect.void;
+  };
+
+  const consumeBody = (stream: RelayStreamId, body: RelayBodyFlow, bytes: number) =>
+    Effect.suspend(() => {
+      body.queued -= bytes;
+      if (!body.paused || body.queued > RELAY_BODY_WATERMARKS.low) return Effect.void;
+      body.paused = false;
+      return sendFlow(stream, 'resume');
+    });
+
   const respondBody = (stream: RelayStreamId, response: RelayResponse) => {
     const body = bodies.get(stream);
     if (!body || BODILESS_STATUSES.has(response.status)) {
       bodies.delete(stream);
       return new Response(null, { status: response.status, headers: toHeaders(response.headers) });
     }
-    const readable = Stream.fromQueue(body).pipe(
+    const readable = Stream.fromQueue(body.queue).pipe(
+      Stream.tap((chunk: Bytes) => consumeBody(stream, body, chunk.length)),
       Stream.ensuring(
         Effect.suspend(() => (bodies.get(stream) === body ? cancelStream(stream) : Effect.void))
       ),
@@ -193,7 +209,11 @@ export function createRelayHub(room: RelayRoom): RelayHub {
     if (Option.isNone(machine)) return respondRefusal('offline');
     const stream = allocateStream();
     if (Option.isNone(stream)) return respondRefusal('busy');
-    bodies.set(stream.value, yield* Queue.unbounded<Bytes, RelayBodyBroken | Cause.Done>());
+    bodies.set(stream.value, {
+      queue: yield* Queue.unbounded<Bytes, RelayBodyBroken | Cause.Done>(),
+      queued: 0,
+      paused: false,
+    });
     const answer = yield* openStream(machine.value, stream.value, request, 'http');
     yield* sendBody(machine.value, stream.value, request);
     const settled = yield* settle(stream.value, answer);
@@ -252,7 +272,7 @@ export function createRelayHub(room: RelayRoom): RelayHub {
     if (frame.type === 'end') {
       const body = bodies.get(frame.stream);
       bodies.delete(frame.stream);
-      if (body) yield* Queue.end(body);
+      if (body) yield* Queue.end(body.queue);
       return;
     }
     if (frame.type !== 'close') return;
@@ -273,7 +293,13 @@ export function createRelayHub(room: RelayRoom): RelayHub {
     if (Option.isNone(frame)) return;
     const { stream, kind, payload } = frame.value;
     const body = bodies.get(stream);
-    if (body) return yield* Queue.offer(body, payload.slice());
+    if (body) {
+      body.queued += payload.length;
+      yield* Queue.offer(body.queue, payload.slice());
+      if (body.paused || body.queued <= RELAY_BODY_WATERMARKS.high) return;
+      body.paused = true;
+      return yield* sendFlow(stream, 'pause');
+    }
     const browser = selectBrowser(stream);
     if (Option.isSome(browser))
       yield* send(browser.value, kind === 'text' ? decodeText(payload) : payload.slice());

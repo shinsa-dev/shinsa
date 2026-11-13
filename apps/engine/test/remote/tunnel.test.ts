@@ -163,6 +163,7 @@ describe('the tunnel supervisor', () => {
               'slack-linked-threads',
               'slack-task-owner',
               'slack-channel-triggers',
+              'relay',
             ],
             signingKey: 'signing-key',
           },
@@ -191,6 +192,7 @@ describe('the tunnel supervisor', () => {
               'slack-linked-threads',
               'slack-task-owner',
               'slack-channel-triggers',
+              'relay',
             ],
           },
         });

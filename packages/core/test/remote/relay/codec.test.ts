@@ -37,6 +37,8 @@ describe('relay control frames', () => {
       { type: 'response', stream: STREAM, status: 200, headers: [['content-type', 'text/html']] },
       { type: 'end', stream: STREAM },
       { type: 'close', stream: STREAM, code: 4001, reason: 'The machine went offline.' },
+      { type: 'pause', stream: STREAM },
+      { type: 'resume', stream: STREAM },
       { type: 'ping' },
       { type: 'pong' },
     ];

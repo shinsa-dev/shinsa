@@ -3,4 +3,4 @@ preload = ["./test/preload.ts"]
 coverage = true
 coverageSkipTestFiles = true
 coverageThreshold = { lines = 1.0, functions = 1.0 }
-coveragePathIgnorePatterns = ["test/**", "src/index.ts", "src/relay/durable.ts", "../../packages/**"]
+coveragePathIgnorePatterns = ["test/**", "src/index.ts", "src/relay/durable.ts", "src/relay/worker.ts", "../../packages/**"]

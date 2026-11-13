@@ -88,7 +88,8 @@ src/
 ├── relay/          The relay (How it works → The relay): hub.ts (createRelayHub, the whole of it as plain code over
 │                    a socket port: which socket is the machine, its streams, their bodies, timeouts and refusals),
 │                    durable.ts (MachineRelay, the Durable Object around it: hibernating sockets tagged by role, the
-│                    ping auto-response; outside coverage like index.ts), schema.ts (roles, refusals, close reasons)
+│                    ping auto-response; outside coverage like index.ts), worker.ts (the `shinsa-relay` Worker that
+│                    holds the class, deployed apart so an app deploy drops no socket; outside coverage too), schema.ts (roles, refusals, close reasons)
 ├── slack/           What the Slack routes share: signed-body.ts (readSignedBody: its size, Slack's signature within
 │                    five minutes), workspace.ts (a workspace's bot token, opened; a request to a machine signed with
 │                    its connect key), schema.ts (the limits)
@@ -139,7 +140,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   state and the verifier kept in a 10-minute `__Host-shinsa_oauth` cookie; the callback checks the state in constant
   time, redeems the code with the verifier (a code stolen from the redirect cannot be redeemed without it), reads who
   you are from GitHub and sets `__Host-shinsa_session` (Path=/, HttpOnly,
-  Secure, SameSite=Lax, 30 days). The `__Host-` prefix means no other host, a machine's `t-<id>.shinsa.dev`
+  Secure, SameSite=Lax, 30 days). The `__Host-` prefix means no other host, a `*.shinsa.page` preview
   included, can set or overwrite either cookie. D1 keeps only the SHA-256 of the session token, and removes the expired ones each time it makes one.
   Any GitHub account may sign in: an account reaches only the machines it paired itself or was invited to, and even
   those open only to a browser the machine enrolled, so a stranger signed in sees an empty list and can reach nothing.
@@ -187,11 +188,20 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   and team socket (`/__relay/<instance>/remote|share|team`, its cookies and authorization dropped, its address kept as
   the stream's), and every webhook, preview and Slack forward (`Relays.request`). The hub (`relay/hub.ts`) gives each
   stream an id, sends `open`, waits for the machine's `response` (101 for an accepted socket, else the machine's own
-  status), and passes body chunks of at most 64 KiB and whole socket messages up to 32 MiB both ways. No machine
-  socket, or 1,024 streams already open, is 503; a machine that drops a stream is 502 and one that does not answer
-  within 60 seconds 504. A newer machine socket replaces the older one, and a closing machine socket closes every
+  status), and passes body chunks of at most 64 KiB and whole socket messages up to 32 MiB both ways. An answer's body
+  is held in the object only up to 1 MiB unread (`RELAY_BODY_WATERMARKS`): past it the hub sends the machine `pause`,
+  and `resume` once its reader is down to 256 KiB, so a slow download never fills the object's memory and drops the
+  machine's other streams. No machine socket, or 1,024 streams already open, is 503; a machine that drops a stream is
+  502 and one that does not answer within 100 seconds (Cloudflare's own origin timeout, as the tunnels had) 504. Only a
+  machine that names `relay` in its heartbeat is sent anything (`Relays.request`; any other is offline, with no
+  object touched), so the object is always first made by the machine's own connect and lives near the machine, never
+  near a webhook sender or a browser far from it. A newer machine socket replaces the older one, and a closing machine socket closes every
   stream. The socket hibernates: the object sleeps while nothing flows, and the machine's 30-second `ping` is answered
   `pong` by the runtime's auto-response, so liveness never wakes it. An idle machine costs storage and nothing else.
+  `MachineRelay` runs in a Worker of its own, `shinsa-relay` (`wrangler.relay.jsonc`, `src/relay/worker.ts`), which
+  the app's Worker binds by `script_name`: deploying the app restarts no relay object, so no machine socket and no
+  browser channel drops on a deploy. Only a change to the relay itself (`release:relay`) does, and then every machine
+  reconnects within seconds and every page redials.
 - **Members.** A machine has one owner, the account that paired it, and up to 20 members (`MAX_INSTANCE_MEMBERS`,
   `machine_members`), who reach it exactly as its owner does. Only the machine invites, and only it lets someone
   in. `POST /__remote/machine/invites` (machine token) answers the machine's one reusable invite token, replacing the
@@ -239,7 +249,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   answer carries them as `teams` (`RemoteTeam`), with every member's machines and whether each is online, and the
   owner's requests. A team connect token (`/__remote/teams/<team>/connect` from a page,
   `/__remote/machine/teams/<team>/connect` from the engine, `{ instanceId }`) is minted only for the owner or a member
-  and a machine of one of them, as `wss://t-<instance>.shinsa.dev/team?token=…`, signed with that machine's connect
+  and a machine of one of them, as `wss://app.shinsa.dev/__relay/<instance>/team?token=…`, signed with that machine's connect
   key for the account that asked; the machine then checks the account against its own copy of the members and the
   team key's proof. Removing a user, a team or a machine cascades its rows.
   What teammates may do on each other's machines is the team's `scopes` (`teams.scopes`) and each member's
@@ -257,11 +267,11 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   machine's signed task list with it when another teammate passes it on while the machine is offline
   (`docs/engine.md` → Teams → Offline teammates). The Worker stores the public half only and never sees a list.
 - **Connect tokens.** `/__remote/instances/<id>/connect`, signed in and same-origin, for the owner, a member, a guest or a teammate of the owner (`findReachableMachine`), answers
-  `wss://t-<id>.shinsa.dev/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
+  `wss://app.shinsa.dev/__relay/<id>/remote?token=…` with a token from `createConnectToken` (the instance's connect key, 60
   seconds), signed for the account that asked. It only keeps random traffic off the machine's endpoint; the machine
   still needs an enrolled device key, and a teammate's is scoped to the team's projects.
 - **Share links.** `POST /__remote/shares/<instance>/connect`, with no session, tells a share page where the machine is:
-  `{ url: "wss://t-<instance>.shinsa.dev", online }` (`ShareConnectResponse`), 404 for an instance that does not
+  `{ url: "wss://app.shinsa.dev/__relay/<instance>", online }` (`ShareConnectResponse`), 404 for an instance that does not
   exist. The page then opens the machine's `/share?id=…` channel itself, sealed with the key in the link's fragment,
   which never reaches the Worker (`docs/engine.md` → Sharing a task). That answer and every `/share/t/…` page carry
   `X-Robots-Tag: noindex, nofollow, noarchive`.
@@ -428,7 +438,7 @@ model. The Worker's part of it:
 ## Running and deploying
 
 - `bun test test` (100% line and function coverage, `bunfig.toml`) and `bun run check-types`.
-- `bun run dev:worker` builds the web app's remote build, then runs `wrangler dev` on :5183; `APP_ORIGIN` points the
+- `bun run dev:worker` builds the web app's remote build, then runs `wrangler dev` on :5183 with both Workers, the app and `shinsa-relay`; `APP_ORIGIN` points the
   Worker at that origin, and `SHINSA_REMOTE_ORIGIN` points an engine at it (its channel origin check, enroll and webhook
   links follow). It is not called `dev`, so the root `bun dev` (turbo) never starts it.
 - The assets are `../web/dist-remote`, the web app's remote build, which `bun run build` makes (`build:remote` in
@@ -456,8 +466,10 @@ model. The Worker's part of it:
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
   `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`
-  (`wrangler secret put`). The `MachineRelay` Durable Object and its migration are in `wrangler.jsonc`; `wrangler
-  deploy` creates the class. The Slack bot needs the app made from `slack-manifest.json` (a change to its events or scopes is made again in the app's settings on api.slack.com, which no deploy does), with public distribution on
+  (`wrangler secret put`). The `MachineRelay` Durable Object and its migration are in `wrangler.relay.jsonc`:
+  `bun run release:relay` deploys that Worker, `shinsa-relay`, and must have run once before the app's first deploy
+  binds it. It deploys apart from `main`'s trigger, by hand or from a Workers Builds trigger of its own watching
+  `apps/cloud/src/relay/` and `packages/core/src/remote/relay/`, since each deploy of it drops every live socket. The Slack bot needs the app made from `slack-manifest.json` (a change to its events or scopes is made again in the app's settings on api.slack.com, which no deploy does), with public distribution on
   (Manage Distribution) so other workspaces can add it, and the secrets
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`

@@ -1,5 +1,5 @@
 import type { Bytes } from '@shinsa/core';
-import { Duration, type Effect, Schema } from 'effect';
+import { type Cause, Duration, type Effect, type Queue, Schema } from 'effect';
 
 export const RELAY_ROOM_ORIGIN = 'https://relay.internal';
 
@@ -11,7 +11,7 @@ export const RelayRole = Schema.Literals(['machine', 'socket', 'http', 'evict'])
 
 export type RelayRole = typeof RelayRole.Type;
 
-export const RELAY_RESPONSE_TIMEOUT = Duration.seconds(60);
+export const RELAY_RESPONSE_TIMEOUT = Duration.seconds(100);
 
 export const RELAY_INTERNAL_HEADERS: ReadonlySet<string> = new Set([RELAY_ROLE_HEADER, RELAY_ADDRESS_HEADER]);
 
@@ -54,6 +54,12 @@ export interface RelayPeer {
 export interface RelayRoom {
   readonly listPeers: () => ReadonlyArray<RelayPeer>;
   readonly accept: (tag: RelayTag, protocol: string | null) => Response;
+}
+
+export interface RelayBodyFlow {
+  readonly queue: Queue.Queue<Bytes, RelayBodyBroken | Cause.Done>;
+  queued: number;
+  paused: boolean;
 }
 
 export interface RelayHub {

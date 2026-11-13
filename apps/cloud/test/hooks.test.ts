@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import {} from '@shinsa/core';
 import { HOOK_BODY_LIMIT_BYTES } from '../src/routes/hooks/schema.ts';
-import { createHarness, type Harness, pairMachine } from './harness.ts';
+import { createHarness, type Harness, heartbeat, pairMachine } from './harness.ts';
 
 async function pairInstance(harness: Harness) {
   return (await pairMachine(harness, await harness.signIn())).instanceId;
@@ -87,6 +87,29 @@ describe('webhooks through app.shinsa.dev', () => {
     expect(errors).not.toHaveBeenCalled();
     warnings.mockRestore();
     errors.mockRestore();
+  });
+
+  test('answers offline for an engine that has not joined the relay, without opening its relay', async () => {
+    const harness = createHarness();
+    const credentials = await pairMachine(harness, await harness.signIn());
+    await heartbeat(harness, credentials, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    answerTunnel(harness, () => new Response('ok'));
+    const offline = await harness.call(`/hooks/${credentials.instanceId}/s/t`, { method: 'POST', body: 'x' });
+    expect(offline.status).toBe(503);
+    expect(harness.calls.filter((call) => call.url.includes('.relay.test/'))).toEqual([]);
+    expect(warnings.mock.calls).toEqual([
+      [
+        '[Cloud] Machine offline',
+        {
+          surface: 'webhook',
+          instanceId: credentials.instanceId,
+          reason: 'unreachable',
+          error: 'This machine has not connected to the relay yet.',
+        },
+      ],
+    ]);
+    warnings.mockRestore();
   });
 
   test('refuses an unknown machine or a body over 1 MB', async () => {

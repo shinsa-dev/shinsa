@@ -3372,7 +3372,9 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   a redirect, a compressed body passed through as it is) or a local WebSocket for a socket (its subprotocol and close
   codes kept), with `cf-connecting-ip` set to the caller's address (`RELAY_FORWARDED_HEADER`; `0.0.0.0` when the
   relay names none) and the hop-by-hop headers dropped (`RELAY_DROPPED_REQUEST_HEADERS`). It holds at most 1,024
-  streams (`RELAY_MAX_STREAMS`) and 32 MiB per request body; a stream past either, one whose engine does not answer
+  streams (`RELAY_MAX_STREAMS`) and 32 MiB per request body. An answer's body waits while the relay has paused its
+  stream (`pause`, `resume`; a `Latch` per stream), so a reader slower than the machine never fills the relay's
+  memory. A stream past either limit, one whose engine does not answer
   within 10 seconds or that the relay cancels is closed with its code. The connect waits at most 30 seconds and fails
   as `RelayConnectFailed`, with the status the relay refused it with (401 for a machine token it does not know).
   `RelayLimits` holds those numbers, so a test can shrink them.
@@ -3407,7 +3409,8 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `slack-channel-triggers`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `slack-channel-triggers`, `relay`, `MACHINE_FEATURES` in core; the Worker sends nothing through
+  the relay to a machine before it names `relay`, so its relay object is first made by its own connect, near it), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -3980,7 +3983,7 @@ projection and channel serve teams, always at Standard (Teams, below).
 - **The live channel** (`SHARE_CHANNEL_PATH`, `/share?id=<share id>` through the relay; core's `remote/share-channel.ts`,
   the engine's `remote/share-channel/service.ts`). The page asks app.shinsa.dev where the machine is
   (`POST /__remote/shares/<machine>/connect`, no session, answering `{ url, online }`), then opens
-  `wss://t-<machine>.shinsa.dev/share?id=<share id>`. The engine upgrades it only from app.shinsa.dev's origin, while
+  `wss://app.shinsa.dev/__relay/<machine>/share?id=<share id>`. The engine upgrades it only from app.shinsa.dev's origin, while
   remote access is on and the id is well formed (404 otherwise), so a stopped or unknown link learns it is gone from
   the handshake rather than looking offline. The page's first and only message is a hello: a fresh P-256 key and an HMAC over it with the link's key. The machine checks it against the
   task's key in constant time (else `refused`, "This task is no longer shared, or the link is wrong."), answers with
@@ -4168,7 +4171,7 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   `remote/teams/service.ts`, `Teams`). A viewer asks app.shinsa.dev for a team connect token
   (`POST /__remote/teams/<team>/connect { instanceId }`, signed in, from a page; `/__remote/machine/teams/<team>/connect`
   with the machine token, from your engine), which it answers only for a member or the owner and a machine of the
-  team, signed with that machine's connect key for the viewer's GitHub id and the `team` channel (60 seconds, once), as `wss://t-<machine>.shinsa.dev/team?token=…`.
+  team, signed with that machine's connect key for the viewer's GitHub id and the `team` channel (60 seconds, once), as `wss://app.shinsa.dev/__relay/<machine>/team?token=…`.
   The machine upgrades it only while remote access is on and the token checks out (`verifyConnect`; 404 or 401
   otherwise). The viewer's first and only message is a team hello: the team, the view it asks for (the team's task
   list, `{ kind: 'list' }`, or one task, `{ kind: 'task', taskId }`), a fresh P-256 key and an HMAC with the team key
@@ -4638,7 +4641,7 @@ Open (remote build) ──► app.shinsa.dev/__remote/previews/open?url=…
                           token checked → __Host-shinsa_preview_access
                           (12 h, that host), 303 without it
                           cookie → x-shinsa-preview-access
-          ──https──► t-<instance>.shinsa.dev/__preview/<id>/<path>
+          ──relay───► MachineRelay ══ machine socket ══► /__preview/<id>/<path>
                           engine: token, id, owner or member, run
           ──http───► localhost:<port>/<path>
 ```
@@ -4696,7 +4699,7 @@ Slack ──event──► app.shinsa.dev /slack/events
                   ├─ machine offline ───────► "<machine> is offline"
                   ├─ linked threads, read with the author's token
                   │  └─ one unreadable ──► a private note after
-                  └─ the thread, signed ──► t-<id>.shinsa.dev
+                  └─ the thread, signed ──► the machine's relay
                                              /api/slack/events
                                                └─ slack.mention
    thread holds an open task ──► task.message, 👀 on the mention
@@ -4737,7 +4740,7 @@ Slack ──a message in a channel──► app.shinsa.dev /slack/events
        ├─ no online machine watches the channel ───────────► nothing
        ├─ Shinsa's own post, or one that mentions @Shinsa ─► nothing
        └─ the message, signed, to each watching machine
-              ──► t-<id>.shinsa.dev /api/slack/messages
+              ──► the machine's relay /api/slack/messages
                     └─ each enabled schedule on the channel
                        ├─ over 60 a minute ──► one failed run
                        ├─ its text does not apply (the

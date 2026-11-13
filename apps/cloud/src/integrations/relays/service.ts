@@ -1,4 +1,4 @@
-import type { InstanceId } from '@shinsa/core';
+import { hasMachineFeature, type InstanceId } from '@shinsa/core';
 import { Context, Effect, Layer } from 'effect';
 import { RelayRooms } from '../../http/worker.ts';
 import {
@@ -7,13 +7,14 @@ import {
   RELAY_ROOM_ORIGIN,
   type RelayRole,
 } from '../../relay/schema.ts';
-import { type RelayRequestInit, RelayUnreachable } from './schema.ts';
+import type { Machine } from '../../store/machines/schema.ts';
+import { RELAY_NOT_JOINED, type RelayRequestInit, RelayUnreachable } from './schema.ts';
 
 export class Relays extends Context.Service<
   Relays,
   {
     request(
-      instanceId: InstanceId,
+      machine: Machine,
       path: string,
       init: RelayRequestInit
     ): Effect.Effect<Response, RelayUnreachable>;
@@ -43,12 +44,16 @@ export class Relays extends Context.Service<
       };
 
       return Relays.of({
-        request: Effect.fn('Relays.request')(
-          (instanceId: InstanceId, path: string, init: RelayRequestInit) => {
-            const upgrade = new Headers(init.headers).get('upgrade')?.toLowerCase() === 'websocket';
-            return send(instanceId, path, upgrade ? 'socket' : 'http', init);
-          }
-        ),
+        request: Effect.fn('Relays.request')(function* (
+          machine: Machine,
+          path: string,
+          init: RelayRequestInit
+        ) {
+          if (!hasMachineFeature(machine.features, 'relay'))
+            return yield* new RelayUnreachable({ instanceId: machine.id, message: RELAY_NOT_JOINED });
+          const upgrade = new Headers(init.headers).get('upgrade')?.toLowerCase() === 'websocket';
+          return yield* send(machine.id, path, upgrade ? 'socket' : 'http', init);
+        }),
         connect: Effect.fn('Relays.connect')((instanceId: InstanceId) =>
           send(instanceId, '/', 'machine', { headers: { upgrade: 'websocket' } })
         ),
