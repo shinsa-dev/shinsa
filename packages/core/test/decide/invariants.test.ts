@@ -1314,7 +1314,7 @@ function selectBundleCommand(state: ShinsaState, random: Random): ShinsaCommand 
     random,
     (later.length > 1 ? later : open).filter((task) => task.id !== parent)
   )?.id;
-  const parents = parent && second && chance(random, 0.4) ? [parent, second] : parent ? [parent] : [];
+  const parents = parent && second && chance(random, 0.7) ? [parent, second] : parent ? [parent] : [];
   const child = pick(
     random,
     open.filter(
@@ -1919,13 +1919,17 @@ describe('decide under random command sequences', () => {
       const collect = (state: ShinsaState) => {
         for (const mark of listBundleMarks(state)) if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) simulate(seed, STEPS, 'bundles', collect);
-      expect([...reached].sort()).toEqual([
+      const marks = [
         'based on several tasks',
         'based on the task below',
         'merged while ready',
         'ready in its bundle',
-      ]);
+      ];
+      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) {
+        if (seed > SEEDS && reached.size === marks.length) break;
+        simulate(seed, STEPS, 'bundles', collect);
+      }
+      expect([...reached].sort()).toEqual(marks);
     },
     RARE_SEEDS * 2_000
   );
