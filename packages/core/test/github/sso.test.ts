@@ -57,7 +57,7 @@ describe('the SSO gate', () => {
   test('names the organization and asks to authorize the login with the link', () => {
     expect(resolveGitHubSsoGate({ organization: 'superwall', url: LINK })).toEqual({
       title: 'GitHub needs SSO authorization for superwall',
-      body: 'The GitHub login Shinsa uses is not authorized for the superwall organization, which enforces SAML single sign-on. Authorize it on GitHub, then retry.',
+      body: `The GitHub login Shinsa uses is not authorized for the superwall organization, which enforces SAML single sign-on. [Authorize it on GitHub](${LINK}), then retry.`,
       cause: 'github_sso',
       githubSso: { organization: 'superwall', url: LINK },
     });
@@ -66,7 +66,7 @@ describe('the SSO gate', () => {
   test('asks to authorize the token when GitHub gave no link', () => {
     const gate = resolveGitHubSsoGate({ organization: 'acme', url: 'https://github.com/orgs/acme/sso' });
     expect(gate.body).toBe(
-      'The GitHub token Shinsa uses is not authorized for the acme organization, which enforces SAML single sign-on. Authorize the token for the acme organization on GitHub, then retry.'
+      'The GitHub token Shinsa uses is not authorized for the acme organization, which enforces SAML single sign-on. [Authorize the token for the acme organization on GitHub](https://github.com/orgs/acme/sso), then retry.'
     );
   });
 
@@ -74,6 +74,7 @@ describe('the SSO gate', () => {
     const gate = resolveGitHubSsoGate({ organization: null, url: 'https://github.com/settings/tokens' });
     expect(gate.title).toBe('GitHub needs SSO authorization');
     expect(gate.body).toContain('not authorized for this organization');
+    expect(gate.body).toContain('(https://github.com/settings/tokens)');
   });
 });
 

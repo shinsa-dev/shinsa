@@ -542,6 +542,20 @@ describe('the card for each gate', () => {
     expect(buttonsOf(signIn)[0]?.style).toBe('primary');
   });
 
+  test('an SSO failure links the authorization page on GitHub', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const link = 'https://github.com/orgs/superwall/sso?authorization_request=A1B2';
+    harness.send({
+      type: 'effect.fail',
+      taskId,
+      title: 'Could not push the branch',
+      detail: `remote: Resource protected by organization SAML enforcement. ${link}`,
+    });
+    const message = gateCardOf(harness, taskId, harness.openGate(taskId));
+    expect(readText(message)).toContain(`<${link}|Authorize it on GitHub>, then retry.`);
+  });
+
   test('an operation is what it runs, Run and Finish without it', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
