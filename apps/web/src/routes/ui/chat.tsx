@@ -68,6 +68,7 @@ function createNoticeItems(now: number): TimelineItemOf<QuietNoticeKind>[] {
     { kind: 'compaction', key: 'eunoe-fold', at: now, trigger: 'fold', by: 'eunoe' },
     { kind: 'proxy', key: 'proxy', at: now, detail: 'Eunoe did not answer within 15 s.' },
     { kind: 'fast_mode', key: 'fast-mode', at: now, status: 'unavailable', reason: 'model_not_allowed' },
+    { kind: 'background_wait', key: 'background-wait', at: now, tasks: 1 },
     {
       kind: 'extensions',
       key: 'extensions',

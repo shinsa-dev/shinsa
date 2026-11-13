@@ -95,7 +95,7 @@ describe('resolveTaskNow', () => {
   it('names the task it waits on', () => {
     const base = createTask({ id: 'base', title: 'Add login' });
     expect(nowFor({ stage: 'waiting_on_tasks', waitsOn: ['base'] }, undefined, [base])).toBe(
-      'Waits on “Add login”'
+      'Waits on “Add login”, which is being built'
     );
   });
 

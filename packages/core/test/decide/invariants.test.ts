@@ -1293,13 +1293,22 @@ function listBundleDrives(state: ShinsaState, open: Task[], random: Random): Shi
         ? null
         : { taskId: task.id, behindTaskId: chance(random, 0.8) ? task.id : null, base: 'main' },
     }));
+  const mergeConflicts: ShinsaCommand[] = members
+    .filter(
+      (task) => task.stage === 'awaiting_merge' && !isBundleFollower(state, task) && chance(random, 0.3)
+    )
+    .map((task) => ({
+      type: 'bundle.record_merge_conflict',
+      taskId: task.id,
+      conflict: { taskId: task.id, behindTaskId: chance(random, 0.8) ? task.id : null, base: 'main' },
+    }));
   const approvals: ShinsaCommand[] = listOpenGates(state)
     .filter((gate) => ids.has(gate.taskId) && isDecisionGate(gate))
     .map((gate) => ({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null }));
   const steps = [...listAgentCommands(state, random), ...listSystemCommands(state, random)].filter(
     (command) => ids.has(resolveCommandTask(state, command) ?? '')
   );
-  return [...reads, ...checks, ...approvals, ...steps];
+  return [...reads, ...checks, ...mergeConflicts, ...approvals, ...steps];
 }
 
 function selectBundleCommand(state: ShinsaState, random: Random): ShinsaCommand | null {

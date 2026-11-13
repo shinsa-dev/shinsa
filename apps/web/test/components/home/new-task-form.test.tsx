@@ -265,15 +265,13 @@ describe('NewTaskForm attachments', () => {
 });
 
 describe('NewTaskForm', () => {
-  it('leaves the kind on Auto, then the project, Auto start and priority', async () => {
+  it('asks only for the project, Auto start and priority, leaving the kind to Shinsa', async () => {
     renderForm();
     expect(screen.getAllByRole('combobox').map((element) => element.getAttribute('aria-label'))).toEqual([
-      'Kind of task',
       'Project',
       'When to start',
       'Priority',
     ]);
-    expect(combobox('Kind of task').textContent).toBe('Auto kind');
     expect(['Project', 'When to start', 'Priority'].map((name) => combobox(name).textContent)).toEqual([
       'No project',
       'Auto start',
@@ -286,17 +284,6 @@ describe('NewTaskForm', () => {
     await send('Start');
     expect(listSentCommands()).toEqual([
       { type: 'task.create', request: 'Exports stall at night', repoId: null },
-    ]);
-  });
-
-  it('starts an initiative when you pick that kind, naming it from the first line', async () => {
-    renderForm();
-    await pick('Kind of task', /Initiative/, 'Initiative');
-    expect(field().getAttribute('placeholder')).toStartWith('Name the initiative on the first line');
-    fireEvent.change(field(), { target: { value: 'Chat split\nSmall pull requests' } });
-    await send('Start');
-    expect(listSentCommands()).toEqual([
-      { type: 'task.create', request: 'Chat split\nSmall pull requests', repoId: null, initiative: true },
     ]);
   });
 

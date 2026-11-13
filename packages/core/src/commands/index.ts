@@ -241,6 +241,7 @@ type SystemCommand =
       attemptId?: string | null;
       failure?: RunFailure | null;
       cacheExpiresAt?: number | null;
+      backgroundWork?: boolean;
     }
   | {
       type: 'run.attempt';
@@ -308,6 +309,7 @@ type SystemCommand =
     }
   | { type: 'pull_request.record_update_conflict'; taskId: string; base: string; files: string[] }
   | { type: 'bundle.record_check'; taskId: string; conflict: BundleConflict | null }
+  | { type: 'bundle.record_merge_conflict'; taskId: string; conflict: BundleConflict }
   | { type: 'pull_request.record_hook_failure'; taskId: string; output: string; failures: string[] | null }
   | {
       type: 'pull_request.record_closed';

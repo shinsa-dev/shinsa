@@ -42,7 +42,7 @@ import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting, stackOnTasks } from './dependencies.ts';
+import { releaseMergeHolds, releaseWaiting, stackOnTasks } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import {
@@ -104,6 +104,7 @@ import { pauseTask } from './pause.ts';
 import { recordAway } from './presence.ts';
 import {
   recordBundleCheck,
+  recordBundleMergeConflict,
   recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
@@ -428,6 +429,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordUpdateConflict(decider, command);
     case 'bundle.record_check':
       return recordBundleCheck(decider, command);
+    case 'bundle.record_merge_conflict':
+      return recordBundleMergeConflict(decider, command);
     case 'pull_request.record_hook_failure':
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
@@ -595,6 +598,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   }
   apply(decider, command);
   releaseWaiting(decider);
+  releaseMergeHolds(decider, state);
   syncShares(decider);
   syncWatchdogs(decider);
   syncMergeSteps(decider);
