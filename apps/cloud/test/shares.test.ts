@@ -9,7 +9,7 @@ describe('a share link', () => {
     const response = await harness.post(resolveShareConnectPath(credentials.instanceId), {});
     expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
     expect(await readJson<ShareConnectResponse>(response)).toEqual({
-      url: `wss://${credentials.tunnelHost}`,
+      url: `wss://app.shinsa.dev/__relay/${credentials.instanceId}`,
       online: false,
     });
     await harness.post(

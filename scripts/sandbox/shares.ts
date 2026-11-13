@@ -155,7 +155,7 @@ export function respondShareConnect(match: RegExpExecArray, machines: Machine[])
       { status: 404 }
     );
   const answer: ShareConnectResponse = {
-    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${machine.id}`,
+    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/relay/${machine.id}`,
     online: true,
   };
   return Response.json(answer);

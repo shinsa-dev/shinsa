@@ -31,7 +31,6 @@ describe('POST /api/commands', () => {
     const remote = {
       isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
       resolveActor: () => Effect.succeed(null),
-      tunnelHost: Effect.succeed(null),
       isEnabled: Effect.succeed(true),
     };
     const { send, context } = startRoutes({ remote: remote as never });
@@ -95,7 +94,6 @@ describe('who sent a command', () => {
   const remote = {
     isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
     resolveActor: (userId: string | null) => Effect.succeed(people[userId ?? 'u-owner'] ?? null),
-    tunnelHost: Effect.succeed(null),
     isEnabled: Effect.succeed(true),
   };
 

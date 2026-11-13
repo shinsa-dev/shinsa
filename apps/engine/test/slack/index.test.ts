@@ -41,8 +41,6 @@ const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(4));
 const CREDENTIALS = {
   instanceId: 'k3x9',
   machineToken: 'machine-token',
-  tunnelToken: 'tunnel',
-  tunnelHost: 't-k3x9.shinsa.dev',
   connectKey: CONNECT_KEY,
 };
 

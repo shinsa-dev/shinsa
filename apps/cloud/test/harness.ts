@@ -22,16 +22,14 @@ import { type Clock, Clock as ClockService, ConfigProvider, Context, Duration, E
 import { FetchHttpClient } from 'effect/http';
 import { SqlClient } from 'effect/sql';
 import { makeCloudHandler } from '../src/app.ts';
-import { Assets, WorkerContext } from '../src/http/worker.ts';
+import { Assets, RelayRooms, WorkerContext } from '../src/http/worker.ts';
+import { RELAY_ROOM_ORIGIN } from '../src/relay/schema.ts';
 import { SQL_NAMES } from '../src/store/shared/schema.ts';
 
 export interface CloudConfig {
   origin: string;
   githubClientId: string;
   githubClientSecret: string;
-  cloudflareAccountId: string;
-  cloudflareApiToken: string;
-  tunnelZone: string;
   previewOrigin: string;
   maxInstances: number;
   slackClientId: string;
@@ -44,9 +42,6 @@ export const TEST_CONFIG: CloudConfig = {
   origin: REMOTE_APP_ORIGIN,
   githubClientId: 'client-id',
   githubClientSecret: 'client-secret',
-  cloudflareAccountId: 'account-1',
-  cloudflareApiToken: 'api-token',
-  tunnelZone: 'shinsa.dev',
   previewOrigin: 'https://shinsa.page',
   maxInstances: 50,
   slackClientId: 'slack-client',
@@ -60,9 +55,6 @@ function resolveEnv(config: CloudConfig) {
     APP_ORIGIN: config.origin,
     GITHUB_CLIENT_ID: config.githubClientId,
     GITHUB_CLIENT_SECRET: config.githubClientSecret,
-    CLOUDFLARE_ACCOUNT_ID: config.cloudflareAccountId,
-    CLOUDFLARE_API_TOKEN: config.cloudflareApiToken,
-    TUNNEL_ZONE: config.tunnelZone,
     PREVIEW_ZONE: new URL(config.previewOrigin).host,
     MAX_INSTANCES: String(config.maxInstances),
     SLACK_CLIENT_ID: config.slackClientId,
@@ -115,27 +107,6 @@ interface UpstreamCall {
 type UpstreamHandler = (call: UpstreamCall) => Response | Promise<Response>;
 
 const PASS = 599;
-
-function answerApi(result: unknown) {
-  return Response.json({ success: true, result });
-}
-
-function createCloudflareApi() {
-  let tunnels = 0;
-  let records = 0;
-  return (call: UpstreamCall): Response | null => {
-    const path = new URL(call.url).pathname;
-    if (call.method === 'GET' && path === '/client/v4/zones') return answerApi([{ id: 'zone-1' }]);
-    if (call.method === 'POST' && path.endsWith('/cfd_tunnel'))
-      return answerApi({ id: `tunnel-${++tunnels}` });
-    if (call.method === 'PUT' && path.endsWith('/configurations')) return answerApi({});
-    if (call.method === 'GET' && path.endsWith('/token')) return answerApi(`tunnel-token-${tunnels}`);
-    if (call.method === 'POST' && path.endsWith('/dns_records'))
-      return answerApi({ id: `record-${++records}` });
-    if (call.method === 'DELETE') return answerApi({});
-    return null;
-  };
-}
 
 export async function createCodeChallenge(verifier: string) {
   return serializeBase64Url(new Uint8Array(await crypto.subtle.digest('SHA-256', encodeText(verifier))));
@@ -228,7 +199,6 @@ async function answerGitHub(upstream: UpstreamCall) {
 export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
   const db = createTestDatabase();
   const calls: UpstreamCall[] = [];
-  const cloudflare = createCloudflareApi();
   const handlers: UpstreamHandler[] = [];
   const clock = { now: 1_800_000_000_000 };
   const deferred: Promise<unknown>[] = [];
@@ -247,9 +217,7 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
       const answer = await handler(upstream);
       if (answer.status !== PASS) return answer;
     }
-    return (
-      (await answerGitHub(upstream)) ?? cloudflare(upstream) ?? new Response('no upstream', { status: 404 })
-    );
+    return (await answerGitHub(upstream)) ?? new Response('no upstream', { status: 404 });
   };
 
   const config = new Proxy(
@@ -282,6 +250,10 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
         Layer.succeed(FetchHttpClient.Fetch, ((input, init) =>
           world.fetch(input, init)) as typeof globalThis.fetch),
         Layer.succeed(ClockService.Clock, createTestClock(clock)),
+        Layer.succeed(RelayRooms, {
+          fetch: (instanceId, room) =>
+            world.fetch(new Request(resolveRelayTestUrl(instanceId, room.url), room)),
+        }),
         Layer.succeed(Assets, {
           fetch: (asset) => Promise.resolve(new Response(`asset ${new URL(asset.url).pathname}`)),
         })
@@ -364,6 +336,10 @@ export function createHarness(overrides: Partial<CloudConfig> = {}): Harness {
   }
 
   return { db, world, calls, handlers, clock, settle, request, call, post, signIn, signInNative };
+}
+
+function resolveRelayTestUrl(instanceId: string, roomUrl: string) {
+  return roomUrl.replace(RELAY_ROOM_ORIGIN, `https://${instanceId}.relay.test`);
 }
 
 export async function readJson<T>(response: Response) {

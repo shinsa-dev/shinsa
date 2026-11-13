@@ -46,7 +46,6 @@ function createTunnelContext(overrides: Partial<HttpContext> = {}, config = {}) 
     {
       remote: {
         isEnabled: Effect.succeed(true),
-        tunnelHost: Effect.succeed('box.shinsa.dev'),
       } as unknown as HttpContext['remote'],
       ...overrides,
     },
@@ -224,9 +223,7 @@ describe('Ingress through the tunnel', () => {
   test('only the tunnel’s plain routes answer, its sockets open only as an upgrade, and the rest is not found', async () => {
     const handle = createWebHandler(createTunnelContext(), AllRoutes);
     expect(await (await call(handle, '/health', { headers: tunnel })).json()).toEqual({ ok: true });
-    expect(await (await call(handle, '/health', { headers: { host: 'box.shinsa.dev' } })).json()).toEqual({
-      ok: true,
-    });
+    expect((await call(handle, '/health', { headers: { host: 'box.shinsa.dev' } })).status).not.toBe(200);
     for (const path of ['/api/queue', '/', '/api/boom']) {
       const answer = await call(handle, path, { headers: tunnel });
       expect([answer.status, await answer.json()]).toEqual([
@@ -243,7 +240,6 @@ describe('Ingress through the tunnel', () => {
     const context = createHttpContext({
       remote: {
         isEnabled: Effect.succeed(false),
-        tunnelHost: Effect.succeed(null),
       } as unknown as HttpContext['remote'],
     });
     const handle = createWebHandler(context, AllRoutes);

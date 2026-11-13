@@ -1,4 +1,4 @@
-import { REMOTE_PATHS } from '@shinsa/core';
+import { RELAY_PATH_PREFIX, REMOTE_PATHS } from '@shinsa/core';
 import { MethodNotAllowed, NotFound, SERVER_ERROR_MESSAGE, ServerError } from '@shinsa/core/remote/errors';
 import { Cause, Effect, Option, Predicate, type Types } from 'effect';
 import { HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/http';
@@ -78,7 +78,7 @@ export const Ingress = HttpRouter.middleware(
       const url = new URL(request.originalUrl);
       if (isPreviewHost(url.host, config.previewOrigin)) return yield* respondPreview(url);
       const response = yield* httpEffect.pipe(Effect.catchCause((cause) => respondCause(cause, url)));
-      return url.pathname.startsWith(HOOKS_PREFIX)
+      return url.pathname.startsWith(HOOKS_PREFIX) || url.pathname.startsWith(RELAY_PATH_PREFIX)
         ? response
         : HttpServerResponse.setHeaders(response, SECURITY_HEADERS);
     });

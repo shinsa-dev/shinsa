@@ -365,12 +365,12 @@ src/
 │                        by the webhook and a Slack channel message)
 ├── remote/              Remote access (docs/engine.md → Remote access), every module a Context.Service in its folder's
 │                        service.ts, composed by layers.ts (RemoteClientLayer: RemoteClient and Pairings on
-│                        FetchHttpClient; RemoteEdgeLayer: RemoteUrlOpener and TunnelHealth; RemoteMachineLayer(input):
+│                        FetchHttpClient; RemoteEdgeLayer: RemoteUrlOpener; RemoteMachineLayer(input):
 │                        Remote with RemoteStore, AccessScope and the client; RemoteLayer(input): Teams over Shares,
 │                        TeamFeeds and Handoffs over the machine; RemoteQuickLayer: PlacementAsker and ShareDescriber
 │                        on QuickCalls), built once in serve/layers.ts on EngineConfig, EngineCore, Evidence,
 │                        Transcripts, GitLayer, GitHubLayer, JsonFile, Shell, the RemoteOrigin reference
-│                        (config.remoteOrigin) and a TunnelConnector; index.ts the barrel. schema.ts (the socket close
+│                        (config.remoteOrigin) and a RelayConnector; index.ts the barrel. schema.ts (the socket close
 │                        codes, RandomBytes, the reference every link's id and key come from, and the schemas
 │                        remote.json, team snapshots and team views are read through), store/ (RemoteStore:
 │                        remote.json under EngineConfig's dataDir in a Ref, the machine's key, the credentials, the
@@ -383,23 +383,21 @@ src/
 │                        machine call Revoked, and a status the API does not declare, a timeout or no answer
 │                        RemoteUnreachable in schema.ts with `retryable`; the origin is the RemoteOrigin reference),
 │                        pairing/ (Pairings: the claim code, then a forked poll every PairPollInterval, 2 s, until
-│                        GitHub sign-in claims the instance, it expires or you cancel), cloudflared/ (Cloudflared:
-│                        the pinned release downloaded, checked by SHA-256 and unpacked under data/bin, each step
-│                        under a timeout; asset.ts picks the platform's build), connector/ (TunnelConnector:
-│                        cloudflared as a scoped process with the token in its environment, up once it prints
-│                        CONNECTED_PATTERN, stopped and failed as TunnelConnectFailed after ConnectTimeout, 30 s;
-│                        installed.ts and refused.ts the two layers), health/ (TunnelHealth: one ping of the
-│                        tunnel's /health), tunnel/ (TunnelSupervisor: connect, then pings on PING_SCHEDULE with a
-│                        heartbeat every fourth, a restart after three failed pings or an exit on
-│                        RESTART_SCHEDULE (every second for a minute, then 2, 4, 10 and 30 s), Revoked ending it for
+│                        GitHub sign-in claims the instance, it expires or you cancel), relay/ (RelayConnector:
+│                        the one outbound socket to the relay, signed in with the machine token, each stream the
+│                        relay opens dialed to the local URL over fetch or a WebSocket with cf-connecting-ip set;
+│                        headers.ts what crosses, refused.ts the layer that refuses every open, RelayLimits and
+│                        RelayFetch the references a test changes), tunnel/ (TunnelSupervisor: open the relay
+│                        socket, then pings on PING_SCHEDULE and a heartbeat on HEARTBEAT_SCHEDULE, a restart
+│                        after three unanswered pings or a close on RESTART_SCHEDULE (every second for a minute, then 2, 4, 10 and 30 s), Revoked ending it for
 │                        good; Remote builds it in its layer on a TunnelMachine of its own steps), access/
 │                        (AccessScope: the remote-access scope every sealed channel and team feed socket is leased
 │                        from, ended when access goes off, the machine is revoked or removed, closing them all in
 │                        parallel), opener/ (RemoteUrlOpener: the pairing page opened through Shell in the user's
 │                        home, BrowserCommand the reference that picks the command), gate/ (TunnelGate in
-│                        service.ts: the one gate for everything through the tunnel,
+│                        service.ts: the one gate for everything through the relay,
 │                        the route table, the principal and the refusals in schema.ts; Ingress, EngineGate and
-│                        the server's socket upgrades ask it and decide nothing else about the tunnel),
+│                        the server's socket upgrades ask it and decide nothing else about the relay),
 │                        egress/ (EgressGate in service.ts: the one gate for what leaves, every share and team
 │                        view and the team list this machine signs encoded through the allowlist schemas in
 │                        schema.ts, a view that breaks one refused, never sent; a preview's answer without the
@@ -416,11 +414,11 @@ src/
 │                        share-clock/ (ShareClock: share.expire when a share's time runs out),
 │                        share-describe/ (ShareDescriber: the writer quick call that describes a shared task for the
 │                        share.describe effect),
-│                        share-channel/ (makeShareChannel: the tunnel's /share channel per connection, the hello
+│                        share-channel/ (makeShareChannel: the relay's /share channel per connection, the hello
 │                        checked against the link's key, sealed frames out, nothing read after the hello; a host
 │                        authorizes the hello, so team views run on it too; a lease on the access scope), teams/
 │                        (Teams: making, joining, leaving and answering requests through app.shinsa.dev with the
-│                        machine token, the team keys in remote.json, and the tunnel's /team channel, checked against
+│                        machine token, the team keys in remote.json, and the relay's /team channel, checked against
 │                        membership, the key and the team's projects, ended the moment access ends), team-feeds/
 │                        (TeamFeeds: a list channel to every other machine of each team whose key this machine
 │                        holds, each socket a lease on the access scope, GET /api/teams/tasks, the teams socket
@@ -432,7 +430,7 @@ src/
 │                        layer), previews/ (Previews: preview.link, the preview's answer and socket relay, and each
 │                        service's private remote URL, which it registers with Terminals in its layer; PreviewFetch
 │                        the reference it forwards through), machine/ (Remote: pairing, pausing, removing, enrolling,
-│                        a hand-off's link, claim and removal, the stable webhook URL, the tunnel and each sealed
+│                        a hand-off's link, claim and removal, the stable webhook URL, the relay socket and each sealed
 │                        channel; observe registers a listener for every change in the caller's scope; RemoteInput
 │                        the version, machine name, body cap and local URL only the composition root knows; name.ts
 │                        resolveMachineName); its routes are http/routes/remote, teams, placement and tunnel
@@ -440,7 +438,7 @@ src/
 │                        Slack.layer({ credentials, appOrigin }) on EngineCore, QuickCalls' classifier and RemoteClient,
 │                        the time from Clock), schema.ts (SlackInput, the SlackStatusInterval reference, limits and
 │                        tagged errors), index.ts the re-exports. Slack takes the mention
-│                        app.shinsa.dev forwards over the tunnel, checked against the connect key and sent as
+│                        app.shinsa.dev forwards over the relay, checked against the connect key and sent as
 │                        slack.mention, and a card's button or modal in Slack as slack.decide, answered with
 │                        what the card now says or why it was refused (handleTunnel); slack.evaluate: ⏳ on the
 │                        mention, the classifier asked, "Not a task" once per thread or slack.start_task; the
@@ -720,7 +718,7 @@ src/
                          channels; a taken port is PortInUse naming config.json's `port`; sockets.ts the socket
                          kinds and their handlers, url.ts resolveServerUrl), app.ts (makeEngineHandler: the web
                          handler over ApiRoutes, the plain routes and Ingress, on the services the server captured), ingress/ (Ingress: Host, Origin and inspect mode for this
-                         machine, and TunnelGate for the tunnel and the channel, on every request), gate/
+                         machine, and TunnelGate for the relay and the channel, on every request), gate/
                          (EngineGateLive, EngineApi's EngineGate: TunnelGate's endpoint check, content type, the
                          body caps and every failure as
                          `{ error: { code, message } }`), guard.ts (the checks both use), routes/<group>/
