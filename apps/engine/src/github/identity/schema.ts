@@ -38,7 +38,7 @@ export const MachineGitHub = Context.Reference<MachineGitHubShape | null>(
 
 export const GITHUB_HEADER_KEY = 'http.https://github.com/.extraheader';
 
-export const GITHUB_CREDENTIAL_KEY = 'credential.https://github.com.helper';
+const GITHUB_CREDENTIAL_KEY = 'credential.https://github.com.helper';
 
 export const MACHINE_GIT_CREDENTIALS = {
   GIT_CONFIG_COUNT: '2',
