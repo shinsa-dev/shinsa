@@ -125,11 +125,6 @@ export class UrlInvalid extends RemoteFailure<UrlInvalid>()('UrlInvalid', {
   status: 400,
 }) {}
 
-export class CloudflareFailed extends RemoteFailure<CloudflareFailed>()('CloudflareFailed', {
-  code: 'cloudflare_failed',
-  status: 502,
-}) {}
-
 export class SignatureInvalid extends RemoteFailure<SignatureInvalid>()('SignatureInvalid', {
   code: 'signature_invalid',
   status: 401,

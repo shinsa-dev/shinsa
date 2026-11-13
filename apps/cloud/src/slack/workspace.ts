@@ -1,7 +1,7 @@
 import { createSlackForwardSignature, SLACK_FORWARD_HEADERS } from '@shinsa/core';
 import { Clock, Effect, Option, Redacted } from 'effect';
 import { CloudCrypto } from '../crypto/service.ts';
-import { Tunnels } from '../integrations/tunnels/service.ts';
+import { Relays } from '../integrations/relays/service.ts';
 import type { Machine } from '../store/machines/schema.ts';
 import type { SlackWorkspace } from '../store/slack/schema.ts';
 import { SlackStore } from '../store/slack/service.ts';
@@ -23,11 +23,11 @@ export const requestSignedMachine = Effect.fn('requestSignedMachine')(function* 
   path: string,
   payload: unknown
 ) {
-  const tunnels = yield* Tunnels;
+  const relays = yield* Relays;
   const body = JSON.stringify(payload);
   const timestamp = yield* Clock.currentTimeMillis;
   const signature = yield* createSlackForwardSignature(Redacted.value(machine.connectKey), timestamp, body);
-  return yield* tunnels.request(machine.id, path, {
+  return yield* relays.request(machine, path, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

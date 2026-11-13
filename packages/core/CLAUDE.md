@@ -323,7 +323,7 @@ src/
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
 ├── remote/          Remote access, shared by the engine, the web app and the hosted Worker (`apps/cloud`), on
 │                    WebCrypto only: the append-only wire contract with the Worker (contract.ts: REMOTE_PATHS, the
-│                    tunnel host, the stable webhook URL and its engine path, the enrollment link's fragment, and
+│                    relay URLs, the stable webhook URL and its engine path, the enrollment link's fragment, and
 │                    every request and answer as an Effect Schema with its type beside it: RemoteUser, RemoteTeam,
 │                    HeartbeatResponse…, their limits in REMOTE_TEXT_LIMITS, the branded path ids InstanceId, TeamId,
 │                    RemoteUserId and ClaimCode), the Worker's failures (errors.ts: one Schema.TaggedError per wire

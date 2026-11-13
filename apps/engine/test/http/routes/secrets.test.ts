@@ -187,7 +187,6 @@ describe('a member’s GitHub token over HTTP', () => {
     isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
     resolveActor: (userId: string | null) =>
       Effect.succeed(userId === null || userId === 'u-owner' ? OWNER : userId === 'u-kai' ? KAI : null),
-    tunnelHost: Effect.succeed(null),
     isEnabled: Effect.succeed(true),
   };
 

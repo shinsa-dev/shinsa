@@ -6,13 +6,13 @@ import { RemoteClient } from './client/service.ts';
 import { DeviceChannels } from './device-channel/service.ts';
 import { FleetRelay } from './fleet-relay/service.ts';
 import { Handoffs } from './handoffs/service.ts';
-import { TunnelHealth } from './health/service.ts';
 import type { RemoteInput } from './machine/schema.ts';
 import { Remote } from './machine/service.ts';
 import { RemoteUrlOpener } from './opener/service.ts';
 import { Pairings } from './pairing/service.ts';
 import { PlacementAsker } from './placement/service.ts';
 import { Presence } from './presence/service.ts';
+import { RelayConnector } from './relay/service.ts';
 import { ShareDescriber } from './share-describe/service.ts';
 import { Shares } from './shares/service.ts';
 import { RemoteStore } from './store/service.ts';
@@ -24,9 +24,10 @@ export const RemoteClientLayer = Pairings.layer.pipe(
   Layer.provide(FetchHttpClient.layer)
 );
 
-export const RemoteEdgeLayer = Layer.merge(
-  RemoteUrlOpener.layer,
-  TunnelHealth.layer.pipe(Layer.provide(FetchHttpClient.layer))
+export const RemoteEdgeLayer = RemoteUrlOpener.layer;
+
+export const RelayConnectorLayer = RelayConnector.layer.pipe(
+  Layer.provide(BunSocket.layerWebSocketConstructor)
 );
 
 export const RemoteMachineLayer = (input: RemoteInput) =>

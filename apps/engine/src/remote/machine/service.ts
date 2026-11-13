@@ -42,11 +42,10 @@ import {
 import { makeRemoteChannel } from '../channel/service.ts';
 import { RemoteOrigin } from '../client/schema.ts';
 import { RemoteClient } from '../client/service.ts';
-import { TunnelConnector } from '../connector/service.ts';
-import { TunnelHealth } from '../health/service.ts';
 import { RemoteUrlOpener } from '../opener/service.ts';
 import type { PairedMachine, PairingEnd } from '../pairing/schema.ts';
 import { Pairings } from '../pairing/service.ts';
+import { RelayConnector } from '../relay/service.ts';
 import { listTeamEntries } from '../store/derive.ts';
 import type { RemoteFile, StoredHandoff, StoredLink } from '../store/schema.ts';
 import { RemoteStore } from '../store/service.ts';
@@ -80,8 +79,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
         const access = yield* AccessScope;
         const origin = yield* RemoteOrigin;
         const opener = yield* RemoteUrlOpener;
-        const connector = yield* TunnelConnector;
-        const health = yield* TunnelHealth;
+        const connector = yield* RelayConnector;
         const tunnelStatus = yield* Ref.make<TunnelStatus>('off');
         const pairing = yield* Ref.make<{ view: PairingView; fiber: Fiber.Fiber<PairingEnd> } | null>(null);
         const claimer = yield* Ref.make<HandoffClaim | null>(null);
@@ -106,8 +104,6 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
         const token = (machineToken: string) => Redacted.make(machineToken);
 
         const isEnabled = file.pipe(Effect.map((current) => current.enabled && current.credentials !== null));
-
-        const tunnelHost = file.pipe(Effect.map((current) => current.credentials?.tunnelHost ?? null));
 
         const publish = Effect.suspend(() =>
           syncTeamAccess.pipe(
@@ -1092,8 +1088,7 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
                     recordStatus,
                     forget,
                   }),
-                  Layer.succeed(TunnelConnector, connector),
-                  Layer.succeed(TunnelHealth, health),
+                  Layer.succeed(RelayConnector, connector),
                   Layer.succeed(RemoteClient, client)
                 )
               )
@@ -1106,7 +1101,6 @@ export class Remote extends Context.Service<Remote, RemoteHandle>()('shinsa/engi
           machineName: input.machineName,
           snapshot,
           isEnabled,
-          tunnelHost,
           startPairing,
           cancelPairing,
           resolveHookUrl,

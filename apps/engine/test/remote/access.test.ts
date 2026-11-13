@@ -134,8 +134,6 @@ async function setUp() {
       credentials: {
         instanceId: 'inst1',
         machineToken: 'machine-token',
-        tunnelToken: 'tunnel',
-        tunnelHost: 't-inst1.shinsa.dev',
         connectKey: 'key',
       },
       enabled: true,
