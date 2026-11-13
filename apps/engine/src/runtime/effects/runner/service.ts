@@ -99,7 +99,7 @@ export class EffectHandlers extends Context.Service<
           case 'pull_request.push':
             return yield* shipping.push(effect.taskId, attempt);
           case 'pull_request.merge':
-            return yield* merging.merge(effect);
+            return yield* merging.merge(effect, attempt);
           case 'pull_request.watch':
             yield* pullRequests.sync(effect.taskId, true);
             return;
