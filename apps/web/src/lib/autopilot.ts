@@ -147,6 +147,7 @@ const LEARNED_TITLE: Record<AutopilotGateKind, string> = {
   question: 'Agent questions',
   review: 'Reviews',
   merge: 'Merges',
+  proposal: 'Watchdog tasks',
 };
 
 const LEARNED_PAUSED: Record<AutopilotGateKind, string> = {
@@ -154,6 +155,7 @@ const LEARNED_PAUSED: Record<AutopilotGateKind, string> = {
   question: 'You changed its last few answers, so it brings questions to you for now.',
   review: 'You changed its last few reviews, so it brings reviews to you for now.',
   merge: 'You changed its last few merges, so it brings merges to you for now.',
+  proposal: 'You changed its last few watchdog tasks, so it brings them to you for now.',
 };
 
 export interface AutopilotLearnedRow {
@@ -561,6 +563,7 @@ const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
   question: 'Autopilot answered an agent’s question for you.',
   review: 'Autopilot approved the review for you.',
   merge: 'Autopilot started the merge for you.',
+  proposal: 'Autopilot gave your OK on a watchdog task’s fix.',
 };
 
 const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
@@ -568,6 +571,7 @@ const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone
   question: { icon: 'IconBubbleCheck', tone: 'blue' },
   review: { icon: 'IconCheckCircle2', tone: 'blue' },
   merge: { icon: 'IconMerged', tone: 'green' },
+  proposal: { icon: 'IconCheckCircle2', tone: 'purple' },
 };
 
 export interface DoneForYouRow {

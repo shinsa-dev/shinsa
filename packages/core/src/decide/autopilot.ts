@@ -1,7 +1,13 @@
 import { Option } from 'effect';
 import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
 import { resolveLessonLimit } from '../autopilot/lessons.ts';
-import { isUrgentTask, resolveAutopilotFacts, resolveAutopilotLimits } from '../autopilot/limits.ts';
+import {
+  isUrgentTask,
+  isWatchdogTask,
+  resolveAutopilotFacts,
+  resolveAutopilotLimits,
+  resolveAutopilotSuggestionLimit,
+} from '../autopilot/limits.ts';
 import { selectJudgedGateKind } from '../autopilot/prompt.ts';
 import {
   AUTOPILOT_JUDGMENT_LIMITS,
@@ -33,6 +39,7 @@ import type { Decider } from './decider.ts';
 import { answerGateForYou, approveReviewAhead } from './gates.ts';
 import { hasOpenPreMergeSteps } from './merge-steps.ts';
 import { startMerge } from './pull-requests.ts';
+import { settleSuggestionForYou } from './suggestions.ts';
 
 function resolveLimits(
   state: ShinsaState,
@@ -189,6 +196,7 @@ export function askAutopilot(decider: Decider, gate: Gate) {
   if (!resolveAutopilotPolicy(decider.state.settings).enabled) return;
   const kind = Option.getOrNull(selectJudgedGateKind(gate));
   if (!kind) return;
+  if (kind === 'proposal' && !isWatchdogTask(decider.task(gate.taskId))) return;
   const refusal = resolveRefusal(decider, gate, kind);
   if (refusal === null) {
     requestJudgment(decider, gate.id);
@@ -240,6 +248,7 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
   const why = reason || NO_REASON;
   switch (kind) {
     case 'plan':
+    case 'proposal':
       answerGateForYou(decider, gate, 'approve', null, why);
       return;
     case 'review':
@@ -255,6 +264,35 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
       return;
     }
   }
+}
+
+function selectSuggestion(decider: Decider, taskId: string, suggestionId: string) {
+  const task = decider.state.tasks[taskId];
+  const suggestion = task?.suggestions?.find((candidate) => candidate.id === suggestionId);
+  if (!task || !suggestion || suggestion.status !== 'open') return null;
+  return { task, suggestion };
+}
+
+export function weighSuggestion(decider: Decider, taskId: string, suggestionId: string) {
+  const found = selectSuggestion(decider, taskId, suggestionId);
+  if (!found) return;
+  const policy = resolveAutopilotPolicy(decider.state.settings);
+  if (!resolveAutopilotSuggestionLimit(policy, found.suggestion).allowed) return;
+  decider.run({ kind: 'autopilot.weigh', taskId, suggestionId });
+}
+
+const SUGGESTION_REASON: Record<'accept' | 'dismiss', string> = {
+  accept: 'Autopilot judged it clearly worth doing.',
+  dismiss: 'Autopilot judged it not worth doing.',
+};
+
+export function applyAutopilotWeighed(decider: Decider, command: CommandOf<'autopilot.weighed'>) {
+  const found = selectSuggestion(decider, command.taskId, command.suggestionId);
+  if (!found || command.verdict === 'forward') return;
+  const policy = resolveAutopilotPolicy(decider.state.settings);
+  if (!resolveAutopilotSuggestionLimit(policy, found.suggestion).allowed) return;
+  const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason) || SUGGESTION_REASON[command.verdict];
+  settleSuggestionForYou(decider, found.task, found.suggestion, command.verdict === 'accept', reason);
 }
 
 function resolveOwnerActiveAt(state: ShinsaState) {

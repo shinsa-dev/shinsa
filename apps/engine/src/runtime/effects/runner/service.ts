@@ -1,4 +1,8 @@
-import { selectAutopilotJudgeRequest, type ShinsaEffect } from '@shinsa/core';
+import {
+  selectAutopilotJudgeRequest,
+  selectAutopilotSuggestionRequest,
+  type ShinsaEffect,
+} from '@shinsa/core';
 import { Clock, Context, Effect, Layer, Option } from 'effect';
 import { provideTaskGitHub } from '../../../github/identity/resolve.ts';
 import { MachineGitHub } from '../../../github/identity/schema.ts';
@@ -97,6 +101,29 @@ export class EffectHandlers extends Context.Service<
         );
       });
 
+      const weighSuggestion = Effect.fn('EffectHandlers.weighSuggestion')(function* (
+        effect: EffectOf<'autopilot.weigh'>,
+        attempt: EffectAttempt
+      ) {
+        const selected = selectAutopilotSuggestionRequest(
+          yield* world.state,
+          effect.taskId,
+          effect.suggestionId
+        );
+        if (Option.isNone(selected)) return;
+        const answer = yield* world.weighSuggestion(selected.value.system, selected.value.prompt);
+        if (!answer) return;
+        yield* world.dispatch(
+          {
+            type: 'autopilot.weighed',
+            taskId: effect.taskId,
+            suggestionId: effect.suggestionId,
+            ...answer,
+          },
+          { id: `${attempt.key}:autopilot.weighed` }
+        );
+      });
+
       const applyEffect = Effect.fn('EffectHandlers.applyEffect')(function* (
         effect: ShinsaEffect,
         attempt: EffectAttempt
@@ -180,6 +207,8 @@ export class EffectHandlers extends Context.Service<
             return yield* withSlack((slack) => slack.escalate(effect, attempt.key));
           case 'autopilot.judge':
             return yield* judgeAutopilot(effect, attempt);
+          case 'autopilot.weigh':
+            return yield* weighSuggestion(effect, attempt);
           case 'feedback.draft':
             return yield* Effect.mapError(
               world.feedback.draft(effect.feedbackId, attempt.key),

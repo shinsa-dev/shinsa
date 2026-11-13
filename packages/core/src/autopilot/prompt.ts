@@ -1,15 +1,21 @@
 import { Option } from 'effect';
-import type { Gate, GateType, Task } from '../domain/types.ts';
+import type { Gate, GateType, Task, TaskSuggestion } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listAutopilotLessonLines } from './lessons.ts';
 import { resolveAutopilotFacts } from './limits.ts';
-import { listAutopilotProfileLines } from './profile.ts';
-import { AUTOPILOT_JUDGMENT_LIMITS, type AutopilotFacts, type AutopilotGateKind } from './schema.ts';
+import { listAutopilotKindLines, listAutopilotProfileLines } from './profile.ts';
+import {
+  AUTOPILOT_JUDGMENT_LIMITS,
+  AUTOPILOT_SUGGESTION_VERDICTS,
+  AUTOPILOT_VERDICTS,
+  type AutopilotFacts,
+  type AutopilotGateKind,
+} from './schema.ts';
 
 export const AUTOPILOT_JUDGE_SYSTEM = [
   'You are Autopilot, the delegate of one developer who runs coding agents in Shinsa.',
   'Like a trusted employee, you handle what you are sure about and bring the rest to your boss.',
-  'You are asked about one point where the work waits for the developer: a plan, an agent’s question, a review or a merge.',
+  'You are asked about one point where the work waits for the developer: a plan, an agent’s question, a review, a merge, or an agent’s proposal on a task a watchdog filed.',
   'Shinsa has already checked its hard limits: you may act here, but you never have to.',
   'Act only when the work is clear, small and low risk, and the developer would almost surely decide the same.',
   'Bring it to the developer when the scope is unclear, the change is large, the reviewer had doubts, the question needs their taste or knowledge, or you are unsure.',
@@ -26,6 +32,7 @@ const GATE_NAME: Record<AutopilotGateKind, string> = {
   question: 'Answer the agent’s question',
   review: 'Approve the reviewed change',
   merge: 'Merge the pull request',
+  proposal: 'Give your OK on the agent’s proposal for a task a watchdog filed',
 };
 
 function clip(text: string, limit: number) {
@@ -117,6 +124,7 @@ const JUDGED_GATES: Partial<Record<GateType, AutopilotGateKind>> = {
   question: 'question',
   review: 'review',
   merge: 'merge',
+  proposal: 'proposal',
 };
 
 export function selectJudgedGateKind(gate: Gate): Option.Option<AutopilotGateKind> {
@@ -142,6 +150,53 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
     return {
       system: AUTOPILOT_JUDGE_SYSTEM,
       prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, profile, shadow),
+      verdicts: AUTOPILOT_VERDICTS,
     };
+  });
+}
+
+export const AUTOPILOT_SUGGESTION_SYSTEM = [
+  'You are Autopilot, the delegate of one developer who runs coding agents in Shinsa.',
+  'An agent suggested a new task while it worked on another. Decide what the developer would do with it.',
+  'Shinsa has already checked its hard limits: you may decide here, but you never have to.',
+  '`accept` adds it as a task of its own, which still passes every gate: only when it is clearly worth doing and the developer would almost surely add it.',
+  '`dismiss` drops it: only when it is clearly not worth doing, repeats work, or the developer usually dismisses ones like it.',
+  '`forward` leaves it for the developer: whenever you are unsure, or it needs their taste or priorities.',
+  'Weigh how they usually decide suggested tasks: the counts and their recent words are their habits.',
+  `Write \`reason\` as one plain sentence the developer reads later, at most ${AUTOPILOT_JUDGMENT_LIMITS.reason} characters, and leave \`reply\` empty.`,
+  'Answer with one JSON object and nothing else.',
+].join('\n');
+
+export function resolveAutopilotSuggestionPrompt(
+  task: Task,
+  suggestion: TaskSuggestion,
+  profile: readonly string[] = []
+) {
+  const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
+  return [
+    'Decision: Add or dismiss a suggested task',
+    '',
+    `Suggested while working on: ${task.title}`,
+    '',
+    `Suggested task: ${suggestion.title}`,
+    `Request: ${clip(suggestion.request, limit)}`,
+    `Why the agent suggests it: ${clip(suggestion.why, limit)}`,
+    `Starts: ${suggestion.waitsOnThis ? 'after this task merges' : 'at once'}`,
+    ...(profile.length > 0 ? ['', 'How the developer decides suggested tasks:', ...profile] : []),
+  ].join('\n');
+}
+
+export function selectAutopilotSuggestionRequest(state: ShinsaState, taskId: string, suggestionId: string) {
+  const task = state.tasks[taskId];
+  const suggestion = task?.suggestions?.find((candidate) => candidate.id === suggestionId);
+  if (!task || !suggestion || suggestion.status !== 'open') return Option.none();
+  const profile = listAutopilotKindLines(state, ['suggestion'], {
+    projectId: task.projectId ?? null,
+    risk: null,
+  });
+  return Option.some({
+    system: AUTOPILOT_SUGGESTION_SYSTEM,
+    prompt: resolveAutopilotSuggestionPrompt(task, suggestion, profile),
+    verdicts: AUTOPILOT_SUGGESTION_VERDICTS,
   });
 }

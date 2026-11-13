@@ -44,6 +44,7 @@ import {
 } from '../prompts/index.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { assertEvidence } from './agents.ts';
+import { askAutopilot } from './autopilot.ts';
 import type { Decider } from './decider.ts';
 import { answerIteration, suggestActions } from './iterations.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
@@ -309,12 +310,13 @@ function openProposalGate(
   recommend: ProposalRecommendation
 ) {
   decider.stage(task.id, 'awaiting_proposal', 'a proposal waits for your OK');
-  decider.openGate(
+  const gate = decider.openGate(
     task.id,
     'proposal',
     resolveProposalTitle(task, step, recommend),
     `${proposal.why}\n\n${proposal.request}`
   );
+  askAutopilot(decider, gate);
 }
 
 function resolveComposedReason(task: Task) {

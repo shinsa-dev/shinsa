@@ -279,7 +279,7 @@ describe('Settings → Agents → Autopilot', () => {
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
       {
         type: 'settings.change',
-        patch: { autopilot: { ...ESCALATING.autopilot, gates: ['plans', 'reviews'] } },
+        patch: { autopilot: { ...ESCALATING.autopilot, gates: ['plans', 'reviews', 'watchdogTasks'] } },
       },
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, autoMerge: 'off' } } },
     ]);

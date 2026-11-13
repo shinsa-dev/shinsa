@@ -1,7 +1,7 @@
 import type { AutopilotLevel } from '../domain/settings.ts';
 import type { ReviewRating } from '../report/types.ts';
 
-export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge';
+export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal';
 
 export interface AutopilotDone {
   gateId: string;
@@ -66,6 +66,10 @@ export const AUTOPILOT_LIMITS = {
 export const AUTOPILOT_VERDICTS = ['act', 'forward'] as const;
 
 export type AutopilotVerdict = (typeof AUTOPILOT_VERDICTS)[number];
+
+export const AUTOPILOT_SUGGESTION_VERDICTS = ['accept', 'dismiss', 'forward'] as const;
+
+export type AutopilotSuggestionVerdict = (typeof AUTOPILOT_SUGGESTION_VERDICTS)[number];
 
 export interface AutopilotJudgment {
   verdict: AutopilotVerdict;

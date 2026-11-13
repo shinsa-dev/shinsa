@@ -162,6 +162,7 @@ const GATE_DECISION_KINDS: Record<AutopilotGateKind, readonly AutopilotDecisionK
   question: ['question'],
   review: ['review', 'finding'],
   merge: ['merge'],
+  proposal: ['proposal'],
 };
 
 const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
@@ -238,8 +239,15 @@ export function listAutopilotProfileLines(
   gate: AutopilotGateKind,
   context: AutopilotProfileContext
 ): string[] {
+  return listAutopilotKindLines(state, GATE_DECISION_KINDS[gate], context);
+}
+
+export function listAutopilotKindLines(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  kinds: readonly AutopilotDecisionKind[],
+  context: AutopilotProfileContext
+): string[] {
   const profile = state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE;
-  const kinds = GATE_DECISION_KINDS[gate];
   const counts = kinds.flatMap((kind) => listKindLines(profile, kind, context));
   if (counts.length === 0) return [];
   const notes = listNoteLines(profile, kinds);

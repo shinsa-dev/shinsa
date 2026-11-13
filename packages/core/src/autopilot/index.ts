@@ -7,6 +7,7 @@ export {
 } from './lessons.ts';
 export {
   type AutopilotProfileContext,
+  listAutopilotKindLines,
   listAutopilotProfileLines,
   listAutopilotTallies,
   recordAutopilotDecisions,
@@ -14,9 +15,11 @@ export {
 export { isAutopilotAgreement, resolveAutopilotScore } from './score.ts';
 export {
   isUrgentTask,
+  isWatchdogTask,
   resolveAutopilotFacts,
   resolveAutopilotLimits,
   resolveAutopilotPresence,
+  resolveAutopilotSuggestionLimit,
 } from './limits.ts';
 export {
   AUTOPILOT_CEILINGS,
@@ -39,6 +42,7 @@ export {
   AUTOPILOT_LESSON_KINDS,
   AUTOPILOT_LESSON_LIMITS,
   AUTOPILOT_LIMITS,
+  AUTOPILOT_SUGGESTION_VERDICTS,
   AUTOPILOT_VERDICTS,
   type AutopilotCeiling,
   type AutopilotDone,
@@ -55,12 +59,16 @@ export {
   type AutopilotLimits,
   type AutopilotPresence,
   type AutopilotScope,
+  type AutopilotSuggestionVerdict,
   type AutopilotVerdict,
 } from './schema.ts';
 export {
   AUTOPILOT_JUDGE_SYSTEM,
   AUTOPILOT_SHADOW_NOTE,
+  AUTOPILOT_SUGGESTION_SYSTEM,
   resolveAutopilotJudgePrompt,
+  resolveAutopilotSuggestionPrompt,
+  selectAutopilotSuggestionRequest,
   selectAutopilotJudgeRequest,
   selectJudgedGateKind,
 } from './prompt.ts';

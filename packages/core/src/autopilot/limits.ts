@@ -1,7 +1,7 @@
 import { Option } from 'effect';
 import { type Gate, HOUR_MS, MINUTE_MS, hasStep } from '../domain/index.ts';
 import { type AutopilotGate, type AutopilotPolicy } from '../domain/settings.ts';
-import type { Task } from '../domain/types.ts';
+import type { Task, TaskSuggestion } from '../domain/types.ts';
 import { isActiveAt, resolveActiveHours } from '../presence/hours.ts';
 import type { ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -22,6 +22,7 @@ const GATE_SETTING: Record<Exclude<AutopilotGateKind, 'merge'>, AutopilotGate> =
   plan: 'plans',
   question: 'questions',
   review: 'reviews',
+  proposal: 'watchdogTasks',
 };
 
 const ALLOWED: AutopilotLimit = { allowed: true };
@@ -32,6 +33,10 @@ function refuse(reason: string): AutopilotLimit {
 
 function refuseBySetting(reason: string): AutopilotLimit {
   return { allowed: false, reason, setting: true };
+}
+
+export function isWatchdogTask(task: Task) {
+  return task.createdBy?.kind === 'watchdog';
 }
 
 export function isUrgentTask(task: Task) {
@@ -83,7 +88,7 @@ export function resolveAutopilotFacts(
   return {
     gate,
     urgent: isUrgentTask(task),
-    watchdog: task.createdBy?.kind === 'watchdog',
+    watchdog: isWatchdogTask(task),
     confidence: ratings?.confidence ?? null,
     risk: ratings?.risk ?? null,
     scope: resolveScope(task),
@@ -131,6 +136,14 @@ function limitPlan(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLim
   return ALLOWED;
 }
 
+function limitProposal(facts: AutopilotFacts): AutopilotLimit {
+  if (!facts.watchdog) return refuseBySetting('Autopilot gives your OK only on tasks a watchdog filed.');
+  if (facts.heldPlan) {
+    return refuseBySetting('This asks for you: it runs an operation or you asked to see its plan.');
+  }
+  return ALLOWED;
+}
+
 function limitReview(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
   if (facts.escalatedReview) return refuseBySetting('The agents could not settle the review.');
   const ceiling = AUTOPILOT_CEILINGS[policy.level];
@@ -164,6 +177,8 @@ function limitAct(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimi
       return limitReview(facts, policy);
     case 'merge':
       return limitMerge(facts, policy);
+    case 'proposal':
+      return limitProposal(facts);
   }
 }
 
@@ -182,4 +197,20 @@ function limitEscalate(facts: AutopilotFacts, policy: AutopilotPolicy): Autopilo
 
 export function resolveAutopilotLimits(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimits {
   return { act: limitAct(facts, policy), escalate: limitEscalate(facts, policy) };
+}
+
+export function resolveAutopilotSuggestionLimit(
+  policy: AutopilotPolicy,
+  suggestion: TaskSuggestion
+): AutopilotLimit {
+  if (!policy.enabled) return refuseBySetting('Autopilot is off.');
+  if (!policy.gates.includes('suggestions')) {
+    return refuseBySetting('Autopilot does not act on suggested tasks.');
+  }
+  if (policy.level === 'ask_first') return refuseBySetting('Ask me first leaves suggested tasks to you.');
+  if (suggestion.splitOff) return refuseBySetting('You split it off yourself, so it waits for you.');
+  if (suggestion.stacksOnThis) {
+    return refuse('It would ship in the same pull request as this task, so it waits for you.');
+  }
+  return ALLOWED;
 }

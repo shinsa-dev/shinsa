@@ -371,6 +371,7 @@ describe('the summary of what it learned', () => {
       { gate: 'question', acted: 0, kept: 0, corrected: 0, forwarded: 0, couldHaveActed: 0, paused: false },
       { gate: 'review', acted: 2, kept: 1, corrected: 1, forwarded: 2, couldHaveActed: 1, paused: false },
       { gate: 'merge', acted: 0, kept: 0, corrected: 0, forwarded: 0, couldHaveActed: 0, paused: false },
+      { gate: 'proposal', acted: 0, kept: 0, corrected: 0, forwarded: 0, couldHaveActed: 0, paused: false },
     ]);
     expect(summary.recent.map((found) => found.id)).toEqual(['p2', 'p1', 'l', 'l', 'l']);
   });

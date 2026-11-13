@@ -376,6 +376,7 @@ type EventBody =
       status: 'accepted' | 'dismissed';
       createdTaskId: string | null;
       keptRound?: number;
+      autopilot?: string;
     }
   | { type: 'config.verified'; taskId: string; problems: ConfigProblem[] }
   | { type: 'task.repo_bound'; taskId: string; repoId: string; projectId?: string | null; handle?: string }

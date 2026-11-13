@@ -264,6 +264,7 @@ export function answerGateForYou(
   decider.emit({ type: 'gate.answered', gateId: gate.id, decision, response, autopilot: reason });
   decider.requestBriefing(gate.taskId);
   if (gate.type === 'question') answerQuestion(decider, gate);
+  else if (gate.type === 'proposal') answerProposal(decider, gate, decision);
   else answerDecision(decider, gate, decision, response, []);
 }
 

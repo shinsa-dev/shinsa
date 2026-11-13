@@ -1,4 +1,4 @@
-import type { AutopilotVerdict } from '../autopilot/schema.ts';
+import type { AutopilotSuggestionVerdict, AutopilotVerdict } from '../autopilot/schema.ts';
 
 export type AutopilotSystemCommand =
   | {
@@ -15,4 +15,11 @@ export type AutopilotSystemCommand =
       reason: string;
       reply: string | null;
       shadow: boolean;
+    }
+  | {
+      type: 'autopilot.weighed';
+      taskId: string;
+      suggestionId: string;
+      verdict: AutopilotSuggestionVerdict;
+      reason: string;
     };

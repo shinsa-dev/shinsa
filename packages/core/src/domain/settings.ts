@@ -57,9 +57,15 @@ export type AutopilotLevel = 'ask_first' | 'balanced' | 'most';
 
 export const AUTOPILOT_LEVELS: readonly AutopilotLevel[] = ['ask_first', 'balanced', 'most'];
 
-export type AutopilotGate = 'plans' | 'questions' | 'reviews';
+export type AutopilotGate = 'plans' | 'questions' | 'reviews' | 'suggestions' | 'watchdogTasks';
 
-export const AUTOPILOT_GATES: readonly AutopilotGate[] = ['plans', 'questions', 'reviews'];
+export const AUTOPILOT_GATES: readonly AutopilotGate[] = [
+  'plans',
+  'questions',
+  'reviews',
+  'suggestions',
+  'watchdogTasks',
+];
 
 export type AutoMerge = 'off' | 'low_risk' | 'approved';
 
@@ -104,7 +110,7 @@ export interface AutopilotPolicy {
 export const AUTOPILOT_DEFAULTS: AutopilotPolicy = {
   enabled: false,
   level: 'balanced',
-  gates: ['plans', 'questions', 'reviews'],
+  gates: ['plans', 'questions', 'reviews', 'watchdogTasks'],
   autoMerge: 'low_risk',
   escalate: true,
   ignoreUsageLimits: true,

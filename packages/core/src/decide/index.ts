@@ -32,7 +32,12 @@ import {
   removeEvidence,
   reportReview,
 } from './agents.ts';
-import { applyAutopilotJudgment, fireAutopilot, markAutopilotSeen } from './autopilot.ts';
+import {
+  applyAutopilotJudgment,
+  applyAutopilotWeighed,
+  fireAutopilot,
+  markAutopilotSeen,
+} from './autopilot.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
 import { requestBrowserSignIn } from './browser-sign-in.ts';
 import { reviewBundles } from './bundles.ts';
@@ -518,6 +523,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return fireAutopilot(decider, command);
     case 'autopilot.judgment':
       return applyAutopilotJudgment(decider, command);
+    case 'autopilot.weighed':
+      return applyAutopilotWeighed(decider, command);
     case 'watch_source.write':
       return writeWatchSource(decider, command);
     case 'watch_source.remove':
