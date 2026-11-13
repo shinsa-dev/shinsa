@@ -454,51 +454,73 @@ describe('extra usage, credit and usage resets', () => {
     expect(formatUsageMoney({ minor: 1240, exponent: 2, currency: 'credits' })).toBe('12.40 credits');
   });
 
-  it('lists each reset with how many are left, the limits it clears and when it ends', () => {
-    const ends = NOW + 10 * 24 * HOUR;
-    expect(notes({ resetGrants: [grant({ endsAt: ends })] })).toEqual([
-      {
-        id: 'reset:g',
-        label: 'Weekly reset',
-        value: '1 of 2 left',
-        detail: `Clears the 5-hour and weekly limits · ends ${formatMoment(ends, NOW)}`,
-        ending: false,
-      },
+  const resets = (grants: UsageResetGrant[]) =>
+    notes({ resetGrants: grants }).find((row) => row.id === 'resets');
+  const line = (grants: UsageResetGrant[]) => resets(grants)?.parts[0]?.lines[0];
+
+  it('merges every reset into one row that counts each kind, weekly first', () => {
+    const dec10 = NOW + 10 * 24 * HOUR;
+    const dec16 = NOW + 16 * 24 * HOUR;
+    const row = resets([
+      grant({ id: 'fable', left: 1, total: 1, clears: ['seven_day_overage_included'] }),
+      grant({ id: 'later', left: 1, total: 1, endsAt: dec16 }),
+      grant({ id: 'sooner', left: 1, total: 1, endsAt: dec10 }),
     ]);
-    expect(
-      notes({ resetGrants: [grant({ label: 'Launch reset', clears: ['five_hour'] })] })[0]
-    ).toMatchObject({
+    expect(row).toMatchObject({
+      label: 'Usage resets',
+      value: 'Weekly 2 · Fable 1',
+      detail: null,
+      ending: false,
+    });
+    expect(row?.parts.map((part) => [part.label, part.count, part.lines.map((each) => each.id)])).toEqual([
+      ['Weekly', 2, ['sooner', 'later']],
+      ['Fable', 1, ['fable']],
+    ]);
+    expect(row?.parts[0]?.lines[0]).toEqual({
+      id: 'sooner',
+      label: 'Weekly reset',
+      value: '1 of 1 left',
+      detail: `Clears the 5-hour and weekly limits · ends ${formatMoment(dec10, NOW)}`,
+      ending: false,
+    });
+  });
+
+  it('adds up what is left across grants of a kind and leaves out used ones', () => {
+    expect(resets([grant({ id: 'a', left: 2 }), grant({ id: 'b', left: 0 })])).toMatchObject({
+      value: 'Weekly 2',
+    });
+    expect(resets([grant({ left: 0 })])).toBeUndefined();
+  });
+
+  it('describes each grant with the limits it clears and when it ends', () => {
+    const ends = NOW + 10 * 24 * HOUR;
+    expect(line([grant({ label: 'Launch reset', clears: ['five_hour'] })])).toMatchObject({
       label: 'Launch reset',
       detail: 'Clears the 5-hour limit',
     });
+    expect(resets([grant({ label: 'Launch reset', clears: ['five_hour'] })])?.value).toBe('Launch reset 1');
     expect(
-      notes({
-        resetGrants: [
-          grant({
-            label: 'One full limit reset (November 2026)',
-            clears: ['seven_day', 'seven_day_overage_included'],
-          }),
-        ],
-      })[0]
-    ).toMatchObject({ label: 'Weekly reset', detail: 'Clears the weekly and weekly Fable limits' });
-    expect(
-      notes({
-        resetGrants: [
-          grant({
-            label: 'New model launch: one more Fable reset at 6 months’ tenure',
-            clears: ['seven_day_overage_included'],
-          }),
-        ],
-      })[0]
-    ).toMatchObject({ label: 'Fable reset', detail: 'Clears the weekly Fable limit' });
-    expect(notes({ resetGrants: [grant({ clears: ['something_new'] })] })[0]).toMatchObject({
+      line([
+        grant({
+          label: 'One full limit reset (November 2026)',
+          clears: ['seven_day', 'seven_day_overage_included'],
+        }),
+      ])
+    ).toMatchObject({
+      label: 'One full limit reset (November 2026)',
+      detail: 'Clears the weekly and weekly Fable limits',
+    });
+    expect(line([grant({ clears: ['seven_day_overage_included'] })])).toMatchObject({
+      label: 'Fable reset',
+      detail: 'Clears the weekly Fable limit',
+    });
+    expect(line([grant({ clears: ['something_new'] })])).toMatchObject({
       label: 'Usage reset',
       detail: null,
     });
-    expect(notes({ resetGrants: [grant({ clears: [], endsAt: ends })] })[0]?.detail).toBe(
-      `Ends ${formatMoment(ends, NOW)}`
-    );
-    expect(notes({ resetGrants: [grant({ usableNow: false })] })[0]?.detail).toBe('Not usable yet');
+    expect(resets([grant({ clears: ['something_new'] })])?.value).toBe('Usage reset 1');
+    expect(line([grant({ clears: [], endsAt: ends })])?.detail).toBe(`Ends ${formatMoment(ends, NOW)}`);
+    expect(line([grant({ usableNow: false })])?.detail).toBe('Not usable yet');
   });
 
   it('counts only the resets usable now for the usage menu', () => {
@@ -536,16 +558,26 @@ describe('extra usage, credit and usage resets', () => {
   it('warns about a usable reset that ends within 3 days, so it is not wasted', () => {
     const inTwoDays = NOW + 2 * 24 * HOUR + HOUR;
     const soon = grant({ id: 'soon', endsAt: inTwoDays, clears: ['seven_day_overage_included'] });
-    expect(notes({ resetGrants: [soon] })[0]).toMatchObject({
+    expect(line([soon])).toMatchObject({
       label: 'Fable reset',
       detail: 'Clears the weekly Fable limit · ends in 2 days',
       ending: true,
     });
-    expect(notes({ resetGrants: [grant({ clears: [], endsAt: NOW + 3 * HOUR })] })[0]).toMatchObject({
+    const mixed = resets([soon, grant({ id: 'weekly', endsAt: NOW + 10 * 24 * HOUR })]);
+    expect(mixed?.ending).toBe(true);
+    expect(mixed?.parts.map((part) => [part.label, part.ending])).toEqual([
+      ['Weekly', false],
+      ['Fable', true],
+    ]);
+    expect(line([grant({ clears: [], endsAt: NOW + 3 * HOUR })])).toMatchObject({
       detail: 'Ends in 3h',
       ending: true,
     });
-    expect(notes({ resetGrants: [grant({ usableNow: false, endsAt: inTwoDays })] })[0]).toMatchObject({
+    expect(resets([grant({ usableNow: false, endsAt: inTwoDays })])).toMatchObject({
+      value: 'Weekly 1',
+      ending: false,
+    });
+    expect(line([grant({ usableNow: false, endsAt: inTwoDays })])).toMatchObject({
       detail: `Not usable yet · ends ${formatMoment(inTwoDays, NOW)}`,
       ending: false,
     });

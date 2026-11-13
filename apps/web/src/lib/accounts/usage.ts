@@ -42,8 +42,9 @@ const USAGE_EXTRA_LABEL = {
   noLimit: 'On, no monthly limit',
   credit: 'Credit left',
   reset: 'Usage reset',
-  weeklyReset: 'Weekly reset',
-  fableReset: 'Fable reset',
+  resets: 'Usage resets',
+  weekly: 'Weekly',
+  fable: 'Fable',
   notUsable: 'Not usable yet',
 };
 
@@ -55,12 +56,29 @@ const CLEARED_LIMITS: Record<string, string> = {
   seven_day_sonnet: 'weekly Sonnet',
 };
 
+export interface UsageResetLine {
+  id: string;
+  label: string;
+  value: string;
+  detail: string | null;
+  ending: boolean;
+}
+
+export interface UsageNotePart {
+  id: string;
+  label: string;
+  count: number;
+  ending: boolean;
+  lines: UsageResetLine[];
+}
+
 export interface UsageNoteRow {
   id: string;
   label: string;
   value: string;
   detail: string | null;
   ending: boolean;
+  parts: UsageNotePart[];
 }
 
 export interface UsageResetsNote {
@@ -327,20 +345,71 @@ function describeGrantDetail(grant: UsageResetGrant, now: number) {
   return reach === null ? `Ends ${ends}` : `${reach} · ends ${ends}`;
 }
 
-function resolveGrantLabel(grant: UsageResetGrant) {
-  if (grant.clears.includes('seven_day')) return USAGE_EXTRA_LABEL.weeklyReset;
-  if (grant.clears.includes('seven_day_overage_included')) return USAGE_EXTRA_LABEL.fableReset;
+function resolveGrantKind(grant: UsageResetGrant) {
+  if (grant.clears.includes('seven_day')) return USAGE_EXTRA_LABEL.weekly;
+  if (grant.clears.includes('seven_day_overage_included')) return USAGE_EXTRA_LABEL.fable;
   return grant.label ?? USAGE_EXTRA_LABEL.reset;
 }
 
-function createGrantRow(grant: UsageResetGrant, now: number): UsageNoteRow {
+const KIND_ORDER = [USAGE_EXTRA_LABEL.weekly, USAGE_EXTRA_LABEL.fable];
+
+function resolveKindRank(kind: string) {
+  const rank = KIND_ORDER.indexOf(kind);
+  return rank === -1 ? KIND_ORDER.length : rank;
+}
+
+function resolveLineLabel(grant: UsageResetGrant, kind: string) {
+  if (grant.label !== null) return grant.label;
+  return kind === USAGE_EXTRA_LABEL.reset ? kind : `${kind} reset`;
+}
+
+function createResetLine(grant: UsageResetGrant, kind: string, now: number): UsageResetLine {
   return {
-    id: `reset:${grant.id}`,
-    label: resolveGrantLabel(grant),
+    id: grant.id,
+    label: resolveLineLabel(grant, kind),
     value: `${grant.left} of ${grant.total} left`,
     detail: describeGrantDetail(grant, now),
     ending: isGrantEnding(grant, now),
   };
+}
+
+function compareEndsAt(a: UsageResetGrant, b: UsageResetGrant) {
+  return (a.endsAt ?? Number.POSITIVE_INFINITY) - (b.endsAt ?? Number.POSITIVE_INFINITY);
+}
+
+function listResetParts(grants: UsageResetGrant[], now: number): UsageNotePart[] {
+  const kinds = new Map<string, UsageResetGrant[]>();
+  for (const grant of grants.filter((each) => each.left > 0)) {
+    const kind = resolveGrantKind(grant);
+    kinds.set(kind, [...(kinds.get(kind) ?? []), grant]);
+  }
+  return [...kinds.entries()]
+    .sort(([a], [b]) => resolveKindRank(a) - resolveKindRank(b))
+    .map(([kind, members]) => {
+      const lines = [...members].sort(compareEndsAt).map((grant) => createResetLine(grant, kind, now));
+      return {
+        id: kind,
+        label: kind,
+        count: members.reduce((total, grant) => total + grant.left, 0),
+        ending: lines.some((line) => line.ending),
+        lines,
+      };
+    });
+}
+
+function createResetsRow(grants: UsageResetGrant[], now: number): UsageNoteRow[] {
+  const parts = listResetParts(grants, now);
+  if (parts.length === 0) return [];
+  return [
+    {
+      id: 'resets',
+      label: USAGE_EXTRA_LABEL.resets,
+      value: parts.map((part) => `${part.label} ${part.count}`).join(' · '),
+      detail: null,
+      ending: parts.some((part) => part.ending),
+      parts,
+    },
+  ];
 }
 
 function describeExtraUsageValue(enabled: boolean, noLimit: boolean) {
@@ -364,6 +433,7 @@ export function listUsageNotes(usage: AccountUsage, now: number): UsageNoteRow[]
             value: describeExtraUsageValue(extra.enabled, extra.noLimit),
             detail: null,
             ending: false,
+            parts: [],
           },
         ]
       : []),
@@ -375,10 +445,11 @@ export function listUsageNotes(usage: AccountUsage, now: number): UsageNoteRow[]
             value: formatUsageMoney(credit),
             detail: null,
             ending: false,
+            parts: [],
           },
         ]
       : []),
-    ...listLiveGrants(usage, now).map((grant) => createGrantRow(grant, now)),
+    ...createResetsRow(listLiveGrants(usage, now), now),
   ];
 }
 
