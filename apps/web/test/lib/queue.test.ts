@@ -10,9 +10,7 @@ import {
   type QueueEntry,
   type QueueGroup,
   type QueueSection,
-  describeGroupHidden,
   describeGroupSummary,
-  describeGroupToggle,
   resolveGroupDefault,
   resolveGroupOpen,
   resolveGroupPrefix,
@@ -357,13 +355,11 @@ describe('groups of a bundle or an initiative', () => {
     expect(resolveGroupDefault(waiting, bundle, 'screen')).toBe(true);
     expect(resolveGroupDefault(waiting, bundle, 'api')).toBe(true);
   });
-  it('says how many of a group’s tasks are here and how far it has come, and what a fold hides', () => {
+  it('says how many of a group’s tasks are here and how far it has come', () => {
     const initiative = groupIn('working');
     const bundle = groupIn('waiting');
     expect(describeGroupSummary(initiative)).toBe('2 tasks here · 1 of 4 shipped · 1 dropped');
-    expect(describeGroupHidden(bundle)).toBe('2 more tasks · 1 of 4 ready');
-    expect(describeGroupToggle(bundle, true)).toBe('Collapse Schema');
-    expect(describeGroupToggle(initiative, false)).toBe('Expand Chat split');
+    expect(describeGroupSummary(bundle)).toBe('3 tasks here · 1 of 4 ready');
   });
 
   it('reads a group’s remembered choice under its section, and its default when it has none', () => {

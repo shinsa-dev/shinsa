@@ -164,7 +164,7 @@ src/
     │                    (sheet.tsx: the lead task's Overview, lead.tsx: Where it stands, write-dialog.tsx,
     │                    task-items.tsx: the task's initiative fact and menu items) and ⌘K's lib/command/initiatives.ts;
     │                    Home and the queue list the members themselves and leave the lead out, grouping two or more
-    │                    of one initiative or one bundle in a section under one foldable row (lib/queue.ts)
+    │                    of one initiative or one bundle in a section under one thin foldable header (lib/queue.ts)
     ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
     │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the

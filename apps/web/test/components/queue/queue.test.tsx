@@ -237,19 +237,19 @@ describe('groups of a bundle or an initiative', () => {
     );
   }
 
-  it('lists an open initiative under its name in In progress, its tasks indented below', () => {
+  it('lists an open initiative under a thin header with its name, its tasks inside a guide line', () => {
     renderQueue({ state: GROUPED, variant: 'wide' });
-    expect(titles().slice(0, 3)).toEqual(['Chat split', 'Dock host', 'Side panel']);
+    expect(titles().slice(0, 2)).toEqual(['Dock host', 'Side panel']);
     expect(screen.getByText('2 tasks here · 0 of 2 shipped')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Collapse Chat split' }).getAttribute('aria-expanded')).toBe(
-      'true'
-    );
+    const toggle = screen.getByRole('button', { name: 'Chat split', expanded: true });
+    expect(toggle.closest('[data-highlight-item]')).toBeNull();
+    expect(screen.getByText('Dock host').closest('.border-s')).not.toBeNull();
     expect(sectionTitles()).toContain('In progress2');
   });
 
-  it('folds a group into one counted row and remembers it per place', () => {
+  it('folds a group from its header into one counted line and remembers it per place', () => {
     const view = renderQueue({ state: GROUPED, variant: 'wide' });
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Collapse Chat split' })));
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Chat split', expanded: true })));
     expect(screen.queryByText('Dock host')).toBeNull();
     expect(sectionTitles()).toContain('In progress1');
     expect(readDisclosure(createDisclosureId('home', 'group', 'working', 'initiative', 'split'))).toBe(false);
@@ -261,19 +261,21 @@ describe('groups of a bundle or an initiative', () => {
 
   it('opens the lead task from the initiative’s name', () => {
     renderQueue({ state: GROUPED, variant: 'wide' });
-    act(() => fireEvent.click(screen.getByText('Chat split')));
+    const name = screen
+      .getAllByRole('button', { name: 'Chat split' })
+      .find((button) => !button.hasAttribute('aria-expanded'));
+    if (!name) throw new Error('No link to the lead');
+    act(() => fireEvent.click(name));
     expect(location.pathname).toBe('/tasks/lead');
   });
 
-  it('folds a bundle under its first task while it waits, and opens it from its chevron', () => {
+  it('folds a bundle under a header named after its first task while it waits, and opens it from there', () => {
     renderQueue({ state: GROUPED, variant: 'wide' });
     expect(screen.queryByText('Add the API')).toBeNull();
-    expect(screen.queryByText('Add the screen')).toBeNull();
-    expect(screen.getByText('+2')).toBeTruthy();
+    expect(screen.getByText('3 tasks here · 1 of 3 ready')).toBeTruthy();
     expect(sectionTitles()).toContain('Waiting on another task1');
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Expand Add the schema' })));
-    expect(screen.getByText('Add the screen')).toBeTruthy();
-    expect(screen.queryByText('+2')).toBeNull();
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'Add the schema', expanded: false })));
+    expect(titles()).toEqual(expect.arrayContaining(['Add the schema', 'Add the API', 'Add the screen']));
     expect(sectionTitles()).toContain('Waiting on another task3');
     expect(readDisclosure(createDisclosureId('home', 'group', 'waiting', 'bundle', 'root'))).toBe(true);
   });

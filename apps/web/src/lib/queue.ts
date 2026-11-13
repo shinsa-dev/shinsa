@@ -147,14 +147,6 @@ export function describeGroupSummary(group: QueueGroup) {
   return `${describeCount(countGroupTasks(group), 'task')} here · ${group.progress}`;
 }
 
-export function describeGroupHidden(group: QueueGroup) {
-  return `${describeCount(group.members.length, 'more task')} · ${group.progress}`;
-}
-
-export function describeGroupToggle(group: QueueGroup, open: boolean) {
-  return `${open ? 'Collapse' : 'Expand'} ${group.title}`;
-}
-
 export function resolveGroupPrefix(scope: Extract<DisclosureScope, 'home' | 'queue'>, section: QueueSection) {
   return createDisclosureId(scope, 'group', section.key);
 }

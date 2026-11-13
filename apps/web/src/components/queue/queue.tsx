@@ -1,18 +1,15 @@
 import { resolveBundle, type ShinsaState, type Task } from '@shinsa/core';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
-import { Icon } from '@shinsa/ui/components/icon';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { CompactSection, CompactSections } from '@/components/layout/compact-section.tsx';
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
-import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { Hint } from '@/components/overlays/hint.tsx';
 import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
-import { StatusTile } from '@/components/status/tile.tsx';
 import { BundleMark } from '@/components/task/bundle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useOwnQueue } from '@/hooks/use-own-queue.ts';
@@ -23,9 +20,7 @@ import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
 import { type DisclosureId, useDisclosure, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
 import {
   countSectionEntries,
-  describeGroupHidden,
   describeGroupSummary,
-  describeGroupToggle,
   listQueueSections,
   type QueueEntry,
   type QueueGroup,
@@ -39,6 +34,7 @@ import {
   resolveSectionId,
 } from '@/lib/queue.ts';
 import { hasShareMark } from '@/lib/share/dialog.ts';
+import { BUNDLE_ICON } from '@/lib/tasks/bundles.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 type Variant = 'wide' | 'compact';
@@ -148,38 +144,15 @@ function openTask(context: RowContext, task: Task) {
   context.onNavigate();
 }
 
-function QueueItemRow({
-  context,
-  item,
-  fold,
-  indent = false,
-  extraMark,
-}: {
-  context: RowContext;
-  item: QueueItem;
-  fold?: React.ReactNode;
-  indent?: boolean;
-  extraMark?: React.ReactNode;
-}) {
+function QueueItemRow({ context, item }: { context: RowContext; item: QueueItem }) {
   const { state, variant } = context;
-  const marks = renderMarks(state, item.task);
   return (
     <ListRow
-      fold={fold}
-      indent={indent}
-      holdsLinks={fold !== undefined}
       leading={<QueueItemGlyph state={state} item={item} />}
       active={item.task.id === context.activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
-      mark={
-        marks || extraMark ? (
-          <>
-            {marks}
-            {extraMark}
-          </>
-        ) : undefined
-      }
+      mark={renderMarks(state, item.task)}
       summary={
         <RowSummary
           state={state}
@@ -194,20 +167,47 @@ function QueueItemRow({
   );
 }
 
-function GroupFold({ group, open, onToggle }: { group: QueueGroup; open: boolean; onToggle: () => void }) {
+const GROUP_ICON: Record<QueueGroup['kind'], IconName> = { initiative: INITIATIVE_ICON, bundle: BUNDLE_ICON };
+
+function QueueGroupHeader({
+  context,
+  group,
+  open,
+  onToggle,
+}: {
+  context: RowContext;
+  group: QueueGroup;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const lead = group.kind === 'initiative' ? group.opens : null;
   return (
-    <button
-      type='button'
-      aria-expanded={open}
-      aria-label={describeGroupToggle(group, open)}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      className='corner-superellipse/1.125 grid size-4 cursor-pointer place-items-center rounded-control-sm text-fg-2 outline-none hover:text-fg-4 active:text-fg-4'
-    >
-      <SectionChevron open={open} />
-    </button>
+    <div className='relative flex h-6 min-w-0 items-center gap-1.5 px-2.5 text-2xs text-fg-2'>
+      <button
+        type='button'
+        aria-expanded={open}
+        aria-label={group.title}
+        onClick={onToggle}
+        className='peer absolute inset-0 cursor-pointer rounded-control-sm outline-none'
+      />
+      <Icon name={GROUP_ICON[group.kind]} size='sm' className='shrink-0' />
+      {lead ? (
+        <button
+          type='button'
+          onClick={() => openTask(context, lead)}
+          className='relative min-w-0 shrink cursor-pointer truncate font-medium text-fg-3 outline-none hover:text-fg-4 hover:underline active:text-fg-4 active:underline'
+        >
+          {group.title}
+        </button>
+      ) : (
+        <span className='min-w-0 shrink truncate font-medium text-fg-3 peer-hover:text-fg-4'>
+          {group.title}
+        </span>
+      )}
+      <span className='pointer-events-none shrink-0 tabular-nums peer-hover:text-fg-3'>
+        {describeGroupSummary(group)}
+      </span>
+    </div>
   );
 }
 
@@ -225,37 +225,22 @@ function QueueGroupRows({
   open: boolean;
 }) {
   const disclosure = useDisclosure(resolveGroupId(scope, section, group), open);
-  const fold = <GroupFold group={group} open={open} onToggle={() => disclosure.replaceOpen(!open)} />;
-  const members = open
-    ? group.members.map((item) => <QueueItemRow key={item.key} context={context} item={item} indent />)
-    : null;
-  if (group.root) {
-    const hidden = open ? undefined : (
-      <Hint label={describeGroupHidden(group)}>
-        <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>+{group.members.length}</span>
-      </Hint>
-    );
-    return (
-      <>
-        <QueueItemRow context={context} item={group.root} fold={fold} extraMark={hidden} />
-        {members}
-      </>
-    );
-  }
-  const lead = group.opens;
+  const items = group.root ? [group.root, ...group.members] : group.members;
   return (
     <>
-      <ListRow
-        fold={fold}
-        holdsLinks
-        leading={<StatusTile icon={INITIATIVE_ICON} tone='neutral' label='Initiative' />}
-        active={lead !== null && lead.id === context.activeTaskId}
-        revealWhenActive={context.variant === 'compact'}
-        title={group.title}
-        summary={<span className='truncate'>{describeGroupSummary(group)}</span>}
-        onClick={() => (lead ? openTask(context, lead) : disclosure.replaceOpen(!open))}
+      <QueueGroupHeader
+        context={context}
+        group={group}
+        open={open}
+        onToggle={() => disclosure.replaceOpen(!open)}
       />
-      {members}
+      {open && (
+        <div className='ms-4 flex flex-col border-s border-border ps-1'>
+          {items.map((item) => (
+            <QueueItemRow key={item.key} context={context} item={item} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
