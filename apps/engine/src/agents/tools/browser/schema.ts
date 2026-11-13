@@ -8,14 +8,15 @@ export const BROWSER_TOOL_SPECS = {
     description: [
       'Ask the human to sign your project’s shared browser in to a site, when a page in it asks you to sign in. Waits until they answer.',
       'Your browser tools already open pages in that shared browser, which keeps its sign-ins across runs and tasks, so ask once per site, never per task.',
-      'The human copies the sign-in from their own browser or signs in by hand in a window on their machine; when they are done, open the page again.',
+      'The human copies the sign-in from their own browser or signs in by hand in a window on their machine. Give the address of the page you want to see, never the sign-in page it sent you to. Before the tool answers, Shinsa opens that address in the shared browser and tells you where it landed: only when it stayed on that site are you signed in, so open the page again.',
+      'For a local dev server, give the exact address with its port: its sign-in belongs to that port, so keep the same service run for every screenshot, since a restart gives it a new port and needs a new sign-in.',
       'Use the repository’s own test users instead when it has them. Never ask for a password with `ask`, and never launch a browser of your own to sign in.',
     ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
         url: limitedText(
-          'The full address of the page that asks you to sign in.',
+          'The full address of the page you want to see, the one that sent you to sign in. Never the sign-in page itself: it opens without a sign-in, so the check would pass.',
           BROWSER_SIGN_IN_LIMITS.url
         ),
         reason: limitedText(

@@ -54,8 +54,9 @@ src/
 │                    text, a header on an API answer), request.ts (the request's URL and a cookie), forward.ts (what
 │                    never reaches a machine: hop-by-hop, Cloudflare's and proxies' headers; the relay statuses that
 │                    mean offline; requestOnlineMachine and recordMachineOffline, the one warn line
-│                    `[Cloud] Machine offline`), worker.ts (WorkerContext and deferWork, Assets, WorkerLogger: Workers
-│                    Logs' console, errors to console.error, warnings to console.warn)
+│                    `[Cloud] Machine offline`; recordPreviewStopped, `[Cloud] Preview service stopped`),
+│                    worker.ts (WorkerContext and deferWork, Assets, WorkerLogger: Workers Logs' console, errors to
+│                    console.error, warnings to console.warn)
 ├── auth/            page-session/ (PageSession: the bearer, or the session cookie with the same-origin check on a
 │                    POST and never when a bearer was sent), machine-session/ (MachineSession: the machine token),
 │                    tokens.ts (the session's steps: selectSessionToken, selectRequestUser for the routes that work
@@ -295,8 +296,10 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   a relay that does not answer (no machine socket, 502, 503, 504 without the machine's
   `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a relay
   that fails for an online instance is logged as the warn line `[Cloud] Machine offline` with `surface: preview`
-  (below); the machine's own
-  pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag: noindex, nofollow, noarchive`, the Worker's own error page included.
+  (below), and so is a heartbeat older than five minutes; the machine's own
+  pages, such as a stopped service's, pass through with the mark removed, and one with a 5xx status writes the warn
+  line `[Cloud] Preview service stopped` (`recordPreviewStopped`) with `instanceId`, `previewId` and `status`: the
+  machine is online and its service is not running, such as a dev server an open tab's Vite client keeps pinging. Every answer carries `X-Robots-Tag: noindex, nofollow, noarchive`, the Worker's own error page included.
   Traffic is plain to the Worker: unlike a task's share, a preview is not sealed end to end, and nothing of it is kept.
 - **Private service addresses.** Every running service of a machine with remote access has a private address on
   `shinsa.page` too (`docs/engine.md` → Private service addresses). `GET /__remote/previews/open?url=<address>`
@@ -319,11 +322,14 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   `Retry-After: 60`, so the sender tries again.
 - **An offline machine is a warning, not an error.** A webhook, a Slack mention or a preview whose relay does not
   answer writes one warn line, `[Cloud] Machine offline` (`recordMachineOffline` in `http/forward.ts`), with
-  `surface` (`webhook`, `slack` or `preview`), `instanceId` and `reason`: `unreachable` with the fetch's `error`, or
-  `status` with the relay's status. A machine asleep or off its network is expected, so a watch counts this line
-  on its own. Workers Logs still marks the webhook's 503 request itself as error level, as it does any 5xx, with no
-  `console.error` behind it, so a watch on the Worker's errors must leave out a 503 on `/hooks/` (and on a preview
-  host) that comes with this warn line, and count the warn line apart.
+  `surface` (`webhook`, `slack` or `preview`), `instanceId` and `reason`: `unreachable` with the fetch's `error`,
+  `status` with the relay's status, or (a preview only, never asked over the relay) `stale` with the machine's
+  `lastSeenAt`, when it is marked offline or its last heartbeat is older than `ONLINE_WINDOW`. A machine asleep or off
+  its network is expected, so a watch counts this line on its own. Workers Logs still marks the webhook's 503 request
+  itself as error level, as it does any 5xx, with no `console.error` behind it, so a watch on the Worker's errors must
+  leave out a 503 on `/hooks/` (and on a preview host) that comes with this warn line, and count the warn line apart.
+  A preview host's 5xx that comes with `[Cloud] Preview service stopped` is the machine's own page for a service
+  that is not running, and is left out the same way.
 - **The Slack bot** (`docs/engine.md` → Slack). One Slack app for everyone, on the Events API at `/slack/events`.
   Connecting (`/slack/connect?instance=<id>`, signed in with GitHub, the machine one you own or are a member of, never a guest's, a member's only on a machine that names `slack-task-owner`; else your own seen last, then one you are a member of)
   signs you in with Slack (OAuth v2, the read-only user scopes in `SLACK_USER_SCOPES`: `channels:history`,

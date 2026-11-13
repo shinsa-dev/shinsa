@@ -136,7 +136,8 @@ src/
 │   │                hook rejection (recordHookFailure, `fixFor: 'hook'`; the same failures again open the `push_hook`
 │   │                gate, retryHookFix answers it); after the checks of such a fix the push follows (checks.ts)
 │   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
-│   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key,
+│   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
+│   │                (failures inherited from the base, CiRun.failsOnBase, left out of both, domain/ci.ts),
 │   │                whether no checks on a head means no CI (ciAbsent: the repository's RepoCi and CI_GRACE_MS
 │   │                from the push, resolvePullRequestCi)
 │   ├── dependencies.ts   Resolving and changing what a task waits on and stacks on (task.stack_on_tasks), releasing

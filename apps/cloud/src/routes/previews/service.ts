@@ -21,7 +21,12 @@ import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { CloudConfig } from '../../config/service.ts';
 import { isMachineOnline } from '../../domain/machines.ts';
 import { serializeCookie } from '../../http/cookies.ts';
-import { isTunnelOffline, recordMachineOffline, resolveForwardHeaders } from '../../http/forward.ts';
+import {
+  isTunnelOffline,
+  recordMachineOffline,
+  recordPreviewStopped,
+  resolveForwardHeaders,
+} from '../../http/forward.ts';
 import { readCookie } from '../../http/request.ts';
 import { NOINDEX, respondRedirect, respondText } from '../../http/responses.ts';
 import { Relays } from '../../integrations/relays/service.ts';
@@ -133,6 +138,8 @@ export class PreviewHost extends Context.Service<
           yield* recordMachineOffline('preview', machine.id, { status: proxied.status });
           return respondPage('offline', 503);
         }
+        if (proxied.status >= 500 && proxied.headers.has(PREVIEW_PAGE_HEADER))
+          yield* recordPreviewStopped(machine.id, address.previewId, proxied.status);
         return HttpServerResponse.raw(
           new Response(proxied.body, {
             status: proxied.status,
@@ -192,8 +199,10 @@ export class PreviewHost extends Context.Service<
         if (!(pass.key || pass.access)) return respondPage('gone', 404);
         const machine = yield* selectMachine(address);
         if (Option.isNone(machine)) return respondPage('gone', 404);
-        if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis))
+        if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis)) {
+          yield* recordMachineOffline('preview', machine.value.id, { lastSeenAt: machine.value.lastSeenAt });
           return respondPage('offline', 503);
+        }
         return yield* forward(url, machine.value, address, pass);
       });
 
