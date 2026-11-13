@@ -12,6 +12,7 @@ export interface FakeQueryControls {
   getContextUsage?: () => Promise<unknown>;
   accountInfo?: () => Promise<unknown>;
   setMcpServers?: (servers: Record<string, unknown>) => Promise<unknown>;
+  stopTask?: (taskId: string) => Promise<void>;
 }
 
 export function sdkMessage(value: unknown) {
@@ -35,6 +36,7 @@ export function createFakeQuery(
       ...(controls.getContextUsage ? { getContextUsage: controls.getContextUsage } : {}),
       ...(controls.accountInfo ? { accountInfo: controls.accountInfo } : {}),
       ...(controls.setMcpServers ? { setMcpServers: controls.setMcpServers } : {}),
+      ...(controls.stopTask ? { stopTask: controls.stopTask } : {}),
     } as unknown as Query;
   }) as QueryFn;
   return { query, calls };

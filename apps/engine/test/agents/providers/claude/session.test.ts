@@ -61,6 +61,9 @@ interface ScriptOptions {
   foldedTurnMs?: number;
   contextTimeoutMs?: number;
   eunoe?: EunoeLink;
+  backgroundWaitMs?: number;
+  backgroundGraceMs?: number;
+  process?: ClaudeProcessHandle;
 }
 
 function startScripted(input: AgentSessionInput, options: ScriptOptions = {}) {
@@ -79,6 +82,11 @@ function startScripted(input: AgentSessionInput, options: ScriptOptions = {}) {
     contextTimeoutMs: options.contextTimeoutMs ?? 20,
     now: () => 1_000,
     ...(options.eunoe ? { eunoe: options.eunoe } : {}),
+    ...(options.backgroundWaitMs ? { backgroundWaitMs: options.backgroundWaitMs } : {}),
+    ...(options.backgroundGraceMs ? { backgroundGraceMs: options.backgroundGraceMs } : {}),
+    ...(options.process
+      ? { createProcess: () => options.process as ClaudeProcessHandle, exitGraceMs: 20 }
+      : {}),
   });
   return { session, messages, prompts, calls: fake.calls };
 }
@@ -904,8 +912,9 @@ describe('what an idle session leaves behind', () => {
   test('reports activity, its background work, the context size and when the prompt cache expires', async () => {
     let activity = 0;
     const { input } = createInput({ onActivity: () => (activity += 1) });
-    const { session, messages } = startScripted(input, {
+    const { session, messages, prompts } = startScripted(input, {
       controls: { getContextUsage: () => Promise.resolve({ totalTokens: 150_000, maxTokens: 200_000 }) },
+      backgroundWaitMs: 20,
     });
     messages.push(init);
     messages.push(
@@ -927,6 +936,15 @@ describe('what an idle session leaves behind', () => {
         },
       })
     );
+    await until('the follow-up after the wait', () => prompts.length === 2);
+    messages.push(
+      success('carried on', {
+        usage: {
+          input_tokens: 10,
+          cache_creation: { ephemeral_1h_input_tokens: 9, ephemeral_5m_input_tokens: 0 },
+        },
+      })
+    );
     expect(await session.done).toMatchObject({
       outcome: 'completed',
       context: {
@@ -936,7 +954,7 @@ describe('what an idle session leaves behind', () => {
         backgroundWork: true,
       },
     });
-    expect(activity).toBe(3);
+    expect(activity).toBe(4);
   });
 
   test('work that ends clears the pin, and a five-minute cache expires five minutes on', async () => {
@@ -964,6 +982,149 @@ describe('what an idle session leaves behind', () => {
       },
     });
     expect(session.hasPendingBackgroundWork?.()).toBe(false);
+  });
+});
+
+function backgroundTasks(...tasks: { task_id: string; ambient?: boolean }[]) {
+  return sdkMessage({
+    type: 'system',
+    subtype: 'background_tasks_changed',
+    tasks: tasks.map((task) => ({ task_type: 'local_bash', description: 'tests', ...task })),
+  });
+}
+
+function taskFinished(taskId: string, summary: string, status = 'completed') {
+  return sdkMessage({
+    type: 'system',
+    subtype: 'task_notification',
+    task_id: taskId,
+    status,
+    summary,
+    output_file: `/tmp/${taskId}.out`,
+  });
+}
+
+function listFollowUps(entries: ChatEvent[]) {
+  return entries
+    .flatMap((entry) => (entry.type === 'user' && entry.from === 'shinsa' ? [entry.text] : []))
+    .slice(1);
+}
+
+describe('background work at the end of a turn', () => {
+  test('a turn that leaves a shell running keeps its process until the turn the shell starts ends', async () => {
+    const child = createFakeProcess();
+    const { input, entries } = createInput();
+    const { session, messages, prompts } = startScripted(input, {
+      executable: ECHOING,
+      process: child.process,
+      backgroundGraceMs: 60_000,
+    });
+    let done = false;
+    void session.done.then(() => (done = true));
+    messages.push(init);
+    messages.push(backgroundTasks({ task_id: 'shell-1' }));
+    await until('the first prompt', () => prompts.length === 1);
+    messages.push(answering([prompts[0]?.uuid], 'Waiting for the tests to report.'));
+    await Bun.sleep(60);
+    expect(done).toBe(false);
+    expect(child.terminated()).toBe(0);
+    messages.push(taskFinished('shell-1', 'tests passed'));
+    messages.push(backgroundTasks());
+    messages.push(sdkMessage({ type: 'assistant', message: { content: [] } }));
+    messages.push(success('Handed over.', { origin: { kind: 'task-notification' } }));
+    expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Handed over.' });
+    expect(prompts).toHaveLength(1);
+    expect(listFollowUps(entries)).toEqual([]);
+  });
+
+  test('work that ends without a turn of its own gets a follow-up naming what finished', async () => {
+    const { input, entries } = createInput();
+    const { session, messages, prompts } = startScripted(input, { backgroundGraceMs: 20 });
+    messages.push(backgroundTasks({ task_id: 'shell-1' }, { task_id: 'agent-1' }));
+    messages.push(taskFinished('lint', 'lint passed during the turn'));
+    messages.push(success('Waiting.'));
+    messages.push(taskFinished('shell-1', 'tests passed'));
+    messages.push(taskFinished('agent-1', '', 'failed'));
+    messages.push(backgroundTasks());
+    await until('the follow-up', () => prompts.length === 2);
+    const followUp = [
+      'Your background work finished.',
+      '- tests passed (completed)\n- No summary. (failed)',
+      'Carry on with your step and finish with its hand-over tool.',
+    ].join('\n\n');
+    expect(prompts[1]?.message.content).toBe(followUp);
+    expect(listFollowUps(entries)).toEqual([followUp]);
+    messages.push(success('Handed over.'));
+    expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Handed over.' });
+  });
+
+  test('work that starts again before the follow-up holds it back', async () => {
+    const { input } = createInput();
+    const { session, messages, prompts } = startScripted(input, { backgroundGraceMs: 30 });
+    messages.push(backgroundTasks({ task_id: 'shell-1' }));
+    messages.push(success('Waiting.'));
+    messages.push(backgroundTasks());
+    messages.push(backgroundTasks({ task_id: 'shell-2' }));
+    await Bun.sleep(80);
+    expect(prompts).toHaveLength(1);
+    messages.push(backgroundTasks());
+    await until('the follow-up', () => prompts.length === 2);
+    messages.push(success('Handed over.'));
+    expect(await session.done).toMatchObject({ outcome: 'completed' });
+  });
+
+  test('work still running at the limit is stopped and the agent is told, then the session ends', async () => {
+    const logs = captureLogs();
+    try {
+      const stopped: string[] = [];
+      const { input } = createInput();
+      const { session, messages, prompts } = startScripted(input, {
+        backgroundWaitMs: 20,
+        controls: {
+          stopTask: (taskId) => {
+            stopped.push(taskId);
+            return taskId === 'shell-2' ? Promise.reject(new Error('gone')) : Promise.resolve();
+          },
+        },
+      });
+      messages.push(backgroundTasks({ task_id: 'shell-1' }, { task_id: 'shell-2' }));
+      messages.push(success('Waiting.'));
+      await until('the follow-up', () => prompts.length === 2);
+      expect(stopped).toEqual(['shell-1', 'shell-2']);
+      expect(prompts[1]?.message.content).toBe(
+        'Your background work was still running after 30 minutes, so Shinsa stopped it.\n\nCarry on with your step and finish with its hand-over tool.'
+      );
+      expect(logs.fieldsOf('[Claude] Could not stop a background task')).toEqual([
+        { cwd: '/work', taskId: 'shell-2', error: 'gone' },
+      ]);
+      messages.push(success('Stopped waiting.'));
+      expect(await session.done).toMatchObject({
+        outcome: 'completed',
+        summary: 'Stopped waiting.',
+        context: { backgroundWork: true },
+      });
+    } finally {
+      logs.restore();
+    }
+  });
+
+  test('ambient work never holds a session open', async () => {
+    const { input } = createInput();
+    const { session, messages } = startScripted(input);
+    messages.push(backgroundTasks({ task_id: 'watch', ambient: true }));
+    messages.push(success('Done.'));
+    expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Done.' });
+  });
+
+  test('a session cancelled while it waits ends cancelled without a follow-up', async () => {
+    const { input } = createInput();
+    const { session, messages, prompts } = startScripted(input, { backgroundGraceMs: 20 });
+    messages.push(backgroundTasks({ task_id: 'shell-1' }));
+    messages.push(success('Waiting.'));
+    await Bun.sleep(20);
+    await session.cancel();
+    expect(await session.done).toMatchObject({ outcome: 'cancelled' });
+    expect(prompts).toHaveLength(1);
   });
 });
 
