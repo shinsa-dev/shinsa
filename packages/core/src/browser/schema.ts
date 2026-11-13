@@ -19,7 +19,14 @@ export const BrowserSignInInput = HandOverRecord({
   reason: Required(BROWSER_SIGN_IN_LIMITS.reason),
 });
 
-const SIGN_IN_CHECK_FAILURES = ['not_installed', 'launch_failed', 'signing_in', 'profile_in_use', 'timeout', 'failed'] as const;
+const SIGN_IN_CHECK_FAILURES = [
+  'not_installed',
+  'launch_failed',
+  'signing_in',
+  'profile_in_use',
+  'timeout',
+  'failed',
+] as const;
 
 export const SignInCheck = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('landed'), url: Schema.String }),
