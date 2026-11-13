@@ -17,7 +17,7 @@ const { name, width, height, label, class: className } = Astro.props;
     height={height}
     poster={`/koe/${name}.webp`}
     aria-label={label}
-    autoplay
+    data-koe-video
     muted
     loop
     playsinline
@@ -27,3 +27,11 @@ const { name, width, height, label, class: className } = Astro.props;
     <source src={`/koe/${name}.mp4`} type='video/mp4' />
   </video>
 </div>
+
+<script>
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  for (const video of document.querySelectorAll<HTMLVideoElement>('[data-koe-video]')) {
+    if (!reduced.matches) void video.play().catch(() => video.setAttribute('controls', ''));
+    else video.setAttribute('controls', '');
+  }
+</script>
