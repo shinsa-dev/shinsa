@@ -11,7 +11,7 @@ import { koeSite } from '../lib/site';
 ---
 
 <Site title={koeSite.title} description={koeSite.description} product='koe'>
-  <section id='soon' class='group flex flex-col px-6 pt-14 pb-6 md:pt-20'>
+  <section id='soon' class='group flex flex-col px-6 pt-14 pb-12 md:pt-20 md:pb-16'>
     <div id='top' class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
       <img src='/koe/koe.svg' alt='' width='88' height='88' class='size-22' />
       <h1 class='font-medium text-4xl leading-[1.08] tracking-tight text-balance md:text-5xl'>
@@ -32,20 +32,15 @@ import { koeSite } from '../lib/site';
         <p class='text-fg-2 text-sm'>{koe.requirement}</p>
       </div>
     </div>
-  </section>
-  <section id={koeSections.talk.id} class='flex flex-col px-6 pt-8 pb-12 md:pb-16'>
     <KoeVideo
       name='koe-session'
       width={2048}
       height={1206}
       label={koe.sessionLabel}
       captions={koe.sessionCaptions}
-      class='mx-auto w-full max-w-5xl shadow-lg'
+      class='mx-auto mt-12 w-full max-w-5xl scroll-mt-24 shadow-lg md:mt-16'
+      id={koe.demoId}
     />
-    <div class='mx-auto mt-10 flex max-w-2xl flex-col items-center gap-3 text-center'>
-      <h2 class='font-medium text-2xl text-fg-4 tracking-tight text-balance md:text-3xl'>{koeSections.talk.title}</h2>
-      <p class='text-base text-fg-2 leading-relaxed text-pretty'>{koeSections.talk.text}</p>
-    </div>
   </section>
   <KoeTools />
   <Section copy={koeSections.bundle}>

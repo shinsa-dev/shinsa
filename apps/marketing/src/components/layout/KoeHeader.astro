@@ -1,11 +1,11 @@
 ---
-import { koe, koeSections } from '../../lib/content';
+import { koe, koeSections, koeTools } from '../../lib/content';
 import { koeSite } from '../../lib/site';
 import Button from '../ui/Button.astro';
 
 const links = [
-  { label: 'How it works', href: `#${koeSections.talk.id}` },
-  { label: 'Tools', href: `#${koeSections.tools.id}` },
+  { label: 'How it works', href: `#${koe.demoId}` },
+  { label: 'Tools', href: `#${koeTools[0]!.id}` },
   { label: 'Speed', href: `#${koeSections.speed.id}` },
   { label: 'Models', href: `#${koeSections.models.id}` },
 ];

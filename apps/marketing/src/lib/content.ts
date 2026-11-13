@@ -162,6 +162,7 @@ export const koe = {
   soonTitle: 'Koe is almost here.',
   soonText: 'There is no release to download yet. Check back soon.',
   byline: 'by Shinsa',
+  demoId: 'demo',
   sessionLabel:
     'A Koe session on Shinsa’s home: talk, pin a comment on the Start button, screenshot the greeting, then finish and Koe copies the bundle',
   sessionCaptions: [
@@ -180,16 +181,6 @@ export const koe = {
 };
 
 export const koeSections = {
-  talk: {
-    id: 'how',
-    title: 'One session, one paste.',
-    text: 'Say what is wrong, point at it, and keep talking. When you let go, one ⌘V brings your words and every picture into the chat, each where you said it.',
-  },
-  tools: {
-    id: 'tools',
-    title: 'Point at it while you talk.',
-    text: 'Every tool is a page of the pill, and what you say next becomes its note. Drop a file on the pill and it joins too. Nothing to type.',
-  },
   bundle: {
     id: 'bundle',
     title: 'A bundle, not a transcript.',
@@ -213,21 +204,31 @@ export interface KoeCaption {
   text: string;
 }
 
+const CAPTION_SPOKEN_SHARE = 0.8;
+
+export function resolveCaptionWords(caption: KoeCaption) {
+  const words = caption.text.split(' ');
+  const total = words.reduce((sum, word) => sum + word.length + 1, 0);
+  const spoken = (caption.end - caption.start) * CAPTION_SPOKEN_SHARE;
+  let before = 0;
+  return words.map((text) => {
+    const at = caption.start + (spoken * before) / total;
+    before += text.length + 1;
+    return { text, at };
+  });
+}
+
 export const koeTools: {
   id: string;
-  icon: IconName;
   title: string;
   text: string;
-  trigger: string;
   video: string;
   label: string;
   captions: KoeCaption[];
 }[] = [
   {
     id: 'comment',
-    icon: 'IconBubbleAnnotation2',
     title: 'Comment on anything.',
-    trigger: '⇧⌘-click',
     text: 'Pin a comment to a button, a line or a cell, then the next one. Koe captures what is under each, and the pins join into one picture.',
     video: 'koe-comment',
     label: 'Koe pinning two comments in a row on Shinsa, one on the Start button and one on a menu',
@@ -238,9 +239,7 @@ export const koeTools: {
   },
   {
     id: 'screenshot',
-    icon: 'IconCamera1',
     title: 'Screenshot as you talk.',
-    trigger: 'Drag a region or click a window',
     text: 'The screenshot lands in your words at the moment you took it, and what you say next becomes its note.',
     video: 'koe-screenshot',
     label: 'Koe taking a screenshot of Shinsa’s task box while you describe it',
@@ -251,9 +250,7 @@ export const koeTools: {
   },
   {
     id: 'clip',
-    icon: 'IconVideo',
     title: 'Record a clip.',
-    trigger: 'Record the screen',
     text: 'Show a bug as it happens, then step through the frames and pick the one that shows it.',
     video: 'koe-clip',
     label: 'Koe recording a clip of hovering over Shinsa’s task list, then playing it back to pick a frame',

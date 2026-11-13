@@ -2,36 +2,40 @@ import { describe, expect, it } from 'bun:test';
 import { resolveBoard, resolveInsets } from '../../src/lib/board.ts';
 
 const PAGE_WIDTH = 1440;
+const BOTH = { incoming: true, outgoing: true };
 
 function chip(top: number, bottom: number) {
   return { left: 240, right: 1200, top, bottom };
 }
 
-function listPins(chips: ReturnType<typeof chip>[]) {
-  return resolveBoard(chips, PAGE_WIDTH).pins;
+function listPinYs(chips: ReturnType<typeof chip>[], index: number) {
+  return resolveBoard(chips, PAGE_WIDTH)
+    .pins.filter((pin) => pin.chip === index)
+    .map((pin) => pin.y);
 }
 
 describe('resolveBoard', () => {
   it('keeps the full insets on a tall section', () => {
-    expect(resolveInsets(chip(0, 800), 2)).toEqual({ entry: 152, exit: 72 });
+    expect(resolveInsets(chip(0, 800), 2, BOTH)).toEqual({ entry: 152, exit: 72 });
   });
 
-  it('starts every outgoing line below every incoming one on a short section', () => {
-    const short = chip(800, 1020);
-    const incoming = listPins([chip(0, 600), short])
-      .filter((pin) => pin.chip === 1)
-      .map((pin) => pin.y);
-    const outgoing = listPins([short, chip(1300, 1900)])
-      .filter((pin) => pin.chip === 0)
-      .map((pin) => pin.y);
-    expect(incoming).toHaveLength(4);
-    expect(outgoing).toHaveLength(4);
-    expect(Math.min(...outgoing)).toBeGreaterThan(Math.max(...incoming));
+  it('brings lines into a short section near its top and out near its bottom', () => {
+    const ys = listPinYs([chip(0, 600), chip(800, 1020), chip(1300, 1900)], 1);
+    expect(ys).toHaveLength(8);
+    expect(Math.min(...ys)).toBe(824);
+    expect(Math.max(...ys)).toBe(996);
   });
 
-  it('scales the insets down in proportion on a short section', () => {
-    const insets = resolveInsets(chip(0, 144), 2);
-    expect(insets.entry).toBeCloseTo(76);
-    expect(insets.exit).toBeCloseTo(36);
+  it('centers the lines on a short last section', () => {
+    const ys = listPinYs([chip(0, 600), chip(800, 940)], 1);
+    expect(ys).toHaveLength(4);
+    expect((Math.min(...ys) + Math.max(...ys)) / 2).toBe(870);
+  });
+
+  it('centers the lines on a short first section', () => {
+    expect(resolveInsets(chip(0, 140), 2, { incoming: false, outgoing: true })).toEqual({
+      entry: 62,
+      exit: 62,
+    });
   });
 });

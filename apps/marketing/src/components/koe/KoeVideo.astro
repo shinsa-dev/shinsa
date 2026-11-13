@@ -1,5 +1,5 @@
 ---
-import type { KoeCaption } from '../../lib/content';
+import { type KoeCaption, resolveCaptionWords } from '../../lib/content';
 
 interface Props {
   name: string;
@@ -8,12 +8,14 @@ interface Props {
   label: string;
   captions: KoeCaption[];
   class?: string;
+  id?: string;
 }
 
-const { name, width, height, label, captions, class: className } = Astro.props;
+const { name, width, height, label, captions, class: className, id } = Astro.props;
+const lines = captions.map((caption) => ({ ...caption, words: resolveCaptionWords(caption) }));
 ---
 
-<div class:list={['relative overflow-hidden rounded-2xl bg-bg-1 ring-1 ring-bg-3', className]}>
+<div id={id} class:list={['relative overflow-hidden rounded-2xl bg-bg-1 ring-1 ring-bg-3', className]}>
   <video
     class='block h-auto w-full'
     width={width}
@@ -31,14 +33,21 @@ const { name, width, height, label, captions, class: className } = Astro.props;
   </video>
   <div class='pointer-events-none absolute inset-x-0 top-[6%] grid justify-items-center px-4' aria-hidden='true'>
     {
-      captions.map((caption) => (
+      lines.map((line) => (
         <p
           class='koe-caption col-start-1 row-start-1 rounded-xl bg-background/85 px-3.5 py-1.5 text-center font-medium text-fg-4 text-sm ring-1 ring-bg-3 backdrop-blur-md md:text-lg'
           data-koe-caption
-          data-start={caption.start}
-          data-end={caption.end}
+          data-start={line.start}
+          data-end={line.end}
         >
-          {caption.text}
+          {line.words.map((word, index) => (
+            <>
+              {index > 0 && ' '}
+              <span class='koe-word' data-koe-word data-at={word.at}>
+                {word.text}
+              </span>
+            </>
+          ))}
         </p>
       ))
     }
@@ -56,6 +65,10 @@ const { name, width, height, label, captions, class: className } = Astro.props;
       for (const line of lines) {
         const shown = time >= Number(line.dataset.start) && time < Number(line.dataset.end);
         if (line.hasAttribute('data-shown') !== shown) line.toggleAttribute('data-shown', shown);
+        for (const word of line.querySelectorAll<HTMLElement>('[data-koe-word]')) {
+          const said = shown && time >= Number(word.dataset.at);
+          if (word.hasAttribute('data-said') !== said) word.toggleAttribute('data-said', said);
+        }
       }
       requestAnimationFrame(sync);
     };

@@ -290,13 +290,27 @@ body {
   translate: 0 0;
 }
 
+.koe-word {
+  opacity: 0;
+  filter: blur(4px);
+  transition:
+    opacity 160ms ease-out,
+    filter 160ms ease-out;
+}
+
+.koe-word[data-said] {
+  opacity: 1;
+  filter: blur(0);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .koe-speed::before,
   .koe-speed::after {
     animation: none;
   }
 
-  .koe-caption {
+  .koe-caption,
+  .koe-word {
     transition: none;
   }
 }
