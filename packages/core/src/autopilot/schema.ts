@@ -218,6 +218,40 @@ export interface AutopilotAgreement {
   loss: number;
 }
 
+export interface AutopilotTrackJudgment {
+  track: AutopilotTrack;
+  right: boolean;
+  p: number;
+}
+
+export interface AutopilotJudgments {
+  positive: boolean;
+  judgments: AutopilotTrackJudgment[];
+  rates: Record<AutopilotModelHead, AutopilotRate>;
+}
+
+export const AUTOPILOT_BENCHMARK_SCOPES = ['all', 'shared'] as const;
+
+export type AutopilotBenchmarkScope = (typeof AUTOPILOT_BENCHMARK_SCOPES)[number];
+
+export type AutopilotBenchmarkKind = AutopilotDecisionKind | 'total';
+
+export interface AutopilotBenchmarkRow {
+  kind: AutopilotBenchmarkKind;
+  scope: AutopilotBenchmarkScope;
+  track: AutopilotTrack;
+  scored: number;
+  agreed: number;
+  agreement: number;
+  loss: number;
+}
+
+export interface AutopilotBenchmark {
+  decisions: number;
+  judged: number;
+  rows: AutopilotBenchmarkRow[];
+}
+
 export interface AutopilotRate {
   positive: number;
   negative: number;

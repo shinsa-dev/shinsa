@@ -7,7 +7,7 @@ import type { ReviewFinding, ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { isHeldPlan, isUrgentTask, resolveAutopilotPresence } from './limits.ts';
 import { isAutopilotPositive } from './model/learn.ts';
-import { AUTOPILOT_HEAD_OF_KIND, type AutopilotModelGuess } from './model/schema.ts';
+import { AUTOPILOT_HEAD_OF_KIND, type AutopilotModelGuess, type AutopilotModelHead } from './model/schema.ts';
 import {
   AUTOPILOT_DECISION_ANSWERS,
   AUTOPILOT_PROFILE_LIMITS,
@@ -19,11 +19,13 @@ import {
   type AutopilotDecisionFacts,
   type AutopilotFindingCounts,
   type AutopilotDecisionKind,
+  type AutopilotJudgments,
   type AutopilotProfile,
   type AutopilotRate,
   type AutopilotScoredKind,
   type AutopilotTally,
   type AutopilotTrack,
+  type AutopilotTrackJudgment,
   type AutopilotVerdict,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
@@ -210,14 +212,9 @@ function countDecision(tallies: Map<string, AutopilotTally>, decision: Autopilot
 
 export type AutopilotScoredDecision = AutopilotDecision & { modelGuess?: AutopilotModelGuess | null };
 
-interface TrackJudgment {
-  right: boolean;
-  p: number;
-}
-
 function scoreTrack(
   agreement: AutopilotAgreement,
-  judgment: TrackJudgment,
+  judgment: AutopilotTrackJudgment,
   positive: boolean,
   baseRight: boolean
 ): AutopilotAgreement {
@@ -232,22 +229,30 @@ function scoreTrack(
   };
 }
 
-function judgeVerdict(verdict: AutopilotVerdict, decision: AutopilotDecision): TrackJudgment {
-  return { right: isAutopilotAgreement(verdict, decision.answer), p: verdict === 'act' ? 1 : 0 };
+function judgeVerdict(
+  track: AutopilotTrack,
+  verdict: AutopilotVerdict,
+  decision: AutopilotDecision
+): AutopilotTrackJudgment {
+  return { track, right: isAutopilotAgreement(verdict, decision.answer), p: verdict === 'act' ? 1 : 0 };
 }
 
-function judgeChance(p: number, positive: boolean): TrackJudgment {
-  return { right: p >= 0.5 === positive, p };
+function judgeChance(track: AutopilotTrack, p: number, positive: boolean): AutopilotTrackJudgment {
+  return { track, right: p >= 0.5 === positive, p };
 }
 
-function listTrackJudgments(decision: AutopilotScoredDecision, base: TrackJudgment, positive: boolean) {
-  const judgments: [AutopilotTrack, TrackJudgment][] = [['base', base]];
+function listTrackJudgments(
+  decision: AutopilotScoredDecision,
+  base: AutopilotTrackJudgment,
+  positive: boolean
+) {
+  const judgments: AutopilotTrackJudgment[] = [base];
   const modelGuess = decision.modelGuess ?? null;
-  if (modelGuess) judgments.push(['model', judgeChance(modelGuess.p, positive)]);
+  if (modelGuess) judgments.push(judgeChance('model', modelGuess.p, positive));
   if (decision.guess !== null) {
-    judgments.push(['call', judgeVerdict(decision.guess, decision)]);
+    judgments.push(judgeVerdict('call', decision.guess, decision));
     const combined = resolveAutopilotCombinedVerdict(decision.guess, modelGuess);
-    judgments.push(['combined', judgeVerdict(combined, decision)]);
+    judgments.push(judgeVerdict('combined', combined, decision));
   }
   return judgments;
 }
@@ -260,18 +265,33 @@ function stepRate(rate: AutopilotRate, positive: boolean): AutopilotRate {
   };
 }
 
+export function selectAutopilotJudgments(
+  rates: Record<AutopilotModelHead, AutopilotRate>,
+  decision: AutopilotScoredDecision
+): Option.Option<AutopilotJudgments> {
+  const head = AUTOPILOT_HEAD_OF_KIND[decision.kind];
+  if (!head) return Option.none();
+  const positive = isAutopilotPositive(head, decision);
+  const base = judgeChance('base', resolveAutopilotBaseRate(rates[head]), positive);
+  return Option.some({
+    positive,
+    judgments: listTrackJudgments(decision, base, positive),
+    rates: { ...rates, [head]: stepRate(rates[head], positive) },
+  });
+}
+
 function scoreDecision(
   profile: Pick<AutopilotProfile, 'tracks' | 'rates'>,
   decision: AutopilotScoredDecision
 ): Pick<AutopilotProfile, 'tracks' | 'rates'> {
-  const head = AUTOPILOT_HEAD_OF_KIND[decision.kind];
-  if (!head) return profile;
-  const positive = isAutopilotPositive(head, decision);
-  const base = judgeChance(resolveAutopilotBaseRate(profile.rates[head]), positive);
+  const judged = selectAutopilotJudgments(profile.rates, decision);
+  if (Option.isNone(judged)) return profile;
+  const { positive, judgments, rates } = judged.value;
+  const baseRight = judgments[0]?.right ?? false;
   const tracks = { ...profile.tracks };
-  for (const [track, judgment] of listTrackJudgments(decision, base, positive))
-    tracks[track] = scoreTrack(tracks[track], judgment, positive, base.right);
-  return { tracks, rates: { ...profile.rates, [head]: stepRate(profile.rates[head], positive) } };
+  for (const judgment of judgments)
+    tracks[judgment.track] = scoreTrack(tracks[judgment.track], judgment, positive, baseRight);
+  return { tracks, rates };
 }
 
 export function recordAutopilotDecisions(

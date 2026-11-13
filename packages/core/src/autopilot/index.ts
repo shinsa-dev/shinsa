@@ -1,3 +1,4 @@
+export { resolveAutopilotBenchmark } from './benchmark.ts';
 export { isAutopilotDoneSeeable, listAutopilotDone } from './done.ts';
 export {
   createAutopilotProbe,
@@ -51,6 +52,11 @@ export {
   AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_SCORED_KINDS,
   AUTOPILOT_TRACKS,
+  AUTOPILOT_BENCHMARK_SCOPES,
+  type AutopilotBenchmark,
+  type AutopilotBenchmarkKind,
+  type AutopilotBenchmarkRow,
+  type AutopilotBenchmarkScope,
   type AutopilotAgreement,
   type AutopilotRate,
   type AutopilotScore,
