@@ -1085,7 +1085,7 @@ folds in `state/shapes.ts`).
   starts a lead, for an initiative.`) and it is never one of the presets below (`PresetShape`).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
-  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it, but for Initiative, which only you start). `task.create`
+  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
   takes no `shape`: only triage and the Agent, while it plans, shape a task. The Agent of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with

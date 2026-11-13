@@ -249,8 +249,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   task. No tabs, no project tree; a sidebar only if you pick that layout.
 - **Request box.** Always one keystroke away (Home's composer, or ⌘K). Type, send, keep working. It
   does not navigate. The project defaults to the focus project; When to start and Priority default
-  to Auto, and picking one overrides what Shinsa would decide. The kind of task is left on Auto: the
-  classifier and the agent decide it, but for Initiative, which only you start there.
+  to Auto, and picking one overrides what Shinsa would decide. The composer never asks for the kind
+  of task: the classifier and the agent decide it.
 - **Attachments.** Home's composer, every task composer and a question's answer box take files and
   images: the paperclip, a paste or a drop. Each shows as a chip above the text while it uploads and
   can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
