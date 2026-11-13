@@ -24,7 +24,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | repository | A git repository Shinsa registered, inside at most one project | `Repo` | repository |
 | handle | A task's name for people, `<project key>-<number>` (`SW-142`), given once, never reused, never a key | `Task.handle` | the handle |
 | id | A UUIDv7, the key of everything stored (events, receipts, references, transcripts) | `id` | not shown |
-| focus | The projects (or every project but some) or the one team whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
+| focus | The projects (or every project but some) or the one team or initiative whose work Home, the queue and the guide show, or none for your work | `Focus` | Focus |
 | team | People who work as if on one Shinsa: a project in a team shows every task in it to every member, live, and on app.shinsa.dev each member acts on it with the scopes the team's owner sets | `RemoteTeam`, `Project.teamIds` | team |
 | teammate | Another member of a team you are in, whose team tasks you see and, on app.shinsa.dev, act on | `TeamTask.owner`, `role: 'teammate'` | teammate |
 | scope | One thing a person outside your machine may see (a view scope: the plan, the code, your messages…) or do (an action scope: answer gates, act, message agents, fork, share, open services); share links and teams read the same list | `AccessScope`, `VIEW_SCOPES`, `ACTION_SCOPES` | scope, the scope's own label (Answer gates, Fork tasks…) |
@@ -37,7 +37,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | attempt | One execution of a run; a resume, a retry on another account or a restart is a new attempt | `RunAttempt`, `attemptId` (`<run>:<n>`) | not shown |
 | session | The provider's own conversation a run executes in; several runs and attempts can share one | `Run.sessionId` | not shown |
 | role | Which agent a run is (the round's agent, a reviewer, an answerer…); picks its prompt, tools, model and where it works | `RunRole` (runs), `AgentRole` (settings), `RUN_AGENT_ROLE` (which settings a run role uses) | Agent, Reviewer… |
-| purpose | What one run of the round's agent does: plan, build a phase, fix, run the operation, check a watchdog or read an integration for a watch; picks its instruction, its hand-over and whether it may edit | `RunPurpose`, `Run.purpose`, `PURPOSE_HAND_OVERS` | planning, phase 2 of 3, fixing… |
+| purpose | What one run of the round's agent does: plan, build a phase, fix, run the operation, check a watchdog, read an integration for a watch or lead an initiative; picks its instruction, its hand-over and whether it may edit | `RunPurpose`, `Run.purpose`, `PURPOSE_HAND_OVERS` | planning, phase 2 of 3, fixing… |
 | step | One fixed building block of a task's path (`answer` … `merge`); a task's pipeline is a list of steps | `PipelineStep` | step |
 | pipeline | The ordered steps one task takes | `Task.pipeline` | "the steps a task takes" |
 | phase | One part of an approved plan's build, built by its own run of the round's agent, on the session that planned it, and committed on its own | `PlanDocument.phases[i]` (`PlanPhase`), `PhaseProgress` | phase |
@@ -87,9 +87,13 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | follow-up | A message to a finished answer, investigation or report, answered on the same session | message effect `follow_up`, `acceptsFollowUp` | follow-up |
 | waits on | The tasks a task waits for before it starts (or before its merge gate opens) | `Task.waitsOn`, stage `waiting_on_tasks` | "Waits on", "Wait for another task" |
 | bundle | Tasks in one repository connected by stacks, a graph that fans out and back in: each task starts once every task it stacks on is ready to merge, branches off the first one's branch with the others merged in and opens its pull request on the first, and the lead's one merge gate (the earliest task that stacks on nothing) merges them all once the whole bundle merges cleanly (`docs/engine.md` → Bundles). Never a round stack, which is one task's own rounds | `Task.stacksOn`, `Task.stackBases`, `Task.bundleReady`, `Task.bundleConflict`, `resolveBundle`, `resolveBundleMembers`, `resolveBundleLead`, `listBundleFollowers`, `listStackParents`, `listStackChildren`, `decide/bundles.ts` | "Bundle", "Stack on another task", "Take out of the bundle", "Ready, merges with its bundle" |
+| initiative | A named group of tasks of one effort, in any repositories and projects, with phases, a report sheet built from state and a focus of its own, which is itself a task: its lead task, whose Overview is the sheet; each task still merges on its own (`docs/engine.md` → Initiatives). Never a project, which is the directories you focus on | `Initiative`, `Task.initiativeId`, `decide/initiatives.ts`, `state/initiatives.ts`, `resolveInitiativeSheet` | Initiatives, Initiative, "Add to an initiative", "Make an initiative from this task" |
+| phase (of an initiative) | A named label in an initiative's order that a task carries; never a gate, and never a build phase of a plan | `InitiativePhase`, `Task.initiativePhaseId` | Phase, No phase |
+| lead | The task that supervises an initiative: one session, kind `lead`, no repository work, no pull request and no gate power; plans its first tasks, then, woken on batched member milestones, reports where the initiative stands and asks with `ask` | `Initiative.leadTaskId`, shape and step `lead`, stage `leading`, purpose `lead`, `report_initiative`, `InitiativeMilestone` | Lead, "Where it stands" |
 | backlog | Where work you want planned now and built later waits: a status of a task, never a kind; it is triaged and planned, then its plan waits out of Needs you until you start building it. Only you, or an agent you asked, put work there | `Task.backlog` (`TaskBacklog`), `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `isHeldInBacklog`, `queue.backlog`, plan gate reason `backlog` | Backlog, "Move to the backlog", "Remove from the backlog", "Start building" |
 | All tasks | Every task in to-do order, in status groups (the Backlog one of them), a waiting or stacked task nested under the task it builds on | `resolveTaskGroup`, `TASK_GROUPS` (web) | All tasks |
 | schedule (automation) | A trigger (once, interval, daily, webhook, Slack channel) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
+| automatic retry | A failed step retried on its own after a growing delay, up to 10 times at one milestone, before the failure gate opens | `AutoRetry`, `Task.autoRetry`, `task.auto_retry` | "Retrying", "Retries in 5m", "Retry 2 of 10" |
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
 | pace hold | A step held before it starts because the last 24 hours reached the daily or a project's usage limit; it starts when older usage drops out | `UsageWait` with `cause: pace`, `UsagePace` | "Held at a usage limit" |
@@ -101,6 +105,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `autoPaceResets`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, Count on usage resets, "Waiting to build", "Builds tonight", Build now |
 | your hours | When you are usually active, per hour of the week on your clock, learned or set by hand; Autopilot and Auto pace read it | `ActiveHours` (`resolveActiveHours`, `isActiveAt`, `resolveNextActiveChange`), `activeHours` (`ActiveDay`), `clock.record`, `state.timeZone` | Your hours, "Outside your usual hours" |
 | night shift | What Auto pace does outside your hours: queued builds run, and the Agent records judgement calls instead of asking | `ActiveHours`, `NightShift`, `resolveNightShiftTold` | "built overnight" |
+| Automatic | The model choice that picks each step's Claude model from the task's size, the step and each model's room, and writes the Home guide with Codex first | `auto` (`AUTO_MODEL`) in `agentModels`, `resolveStepModel`, `MODEL_ROUTES`, `resolveQuickProvider`, `usage.models_recorded`, `state.modelRoom`, `models.routing` | Automatic |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
@@ -120,7 +125,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | The kind of task | `TaskShape`, `shape`, `reshape_task`, `task.reshaped`; UI "kind of task"; `mode: 'ask'` for an answer task asked for as one (`tasks create --ask`, a schedule's `just_answer`) |
 | Your request | `request` everywhere new; the refusal code for an empty one is still `intent_required` (`decide/tasks.ts`) |
 | Waiting on another task | `waitsOn`, `task.wait_on`, `task.waits_on_changed`, stage `waiting_on_tasks`, triage's `waits_on`; the rules in `decide/dependencies.ts` (`resolveDependencies`, `listPendingDependencies`); UI "Waits on" |
-| A bundle | `stacksOn` (on `Task`, `task.create`, `task.stack_on_tasks`), `stack_on_this` and `stack_on` (`create_task`), `stack_on_this` (`suggest_tasks`) and `stackOnThis` (`suggestion.accept`), `task.stack_changed`, `stackBases` and `task.stack_based`, the lead and its followers, `bundleReady` and `task.bundle_ready`, `bundleConflict`, `bundle.record_check` and `task.bundle_conflict`, `bundle` on `pull_request.merge`, `tasks stack-on` and `tasks unstack`; UI "Bundle", "Stack on another task", "Ready". Never "stack" alone on screen: that is a round stack |
+| A bundle | `stacksOn` (on `Task`, `task.create`, `task.stack_on_tasks`), `stack_on_this` and `stack_on` (`create_task`), `stack_on_this` (`suggest_tasks`) and `stackOnThis` (`suggestion.accept`), `task.stack_changed`, `stackBases` and `task.stack_based`, the lead and its followers, `bundleReady` and `task.bundle_ready`, `bundleConflict`, `bundle.record_check`, `bundle.record_merge_conflict` and `task.bundle_conflict`, `bundle` on `pull_request.merge`, `tasks stack-on` and `tasks unstack`; UI "Bundle", "Stack on another task", "Ready". Never "stack" alone on screen: that is a round stack |
 | Snoozing | `Task.snoozed` (`TaskSnooze`), `task.snooze_changed`, `task.snooze`, `task.unsnooze`, `queue.snoozed`, `decide/snooze.ts`, the task group and queue section `snoozed`; UI "Snooze", "Unsnooze", "Snoozed". Never "pause" for it: Paused is a step that stopped for you |
 | The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
@@ -338,6 +343,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `monitor?` | `Monitor` \| null | an agent's armed wait |
+| `autoRetry?` | `AutoRetry` \| null | the automatic retry of a failed step: armed until it fires or is cleared, then kept `spent` so the next failure at the same `milestone` counts on from its `attempt` |
 | `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset, or held at a daily or project limit (`cause: pace`, with `pace`: `scope` `daily` or `project`, `limit`, `percent`, `projectId`, `stageReason`) |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
@@ -351,6 +357,9 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `suggestions?` | `TaskSuggestion[]` | tasks agents suggested |
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`), `split` (`split_task`), `watchdog` (`file_report` in a watchdog check) or `intake` (`file_report` in a watch's read), with the task, the run and request key |
+| `initiativeId?` | string \| null | the initiative it belongs to (`docs/engine.md` → Initiatives); absent or null for none |
+| `initiativePhaseId?` | string \| null | its phase in that initiative; null for no phase |
+| `teamInitiative?` | `TeamInitiativeRef` \| null | a teammate's initiative this task joined from your machine: `teamId`, `instanceId`, `initiativeId`, `phaseId`, `name`; never beside `initiativeId` |
 | `owner?` | `TaskOwner` \| null | the person who created it (`login`, `name`, `avatarUrl`): the remote member or guest who sent `task.create`, the machine's owner at the keyboard, or the owner of the task an agent filed it from; null for tasks from before and those Slack, schedules and webhooks start, which count as the machine owner's. On a shared machine its runs use only this person's Claude accounts and GitHub token (`docs/engine.md` → Remote access, Shared machines) |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `teammateFork?` | `TeammateFork` \| null | the teammate's task this one was forked from, as a brief (`instanceId`, `taskId`, `handle`, `title`, `owner`, `request`, `rounds`, `branch`, `pullRequest`): its first Agent run starts fresh from it (`docs/engine.md` → Forking a teammate's task) |
@@ -446,6 +455,7 @@ holds an active run; Shinsa's own stages hold an effect.
 | `awaiting_plan` | plan | you | `building`, `operating`, `planning` (revise), `cancelled` |
 | `operating` | operate | the agent (`purpose: operate`) | `done`, `building` (operation before the build) |
 | `watching` | merge | the agent, read-only (`purpose: watch`), checking a watchdog of the merged change; or (`purpose: intake`) a watch's read, in its home | `merged`, `done` |
+| `leading` | lead | the agent (`purpose: lead`), one turn per wake or message; at rest between turns | `done`, `cancelled` (marked done by you, which finishes its initiative, or cancelled, which dissolves it) |
 | `building` | build | the agent, one run per phase on one session (`purpose: build`) | `checking` |
 | `checking` | checks | Shinsa | `reviewing`, `fixing`, a failure gate |
 | `reviewing` | agent review | reviewer | `awaiting_review`, `fixing` |
@@ -513,7 +523,22 @@ executable changed line (`selectMeasuredCoverage`).
   (`state.taskNumbers`); a key change starts the new key's counter and never reuses a handle. Parsed by
   `parseTaskHandle` (any case). Core finds a task by id or handle (`selectTaskByReference`); the server's reads also
   take the start of an id or the exact title.
-- **Focus**: `{ projectIds, except, teamId, until }`, projects or a team, never both (`focus_refused`). `projectIds` are the projects in focus, or with `except` the ones left out, so every other project and tasks without one show; `except` with no project is dropped (`normaliseFocusProjects`). `until` ends it at a time.
+- **Focus**: `{ projectIds, except, teamId, initiativeId, until }`, projects, a team or an initiative, one kind at a time (`focus_refused`). `projectIds` are the projects in focus, or with `except` the ones left out, so every other project and tasks without one show; `except` with no project is dropped (`normaliseFocusProjects`). `until` ends it at a time.
+
+| `Initiative` field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | UUIDv7 |
+| `name` | string | at most 80 characters, spaces collapsed |
+| `description` | string | at most 2,000 characters, given to its lead |
+| `phases` | `InitiativePhase[]` | at most 12, in order, each `{ id, name }` (name at most 60, distinct ignoring case) |
+| `leadTaskId` | string \| null | its lead task, set when it is created; once the lead is done the initiative is finished (`selectInitiativeLead` is null) |
+| `createdAt`, `updatedAt` | number | |
+| `milestones?` | `InitiativeMilestone[]` | members' milestones since the lead's last turn, the last 40: `taskId`, `kind` (`joined`, `plan_approved`, `gate_opened`, `merged`, `done`, `cancelled`), `text` (at most 280), `at` |
+| `report?` | `InitiativeReport` \| null | the lead's last `report_initiative`: `narrative`, `runId`, `at` |
+| `teamIds?` | string[] | the teams that see it (`docs/engine.md` → Initiatives, Shared with a team); written only by `initiative.add_to_team` and `initiative.remove_from_team`; absent for none |
+| `teamMembers?` | `InitiativeTeamMember[]` | teammates' tasks in it, recorded from the team feeds, at most 200: `teamId`, `instanceId`, `taskId`, `handle`, `title`, `owner`, `stage`, `phaseId`, `gate`, `closedAt` |
+
+At most 50 open initiatives (`INITIATIVE_LIMITS`, `initiative_limit`). An initiative is found by id, exact name (any case) or the start of its id (`selectInitiativeByReference`).
 
 ## Runs, attempts and roles
 
@@ -551,7 +576,7 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_initiative` (lead), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
@@ -674,7 +699,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `openedAt`, `answeredAt`, `decision`, `response` | | your answer and its words |
 | `planVersion?` | number | the plan version a plan gate is for |
 | `choices?`, `recommendation?` | | a question's one-click answers |
-| `cause?` | `budget` \| `monitor` \| `push_hook` \| `paused` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round; `paused` is your `task.pause`, whose approve (Resume) restarts the step |
+| `cause?` | `budget` \| `monitor` \| `push_hook` \| `paused` \| `owner_account` \| `github_sso` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round; `paused` is your `task.pause`, whose approve (Resume) restarts the step; `github_sso` is GitHub refusing Shinsa's login for an organization that enforces SAML single sign-on (`parseGitHubSso`), opened on the first failure, whose approve (Retry) starts the step or the watch again |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
 | `autopilotHeld?` | string | why Autopilot left this review gate for you ("The reviewer’s confidence is medium.") |
 | `autopilotDue?` | `{ at, action: 'escalate' \| 'merge', wait, waitedMinutes }` \| null | an open merge gate's Autopilot deadline (`autopilot.scheduled`); `wait` (`AutopilotWait`) is `configured`, `outside_hours` or `hours_ended`, and `waitedMinutes` the wait it set; `AutopilotClock` fires `autopilot.fire` at `at` |
@@ -683,6 +708,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `provider?` | string | the provider a Sign in gate is for, set on every one (`claude` for a Claude account) |
 | `account?` | `RunAccount` \| null | the Claude account a Sign in gate names, or null for a provider with its own login |
 | `secret?` | `{ label }` | what a secret gate asks for |
+| `githubSso?` | `{ organization, url }` | on a `github_sso` failure gate, the organization (null when GitHub names none) and the link that authorizes the login for it: GitHub's own authorization link, else the organization's SSO page, else the token settings; the body links it too |
 | `browserSignIn?` | `{ url, site }` \| null | the page and its site a browser sign-in gate asks for (`resolveSignInSite`) |
 | `commit?` | string \| null | the merged commit an operation gate shows; on a merge gate, the head it was opened for, which approving merges and nothing newer |
 | `notes?` | string \| null | the notes for the operation, kept only here: a message at the operation gate replaces them (`gate.noted`, null clears them), `reply` replaces them with its words, and the agent runs the operation with them |
@@ -835,8 +861,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
-| `task.create` | creates a task (request, project, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`, or a teammate's: `teammateFork`, never both) | `tasks create` | you; task agents file tasks with `create_task` |
-| `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below) | `tasks message [--as]` | agent |
+| `task.create` | creates a task (request, project, initiative and phase: `initiativeId`, `initiativePhaseId`, else the ones of the task it was filed from, split from or forked from, priority, plan first, backlog, waits on, stacks on: `stacksOn`, a list, mode, account, the task it forks: `forkOf`, or a teammate's: `teammateFork`, never both; `initiative: true` starts an initiative instead, named by the request's first line, with this task as its lead) | `tasks create` | you; task agents file tasks with `create_task` |
+| `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task; `comments` carries line comments (Line comments, below); `fromTeammateTask` (`handle`, `title`) names a teammate's task whose agent sent it to your lead over the fleet relay; only such a message, plain feedback to a resting lead with no gate open, skips the team's `message` scope | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
 | `round.remove` | removes a round waiting to start; the waiting rounds after it move up one number; a round that started is refused (`round_started`) | `rounds remove` | agent |
@@ -844,6 +870,9 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
 | `task.stack_on_tasks` | stacks it on tasks as a bundle (`stacksOn`, the whole list, replacing the one it has), or takes it out (`[]`); refused, for any task in the list, on itself (`stack_self`), a cancelled (`dependency_cancelled`) or finished task (`stack_parent_settled`), one with no pull request (`stack_no_pull_request`), one in another repository than the task or the others (`stack_repository`), a cycle (`dependency_cycle`), and once it builds (`stack_started`) | `tasks stack-on`, `tasks unstack` | agent |
+| `task.join_initiative` | adds a task to an initiative in a phase (`phaseId`, null for none), moves it to another phase or initiative, or takes it out (`initiativeId: null`); with `team` (`teamId`, `instanceId`, `name`) the initiative is a teammate's, recorded as `teamInitiative` and refused for a task the team does not see (`initiative_not_shared`); refused for an unknown initiative (`initiative_not_found`) or phase (`initiative_phase_not_found`), or a finished initiative (`initiative_finished`) | `tasks join-initiative`, `tasks leave-initiative` | agent |
+| `initiative.write` | changes an initiative's name, description and phases (`phases` replaces the list; a phase with an `id` keeps it, one without gets a new one; a removed phase drops its tasks to no phase); refused past the limits (`initiative_invalid`) | `initiatives write` | agent |
+| `initiative.adopt_task` | creates an initiative named after a task, adds it and every descendant by `createdBy`, `parentTaskId` and `forkOf` not already in one, and starts its lead forked from the task; refused for a task already in one (`initiative_exists`) or past the limit (`initiative_limit`) | `initiatives adopt` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
@@ -893,9 +922,11 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `project.remove` | removes one | `projects remove` | agent |
 | `project.add_to_team` | shows every task of the project to a team (`teamId`), read-only: `project.written` with the team in `teamIds`; nothing when it is already there | `projects add-to-team --team` | **human** |
 | `project.remove_from_team` | stops showing them: every open view of its tasks for that team closes | `projects remove-from-team --team` | **human** |
+| `initiative.add_to_team` | shows an initiative and its lead task to a team (`teamId`): `initiative.written` with the team in `teamIds`; nothing when it is already there | `initiatives add-to-team --team` | **human** |
+| `initiative.remove_from_team` | stops showing it, and drops that team's recorded members | `initiatives remove-from-team --team` | **human** |
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
-| `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, never both (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
+| `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, or `initiativeId`, one kind at a time (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `autoPaceResets`, `sharedTeams`, `activeHours` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` and `quietWaitMinutes` (15 by default) each 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits, `contacts` (none by default, at most 5, each `slack_channel` or `slack_person` with `teamId`, `id`, `name` and, for a person, `image`) is replaced whole; `activeHours` is null (learned) or at most 14 `ActiveDay` spans, each `weekday` 0 (Sunday) to 6, `from` 0 to 23 and `to` after `from` up to 24, none overlapping on a weekday |
 
@@ -971,6 +1002,7 @@ role without the tool (`hasTool`).
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
 | `agent.file_report` | `file_report` | in a watch's read or a watchdog check only: files a task from one report (`title`, `request`, `reportId` or `link`, `author`, `postedAt`, `text`, `repoId`, `forkOf`, `urgency`: the filed task's priority, the watched task's or the default when null); refuses a report the project already has a task for (`report_filed`) and a repository of another project (`repo_project`); a watchdog's always forks the shipped task (`fork_watchdog`), and links a report another watch or watchdog filed first (`watchdog.report_linked`) rather than refusing it |
 | `agent.report_read` | `report_read` | ends a read with its `summary`, as not finished with `reached: false`: a watch's next read covers the same time, a watchdog's check is missed; a watchdog check that filed a report trips it, one that filed none is healthy, and `live` answers a watchdog waiting for production, or, false on a watching check, sends the task's watching watchdogs back to waiting for it; the task rests again |
+| `agent.report_initiative` | `report_initiative` | ends a lead's turn with its `narrative`, kept as the initiative's report; refused when the task leads no initiative (`initiative_not_found`) or the report breaks a limit (`report_invalid`) |
 | `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it (`thisWaits`), waiting on this task (`afterThis`, never with `thisWaits`), in the backlog (`backlog`), stacked on this task as a bundle (`stackOnThis`, never with `thisWaits` or `afterThis`) or forked from a task (`forkOf`) or a teammate's task (`teammateFork`), in another project (`projectId`, from `project`; without a repository, triage picks one there); `new_repository` makes the engine create and register the named repository first |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`); `stacked` chains them as a bundle on this task |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules; `source` names an integration of the task's project to watch: a new watch is recorded as a suggested watch for you to accept (origin the task and run, in its activity), at most 10 open at once (`suggestion_limit`) |
@@ -1016,11 +1048,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.record_retry` | the engine, before it requeues a failed open or push | `step` (`updating`, `pushing`, `opening`), the `attempt` that failed, `attempts`, `retryAt`, a short `detail`: `pull_request.push_retrying` and the stage reason "pushing again in 30s, attempt 2 of 5: …" |
 | `pull_request.record_update_conflict` | open and push effects, after aborting the merge of the base | `base`, the conflicted `files`: a fix round (`fixFor: 'update'`) |
 | `bundle.record_check` | the pull request watch, reading a bundle's root while every task above is ready | `conflict` (`{ taskId, behindTaskId, base }` or null) from merging the bundle into the default branch in git: holds the root's gate and pushes the lowest task behind its base, or pauses the root when none is; null clears it and reads the root again |
+| `bundle.record_merge_conflict` | the merge, finding right before it merges a bundle that the bundle conflicts with the default branch | `conflict` (`{ taskId, behindTaskId, base }`): on a root still merging, moves it and its followers back to ready and records the conflict as `bundle.record_check` does, updating the lowest task behind or pausing the root when none is; a root whose followers all left while it merged checks its pull request again instead; ignored once the root is no longer merging |
 | `pull_request.record_hook_failure` | open and push effects | the hook's `output` tail and the `failures` read from it (or null): `pull_request.hook_failed`, then a fix round (`fixFor: 'hook'`), or the `push_hook` failure gate when the same failures come back |
 | `pull_request.record_closed` | the close effect | the pull requests it `closed` and the ones it `failed` to close (`{ number, detail }[]`): `pull_request.closed`, only on a cancelled task with something in either list |
 | `evidence.record_uploads` | open and push effects | the GitHub attachment `url` of each uploaded piece (`uploads: { evidenceId, url }[]`): `evidence.uploaded` with the pieces of this task whose address is new, nothing otherwise |
 | `effect.fail` | the engine and effects | an effect gave up: a failure gate when its kind has one |
-| `run.attempt`, `run.link`, `run.meter`, `run.end` | the run supervisor | an attempt starts, links its session, is metered, ends |
+| `run.attempt`, `run.link`, `run.meter`, `run.end` | the run supervisor | an attempt starts, links its session, is metered, ends; `run.end` carries `backgroundWork: true` when the turn ended with the agent's own background shells or subagents still running, so the recovery nudge names that cause |
 | `run.interrupt`, `run.continue` | the supervisor at shutdown and boot | marks a run for restart continuation, continues it |
 | `run.record_lost_session` | the supervisor | marks a session that cannot be resumed |
 | `run.compact` | the supervisor (idle compaction) | records an idle compaction |
@@ -1033,6 +1066,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
 | `autopilot.fire` | `AutopilotClock` | acts on an open merge gate's Autopilot deadline (`dueAt`): merges for you, or escalates to your team with why it could not |
 | `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
+| `task.auto_retry` | `TaskRetry` (`tasks/retry/service.ts`) | retries a failed step when its armed `Task.autoRetry` is due, as Retry does; nothing when none is armed |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
 | `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing`; its `openedAt` is now and `closedAt` null |
@@ -1042,12 +1076,15 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `account.plan_recorded` | the account roster, when an account's plan differs from `state.accountPlans` | records the account's `provider` and `plan` under its plan key, or forgets it with `plan: null`; nothing when unchanged |
 | `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast without usage resets), `resetPace` (with each usable reset as a budget ending at its `endsAt`), `endingPace` (with only the resets that end within 3 days) and `resetEndsAt` (when the soonest of them ends), or clears them with a null pace; nothing when unchanged |
 | `clock.record` | the engine, on start | records this Mac's time zone (`timeZone`, an IANA name); refused for a name that is not one (`clock_refused`); nothing when unchanged |
+| `usage.models_recorded` | the account roster, on an accounts refresh | records each Claude family's room (`models`: `{ family, usable, left, accounts }`, each account's own `{ account, usable, left }`, `listModelRoom`); nothing unless a family or one account's reading turned usable or spent or moved by 5 points; re-checks model waits under Automatic |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries/service.ts` | a delivery claim was taken, or released |
 | `delegation.wake_policy` | `agents/tools/orchestration/handler.ts` | a `wait` call that timed out switches to waking |
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
 | `schedule.fire`, `schedule.fail` | `ScheduleClock`, the webhook, a Slack channel message | fires a slot, or records a failed one |
+| `initiative.record_team_members` | `TeamMembers` (`apps/engine/src/initiatives/team-members/`), when a team feed changes | records one team's members of a shared initiative (`teamId`, `members`) and queues the milestones they changed; ignored for an initiative not shared with that team or without a live lead |
+| `initiative.wake_lead` | `LeadWakes` (`apps/engine/src/initiatives/service.ts`), after the debounce | starts a lead turn with the queued milestones when the lead rests idle in `leading`; otherwise does nothing |
 | `schedule.skip` | the webhook receiver and `POST /api/slack/messages`, when the filter (`ScheduleFilter`) says the schedule's text does not apply to what arrived; command id `webhook:<id>:<delivery>:skip` or `slack-message:<schedule>:<event id>:skip` | records a skipped run with its `detail` and the delivery's `replayKey`, and starts nothing; ignored for a paused schedule, a clock trigger or a replay key already held |
 | `schedule.deliver` | the webhook receiver; `POST /api/slack/messages`, command id `slack-message:<schedule>:<event id>` | starts the schedule's work from a delivery: a webhook request, or a signed `SlackChannelMessage` for a schedule whose trigger is that Slack channel, which carries the message as `slackMessage` (`SlackMessageRef`: `teamId`, `channelId`, `messageTs`, `userId`, `permalink`, `channelName`): a new task it starts is linked to that message's thread (`slack.thread_linked`) when the trigger's `threadUpdates` is on |
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
@@ -1091,6 +1128,13 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.duplicate_cleared` | a triage-closed duplicate is not one after all: the mark, `closedAt` and `cancelledFrom` are cleared |
 | `task.waits_on_changed` | the tasks it waits on changed (`waitsOn`) |
 | `task.stack_changed` | the tasks it stacks on changed (`stacksOn`, a list, empty when taken out; `by` you or Shinsa) |
+| `initiative.written`, `initiative.removed` | an initiative is created or changed (the whole record), dissolved when its lead task is cancelled |
+| `task.initiative_changed` | a task joined, moved within or left an initiative (`initiativeId`, `phaseId`) |
+| `task.team_initiative_changed` | a task joined, moved within or left a teammate's initiative (`teamInitiative`, or null) |
+| `initiative.team_members_recorded` | a team's members of a shared initiative were recorded (`teamId`, `members`) |
+| `initiative.milestones_queued` | members' milestones were queued for the lead (`milestones`) |
+| `initiative.lead_woken` | a lead turn took the queued milestones (`runId`); the queue empties |
+| `initiative.reported` | the lead reported (`report`: `narrative`, `runId`, `at`) |
 | `task.stack_based` | its bases became the branches of the tasks below (`bases`, in the order of `stacksOn`), or the default branch again (`[]`) once they all merged or left |
 | `task.bundle_ready` | it is ready to merge with its bundle (`ready: { commit }`), or no longer is (`null`) |
 | `task.bundle_conflict` | its bundle conflicts with the default branch once it merges (`conflict`), or no longer does (`null`) |
@@ -1107,6 +1151,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `round.pull_request_merged` | an earlier round's pull request merged outside Shinsa while a later round works: that round is merged, and the active round takes a new `branch` from the default branch for its own pull request |
 | `task.noted` | an agent kept a note |
 | `task.recovered` | the recovery count changed |
+| `task.retry_scheduled` | a failed step armed an automatic retry (`retry`: `at`, `attempt`, `title`, `detail`, `runId`, `cause`, `milestone`, `status: armed`) |
+| `task.retry_cleared` | the armed retry ended (`status: spent`): retried, paused, cancelled or a step started; `streak: reset` starts the count again |
 | `task.delivered` | an answer, a diagnosis, a report or an outcome was handed over (`step`) |
 | `task.change_proposed`, `task.change_approved`, `task.change_declined` | a proposal was made (with its `recommend`), approved, declined |
 | `task.actions_suggested` | a hand-over suggested replies (`actions`, empty to clear them); also cleared by your message or a gate answer |
@@ -1168,6 +1214,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared (a pace hold's `pace.scope` is `daily`, `project` or `admission`, the last with the build's estimate as `need`) |
 | `account.plan_recorded` | an account's plan was recorded or forgotten, folded into `state.accountPlans` |
 | `usage.pace_recorded` | a provider's safe pace was recorded or cleared, folded into `state.usagePaces` |
+| `usage.models_recorded` | each Claude family's room was recorded, folded into `state.modelRoom` (a family left out is removed) |
 | `task.pace_limits_ignored` | you resumed a pace hold, so the daily and project usage limits no longer hold the task |
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |
@@ -1220,6 +1267,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `feedback.draft` | replay_safe | `feedback:<id>` | `feedback.record_draft`, after one quick call rewrites the note without anything private (`feedback/draft.ts`); `feedback.record_failure` when no usable draft comes back |
 | `feedback.file` | process_bound | `feedback:<id>` | `feedback.record_filed`, after `gh issue create --repo shinsa-dev/shinsa` (`feedback/file.ts`); `feedback.record_failure` with what `gh` said; never retried, and one a restart cut short is failed on start |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
+| `initiative.wake` | replay_safe | `initiative:<id>` | `initiative.wake_lead`, through `LeadWakes`, 30 s after the first milestone of a batch (`LeadWakeDebounce`) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
 | `run.cancel` | process_bound | `cancel:<id>` | `run.end` |
@@ -1258,6 +1306,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `submit_report` | | | | | ✓ | | |
 | `report_outcome` | ✓ operate | | | | | | |
 | `report_read` | ✓ watch, intake | | | | | | |
+| `report_initiative` | ✓ lead | | | | | | |
 | `ask` | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `attach_evidence` | ✓ | ✓ | | ✓ | | ✓ | ✓ |
 | `remove_evidence` | ✓ | ✓ | | ✓ | | | |
@@ -1299,7 +1348,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 
 | Tool | Fields (required in bold) | Limits |
 | --- | --- | --- |
-| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `split` (**`title`**, **`request`**, **`order`**, `on`), `reply` (as in `complete_fix`), `actions` (as in `complete_fix`) | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; split 8 parts (title as a task's title, request as a suggestion's, `on` 0 to 7 and before its own part); reply as in `complete_fix` |
+| `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`** (**`label`**, **`command`**, **`phases`**), **`questions`** (**`question`**, **`options`**, `recommendation`); `title`, `impact`, `evidence`, `approval`, `operation`, `split` (**`title`**, **`request`**, **`order`**, `on`, `phase`: for a lead's plan, the plan phase the task joins), `initiative` (only with `split`: approving the plan makes the task and its parts an initiative), `reply` (as in `complete_fix`), `actions` (as in `complete_fix`) | title 60; goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope 6 × 200; verification 12 checks (label 60, command 200, never a whole-suite command or one listed twice; phases 1-based, at least one, within the plan); questions 4 (question 200, 2 to 4 options of 100); impact 1,000; operation 8 × 200; split 8 parts (title as a task's title, request as a suggestion's, `on` 0 to 7 and before its own part); reply as in `complete_fix` |
 | `complete_phase` | `reply` and `actions` (as in `complete_fix`); **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`)), asked for on the last phase; `watchdogs` (**`title`**, **`check`**, `first_check_minutes`, `max_gap_hours`, `for_hours`, `starts` (`merge` or `production`) with `production_check`, and exactly one of `source` (**`server`**, **`data`**) or `source_request` (**`data`**, **`evidence`**, **`suggestions`**)), beside `walkthrough` and only with it; `check_changes` (**`action`**: add, change or remove, `id` (not for add), `label`, `command`, `phases`, **`reason`**) | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400); 5 watchdogs (title 80, unique; check 600; server 128; data 200; evidence 600; 1 to 4 suggestions of 160; first check 1 to 720 minutes, gaps up to 1 to 24 hours, for 1 to 720 hours and no less than the first check; production check 400, required with `starts: production`; a `source_request` whose suggestions name a server the run already has is refused unless its `evidence` says it checked that server (“checked <server>” in one clause), here and on `complete_fix`); 6 check changes (id 12, label 60, command 200, reason 200; an add needs a label and a command); reply as in `complete_fix` |
 | `complete_fix` | **`summary`**; `reply` (**`headline`**, **`points`** (**`ask`**, **`outcome`**: done, answered or not_changed, **`note`**), `next`), required while a request of yours is open and refused otherwise; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included; `watchdogs` as in `complete_phase`, beside `walkthrough`, replacing the list whole (an empty one removes them) and enough on its own; `checks` (ids of checks to run again besides the failing ones); `check_changes` as in `complete_phase`; `evidence_kept` (earlier items, by key or id, that still show the work as it is); `actions` (**`label`**, **`message`**: one-click replies shown beside the gate's main button, each sending its message as yours) | summary 240; actions 3 (label 40, unique ignoring case; message 2,000); reply headline 240, 1 to 8 points (ask 160, note 280), next 1,200; walkthrough as in `complete_phase`; checks 12 ids of 12; check changes as in `complete_phase`; evidence kept 24 of 60; watchdogs as in `complete_phase`. Both hand-overs and their `walkthrough` refuse a field they do not take, naming the ones they do |
 | `report_review` | **`confidence`** and **`risk`** (`low`, `medium` or `high`); **`findings`** (**`severity`**: `blocking`, `should_fix` or `optional`, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
@@ -1308,6 +1357,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `submit_report` | **`report`**; `propose_change`; `recommend`; `reply`; `actions` | 40,000; the rest as in `answer` |
 | `report_outcome` | **`outcome`**; `reply`; `actions` | 8,000; reply and actions as in `complete_fix` |
 | `report_read` | **`summary`**: what it read, filed and skipped; `reached` (false when the source still failed after 3 tries; true when left out); `live` (for a watchdog check: false when the change is not live in production, which makes a watching watchdog wait for it; true once it is, which a watchdog waiting for production needs; left out on a watching check it counts as true, and so does a report filed) | 1,000 |
+| `report_initiative` | **`narrative`**: where the initiative stands and what comes next | narrative 2,000 (`INITIATIVE_LIMITS`) |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name or id), `urgency` (`low`, `normal`, `high` or `urgent`: the filed task's priority) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
 | `move_to_repository` | **`repository`** (a repository of the task's project by name, or the folder name of one in its folders, registered when named), **`reason`** | reason 240 |
@@ -1366,7 +1416,7 @@ or `browser` (a tab, Floaty).
 | `attention { where }` | To a page that sent `presence`, and again whenever its answer changes: `here` (it is the owner's page used last), `elsewhere` (another of the owner's pages is) or `nowhere` (none was used in the last five minutes, or the page is a member's) (`AttentionPlace`, `ATTENTION_PLACES`) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 | `resources { resources }` | On connect once sampled, then every 5 s while a page is connected: `MachineResources` (core's `remote/resources.ts`: the machine's cores, CPU percent, memory used and total, disk free and total, and each open task's agent, services and checks as CPU percent and memory, its process count and its worktree's size). An engine samples only while a socket listens, so a page that never reads it costs nothing; an older engine never sends it and an older page ignores it |
-| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
+| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the relay's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
 | `teams { teams }` | On connect and after every change to what the machine watches of its teammates: `TeamFeedSnapshot` (Teams, below) |
 
 Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/protocol/terminals.ts`, `docs/engine.md`
@@ -1460,7 +1510,7 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | --- | --- | --- |
 | `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
 | `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
-| `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
+| `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance |
 | `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version, signingKey? }` (`HeartbeatRequest`; `signingKey` the machine's ECDSA P-256 public key, raw and base64url, kept when left out, else 400 `body_invalid`) keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members, guests }` (`HeartbeatResponse`, a `RemoteAccess` and the machine's guests as `RemoteMember`s), which the engine reads leniently; a 401 means revoked |
 | `POST /__remote/machine/invites`, `POST /__remote/machine/invites/remove` | The engine, with its machine token | The machine's one reusable invite token, replacing the one before (`InviteCreateResponse`: `token`); removing it turns the invite off |
 | `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member, the owner or someone in a team with the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request or give a teammate this machine (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
@@ -1471,17 +1521,17 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
 | `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner`, `member` or `guest`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member or a guest) |
-| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`apps/cloud/src/routes/hooks/`) |
-| `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://t-<instance>.shinsa.dev`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
+| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded through the machine's relay to `/api/hooks/<schedule>/<token>` (`apps/cloud/src/routes/hooks/`) |
+| `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://app.shinsa.dev/__relay/<instance>`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
 | `POST /__remote/machine/teams` | The engine, with its machine token | `{ name }` (`TeamCreateRequest`) makes a team its owner owns (409 `teams_full` past `MAX_OWNED_TEAMS`) and answers `TeamCreateResponse` (`team`, a `RemoteTeam`, and `invite`) |
 | `POST /__remote/machine/teams/join`, `POST /__remote/teams/join` | The engine, with its machine token; the join page | `{ invite }` (`TeamJoinRequest`) records that the account asked, unless it is in the team already, and answers `TeamJoinResponse` (`teamId`, `name`, `owner`, `status`: `requested` or `member`); 404 `invite_invalid` for a link turned off |
 | `POST /__remote/teams/preview` | The join page, signed in | `{ invite }` answers `TeamPreviewResponse` (`name`, `owner`) so the page names the team before anyone asks; records nothing; 404 `invite_invalid` for a link turned off |
 | `POST /__remote/machine/teams/<team>/<action>` | The engine, with its machine token | `TeamAction`: `invite` (a new invite, `TeamInviteResponse`), `invite/remove`, `members/add` and `requests/decline` (`{ userId }`, of an account that asked), `members/remove`, `remove` (the owner only, else 403 `not_owner`), `leave` (a member; 409 `owner_cannot_leave`), `connect` (`TeamConnectRequest`, below); 404 for a team the account is not in |
 | `GET /__remote/teams`, `POST /__remote/teams/<team>/leave`, `POST /__remote/teams/<team>/connect` | The page | Your teams (`RemoteTeam[]`), leaving one, and a team connect token |
-| any path on `<label>.shinsa.page` | Anyone with a preview link | A shared preview (`previews.ts`): `?key=` set as the `__Host-shinsa_preview` cookie and a 303 to the same path without it; with the cookie, forwarded with `x-shinsa-preview-key` (`PREVIEW_KEY_HEADER`) to the tunnel's `/__preview/<id><path>` (`resolvePreviewTunnelPath`), WebSockets included; `PREVIEW_GONE` (404) or `PREVIEW_OFFLINE` (503) otherwise |
+| any path on `<label>.shinsa.page` | Anyone with a preview link | A shared preview (`previews.ts`): `?key=` set as the `__Host-shinsa_preview` cookie and a 303 to the same path without it; with the cookie, forwarded with `x-shinsa-preview-key` (`PREVIEW_KEY_HEADER`) through the relay to `/__preview/<id><path>` (`resolvePreviewTunnelPath`), WebSockets included; `PREVIEW_GONE` (404) or `PREVIEW_OFFLINE` (503) otherwise |
 
 A **team connect token** (`connect`, `{ instanceId }`) is answered only for the team's owner or a member and a
-machine of one of them, as `ConnectResponse` with `url` `wss://t-<instance>.shinsa.dev/team?token=…`
+machine of one of them, as `ConnectResponse` with `url` `wss://app.shinsa.dev/__relay/<instance>/team?token=…`
 (`resolveTeamChannelUrl`), the token signed with that machine's connect key for the GitHub account that asked. The
 heartbeat's answer also carries `teams` (`RemoteTeam[]`: `id`, `name`, `owner`, your `role`, `members`, `requests`
 (the owner's only), `machines` (`TeamMachine`: `id`, `name`, `userId`, `online`, `lastSeenAt`, `signingKey` when the machine sent one, every member's), and
@@ -1492,14 +1542,14 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 
 **Teams** (`teams.ts` here, `share/teams.ts` for the list): the join link is `https://app.shinsa.dev/share/team#<team>.<invite>.<key>`
 (`TeamJoinFragment`, `resolveTeamJoinUrl`, `parseTeamJoinUrl`, `REMOTE_PATHS.teamJoinPage`), the key `TEAM_KEY_BYTES`
-(32) as base64url (`isTeamKey`), never sent to a server. The tunnel's `TEAM_CHANNEL_PATH` (`/team?token=…`) takes one
+(32) as base64url (`isTeamKey`), never sent to a server. The relay's `TEAM_CHANNEL_PATH` (`/team?token=…`) takes one
 `TeamHello` (`team`, `view`: `TeamView`, `{ kind: 'list' }` or `{ kind: 'task', taskId }`, a fresh `ephemeral`, and
 `proof`, an HMAC with the team key over the team, the view and the key), answered by a welcome with the machine's
 fresh key and a proof over all of it or by `refused`; both derive the session key with the view in it
 (`deriveTeamSessionKey`, `TeamKeys`), then the machine sends `ShareMessage`s as a share does. A list view is a
-`TeamListView` (`tasks`: `TeamTask[]`, `machineKey`: the machine's public key, `updatedAt`, `snapshot`: the same list
+`TeamListView` (`tasks`: `TeamTask[]`, `initiatives`: the `TeamInitiative`s shared with the team, `machineKey`: the machine's public key, `updatedAt`, `snapshot`: the same list
 signed, and `held`: the signed lists it keeps of the team's offline machines): each a `SharedListing` (the redacted task, its gates, its project, its repository)
-with `owner` (GitHub login) and `machine` (its name), every open task of the team's projects and the
+with `owner` (GitHub login), `machine` (its name) and `initiative` (the teammate's initiative it joined, a `TeamInitiativeRef`), every open task of the team's projects and the
 `TEAM_SETTLED_LIMIT` (50) most recently finished. A task view is a `ShareLiveView`. What a machine watches is a
 `TeamFeedSnapshot`: `machines` (`TeamFeedMachine`: `teamId`, `instanceId`, `name`, `userId`, `status`, one of
 `connecting`, `live`, `offline`, `refused`, `reason`, and `updatedAt`, when the owner's machine made the list it shows; the page marks a machine that is not `live` but has one as Offline) and `tasks` (`TeamFeedTask`: a `TeamTask` with its `teamId`
@@ -1517,7 +1567,7 @@ newline and `body`, as base64url (`signTeamSnapshot`, `verifyTeamSnapshot` with 
 `PREVIEW_ID_BYTES`, `key` of `PREVIEW_KEY_BYTES`, base64url), written `https://<label>.shinsa.page/?key=<key>`
 (`PREVIEW_ORIGIN`; `serializePreviewUrl`, `parsePreviewUrl`), the label lowercase base32 of the preview id's bytes
 followed by the instance id's (`serializePreviewLabel`, `parsePreviewLabel`, `parsePreviewHost`), one DNS label of 63
-characters at most. The engine's tunnel route is `PREVIEW_TUNNEL_PREFIX` (`/__preview/<id><path>`,
+characters at most. The engine's relay route is `PREVIEW_TUNNEL_PREFIX` (`/__preview/<id><path>`,
 `parsePreviewTunnelPath`); its pages are `serializePreviewPage('gone' | 'stopped' | 'offline')` (`preview-page.ts`,
 `PREVIEW_PAGES`), one self-contained page each in the app's empty-state look. Nothing is sealed: the key is checked on every request (`docs/engine.md` → Sharing a preview).
 
@@ -1532,7 +1582,7 @@ stands: `planning`, `working`, `ready`, `deploying`, `live`, `looking_into`, `an
 code; its card dates itself by the task's `stageChangedAt`), the same for a public or a private repository (`docs/engine.md` → Sharing a
 task has the table). A link is `ShareLink` (`instanceId`, `shareId` of `SHARE_ID_BYTES`, `key` of `SHARE_KEY_BYTES`),
 written `https://app.shinsa.dev/share/t/<token>#<key>`, the token the share id's bytes followed by the instance id's, as
-base64url (`serializeShareUrl`, `resolveSharePagePath`, `parseShareUrl`, `parseShareLocation`). Its channel is the tunnel's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,
+base64url (`serializeShareUrl`, `resolveSharePagePath`, `parseShareUrl`, `parseShareLocation`). Its channel is the relay's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,
 `resolveShareChannelUrl`): the page sends one `ShareHello` (`share`, a fresh P-256 `ephemeral`, `proof`: an HMAC with
 the key), the machine answers `ShareWelcome` (`welcome` with its fresh key and a proof over both, or `refused`), both
 derive one AES-GCM key (`deriveShareSessionKey`: HKDF over the ECDH and the key), and from then on only the machine
@@ -1543,18 +1593,32 @@ sends, sealed frames of `ShareMessage`: `view` (a `ShareLiveView`: `shared`, `fi
 Standard or Full access share's run, `transcript-<run id>-<page>` (`resolveShareTranscriptFile`: one page of 200 of the run's
 `ChatEntry[]` after `redactTranscriptPage`, versioned by its entry count, so a full page is sent once).
 
-`MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
-`resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
+`MachineCredentials` is `instanceId`, `machineToken`, `connectKey`; a machine reaches the relay at
+`resolveRelayMachineUrl(instance)` and a browser at `resolveRelayUrl(instance)` followed by its channel's path. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
 key>.<secret>`, with `.<invite token>` after it for an invite (`EnrollFragment`, `resolveEnrollUrl`,
 `parseEnrollFragment`): everything after `#` stays in the browser. A hand-off link is the same fragment at `/claim` with a hand-off token in place of the invite token (`resolveClaimUrl`). A GitHub account is a `RemoteUser` everywhere
 (`id`, `login`, `name`, `avatarUrl`); a machine's people are a `RemoteAccess` (`owner`, and `members`, each a
 `RemoteMember`: `user`, `addedAt`).
 
+**The relay** (`relay/schema.ts`, `relay/codec.ts`): one WebSocket per machine to `/__relay/<instance>/machine`, the
+machine token as a bearer, carrying streams. Control frames are JSON text: `open` (`stream`, `kind` `http` or
+`socket`, `method`, `path`, `headers` as pairs, `address`), `response` (`stream`, `status`, `headers`; 101 accepts a
+socket), `end`, `close` (`stream`, `code`, `reason` of at most 120 characters), `pause` and `resume` (`stream`: the
+relay holds more than `RELAY_BODY_WATERMARKS.high`, 1 MiB, of an answer its reader has not taken, so the machine stops
+sending that stream's body until it is down to `low`, 256 KiB), and `ping` and `pong`, whose
+exact texts (`RELAY_PING`, `RELAY_PONG`) the Durable Object answers by auto-response, so a ping never wakes it.
+Data frames are binary: a 5-byte header
+(`RELAY_DATA_HEADER_BYTES`: the stream id as a 32-bit integer and a kind byte, `binary` 1 or `text` 2) and the
+payload: an HTTP body chunk of at most `RELAY_CHUNK_BYTES` (64 KiB), or one whole socket message of at most
+`RELAY_MAX_MESSAGE_BYTES` (32 MiB). A side opens at most `RELAY_MAX_STREAMS` (1,024) at once; `RELAY_CLOSE` names the
+close codes (`normal`, `replaced`, `machineGone`, `refused`, `tooLarge`). `serializeRelayControl`,
+`parseRelayControl`, `serializeRelayData`, `parseRelayData` and `listRelayBodyFrames` write and read them; a frame that does not decode is dropped.
+
 **Connect tokens** (`connect-token.ts`): `<payload>.<signature>`, base64url, the payload `{ i: instance, u: GitHub
 user, e: expiry }` and the signature an HMAC-SHA256 with the instance's connect key. `verifyConnectToken` refuses
 another instance, an expired token and one that lives longer than `CONNECT_TOKEN_TTL_MS` (60 s).
 
-**The handshake** (`handshake.ts`, `REMOTE_PROTOCOL_VERSION` 1), on `wss://<tunnel host>/remote?token=…`, as text frames:
+**The handshake** (`handshake.ts`, `REMOTE_PROTOCOL_VERSION` 1), on `wss://app.shinsa.dev/__relay/<instance>/remote?token=…`, as text frames:
 
 | Message | From | Fields |
 | --- | --- | --- |
@@ -1592,7 +1656,7 @@ padding means a guess that saves a few bytes changes the length on the wire only
 a 4 MB state), so each guess first costs a search for that edge, over frames the attacker must also cause, while
 every other change to the state moves the length too. It narrows the leak and does not close it: what is at stake is
 task content, since the channel's keys and connect tokens are never in a message. The gain is the first state through
-the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/engine.md` → Remote access).
+the relay in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/engine.md` → Remote access).
 
 **Inside the channel** (`channel.ts`, `ChannelMessage`, JSON in each sealed frame):
 
@@ -1639,8 +1703,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link with the user token sealed, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
 | `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.decide.*` click, or a `shinsa.decision` form sent after a `shinsa.write.*` click opened it (`views.open`), from the owner or a member of the machine that posted the card is forwarded as a `SlackDecision`; the click's `response_url` (on `hooks.slack.com`) gets the decided card or a private refusal, a form's refusal comes as `chat.postEphemeral`; anything else is dropped |
-| `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
-| `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
+| `POST /api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
+| `POST /api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread neither sent to it nor in a channel it watches, or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when the workspace cannot show one (`not_authorized` from an app not on Agent Sessions, `feature_disabled` from a workspace without agent features), after which the engine stops asking for that workspace until it restarts; any other refusal is 502 `slack_failed`, logged, and tried again at the next change |
 | `POST /__remote/slack/react` | The engine, with its machine token | `SlackRelayReaction` (the thread, the mention's `messageTs`, the emoji name to `add` and to `remove`, at least one; `parseSlackRelayReaction`) → `SlackRelayReacted` `{ applied }`: `reactions.remove` then `reactions.add` on a message of a thread sent to that machine; `no_reaction` and `already_reacted` count as done, anything else (`missing_scope` on a workspace that added the app before `reactions:write`) is `applied: false` |
@@ -1649,7 +1713,7 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `GET /__remote/slack/links`, `POST /__remote/slack/unlink` | The engine, with its machine token | `SlackLinks` (`teamId`, `teamName`, `userId`, `userName`, `linkedAt` each); removes every link of the machine |
 | `GET /__remote/slack/channels` | The engine, with its machine token | `SlackChannels`: the channels the bot is in (`users.conversations`, public and private, not archived, at most 1,000), in each workspace linked to the machine, a private one only when a Slack user linked to that machine is a member of it, asked with that person's own token: `teamId`, `teamName`, `channelId`, `channelName`, `private`; 502 `SlackFailed` when Slack does not list the bot's channels or does not say which private ones a linked person is in |
 | `POST /__remote/slack/watches` | The engine, with its machine token | `SlackChannelWatches` (`watches` of `teamId` and `channelId`, at most 100): replaces the channels whose messages the machine is sent, keeping only channels `GET /__remote/slack/channels` would list for it → `{ ok: true }`, or 502 `SlackFailed` with the list as it was, also when Slack does not say whether a linked person is in a private channel named in it |
-| `POST https://t-<instance>.shinsa.dev/api/slack/messages` | app.shinsa.dev | A `SlackChannelMessage` (`SLACK_ENGINE_MESSAGES_PATH`: `eventId`, `teamId`, `channelId`, `messageTs`, `userId`, `userName`, `bot`, `text`, `permalink`, `channelName`; `parseSlackChannelMessage`), signed as a mention is, only to a machine that names `slack-channel-triggers` → 202 `{ ok: true, delivered }`, the number of schedules it ran |
+| `POST /api/slack/messages` | app.shinsa.dev | A `SlackChannelMessage` (`SLACK_ENGINE_MESSAGES_PATH`: `eventId`, `teamId`, `channelId`, `messageTs`, `userId`, `userName`, `bot`, `text`, `permalink`, `channelName`; `parseSlackChannelMessage`), signed as a mention is, only to a machine that names `slack-channel-triggers` → 202 `{ ok: true, delivered }`, the number of schedules it ran |
 
 | Shape | Fields |
 | --- | --- |

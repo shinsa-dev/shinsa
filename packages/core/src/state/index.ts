@@ -9,6 +9,7 @@ export {
   resolveCohort,
   selectRootRun,
 } from './delegations.ts';
+export { describeDependencyWait } from './dependency-wait.ts';
 export type { StateChanges } from './draft.ts';
 export {
   listFeedback,
@@ -16,6 +17,12 @@ export {
   listPrivateWords,
   resolveFeedbackIssueText,
 } from './feedback.ts';
+export {
+  listInitiativeMembers,
+  listInitiatives,
+  listInitiativeWork,
+  selectInitiativeLead,
+} from './initiatives.ts';
 export { listKeptMemory, listMemory } from './memory.ts';
 export {
   applyEvent,

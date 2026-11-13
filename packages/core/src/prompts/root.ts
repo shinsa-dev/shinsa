@@ -1,7 +1,7 @@
 import { Option } from 'effect';
-import { isTaskComplete, type Run, type RunPurpose, type Task } from '../domain/index.ts';
+import type { Run, RunPurpose, Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { resolveBundle } from '../state/queries.ts';
+import { isWaitOver, resolveBundle } from '../state/queries.ts';
 import { resolveBriefedMemory, resolveMemoryContext } from './memory.ts';
 import { resolveProjectContext } from './project.ts';
 import { describeRound, resolveAgentPrompt } from './roles.ts';
@@ -10,11 +10,13 @@ import { splitHouseRules } from './rules.ts';
 export function listTaskBases(state: ShinsaState, task: Task) {
   return task.waitsOn
     .map((id) => state.tasks[id])
-    .filter((dependency): dependency is Task => dependency !== undefined && isTaskComplete(dependency));
+    .filter((dependency): dependency is Task => dependency !== undefined && isWaitOver(task, dependency));
 }
 
 export function needsRoundBrief(run: Pick<Run, 'role' | 'purpose'>) {
-  return run.role === 'agent' && run.purpose !== undefined && run.purpose !== 'plan';
+  return (
+    run.role === 'agent' && run.purpose !== undefined && run.purpose !== 'plan' && run.purpose !== 'lead'
+  );
 }
 
 function resolveBrief(state: ShinsaState, task: Task, purpose: RunPurpose, phaseIndex: number | null) {

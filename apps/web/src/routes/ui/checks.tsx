@@ -31,6 +31,11 @@ const LIST_SPECIMENS: { key: ChecksSpecimen; label: string }[] = [
     label:
       'ChecksBlock · after the pull request: the checks from building, then CI’s checks (required or optional, linked)',
   },
+  {
+    key: 'inherited',
+    label:
+      'ChecksBlock · CI checks that fail on main too: a required one holds the merge, an optional one does not block',
+  },
 ];
 
 function recordSampleTexts() {

@@ -49,6 +49,8 @@ import {
   LocalOnly,
   LocalOnlyRoute,
   LocalReposAnswer,
+  InitiativeSheetAnswer,
+  InitiativesAnswer,
   MemoryAnswer,
   ModelsAnswer,
   ObjectAnswer,
@@ -264,6 +266,14 @@ class StateGroup extends HttpApiGroup.make('state')
     HttpApiEndpoint.get('projects', '/api/projects', { success: ProjectsAnswer }),
     HttpApiEndpoint.get('schedules', '/api/schedules', { success: SchedulesAnswer }),
     HttpApiEndpoint.get('memory', '/api/memory', { success: MemoryAnswer }),
+    HttpApiEndpoint.get('initiatives', '/api/initiatives', { success: InitiativesAnswer }).annotate(
+      EngineFeatureRoute,
+      'initiatives'
+    ),
+    HttpApiEndpoint.get('initiative', '/api/initiatives/:initiativeRef', {
+      params: { initiativeRef: Schema.String },
+      success: InitiativeSheetAnswer,
+    }).annotate(EngineFeatureRoute, 'initiatives'),
     HttpApiEndpoint.get('feedback', '/api/feedback', { success: FeedbackAnswer }).annotate(
       EngineFeatureRoute,
       'feedback'
@@ -340,7 +350,11 @@ class AccountsGroup extends HttpApiGroup.make('accounts')
     HttpApiEndpoint.post('remove', '/api/accounts/remove', {
       payload: Schema.Struct({ accountId: Field }),
       success: AccountsAnswer,
-    })
+    }),
+    HttpApiEndpoint.post('provider', '/api/accounts/provider', {
+      payload: Schema.Struct({ provider: Field, choice: Field }),
+      success: AccountsAnswer,
+    }).annotate(EngineFeatureRoute, 'accounts.provider_choice')
   )
   .annotateEndpoints(OwnerOnlyRoute, true)
   .annotateEndpoints(SharedMemberRoute, true)

@@ -23,6 +23,7 @@ import {
   approve,
   createHarness,
   createTask,
+  fireRetry,
   type Harness,
   proposePlan,
   pullRequest,
@@ -466,14 +467,14 @@ describe('a bundle on its way to the merge', () => {
     ]);
   });
 
-  test('a failed bundle merge puts the tasks above back to ready, and Retry opens the root’s gate again', () => {
+  test('a failed bundle merge puts the tasks above back to ready, and its retry opens the root’s gate again', () => {
     const harness = createHarness();
     const { root, middle, top } = createBundle(harness);
     approve(harness, root);
     harness.send({ type: 'effect.fail', taskId: root, title: 'Could not merge', detail: 'GitHub refused.' });
-    expect(harness.openGate(root).type).toBe('failure');
+    expect(harness.task(root).autoRetry?.status).toBe('armed');
     for (const above of [middle, top]) expect(harness.task(above).stageReason).toBe(READY);
-    approve(harness, root);
+    fireRetry(harness, root);
     recordClean(harness, root, 1);
     expect(harness.openGate(root).type).toBe('merge');
   });
@@ -485,7 +486,7 @@ describe('a bundle on its way to the merge', () => {
     recordMerged(harness, top, 3);
     harness.send({ type: 'effect.fail', taskId: root, title: 'Could not merge', detail: 'GitHub refused.' });
     expect(harness.task(middle).stageReason).toBe(READY);
-    approve(harness, root);
+    fireRetry(harness, root);
     recordClean(harness, root, 1);
     const gate = harness.openGate(root);
     expect(gate.type).toBe('merge');
@@ -688,11 +689,12 @@ describe('a bundle that conflicts with the default branch', () => {
     const harness = createHarness();
     const { root, top } = createBundle(harness);
     recordCheck(harness, root, { taskId: top, behindTaskId: null });
-    const gate = harness.openGate(root);
-    expect(gate.type).toBe('failure');
-    expect(gate.title).toBe('The bundle conflicts with main');
+    expect(harness.task(root).autoRetry).toMatchObject({
+      title: 'The bundle conflicts with main',
+      attempt: 1,
+    });
     recordCheck(harness, root, { taskId: top, behindTaskId: null });
-    expect(listOpenGates(harness.state, root)).toHaveLength(1);
+    expect(harness.task(root).autoRetry?.attempt).toBe(1);
   });
 
   test('a branch behind that is still busy is updated later, and a check while merging changes nothing', () => {
@@ -719,6 +721,90 @@ describe('a bundle that conflicts with the default branch', () => {
     harness.send({ type: 'task.cancel', taskId: top });
     harness.send({ type: 'task.cancel', taskId: middle });
     expect(harness.task(root).bundleConflict).toBeNull();
+  });
+});
+
+function recordMergeConflict(
+  harness: Harness,
+  taskId: string,
+  conflict: { taskId: string; behindTaskId: string | null }
+) {
+  harness.send({ type: 'bundle.record_merge_conflict', taskId, conflict: { ...conflict, base: 'main' } });
+}
+
+describe('a bundle that conflicts with the default branch when it merges', () => {
+  test('the merge sends the bundle back to update the lowest branch behind, then the gate opens again', () => {
+    const harness = createHarness();
+    const { root, middle, top } = createBundle(harness);
+    approve(harness, root);
+    expect(harness.task(middle).stage).toBe('awaiting_merge');
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: middle });
+    expect(harness.task(root).stage).toBe('shipping');
+    expect(harness.task(root).stageReason).toBe(
+      '“Top” conflicts with main once the bundle merges; updating “Middle” first'
+    );
+    expect(listOpenGates(harness.state, root)).toHaveLength(0);
+    expect(harness.task(root).autoRetry ?? null).toBeNull();
+    expect(harness.task(top).stage).toBe('shipping');
+    expect(harness.task(top).stageReason).toBe(READY);
+    expect(harness.task(middle).stageReason).toBe('updating the branch onto main');
+    expect(harness.lastEffect('pull_request.push').taskId).toBe(middle);
+
+    pushed(harness, middle);
+    recordClean(harness, middle, 2);
+    recordCheck(harness, root, null);
+    recordClean(harness, root, 1);
+    expect(harness.openGate(root).type).toBe('merge');
+  });
+
+  test('the lead itself behind is updated first', () => {
+    const harness = createHarness();
+    const { root, top } = createBundle(harness);
+    approve(harness, root);
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: root });
+    expect(harness.task(root).stageReason).toBe('updating the branch onto main');
+    expect(harness.lastEffect('pull_request.push').taskId).toBe(root);
+  });
+
+  test('a conflict with no branch behind pauses the lead and releases its followers', () => {
+    const harness = createHarness();
+    const { root, middle, top } = createBundle(harness);
+    approve(harness, root);
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: null });
+    expect(harness.task(root).autoRetry).toMatchObject({ title: 'The bundle conflicts with main' });
+    expect(harness.task(middle).stageReason).toBe(READY);
+    expect(harness.task(top).stageReason).toBe(READY);
+  });
+
+  test('a lead that is not merging ignores it', () => {
+    const harness = createHarness();
+    const { root, top } = createBundle(harness);
+    const before = harness.state;
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: root });
+    expect(harness.state).toBe(before);
+  });
+
+  test('a lead whose followers left while it merged checks its pull request again instead of staying merging', () => {
+    const harness = createHarness();
+    const { root, middle, top } = createBundle(harness);
+    approve(harness, root);
+    harness.send({ type: 'task.cancel', taskId: top });
+    harness.send({ type: 'task.cancel', taskId: middle });
+    expect(harness.task(root).stage).toBe('awaiting_merge');
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: null });
+    expect(harness.task(root).stage).toBe('shipping');
+    expect(harness.task(root).stageReason).toBe('checking the pull request');
+    expect(harness.task(root).bundleConflict ?? null).toBeNull();
+    expect(harness.lastEffect('pull_request.watch').taskId).toBe(root);
+    recordClean(harness, root, 1);
+    expect(harness.openGate(root).type).toBe('merge');
+
+    const lone = createHarness();
+    const task = createTask(lone, { request: 'Lone' });
+    reachReady(lone, task, 1);
+    approve(lone, task);
+    recordMergeConflict(lone, task, { taskId: task, behindTaskId: task });
+    expect(lone.task(task).stageReason).toBe('checking the pull request');
   });
 });
 

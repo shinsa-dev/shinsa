@@ -42,6 +42,7 @@ import {
   reachReviewGate,
   readyWorktree,
   registerRepo,
+  spendRetries,
 } from '../harness.ts';
 import { readBlockText, readMessageText } from './read.ts';
 
@@ -129,6 +130,7 @@ describe('the status message', () => {
     harness.send({ type: 'gate.answer', gateId: 'q1', decision: 'reply', response: 'CSV' });
     expect(readText(statusOf(harness, taskId))).not.toContain('Question for you');
     const failed = createTask(harness, { request: 'Second' });
+    spendRetries(harness, failed);
     harness.send({ type: 'effect.fail', taskId: failed, title: 'The worktree failed', detail: 'disk full' });
     expect(readText(statusOf(harness, failed))).toStartWith('Something failed\n*The worktree failed*\n');
   });
@@ -196,6 +198,7 @@ describe('the reaction on the mention', () => {
     ask(harness, first, { question: 'Go?' });
     expect(reactionOf(first)).toBe(SLACK_REACTIONS.needsYou);
     const failed = createTask(harness, { request: 'Failed' });
+    spendRetries(harness, failed);
     harness.send({ type: 'effect.fail', taskId: failed, title: 'The worktree failed', detail: 'disk full' });
     expect(reactionOf(failed)).toBe(SLACK_REACTIONS.failed);
     const review = createTask(harness, { request: 'Review' });
@@ -533,11 +536,12 @@ describe('the card for each gate', () => {
   test('a failure is its title and detail with Retry; a sign-in only links to Shinsa', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
+    spendRetries(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'The worktree failed', detail: 'disk full. More.' });
     const gate = harness.openGate(taskId);
     const message = gateCardOf(harness, taskId, gate);
     expect(readText(message)).toBe(
-      `Something failed\n*The worktree failed*\n> disk full. More.\n[Retry]  <${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
+      `Something failed\n*The worktree failed*\n> disk full. More. Shinsa already retried it 10 times on its own.\n[Retry]  <${URL}|Open in Shinsa>\n${footerOf(harness, taskId)}`
     );
     expect(valuesOf(message).map((value) => value.decision)).toEqual(['approve']);
     const signIn = gateCardOf(harness, taskId, { ...gate, type: 'sign_in', body: '' });
@@ -547,9 +551,24 @@ describe('the card for each gate', () => {
     expect(buttonsOf(signIn)[0]?.style).toBe('primary');
   });
 
+  test('an SSO failure links the authorization page on GitHub', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const link = 'https://github.com/orgs/superwall/sso?authorization_request=A1B2';
+    harness.send({
+      type: 'effect.fail',
+      taskId,
+      title: 'Could not push the branch',
+      detail: `remote: Resource protected by organization SAML enforcement. ${link}`,
+    });
+    const message = gateCardOf(harness, taskId, harness.openGate(taskId));
+    expect(readText(message)).toContain(`<${link}|Authorize it on GitHub>, then sign \`gh\` in again`);
+  });
+
   test('an operation is what it runs, Run and Finish without it', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
+    spendRetries(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Run the backfill', detail: '' });
     const gate = { ...harness.openGate(taskId), type: 'operation' as const, body: '' };
     const message = gateCardOf(harness, taskId, gate);

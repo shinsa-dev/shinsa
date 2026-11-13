@@ -38,6 +38,7 @@ export interface TaskProgress {
 
 type DisplayKey =
   | 'setup'
+  | 'lead'
   | 'answer'
   | 'research'
   | 'investigate'
@@ -53,6 +54,7 @@ type DisplayKey =
   | 'post-merge';
 
 const STEP_DISPLAY: Record<PipelineStep, DisplayKey> = {
+  lead: 'lead',
   answer: 'answer',
   research: 'research',
   investigate: 'investigate',
@@ -71,6 +73,7 @@ const STEP_DISPLAY: Record<PipelineStep, DisplayKey> = {
 
 const DISPLAY_TITLE: Record<DisplayKey, string> = {
   setup: 'Find the repository',
+  lead: 'Lead the initiative',
   answer: 'Answer',
   research: 'Research',
   investigate: 'Investigate',
@@ -87,6 +90,7 @@ const DISPLAY_TITLE: Record<DisplayKey, string> = {
 };
 
 const STAGE_DISPLAY: Partial<Record<TaskStage, DisplayKey>> = {
+  leading: 'lead',
   answering: 'answer',
   researching: 'research',
   investigating: 'investigate',

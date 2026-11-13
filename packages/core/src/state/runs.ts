@@ -47,6 +47,7 @@ const RUN_PURPOSES: readonly (RunPurpose | undefined)[] = [
   'operate',
   'watch',
   'intake',
+  'lead',
 ];
 
 function assertRunShape(run: Run) {

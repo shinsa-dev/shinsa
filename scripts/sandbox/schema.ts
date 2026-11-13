@@ -43,7 +43,7 @@ export const HANDOFF_FRESH = new RegExp(`^${SANDBOX_PATH}/handoff/([A-Z]+-\\d+)$
 
 export const SIGN_IN_AS = new RegExp(`^${SANDBOX_PATH}/as/([a-z]+)$`);
 
-export const TUNNEL = new RegExp(`^${SANDBOX_PATH}/tunnel/([a-z]+)(/share|/team)?$`);
+export const RELAY = new RegExp(`^${SANDBOX_PATH}/relay/([a-z]+)(/share|/team)?$`);
 
 export const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
@@ -94,7 +94,14 @@ export const TEAMMATE_TASKS: SeedTask[] = [
     title: 'Move the paywall list to the new table',
     branch: 'refactor/paywall-table',
   },
+  {
+    request: 'Show the chat’s connection state in the paywall editor',
+    title: 'Show the chat’s connection state in the editor',
+    branch: 'feat/chat-connection-state',
+  },
 ];
+
+export const TEAMMATE_INITIATIVE_TASK = 'Show the chat’s connection state in the paywall editor';
 
 export const SEEDED_MESSAGES = [
   'Can you keep the old export working for one more release?',
@@ -159,7 +166,7 @@ export interface SandboxPageModule {
   serializeSandboxPage: (sections: SandboxSection[], stylesheet: string) => string;
 }
 
-export interface TunnelData {
+export interface RelayData {
   machine: Machine;
   path: string;
   upstream: WebSocket | null;

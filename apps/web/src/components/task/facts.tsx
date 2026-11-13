@@ -16,6 +16,7 @@ import type * as React from 'react';
 import { AccountChoiceItems } from '@/components/accounts/account-items.tsx';
 import { CheckStateIcon, ChecksSections } from '@/components/checks/checks-list.tsx';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
+import { InitiativeFact } from '@/components/initiatives/task-items.tsx';
 import { BranchDetails } from '@/components/links/branch.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
 import { PullRequestDetails } from '@/components/links/pull-request.tsx';
@@ -803,6 +804,7 @@ export function TaskFacts({
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} />
       <BundleFact state={state} task={task} />
+      <InitiativeFact state={state} task={task} />
       {!task.pullRequest && checks && <ChecksFact view={checks} />}
       <CoverageFact task={task} />
       <MachineFact task={task} />

@@ -3,7 +3,7 @@ import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import { ACCESS_PRESETS } from '../scopes/index.ts';
 import { ACCESS_SCOPES, ACTION_SCOPES, type AccessScopes, type ActionScope } from '../scopes/schema.ts';
-import type { TeamTask } from '../share/teams.ts';
+import type { TeamInitiative, TeamTask } from '../share/teams.ts';
 import { encodeText, hasBytes, parseBase64Url, serializeBase64Url, URL_SAFE_SEGMENT } from './bytes.ts';
 import {
   REMOTE_APP_ORIGIN,
@@ -113,6 +113,7 @@ export interface TeamSnapshotBody {
   teamId: string;
   instanceId: string;
   tasks: TeamTask[];
+  initiatives?: TeamInitiative[];
   updatedAt: number;
 }
 
@@ -133,6 +134,7 @@ export interface TeamPresence {
 
 export interface TeamListView {
   tasks: TeamTask[];
+  initiatives?: TeamInitiative[];
   machineKey: string;
   grant?: string;
   updatedAt: number;
@@ -186,9 +188,15 @@ export interface TeamFeedTask extends TeamTask {
   instanceId: string;
 }
 
+export interface TeamFeedInitiative extends TeamInitiative {
+  teamId: string;
+  instanceId: string;
+}
+
 export interface TeamFeedSnapshot {
   machines: TeamFeedMachine[];
   tasks: TeamFeedTask[];
+  initiatives?: TeamFeedInitiative[];
 }
 
 export const NO_TEAM_FEED: TeamFeedSnapshot = { machines: [], tasks: [] };
@@ -410,10 +418,12 @@ export function readTeamSnapshot(value: unknown): Option.Option<TeamSnapshot> {
 function readSnapshotBody(text: string): TeamSnapshotBody | null {
   const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (!fields) return null;
-  const { teamId, instanceId, tasks, updatedAt } = fields;
+  const { teamId, instanceId, tasks, initiatives, updatedAt } = fields;
   if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
     return null;
-  return Array.isArray(tasks) ? { teamId, instanceId, tasks: tasks as TeamTask[], updatedAt } : null;
+  if (!Array.isArray(tasks)) return null;
+  const body: TeamSnapshotBody = { teamId, instanceId, tasks: tasks as TeamTask[], updatedAt };
+  return Array.isArray(initiatives) ? { ...body, initiatives: initiatives as TeamInitiative[] } : body;
 }
 
 export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {

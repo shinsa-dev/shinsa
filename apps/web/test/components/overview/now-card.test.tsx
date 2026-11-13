@@ -563,6 +563,35 @@ describe('NowCard on the Overview', () => {
     ]);
   });
 
+  it('offers Authorize on GitHub beside Retry when GitHub wants SSO authorization', () => {
+    const task = createTask({ id: 'task-1' });
+    const url = 'https://github.com/orgs/superwall/sso?authorization_request=A1B2';
+    const gate = createGate({
+      id: 'gate-1',
+      taskId: 'task-1',
+      type: 'failure',
+      cause: 'github_sso',
+      title: 'GitHub needs SSO authorization for superwall',
+      body: 'The GitHub login Shinsa uses is not authorized for the superwall organization.',
+      githubSso: { organization: 'superwall', url },
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    const authorize = view.getByRole('button', { name: 'Authorize on GitHub' });
+    expect(authorize.getAttribute('href')).toBe(url);
+    expect(authorize.getAttribute('target')).toBe('_blank');
+    fireEvent.click(view.getByRole('button', { name: 'Retry' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null },
+    ]);
+  });
+
+  it('shows no Authorize on GitHub button on any other paused task', () => {
+    const task = createTask({ id: 'task-1' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'failure', title: 'Could not push' });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.queryByRole('button', { name: 'Authorize on GitHub' })).toBeNull();
+  });
+
   it('links a paused task to the run that stopped', () => {
     const task = createTask({ id: 'task-1' });
     const run = createRun({
@@ -975,6 +1004,40 @@ describe('NowCard on the Overview', () => {
     fireEvent.click(view.getByRole('button', { name: 'Check in now' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'monitor.check_in_now', taskId: 'task-1' }])
+    );
+  });
+
+  it('shows a pending automatic retry with its reason, retries now or stops retrying on request', async () => {
+    const now = Date.now();
+    const task = createTask({
+      id: 'task-1',
+      stage: 'fixing',
+      autoRetry: {
+        at: now + 5 * 60_000,
+        attempt: 2,
+        title: 'Fixing is not making progress',
+        detail: 'The failing checks came back after 8 fix rounds.',
+        runId: null,
+        cause: null,
+        milestone: 'm',
+        status: 'armed',
+      },
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task] }), task, undefined);
+    expect(view.getByText('Fixing is not making progress')).toBeTruthy();
+    expect(view.getByText('The failing checks came back after 8 fix rounds.')).toBeTruthy();
+    expect(view.getByText(/Retries in 5m/)).toBeTruthy();
+    expect(view.getByText(/Retry 2 of 10/)).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Retry now' }));
+    await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'task.retry', taskId: 'task-1' }]));
+    const stop = view.getByRole('button', { name: 'Stop retrying' }) as HTMLButtonElement;
+    await waitFor(() => expect(stop.disabled).toBe(false));
+    fireEvent.click(stop);
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.retry', taskId: 'task-1' },
+        { type: 'task.pause', taskId: 'task-1' },
+      ])
     );
   });
 

@@ -1024,6 +1024,14 @@ describe('a plan that splits the work into other tasks', () => {
     expect(bare.ok && Object.keys(bare.value.document)).not.toContain('split');
   });
 
+  test('keeps the phase an initiative’s part belongs to, and refuses one past the last', () => {
+    const result = validatePlanHandOver({ ...plan, split: [{ ...part('parallel'), phase: 2 }] });
+    expect(result.ok && result.value.document.split?.[0]?.phase).toBe(2);
+    expect(errorsOf(validatePlanHandOver({ ...plan, split: [{ ...part('parallel'), phase: 9 }] }))).toEqual([
+      "split[0].phase must be the number of one of this plan's phases, from 1 to 8.",
+    ]);
+  });
+
   test('a part waits on or stacks on only this task or an earlier part', () => {
     expect(
       errorsOf(

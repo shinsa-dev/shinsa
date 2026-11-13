@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import { traceStalledLeaf } from '../../src/index.ts';
-import { approve, createHarness, createTask, pullRequest, pushed, reachReviewGate } from '../harness.ts';
+import {
+  approve,
+  createHarness,
+  createTask,
+  pullRequest,
+  pushed,
+  reachReviewGate,
+  spendRetries,
+} from '../harness.ts';
 
 describe('traceStalledLeaf', () => {
   test('walks a chain to the task that is stuck on you, with the path to it', () => {
@@ -22,6 +30,7 @@ describe('traceStalledLeaf', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
     const child = createTask(harness, { request: 'Child', waitsOn: [parent] });
+    spendRetries(harness, parent);
     harness.send({ type: 'effect.fail', taskId: parent, title: 'Broke', detail: 'x' });
     expect(Option.getOrNull(traceStalledLeaf(harness.state, harness.task(child)))?.reason).toBe('paused');
     harness.send({ type: 'task.cancel', taskId: parent });

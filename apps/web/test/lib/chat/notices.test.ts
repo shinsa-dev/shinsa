@@ -107,6 +107,16 @@ describe('a notice row', () => {
     );
   });
 
+  it('says the agent waits for its own background work, and for how long at most', () => {
+    expect(resolveNoticeLine({ kind: 'background_wait', key: 'n', at: 0, tasks: 2 })).toEqual({
+      icon: 'IconHourglass',
+      label: 'Waiting for its background work to finish',
+      meta: '2 tasks',
+      detail:
+        'The agent ended its turn while its own commands or subagents were still running. It carries on in the same session when they finish, and Shinsa stops them after 30 minutes.',
+    });
+  });
+
   it('says why fast mode is not running, and that the run carries on at standard speed', () => {
     const fast = { kind: 'fast_mode' as const, key: 'n', at: 0, status: 'unavailable' as const };
     expect(resolveNoticeLine({ ...fast, reason: 'model_not_allowed' })).toEqual({

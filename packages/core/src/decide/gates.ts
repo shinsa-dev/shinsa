@@ -20,6 +20,7 @@ import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
 import { requestIteration } from './iterations.ts';
+import { startPlanInitiative } from './leads.ts';
 import { settleTask, startPlanning } from './lifecycle.ts';
 import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
@@ -164,11 +165,11 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
     settleTask(decider, gate.taskId, 'cancelled', 'cancelled after a failure');
     return;
   }
+  decider.resetRecoveries(gate.taskId);
   if (gate.cause === 'push_hook') {
     retryHookFix(decider, gate.taskId, decision === 'reply' ? response : null);
     return;
   }
-  decider.resetRecoveries(gate.taskId);
   acknowledgeBudget(decider, gate);
   retryTask(decider, gate.taskId, decision === 'reply' ? response : null);
 }
@@ -243,6 +244,7 @@ function answerDecision(
     decider.emit({ type: 'plan.approved', taskId, version });
     if (response?.trim()) decider.emit({ type: 'plan.answered', taskId, answers: response.trim() });
     startPlanSplit(decider, taskId);
+    startPlanInitiative(decider, taskId);
     startApprovedPlan(decider, taskId);
     return;
   }

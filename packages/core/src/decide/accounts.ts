@@ -1,14 +1,15 @@
 import { Option } from 'effect';
 import { resolvePlanKey } from '../accounts/plan.ts';
+import { isModelRoomMoved } from '../accounts/room.ts';
 import { isModelMarkFor } from '../accounts/usage.ts';
 import {
   CLAUDE_PROVIDER,
   RUN_AGENT_ROLE,
-  resolveAgentModel,
   resolveAgentProvider,
   resolveModelFamilyLabel,
   resolveProviderLabel,
 } from '../agent-models/index.ts';
+import { resolveStepModel } from '../agent-models/routing.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -118,19 +119,27 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
   moveWatchCheck(decider, wait.runId, next.id);
 }
 
-function isModelMoved(decider: Decider, wait: UsageWait) {
-  const { settings } = decider.state;
-  const role = RUN_AGENT_ROLE[wait.role];
-  const provider = resolveAgentProvider(settings, role);
+function isModelMoved(decider: Decider, task: Task, wait: UsageWait) {
+  const { settings, modelRoom } = decider.state;
+  const provider = resolveAgentProvider(settings, RUN_AGENT_ROLE[wait.role]);
   if (provider !== (wait.provider ?? CLAUDE_PROVIDER)) return true;
-  return !isModelMarkFor(wait.model, resolveAgentModel(settings, role, provider));
+  const run = decider.state.runs[wait.runId];
+  const model = resolveStepModel({
+    settings,
+    room: modelRoom,
+    size: task.size,
+    role: wait.role,
+    purpose: run?.purpose ?? null,
+    account: run?.account?.id ?? task.account?.id ?? null,
+  });
+  return !isModelMarkFor(wait.model, model);
 }
 
 export function releaseModelWaits(decider: Decider) {
   for (const task of Object.values(decider.state.tasks)) {
     const wait = task.usageWait;
     if (wait?.status !== 'armed' || wait.cause === 'pace' || wait.limitScope !== 'model') continue;
-    if (RUN_STAGES.has(task.stage) && isModelMoved(decider, wait)) resumeFromWait(decider, task, wait);
+    if (RUN_STAGES.has(task.stage) && isModelMoved(decider, task, wait)) resumeFromWait(decider, task, wait);
   }
 }
 
@@ -158,7 +167,7 @@ export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait
     return;
   }
   decider.emit({ type: 'usage_wait.ended', taskId: task.id, waitId: wait.id, status: 'reset' });
-  decider.fail(task.id, 'The usage limit has reset', describeReset(wait), wait.runId);
+  decider.hold(task.id, 'The usage limit has reset', describeReset(wait), wait.runId);
 }
 
 function canIgnorePaceLimits(decider: Decider) {
@@ -296,6 +305,12 @@ export function recordUsagePace(decider: Decider, command: CommandOf<'usage.pace
     endingPace: pace === null ? null : (Option.getOrNull(resolveRecordablePace(command.endingPace)) ?? pace),
     resetEndsAt: pace === null ? null : command.resetEndsAt,
   });
+}
+
+export function recordModelRoom(decider: Decider, command: CommandOf<'usage.models_recorded'>) {
+  if (!isModelRoomMoved(decider.state.modelRoom, command.models)) return;
+  decider.emit({ type: 'usage.models_recorded', models: command.models });
+  releaseModelWaits(decider);
 }
 
 export function recordAccountRemoved(decider: Decider, command: CommandOf<'account.removed'>) {

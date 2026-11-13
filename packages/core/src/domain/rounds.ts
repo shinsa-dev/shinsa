@@ -1,6 +1,6 @@
 import { Option } from 'effect';
 import { splitMessageAttachments } from '../chat/attachments.ts';
-import { isTaskSettled } from './stages.ts';
+import { hasMergedPullRequest, isTaskComplete, isTaskSettled } from './stages.ts';
 import type { PipelineStep } from './steps.ts';
 import type { PullRequest, PullRequestChanges, Task } from './types.ts';
 
@@ -129,6 +129,15 @@ export function resolveCurrentRound(task: RoundSource): Round {
   const rounds = resolveTaskRounds(task);
   const started = rounds.filter((round) => round.startedAt !== null);
   return selectActiveRound(task) ?? started.at(-1) ?? (rounds[0] as Round);
+}
+
+export function hasMergedSince(task: RoundSource, round: number) {
+  if (hasMergedPullRequest(task)) return true;
+  return resolveTaskRounds(task).some((each) => each.number >= round && each.pullRequest?.state === 'merged');
+}
+
+export function isDependencyComplete(task: Task, round = resolveCurrentRound(task).number) {
+  return isTaskComplete(task) || hasMergedSince(task, round);
 }
 
 export function isLaterRound(task: RoundSource) {

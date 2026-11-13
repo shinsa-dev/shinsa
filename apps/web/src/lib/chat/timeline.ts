@@ -79,6 +79,7 @@ export type TimelineItem =
   | { kind: 'compaction'; key: string; at: number; trigger: ChatCompactionTrigger; by: ChatCompactor }
   | { kind: 'proxy'; key: string; at: number; detail: string | null }
   | { kind: 'fast_mode'; key: string; at: number; status: ChatFastModeStatus; reason: string | null }
+  | { kind: 'background_wait'; key: string; at: number; tasks: number }
   | ({ kind: 'extensions'; key: string; at: number } & LoadedExtensions)
   | ({ kind: 'handoff'; key: string; at: number } & Omit<HandoffNotice, 'kind'>)
   | { kind: 'delegation'; key: string; at: number; event: ChatDelegationEvent; runIds: string[] };
@@ -92,6 +93,7 @@ export type QuietNoticeKind =
   | 'handoff'
   | 'proxy'
   | 'fast_mode'
+  | 'background_wait'
   | 'extensions';
 
 type NoticeKind = QuietNoticeKind | 'delegation';
@@ -292,6 +294,9 @@ function resolveNoticeItems(entry: ChatEntryOf<'notice'>): TimelineItem[] {
   if (notice.kind === 'fast_mode') {
     return [{ kind: 'fast_mode', key: entry.id, at: entry.at, status: notice.status, reason: notice.reason }];
   }
+  if (notice.kind === 'background_wait') {
+    return [{ kind: 'background_wait', key: entry.id, at: entry.at, tasks: notice.tasks }];
+  }
   if (notice.kind === 'handoff') {
     return [
       {
@@ -460,6 +465,7 @@ function isNotice(item: TimelineItem): item is TimelineItemOf<NoticeKind> {
     item.kind === 'compaction' ||
     item.kind === 'proxy' ||
     item.kind === 'fast_mode' ||
+    item.kind === 'background_wait' ||
     item.kind === 'extensions' ||
     item.kind === 'handoff' ||
     item.kind === 'delegation'

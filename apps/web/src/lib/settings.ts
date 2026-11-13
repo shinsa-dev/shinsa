@@ -3,6 +3,9 @@ import {
   type AccountsSnapshot,
   type AgentProviderInfo,
   type AgentRole,
+  AUTO_MODEL,
+  AUTO_MODEL_LABEL,
+  CLAUDE_PROVIDER,
   type CompactionMode,
   createUsd,
   describeUsd,
@@ -12,9 +15,9 @@ import {
   RUN_AGENT_ROLE,
   type RunRole,
   resolveAgentFastMode,
-  resolveAgentModel,
   resolveAgentProvider,
   resolveAttentionLimit,
+  resolveChosenModel,
   resolveDelegationLimit,
   resolveFastModeAvailability,
   resolveIdleCompaction,
@@ -452,14 +455,21 @@ function parseModelKey(key: string) {
 }
 
 export function resolveAgentModelValue(settings: Settings, role: AgentRole) {
-  return resolveModelKey(resolveAgentProvider(settings, role), resolveAgentModel(settings, role));
+  return resolveModelKey(resolveAgentProvider(settings, role), resolveChosenModel(settings, role));
 }
+
+const AUTO_ITEM: SettingItem<string> = {
+  value: resolveModelKey(CLAUDE_PROVIDER, AUTO_MODEL),
+  label: AUTO_MODEL_LABEL,
+  icon: 'IconArrowSplitRight',
+};
 
 export function listAgentModelItems(
   providers: AgentProviderInfo[],
-  current: string | null
+  current: string | null,
+  automatic = false
 ): SettingItem<string>[] {
-  const items: SettingItem<string>[] = providers.flatMap((entry) =>
+  const models: SettingItem<string>[] = providers.flatMap((entry) =>
     entry.models.map((option) => ({
       value: resolveModelKey(entry.id, option.id),
       label: option.label,
@@ -467,6 +477,7 @@ export function listAgentModelItems(
       group: entry.label,
     }))
   );
+  const items = automatic ? [AUTO_ITEM, ...models] : models;
   if (current === null || items.some((item) => item.value === current)) return items;
   const { provider, model } = parseModelKey(current);
   const group = resolveProviderLabel(provider);
@@ -496,10 +507,15 @@ export function resolveGroupModel(settings: Settings, group: AgentGroup) {
   return resolveShared(group.roles.map(({ role }) => resolveAgentModelValue(settings, role)));
 }
 
-export function listGroupModelItems(providers: AgentProviderInfo[], settings: Settings, group: AgentGroup) {
+export function listGroupModelItems(
+  providers: AgentProviderInfo[],
+  settings: Settings,
+  group: AgentGroup,
+  automatic = false
+) {
   const current = resolveGroupModel(settings, group);
-  if (current === MIXED_VALUE) return [MIXED_ITEM, ...listAgentModelItems(providers, null)];
-  return listAgentModelItems(providers, current);
+  if (current === MIXED_VALUE) return [MIXED_ITEM, ...listAgentModelItems(providers, null, automatic)];
+  return listAgentModelItems(providers, current, automatic);
 }
 
 function assignRoles<Value>(group: AgentGroup, value: Value) {

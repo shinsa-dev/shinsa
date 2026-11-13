@@ -157,6 +157,12 @@ async function assertConsistent(w: World, lives: number, outputs: string[]) {
     (gate) => gate.type === 'failure' && !isCrashLoop(state.runs[gate.runId ?? ''])
   );
   expect(failureGates.map((gate) => `${gate.title}: ${gate.body}`)).toEqual([]);
+  const retries = read.events.flatMap((event) =>
+    event.type === 'task.retry_scheduled' && !isCrashLoop(state.runs[event.retry.runId ?? ''])
+      ? [`${event.retry.title}: ${event.retry.detail}`]
+      : []
+  );
+  expect(retries).toEqual([]);
   expect(Object.values(state.gates).filter((gate) => gate.status === 'open')).toEqual([]);
   expect(Object.values(state.runs).filter((run) => run.endedAt === null)).toEqual([]);
   expect(Object.values(state.runs).filter((run) => run.outcome === 'failed' && !isCrashLoop(run))).toEqual(

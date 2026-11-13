@@ -86,3 +86,7 @@ export function resolveOverviewSummary(task: Task) {
 export function listActivityNewestFirst(task: Task): Activity[] {
   return [...task.activity].reverse().sort((left, right) => right.at - left.at);
 }
+
+export function mergeActivity(newestFirst: readonly Activity[], extra: readonly Activity[]): Activity[] {
+  return [...newestFirst, ...extra].sort((left, right) => right.at - left.at);
+}

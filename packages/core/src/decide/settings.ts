@@ -31,6 +31,7 @@ import { syncAutopilotDeadlines } from './autopilot.ts';
 import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
+import { findInitiative } from './initiatives.ts';
 import { removeProjectMemory } from './memory.ts';
 import { removeProjectSuggestions } from './watch-suggestions.ts';
 
@@ -369,15 +370,18 @@ export function changeFocus(decider: Decider, command: CommandOf<'focus.change'>
   const projectIds = command.projectIds ?? (command.projectId ? [command.projectId] : []);
   for (const projectId of projectIds) assertProject(decider, projectId);
   const teamId = command.teamId ?? null;
-  if (projectIds.length > 0 && teamId) {
+  const initiativeId = command.initiativeId ?? null;
+  if ([projectIds.length > 0, teamId !== null, initiativeId !== null].filter(Boolean).length > 1) {
     throw new DomainError({
       code: 'focus_refused',
-      message: 'Focus on projects or on a team, not both at once.',
+      message: 'Focus on projects, a team or an initiative, one at a time.',
     });
   }
+  if (initiativeId !== null) findInitiative(decider, initiativeId);
   const focus = {
     ...normaliseFocusProjects(projectIds, command.except ?? false),
     teamId,
+    ...(initiativeId ? { initiativeId } : {}),
     until: command.until,
   };
   if (isSameValue(focus, decider.state.focus)) return;

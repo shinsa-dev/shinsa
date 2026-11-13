@@ -1,6 +1,23 @@
 import { Option } from 'effect';
 import { hashText } from '../domain/hash.ts';
-import { type FixFingerprint, type FixReason, listBlockingChecks, type Task } from '../domain/index.ts';
+import {
+  type FixFingerprint,
+  type FixReason,
+  type Gate,
+  type GateType,
+  listBlockingChecks,
+  resolveCurrentRound,
+  type Task,
+} from '../domain/index.ts';
+
+const MILESTONE_GATES: ReadonlySet<GateType> = new Set<GateType>([
+  'plan',
+  'review',
+  'merge',
+  'proposal',
+  'operation',
+  'result',
+]);
 
 function listFailingChecks(task: Task) {
   return listBlockingChecks(task)
@@ -36,6 +53,19 @@ export function resolveRecoveryFingerprint(task: Task) {
   return `recovery:${hashText(JSON.stringify(durable)).toString(16).padStart(8, '0')}`;
 }
 
+function hashFingerprint(prefix: string, value: unknown) {
+  return `${prefix}:${hashText(JSON.stringify(value)).toString(16).padStart(8, '0')}`;
+}
+
+export function resolveRetryMilestone(task: Task, gates: readonly Gate[]) {
+  return hashFingerprint('milestone', {
+    round: resolveCurrentRound(task).number,
+    plan: task.plan?.version ?? 0,
+    phases: task.phaseReports.map((report) => report.index).sort((a, b) => a - b),
+    reached: gates.filter((gate) => gate.taskId === task.id && MILESTONE_GATES.has(gate.type)).length,
+  });
+}
+
 function isSameTree(fingerprint: FixFingerprint, tree: string | null) {
   return tree !== null && fingerprint.treeHash === tree;
 }
@@ -48,6 +78,17 @@ export function countFixRepeats(task: Task, reason: FixReason, signature: string
       fingerprint.reason === reason &&
       ((signature !== null && fingerprint.signature === signature) || isSameTree(fingerprint, tree))
   ).length;
+}
+
+export function isUnchangedFix(task: Task, reason: FixReason, signature: string | null) {
+  const last = (task.fixFingerprints ?? []).at(-1);
+  return (
+    last !== undefined &&
+    last.reason === reason &&
+    signature !== null &&
+    last.signature === signature &&
+    isSameTree(last, task.treeHash ?? null)
+  );
 }
 
 export function countUnchangedRounds(task: Task, reason: FixReason) {

@@ -87,6 +87,10 @@ export const MemoryId = IdText.pipe(Schema.brand('MemoryId'));
 
 export type MemoryId = typeof MemoryId.Type;
 
+export const InitiativeId = IdText.pipe(Schema.brand('InitiativeId'));
+
+export type InitiativeId = typeof InitiativeId.Type;
+
 export type Unbranded<T> =
   T extends Brand.Brand<string>
     ? Brand.Brand.Unbranded<T>

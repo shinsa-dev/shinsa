@@ -47,8 +47,6 @@ const ORIGIN = 'https://shinsa.page';
 const CREDENTIALS = {
   instanceId: 'inst1',
   machineToken: 'machine-token',
-  tunnelToken: 'tunnel',
-  tunnelHost: 't-inst1.shinsa.dev',
   connectKey: serializeBase64Url(new Uint8Array(32).fill(1)),
 };
 

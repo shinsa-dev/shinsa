@@ -11,9 +11,10 @@ import {
   selectFocus,
   selectFocusTeam,
   UNNAMED_TEAM,
+  selectFocusInitiative,
 } from '@/lib/focus.ts';
 import { createRemoteSnapshot } from '../support/remote-access.ts';
-import { createProject, createShinsaState, NOW } from '../support/state.ts';
+import { createInitiative, createProject, createShinsaState, NOW } from '../support/state.ts';
 import { createTeamEntry } from '../support/teams.ts';
 
 describe('selectFocus', () => {
@@ -150,5 +151,23 @@ describe('resolveFocusUntil', () => {
     const tonight = new Date(resolveFocusUntil('tonight', new Date(2026, 9, 22, 9).getTime()));
     expect([tonight.getHours(), tonight.getMinutes()]).toEqual([23, 59]);
     expect(resolveFocusUntil('hours')).toBeGreaterThan(Date.now());
+  });
+});
+
+describe('selectFocusInitiative', () => {
+  const initiatives = [createInitiative({ id: 'split', name: 'Chat split' })];
+
+  function focusedOn(initiativeId: string | null, until: number | null = null) {
+    return createShinsaState({
+      initiatives,
+      patch: { focus: { projectIds: [], except: false, teamId: null, initiativeId, until } },
+    });
+  }
+
+  it('finds the initiative in focus, and nothing once the focus ends or it is gone', () => {
+    expect(selectFocusInitiative(focusedOn('split'), NOW)?.name).toBe('Chat split');
+    expect(selectFocusInitiative(focusedOn('split', NOW - 1), NOW)).toBeNull();
+    expect(selectFocusInitiative(focusedOn('gone'), NOW)).toBeNull();
+    expect(selectFocusInitiative(focusedOn(null), NOW)).toBeNull();
   });
 });

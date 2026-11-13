@@ -1,4 +1,5 @@
-import { isPausingGate, isWatchHome } from '../domain/index.ts';
+import type { CommandOf } from '../commands/index.ts';
+import { isPausingGate, isRetryArmed, isTaskSettled, isWatchHome } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
 import { retryChecks } from './checks.ts';
@@ -6,8 +7,9 @@ import type { Decider } from './decider.ts';
 import { changeStack } from './dependencies.ts';
 import { resetFixBudget } from './fixes.ts';
 import { restartIntakeRead } from './intake.ts';
+import { startLeadTurn } from './leads.ts';
 import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
-import { recheckPullRequest, requestPush } from './pull-requests.ts';
+import { recheckPullRequest, requestPush, retryHookFix } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
 import { restartWatchCheck } from './watchdogs.ts';
 
@@ -87,6 +89,9 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       if (isWatchHome(task)) restartIntakeRead(decider, task);
       else restartWatchCheck(decider, task, guidance);
       return;
+    case 'leading':
+      startLeadTurn(decider, taskId, guidance ? { text: guidance, byAgent: false, fromTask: null } : null);
+      return;
     case 'awaiting_proposal':
     case 'awaiting_operation':
     case 'answered':
@@ -96,4 +101,25 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
     case 'cancelled':
       return;
   }
+}
+
+type RetryBy = 'shinsa' | 'you';
+
+export function retryArmedTask(decider: Decider, taskId: string, by: RetryBy, guidance: string | null) {
+  const task = decider.task(taskId);
+  const cause = isRetryArmed(task) ? task.autoRetry?.cause : null;
+  decider.resetRecoveries(taskId, by === 'shinsa' ? 'kept' : 'reset');
+  if (cause === 'push_hook') {
+    retryHookFix(decider, taskId, guidance);
+    return;
+  }
+  retryTask(decider, taskId, guidance);
+}
+
+export function autoRetryTask(decider: Decider, command: CommandOf<'task.auto_retry'>) {
+  const task = decider.state.tasks[command.taskId];
+  const retry = task?.autoRetry;
+  if (!task || !retry || !isRetryArmed(task) || isTaskSettled(task)) return;
+  if (decider.context.now < retry.at) return;
+  retryArmedTask(decider, task.id, 'shinsa', null);
 }

@@ -71,7 +71,7 @@ export class Prerequisites extends Context.Service<
 
       const resolve = Effect.fn('Prerequisites.resolve')(function* (cwd: string, needs: PrerequisiteNeeds) {
         const run = (command: string[]) => commands.run(command, cwd, { timeoutMs: PREREQUISITE_TIMEOUT_MS });
-        const [git, brew, gh, ghAuth, claude, bun, codex] = yield* Effect.all(
+        const [git, brew, gh, ghAuth, claude, bun] = yield* Effect.all(
           [
             run(['git', '--version']),
             run(['brew', '--version']),
@@ -79,7 +79,6 @@ export class Prerequisites extends Context.Service<
             run(['gh', 'auth', 'status']),
             run(['claude', '--version']),
             run(['bun', '--version']),
-            run(['codex', '--version']),
           ],
           { concurrency: 'unbounded' }
         );
@@ -93,7 +92,6 @@ export class Prerequisites extends Context.Service<
             !needs.bun,
             needs.bun ? FIXES.bun : OPTIONAL_BUN_FIX
           ),
-          createCheck('codex', codex.ok, describeOutcome(codex), true),
         ];
         const brewFor = tools.filter((check) => check.command?.startsWith('brew '));
         const checks = [

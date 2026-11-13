@@ -9,14 +9,18 @@ import {
   resolveDelegationAnswerPrompt,
   resolveQuestionResumePrompt,
   resolveSupersededReply,
+  resolveTaskProject,
   resolveWithdrawnReply,
   type ShinsaCommand,
+  type SignInCheck,
   type Validation,
   validateBrowserSignInRequest,
   validateQuestion,
   validateSecretRequest,
 } from '@shinsa/core';
-import { Clock, Context, Deferred, Effect, Layer } from 'effect';
+import { Clock, Context, Deferred, Effect, Layer, Option, Schema } from 'effect';
+import { BrowserSignInCheck } from '../../browser/check/service.ts';
+import { BrowserProfile } from '../../browser/host/schema.ts';
 import { describeError } from '../../log/index.ts';
 import type { EngineStopped } from '../../runtime/engine/schema.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
@@ -71,6 +75,8 @@ export class Questions extends Context.Service<
       const settings = yield* IdleReleaseSettings;
       const live = runs.active;
       const waiters = yield* makeReplyWaiters();
+      const signInCheck = yield* Effect.serviceOption(BrowserSignInCheck);
+      const decodeProfile = Schema.decodeUnknownOption(BrowserProfile);
 
       const resolveGateReply = (gate: Gate): QuestionReply => {
         if (gate.status === 'answered') return { kind: 'answered', text: gate.response ?? '' };
@@ -101,6 +107,19 @@ export class Questions extends Context.Service<
             return 'The request was withdrawn. Continue without the secret, or ask again later.';
         }
       };
+
+      const checkSignIn = Effect.fn('Questions.checkSignIn')(function* (gate: Gate | undefined) {
+        const unchecked: SignInCheck = { kind: 'unchecked', reason: 'failed' };
+        const url = gate?.browserSignIn?.url;
+        if (!gate || gate.status !== 'answered' || gate.decision === 'reject' || !url) return unchecked;
+        const state = yield* engine.state;
+        const profile = Option.fromNullishOr(state.tasks[gate.taskId]).pipe(
+          Option.flatMap((task) => resolveTaskProject(state, task)),
+          Option.flatMap(decodeProfile)
+        );
+        if (Option.isNone(signInCheck) || Option.isNone(profile)) return unchecked;
+        return yield* signInCheck.value.check(profile.value, url);
+      });
 
       const readHandOver = <T>(validation: Validation<T>) =>
         Effect.fromResult(resolveHandOver(validation)).pipe(
@@ -228,7 +247,8 @@ export class Questions extends Context.Service<
           url,
           reason,
         });
-        return resolveBrowserSignInReply((yield* engine.state).gates[gateId]);
+        const gate = (yield* engine.state).gates[gateId];
+        return resolveBrowserSignInReply(gate, yield* checkSignIn(gate));
       });
 
       const resolve = Effect.fn('Questions.resolve')(function* (gateId: string) {
@@ -242,7 +262,10 @@ export class Questions extends Context.Service<
         const task = state.tasks[gate.taskId];
         if (!task || isTaskSettled(task)) return;
         const asker = gate.runId ? state.runs[gate.runId] : undefined;
-        const browserSignIn = gate.type === 'browser_sign_in' ? resolveBrowserSignInResumePrompt(gate) : null;
+        const browserSignIn =
+          gate.type === 'browser_sign_in'
+            ? resolveBrowserSignInResumePrompt(gate, yield* checkSignIn(gate))
+            : null;
         if (asker && asker.endedAt === null && !live.has(asker.id))
           return yield* runs.execute(
             asker.id,

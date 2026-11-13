@@ -7,7 +7,7 @@ import { MachineSessionLive } from './auth/machine-session/middleware.ts';
 import { PageSessionLive } from './auth/page-session/middleware.ts';
 import { RequestGateLive } from './http/gate/middleware.ts';
 import { Ingress } from './http/ingress/middleware.ts';
-import { type Assets, WorkerLogger } from './http/worker.ts';
+import { type Assets, type RelayRooms, WorkerLogger } from './http/worker.ts';
 import { CloudServices } from './layers.ts';
 import { HookRoutes } from './routes/hooks/handler.ts';
 import { InstancesHandlers } from './routes/instances/handler.ts';
@@ -17,6 +17,7 @@ import { PairingHandlers } from './routes/pairing/handler.ts';
 import { PairsHandlers } from './routes/pairs/handler.ts';
 import { PreviewOpenRoutes } from './routes/preview-open/handler.ts';
 import { PreviewHost } from './routes/previews/service.ts';
+import { RelayRoutes } from './routes/relay/handler.ts';
 import { SessionHandlers } from './routes/session/handler.ts';
 import { SharesHandlers } from './routes/shares/handler.ts';
 import { SignInRoutes } from './routes/sign-in/handler.ts';
@@ -47,10 +48,11 @@ const CloudRoutes = Layer.mergeAll(
   SlackEventRoutes,
   HookRoutes,
   PreviewOpenRoutes,
+  RelayRoutes,
   Ingress.pipe(Layer.provide(PreviewHost.layer))
 );
 
-export type CloudPlatform = SqlClient.SqlClient | Assets;
+export type CloudPlatform = SqlClient.SqlClient | Assets | RelayRooms;
 
 export const makeCloudHandler = <E>(platform: Layer.Layer<CloudPlatform, E>) =>
   HttpRouter.toWebHandler(

@@ -144,7 +144,7 @@ function sealedUserTokens(harness: Harness) {
 async function bringOnline(harness: Harness, machine: MachineCredentials, features: string[] = []) {
   await harness.post(
     REMOTE_PATHS.heartbeat,
-    { localUrl: 'http://127.0.0.1:7446', features },
+    { localUrl: 'http://127.0.0.1:7446', features: ['relay', ...features] },
     { bearer: machine.machineToken }
   );
 }
@@ -200,7 +200,7 @@ async function setUp(options: { online?: boolean } = {}): Promise<Setup> {
   const forwards: Setup['forwards'] = [];
   const tunnel = { answer: () => Response.json({ ok: true }, { status: 202 }) };
   harness.handlers.push((call) => {
-    if (!call.url.endsWith('.shinsa.dev/api/slack/events')) return new Response('', { status: 599 });
+    if (!call.url.endsWith('.relay.test/api/slack/events')) return new Response('', { status: 599 });
     forwards.push({ body: call.body, headers: call.headers });
     return tunnel.answer();
   });
@@ -1046,6 +1046,23 @@ describe('a mention from someone', () => {
     warnings.mockRestore();
   });
 
+  test('whose machine beats without joining the relay is told it is offline, with a warning that it has not joined', async () => {
+    const { harness, slack, machine, forwards } = await setUp({ online: false });
+    await harness.post(
+      REMOTE_PATHS.heartbeat,
+      { localUrl: 'http://127.0.0.1:7446', features: ['sealed-pairing'] },
+      { bearer: machine.machineToken }
+    );
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    await sendEvent(harness, mentionEnvelope());
+    expect(String(slack.callsTo('chat.postMessage')[0]?.body.text)).toContain('Studio is offline');
+    expect(forwards).toHaveLength(0);
+    expect(warnings.mock.calls).toEqual([
+      ['[Cloud] Machine offline', expect.objectContaining({ surface: 'slack', reason: 'not_joined' })],
+    ]);
+    warnings.mockRestore();
+  });
+
   test('that fails part way is logged, and Slack still gets its answer at once', async () => {
     const { harness, slack } = await setUp();
     slack.answers['chat.postEphemeral'] = () => ({ ok: false, error: 'channel_not_found' });
@@ -1784,7 +1801,7 @@ describe('deciding from the card', () => {
     };
     const replies: Fields[] = [];
     setup.harness.handlers.unshift((call) => {
-      if (call.url.endsWith('.shinsa.dev/api/slack/interactions')) {
+      if (call.url.endsWith('.relay.test/api/slack/interactions')) {
         decisions.push({ url: call.url, body: JSON.parse(call.body) as Fields, headers: call.headers });
         return reply.answer();
       }
@@ -1888,7 +1905,7 @@ describe('deciding from the card', () => {
     const response = await sendInteraction(harness, clickPayload(ts));
     expect(response.status).toBe(200);
     const [decision] = decisions;
-    expect(decision?.url).toBe(`https://t-${machine.instanceId}.shinsa.dev/api/slack/interactions`);
+    expect(decision?.url).toBe(`https://${machine.instanceId}.relay.test/api/slack/interactions`);
     expect(decision?.body).toEqual({
       ...APPROVE,
       channelId: 'C1',
@@ -1945,7 +1962,7 @@ describe('deciding from the card', () => {
     const laptop = await addTeammate(setup, 'member');
     await sendInteraction(setup.harness, clickPayload(setup.ts, { user: { id: 'U2' } }));
     expect(setup.decisions.map((decision) => decision.url)).toEqual([
-      `https://t-${setup.machine.instanceId}.shinsa.dev/api/slack/interactions`,
+      `https://${setup.machine.instanceId}.relay.test/api/slack/interactions`,
     ]);
     expect(setup.decisions[0]?.url).not.toContain(laptop.instanceId);
     expect(setup.decisions[0]?.body.userId).toBe('U2');
@@ -2142,10 +2159,10 @@ async function setUpChannel(): Promise<ChannelSetup> {
   const messageTunnel = { answer: () => Response.json({ ok: true }, { status: 202 }) };
   setup.harness.handlers.push((call) => {
     const url = new URL(call.url);
-    if (!url.hostname.endsWith('.shinsa.dev') || url.pathname !== SLACK_ENGINE_MESSAGES_PATH)
+    if (!url.hostname.endsWith('.relay.test') || url.pathname !== SLACK_ENGINE_MESSAGES_PATH)
       return new Response('', { status: 599 });
     messages.push({
-      instanceId: url.hostname.slice(2, -'.shinsa.dev'.length),
+      instanceId: url.hostname.slice(0, -'.relay.test'.length),
       body: call.body,
       headers: call.headers,
     });

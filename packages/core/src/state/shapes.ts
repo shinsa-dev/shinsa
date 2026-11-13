@@ -30,6 +30,7 @@ const SHAPE_PHRASE: Record<TaskShape, string> = {
   change: 'a change',
   fix: 'a find-and-fix change',
   operation: 'an operation',
+  lead: 'the lead of an initiative',
 };
 
 const INQUIRY_PHRASE: Record<InquiryStep, string> = {
