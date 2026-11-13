@@ -4,12 +4,7 @@ import { ListRow } from '@/components/layout/list-row.tsx';
 import { WideSection } from '@/components/queue/queue.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import {
-  DONE_FOR_YOU_ALL_SEEN,
-  DONE_FOR_YOU_SEEN,
-  DONE_FOR_YOU_TITLE,
-  listDoneForYouRows,
-} from '@/lib/autopilot.ts';
+import { DONE_FOR_YOU_ALL_SEEN, DONE_FOR_YOU_TITLE, listDoneForYouRows } from '@/lib/autopilot.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
@@ -48,22 +43,11 @@ export function DoneForYou({ state }: { state: ShinsaState }) {
               {row.summary} {row.reason}
             </span>
           }
-          trailing={
-            <span className='flex items-center gap-2'>
-              <TimeAgo at={row.at} compact />
-              <Button
-                variant='secondary'
-                size='xs'
-                onClick={(event) => {
-                  event.stopPropagation();
-                  markSeen([row.gateId]);
-                }}
-              >
-                {DONE_FOR_YOU_SEEN}
-              </Button>
-            </span>
-          }
-          onClick={() => navigate(resolveTaskPath(resolveTaskTarget(state, row.taskId)))}
+          trailing={<TimeAgo at={row.at} compact />}
+          onClick={() => {
+            markSeen([row.gateId]);
+            navigate(resolveTaskPath(resolveTaskTarget(state, row.taskId)));
+          }}
         />
       ))}
     </WideSection>

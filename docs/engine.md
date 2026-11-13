@@ -2072,7 +2072,7 @@ whether to act for you, bring it to you, or, as a last resort, send it to your t
 never a power Shinsa takes: the policy is the human-only setting `autopilot` (Settings → Agents → Autopilot,
 `AutopilotPolicy` in `domain/settings.ts`), off by default, and every action it takes is recorded with its reason.
 Two layers decide: core's hard limits, which a model can never cross, and inside them a short model call that
-judges the case. The rules are core's (`autopilot/` for the facts, limits, prompt, lessons and Done for you;
+judges the case. The rules are core's (`autopilot/` for the facts, limits, prompt, lessons and Handled by Autopilot;
 `decide/autopilot.ts` for the commands; the folds in `state/autopilot.ts`); the judge and the clock are the
 engine's (`autopilot/judge.ts`, `runtime/autopilot/`).
 
@@ -2154,10 +2154,10 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   Autopilot did at your last few reviews, so it brings them to you for now." A later approval of what it brought
   you ends the pause. `resolveAutopilotLessonSummary` counts, per gate, what it did, what you kept, changed or let
   through as it was, and Settings shows it as What it learned.
-- **Done for you on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
-  that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Done for you, first on Home above
-  Needs you: what it did, the task and the reason, with Seen and, with two or more, Mark all seen
-  (`autopilot.seen {gateIds}`, human-only, `Gate.autopilotSeen`; `shinsa autopilot seen`). Each notifies once when
+- **Handled by Autopilot on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
+  that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Handled by Autopilot, first on Home above
+  Needs you: what it did, the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
+  stays in Recently finished); with two or more rows, Mark all seen clears them (`autopilot.seen {gateIds}`, human-only, `Gate.autopilotSeen`; `shinsa autopilot seen`). Each notifies once when
   it happens and its notification closes when you mark it seen; none counts in the Needs you badge.
 - **Urgent merges while you are away.** With the policy on, an urgent task's open merge gate is checked every hour
   (`autopilot.scheduled`, `Gate.autopilotDue {at}`, `syncAutopilotDeadlines` after `task.prioritize` and

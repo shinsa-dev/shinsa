@@ -205,7 +205,7 @@ not chat text.
   merge it weighs the scope, the ratings, urgency, whether a watchdog filed it and whether you are around, and acts
   for you only within hard limits you set (Ask me first, Balanced or Most things, the gates it may act on, Auto
   merge); everything else comes to you. It learns from how you answer what it did or brought you, pauses a kind of
-  gate you keep correcting, and shows what it learned. Everything it did is in Done for you on Home and notifies
+  gate you keep correcting, and shows what it learned. Everything it did is in Handled by Autopilot on Home and notifies
   until you mark it seen. Only an urgent, high-risk change, after you have been away an hour, goes to your team's
   Needs you, and to Slack channels and on-call teammates you choose, up to five; never while you are active. The
   activity says why it acted (`docs/engine.md` → Autopilot).

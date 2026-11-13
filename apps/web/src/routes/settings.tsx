@@ -98,8 +98,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
     case 'agents':
       return (
         <>
-          <AgentSettings settings={state.settings} />
-          <ActiveHoursSettings state={state} />
+          <AgentSettings settings={state.settings} afterAutopilot={<ActiveHoursSettings state={state} />} />
           <MemorySettings state={state} />
           <VersionSettings />
         </>

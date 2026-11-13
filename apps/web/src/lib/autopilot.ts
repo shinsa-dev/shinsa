@@ -113,7 +113,7 @@ export const AUTO_MERGE_DESCRIPTION: Record<AutoMerge, string> = {
 };
 
 export const AUTOPILOT_ESCALATE_DESCRIPTION: Record<'on' | 'off', string> = {
-  on: 'Asks your team only when you are away and the change is urgent and high risk, never while you are active.',
+  on: 'Only when you are away and the change is urgent and high risk.',
   off: 'Never asks your team; urgent work waits for you.',
 };
 
@@ -552,9 +552,7 @@ export function listTeamEscalationRows(escalations: readonly TeamEscalation[]): 
   }));
 }
 
-export const DONE_FOR_YOU_TITLE = 'Done for you';
-
-export const DONE_FOR_YOU_SEEN = 'Seen';
+export const DONE_FOR_YOU_TITLE = 'Handled by Autopilot';
 
 export const DONE_FOR_YOU_ALL_SEEN = 'Mark all seen';
 
