@@ -74,7 +74,7 @@ src/
                             Closing CTA and llms.txt's second download. Nothing links `/download` itself.
                             cloudUrl (app.shinsa.dev, which starts GitHub sign-in) is the Header's outline Sign in;
                             the Header's GitHub button is icon only, and every GitHub glyph on the site draws at 16px.
-                            koeSite holds Koe's page path and its three download links (`/koe/download[/beta|/canary]`)
+                            koeSite holds Koe's page path, title, description and its download link (`/koe/download`)
   lib/scene.ts              The sample project (Northwind) and the Home and All tasks state
   lib/*-scene.ts            One file of sample state per demo. onboarding-code.ts is the Northwind change the gates and
                             Code demos show. tint-scene.ts is the Review demo's task, a real Shinsa change (SW-214, the
@@ -89,10 +89,18 @@ src/
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   lib/design.ts             `/design.md`, the whole design system in one file (below)
-  pages/koe.astro           Koe's product page (`/koe`): its icon (public/koe/koe.svg, Koe's own app icon), headline,
-                            Download for Mac with smaller Beta and Canary links, and its feature grid. `#soon` is
-                            the "coming soon" note, shown by CSS `:target` alone: a Koe download with no release
-                            behind it redirects there. The Header's last link and a card under Closing lead to it
+  pages/koe.astro           Koe's product page (`/koe`), under its own header (layout/KoeHeader.astro: Koe's icon and
+                            name, "by Shinsa" back to `/`, its section links and Download for Mac): the icon
+                            (public/koe/koe.svg), headline, Download for Mac, the hero demo, the settings demo and the
+                            feature grid. `#soon` is the "coming soon" note, shown by CSS `:target` alone: a Koe
+                            download with no release behind it redirects there. Shinsa's Header leads to it with an
+                            "Also from us: Koe" chip beside the wordmark, and sections/KoeCallout.astro, an "Also from
+                            us" block under Closing, with a Meet Koe button and the pill
+  components/demos/koe/     Koe's demos, recreated from the Mac app (dark HUD, Koe's own copy): pill.tsx (the pill and
+                            its pages), hero.tsx (a session over a sample settings page, played by useFocus: hold Fn,
+                            drag a screenshot and say its note, comment on Save, finish, paste into an agent chat with
+                            both images; its steps in lib/koe-scene.ts) and settings.tsx (Koe's one page of settings,
+                            its switches live)
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
                             own review as a page, the task page's header pinned on top (title, the two buttons, and the web's TaskSharedFacts:
                             handle, status, repository, branch, pull request, checks, coverage, started; under the title
@@ -201,7 +209,7 @@ updates/latest-mac.yml                             the Stable update channel's f
 updates/beta-mac.yml                               the Beta update channel's file
 updates/canary-mac.yml                             the Canary update channel's file
 koe/releases/<version>/Koe.dmg                     every Koe release's disk image, never overwritten
-koe/channels/<channel>.json                        what /koe/download[/beta|/canary] serves
+koe/channels/<channel>.json                        what /koe/download[/canary] serves (stable, canary)
 koe/appcast/<channel>.xml                          Koe's Sparkle appcast for the channel
 ```
 
@@ -252,9 +260,11 @@ pointer (`docs/release.md` → Downloads).
   `Cache-Control: no-store` and logs an error, which `logger.ts` writes to `console.error` and Workers Logs keeps
   (`observability` in `wrangler.jsonc`), and the app checks again later. There is no fallback to GitHub
   (`updates/service.ts`).
-- **Koe.** `/koe/download`, `/koe/download/beta` and `/koe/download/canary` are served by the same `Downloads` code
-  with Koe's `Product`: the pointer under `koe/channels/`, `Content-Disposition: attachment; filename="Koe-<version>.dmg"`,
-  the same headers, ranges and validators, and the same stable-falls-back-to-beta rule. Koe's repository is private, so
+- **Koe.** Koe has two channels, stable and canary, and no beta. `/koe/download` and `/koe/download/canary` are served
+  by the same `Downloads` code with Koe's `Product`: the pointer under `koe/channels/`,
+  `Content-Disposition: attachment; filename="Koe-<version>.dmg"` and the same headers, ranges and validators.
+  `/koe/download` falls back to the canary pointer until there is a stable release (`stableFallback`), and
+  `/koe/download/beta` answers 404, as does `/koe/appcast/beta.xml`. Koe's repository is private, so
   there is no GitHub fallback: whenever R2 cannot serve, the answer is a `302` to `/koe#soon` with
   `Cache-Control: no-store`, and the page shows its coming-soon note. An R2 error on that path logs
   `Download read from R2 failed` first, so an outage is never mistaken for a missing release. `/koe/appcast/<channel>.xml` serves

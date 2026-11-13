@@ -1,15 +1,18 @@
 ---
 import { Icon } from '@shinsa/ui/components/icon';
+import { KoeHeroDemo } from '../components/demos/koe/hero';
+import { KoeSettingsDemo } from '../components/demos/koe/settings';
+import Section from '../components/layout/Section.astro';
 import Button from '../components/ui/Button.astro';
 import Site from '../layouts/Site.astro';
-import { koe, koeFeatures } from '../lib/content';
+import { koe, koeFeatures, koeSections } from '../lib/content';
 import { koeSite } from '../lib/site';
 ---
 
-<Site title={koeSite.title} description={koeSite.description}>
-  <section id='soon' class='group flex flex-col px-6 pt-16 pb-20 md:pt-24 md:pb-24'>
-    <div class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
-      <img src='/koe/koe.svg' alt='' width='96' height='96' class='size-24' />
+<Site title={koeSite.title} description={koeSite.description} product='koe'>
+  <section id='soon' class='group flex flex-col px-6 pt-14 pb-6 md:pt-20'>
+    <div id='top' class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
+      <img src='/koe/koe.svg' alt='' width='88' height='88' class='size-22' />
       <h1 class='font-medium text-4xl leading-[1.08] tracking-tight text-balance md:text-5xl'>
         <span class='text-fg-4'>{koe.headline}</span>{' '}<span class='text-fg-2'>{koe.headlineRest}</span>
       </h1>
@@ -18,32 +21,52 @@ import { koeSite } from '../lib/site';
         <p class='font-medium text-fg-4 text-sm'>{koe.soonTitle}</p>
         <p class='text-fg-2 text-sm'>{koe.soonText}</p>
       </div>
-      <div class='mt-2 flex flex-col items-center gap-3'>
+      <div class='mt-1 flex flex-col items-center gap-2'>
         <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
-        <div class='flex items-center gap-3 text-fg-2 text-sm'>
-          <a href={koeSite.betaUrl} class='underline-offset-4 transition-colors hover:text-fg-3 hover:underline'>
-            {koe.beta}
-          </a>
-          <a href={koeSite.canaryUrl} class='underline-offset-4 transition-colors hover:text-fg-3 hover:underline'>
-            {koe.canary}
-          </a>
-        </div>
+        <p class='text-fg-2 text-sm'>{koe.requirement}</p>
       </div>
     </div>
-    <div class='mx-auto mt-20 grid w-full max-w-5xl gap-x-10 gap-y-8 border-bg-3 border-t pt-12 sm:grid-cols-2 lg:grid-cols-3'>
+  </section>
+  <section id={koeSections.talk.id} class='flex flex-col px-6 pt-8 pb-12 md:pb-16'>
+    <div class='mx-auto h-[540px] w-full max-w-5xl md:h-[600px]'>
+      <KoeHeroDemo client:load />
+    </div>
+    <div class='mx-auto mt-10 flex max-w-2xl flex-col items-center gap-3 text-center'>
+      <h2 class='font-medium text-2xl text-fg-4 tracking-tight text-balance md:text-3xl'>{koeSections.talk.title}</h2>
+      <p class='text-base text-fg-2 leading-relaxed text-pretty'>{koeSections.talk.text}</p>
+    </div>
+  </section>
+  <Section copy={koeSections.settings}>
+    <div class='mx-auto h-[620px] w-full max-w-2xl'>
+      <KoeSettingsDemo client:visible={{ rootMargin: '400px' }} />
+    </div>
+  </Section>
+  <Section copy={koeSections.features}>
+    <div class='grid w-full gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3'>
       {
         koeFeatures.map((feature) => (
           <div class='flex flex-col gap-1'>
-            <h2 class='flex items-center gap-2 font-medium text-fg-4 text-sm [--icon-size:var(--icon-size-md)]'>
+            <h3 class='flex items-center gap-2 font-medium text-fg-4 text-sm [--icon-size:var(--icon-size-md)]'>
               <span class='text-fg-2'>
                 <Icon name={feature.icon} />
               </span>
               {feature.title}
-            </h2>
+            </h3>
             <p class='text-fg-2 text-sm leading-relaxed text-pretty'>{feature.text}</p>
           </div>
         ))
       }
+    </div>
+  </Section>
+  <section class='flex flex-col px-6 pt-16 pb-24'>
+    <div class='mx-auto flex max-w-xl flex-col items-center gap-6 text-center'>
+      <h2 class='font-medium text-3xl tracking-tight text-balance md:text-4xl'>
+        <span class='text-fg-4'>{koe.closingTitle}</span>{' '}<span class='text-fg-2'>{koe.closingText}</span>
+      </h2>
+      <div class='flex flex-col items-center gap-2'>
+        <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+        <p class='text-fg-2 text-sm'>{koe.requirement}</p>
+      </div>
     </div>
   </section>
 </Site>

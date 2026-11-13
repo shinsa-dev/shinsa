@@ -52,7 +52,7 @@ export class Downloads extends Context.Service<
       ) {
         const pointer = yield* selectPointer(product, channel);
         if (Option.isSome(pointer) || channel !== 'stable') return pointer;
-        return yield* selectPointer(product, 'beta');
+        return yield* selectPointer(product, product.stableFallback);
       });
 
       const streamPointer = Effect.fn('Downloads.streamPointer')(function* (

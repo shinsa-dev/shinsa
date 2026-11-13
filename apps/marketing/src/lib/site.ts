@@ -16,6 +16,4 @@ export const koeSite = {
   description:
     'Hold Fn and talk. Koe writes it down on your Mac and copies one bundle: your words with the screenshots, clips and comments you added while you talked.',
   downloadUrl: 'https://shinsa.dev/koe/download',
-  betaUrl: 'https://shinsa.dev/koe/download/beta',
-  canaryUrl: 'https://shinsa.dev/koe/download/canary',
 };

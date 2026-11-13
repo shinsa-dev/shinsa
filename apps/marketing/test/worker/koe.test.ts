@@ -17,9 +17,9 @@ const SHA = 'b'.repeat(64);
 const UPLOADED = new Date('2026-11-13T14:01:13Z');
 
 const APPCAST =
-  '<?xml version="1.0"?><rss version="2.0"><channel><item><title>1.0.0-beta.1</title></item></channel></rss>';
+  '<?xml version="1.0"?><rss version="2.0"><channel><item><title>1.0.0-canary.1</title></item></channel></rss>';
 
-type StoredChannel = 'stable' | 'beta' | 'canary';
+type StoredChannel = 'stable' | 'canary';
 
 interface BucketCall {
   method: 'get' | 'head';
@@ -101,15 +101,13 @@ function createRequest(path: string, headers: Record<string, string> = {}, metho
 
 const RELEASED = storeChannels([
   ['stable', pointerOf('1.0.0')],
-  ['beta', pointerOf('1.1.0-beta.2')],
   ['canary', pointerOf('1.1.0-canary.7')],
 ]);
 
 describe("Koe's download paths", () => {
-  it('reads the stable, beta and canary paths under /koe/download, with or without a trailing slash', () => {
+  it('reads the stable and canary paths under /koe/download, with or without a trailing slash', () => {
     expect(resolveChannel('/koe/download')).toEqual({ product: KOE, channel: 'stable' });
     expect(resolveChannel('/koe/download/')).toEqual({ product: KOE, channel: 'stable' });
-    expect(resolveChannel('/koe/download/beta')).toEqual({ product: KOE, channel: 'beta' });
     expect(resolveChannel('/koe/download/canary/')).toEqual({ product: KOE, channel: 'canary' });
   });
 
@@ -118,6 +116,7 @@ describe("Koe's download paths", () => {
       '/koe',
       '/koe/',
       '/koe/downloads',
+      '/koe/download/beta',
       '/koe/download/nightly',
       '/koe/download/version',
     ]) {
@@ -126,10 +125,10 @@ describe("Koe's download paths", () => {
   });
 
   it('keeps every key under koe/ in the bucket and the edge cache', () => {
-    expect(resolveReleaseKey('1.0.0-beta.1', KOE)).toBe('koe/releases/1.0.0-beta.1/Koe.dmg');
+    expect(resolveReleaseKey('1.0.0-canary.1', KOE)).toBe('koe/releases/1.0.0-canary.1/Koe.dmg');
     expect(resolveChannelKey('stable', KOE)).toBe('koe/channels/stable.json');
-    expect(resolvePointerCacheKey('beta', KOE)).toBe(
-      'https://shinsa.dev/cache/download/koe/channels/beta.json'
+    expect(resolvePointerCacheKey('canary', KOE)).toBe(
+      'https://shinsa.dev/cache/download/koe/channels/canary.json'
     );
   });
 });
@@ -151,23 +150,21 @@ describe('respond to a Koe download', () => {
     expect(fetched).toEqual([]);
   });
 
-  it('streams the beta and canary pointers for their paths', async () => {
+  it('streams the canary pointer for its path', async () => {
     const { bucket } = createBucket(RELEASED);
-    const beta = await respond(createRequest('/koe/download/beta'), createWorld(bucket).world);
-    expect(beta.headers.get('Content-Disposition')).toBe('attachment; filename="Koe-1.1.0-beta.2.dmg"');
     const canary = await respond(createRequest('/koe/download/canary'), createWorld(bucket).world);
     expect(canary.headers.get('Content-Disposition')).toBe('attachment; filename="Koe-1.1.0-canary.7.dmg"');
   });
 
-  it('serves the beta at /koe/download while Koe has no stable release', async () => {
-    const { bucket, calls } = createBucket(storeChannels([['beta', pointerOf('1.0.0-beta.1')]]));
+  it('serves the canary at /koe/download while Koe has no stable release', async () => {
+    const { bucket, calls } = createBucket(storeChannels([['canary', pointerOf('1.0.0-canary.3')]]));
     const response = await respond(createRequest('/koe/download'), createWorld(bucket).world);
     expect(response.status).toBe(200);
-    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="Koe-1.0.0-beta.1.dmg"');
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="Koe-1.0.0-canary.3.dmg"');
     expect(calls.map((call) => call.key)).toEqual([
       'koe/channels/stable.json',
-      'koe/channels/beta.json',
-      'koe/releases/1.0.0-beta.1/Koe.dmg',
+      'koe/channels/canary.json',
+      'koe/releases/1.0.0-canary.3/Koe.dmg',
     ]);
   });
 
@@ -189,12 +186,12 @@ describe('respond to a Koe download', () => {
   it('remembers the pointer under its own cache key, apart from Shinsa', async () => {
     const { bucket } = createBucket(RELEASED);
     const { cache, entries } = createCache();
-    await respond(createRequest('/koe/download/beta'), createWorld(bucket, cache).world);
-    expect([...entries.keys()]).toEqual(['https://shinsa.dev/cache/download/koe/channels/beta.json']);
+    await respond(createRequest('/koe/download/canary'), createWorld(bucket, cache).world);
+    expect([...entries.keys()]).toEqual(['https://shinsa.dev/cache/download/koe/channels/canary.json']);
   });
 
   it('sends every channel to the coming-soon note on the page while Koe has no release, never to GitHub', async () => {
-    for (const path of ['/koe/download', '/koe/download/beta', '/koe/download/canary']) {
+    for (const path of ['/koe/download', '/koe/download/canary']) {
       const { world, fetched } = createWorld(createBucket({}).bucket);
       const response = await respond(createRequest(path), world);
       expect(response.status).toBe(302);
@@ -204,8 +201,8 @@ describe('respond to a Koe download', () => {
     }
   });
 
-  it('never serves a beta for canary', async () => {
-    const { bucket } = createBucket(storeChannels([['beta', pointerOf('1.0.0-beta.1')]]));
+  it('never serves a stable release for canary', async () => {
+    const { bucket } = createBucket(storeChannels([['stable', pointerOf('1.0.0')]]));
     const response = await respond(createRequest('/koe/download/canary'), createWorld(bucket).world);
     expect(response.headers.get('Location')).toBe('/koe#soon');
   });
@@ -227,11 +224,11 @@ describe('respond to a Koe download', () => {
       head: () => Promise.reject(new Error('R2 down')),
       get: () => Promise.reject(new Error('R2 down')),
     };
-    const response = await respond(createRequest('/koe/download/beta'), createWorld(failing).world);
+    const response = await respond(createRequest('/koe/download/canary'), createWorld(failing).world);
     expect(response.headers.get('Location')).toBe('/koe#soon');
     expect(errors).toHaveBeenCalledWith(
       expect.stringContaining('Download read from R2 failed'),
-      expect.objectContaining({ product: 'koe', channel: 'beta' })
+      expect.objectContaining({ product: 'koe', channel: 'canary' })
     );
     errors.mockRestore();
   });
@@ -253,8 +250,8 @@ describe("Koe's update files", () => {
     expect(isUpdatePath('/koe/appcastx')).toBe(false);
   });
 
-  it('serves the three appcasts as XML, short-lived', () => {
-    for (const channel of ['stable', 'beta', 'canary']) {
+  it('serves the stable and canary appcasts as XML, short-lived', () => {
+    for (const channel of ['stable', 'canary']) {
       expect(resolveUpdateFile(`/koe/appcast/${channel}.xml`)).toEqual({
         key: `koe/appcast/${channel}.xml`,
         contentType: 'application/xml; charset=utf-8',
@@ -264,8 +261,8 @@ describe("Koe's update files", () => {
   });
 
   it('serves the disk image of any version, cached for good', () => {
-    expect(resolveUpdateFile('/koe/releases/1.0.0-beta.1/Koe.dmg')).toEqual({
-      key: 'koe/releases/1.0.0-beta.1/Koe.dmg',
+    expect(resolveUpdateFile('/koe/releases/1.0.0-canary.1/Koe.dmg')).toEqual({
+      key: 'koe/releases/1.0.0-canary.1/Koe.dmg',
       contentType: 'application/x-apple-diskimage',
       cacheControl: 'public, max-age=31536000, immutable',
     });
@@ -275,6 +272,7 @@ describe("Koe's update files", () => {
     for (const path of [
       '/koe/appcast',
       '/koe/appcast/',
+      '/koe/appcast/beta.xml',
       '/koe/appcast/nightly.xml',
       '/koe/appcast/stable.xml/more',
       '/koe/appcast/latest-mac.yml',
@@ -290,19 +288,19 @@ describe("Koe's update files", () => {
   });
 
   it('serves an appcast from koe/appcast/ in the bucket', async () => {
-    const { bucket, calls } = createBucket({ 'koe/appcast/beta.xml': APPCAST });
-    const response = await respond(createRequest('/koe/appcast/beta.xml'), createWorld(bucket).world);
+    const { bucket, calls } = createBucket({ 'koe/appcast/canary.xml': APPCAST });
+    const response = await respond(createRequest('/koe/appcast/canary.xml'), createWorld(bucket).world);
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('application/xml; charset=utf-8');
     expect(response.headers.get('Cache-Control')).toBe('public, max-age=60');
     expect(await response.text()).toBe(APPCAST);
-    expect(calls.map((call) => call.key)).toEqual(['koe/appcast/beta.xml', 'koe/appcast/beta.xml']);
+    expect(calls.map((call) => call.key)).toEqual(['koe/appcast/canary.xml', 'koe/appcast/canary.xml']);
   });
 
   it("serves a release's disk image, as the appcast's enclosure points there", async () => {
     const { bucket } = createBucket(RELEASED);
     const response = await respond(
-      createRequest('/koe/releases/1.1.0-beta.2/Koe.dmg'),
+      createRequest('/koe/releases/1.1.0-canary.7/Koe.dmg'),
       createWorld(bucket).world
     );
     expect(response.status).toBe(200);
@@ -316,7 +314,7 @@ describe("Koe's update files", () => {
     const missing = await respond(createRequest('/koe/appcast/canary.xml'), createWorld(bucket).world);
     expect(missing.status).toBe(404);
     const posted = await respond(
-      createRequest('/koe/appcast/beta.xml', {}, 'POST'),
+      createRequest('/koe/appcast/canary.xml', {}, 'POST'),
       createWorld(bucket).world
     );
     expect(posted.status).toBe(405);

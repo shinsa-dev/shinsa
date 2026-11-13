@@ -28,6 +28,8 @@ export interface Product {
   readonly prefix: string;
   readonly dmgName: string;
   readonly fileStem: string;
+  readonly channelSuffixes: Readonly<Record<string, Channel>>;
+  readonly stableFallback: Channel;
   readonly comingSoonUrl: Option.Option<string>;
 }
 
@@ -37,6 +39,8 @@ export const SHINSA: Product = {
   prefix: '',
   dmgName: DMG_NAME,
   fileStem: 'Shinsa',
+  channelSuffixes: { '': 'stable', '/beta': 'beta', '/canary': 'canary' },
+  stableFallback: 'beta',
   comingSoonUrl: Option.none(),
 };
 
@@ -46,6 +50,8 @@ export const KOE: Product = {
   prefix: 'koe/',
   dmgName: KOE_DMG_NAME,
   fileStem: 'Koe',
+  channelSuffixes: { '': 'stable', '/canary': 'canary' },
+  stableFallback: 'canary',
   comingSoonUrl: Option.some('/koe#soon'),
 };
 

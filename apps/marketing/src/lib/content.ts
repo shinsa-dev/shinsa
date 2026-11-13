@@ -155,15 +155,38 @@ export const openTask = {
 export const koe = {
   headline: 'Hold Fn and talk.',
   headlineRest: 'Koe writes it down.',
-  text: 'Koe is dictation for the Mac. Hold Fn, say what you mean and let go: Koe copies your words, with the screenshots, clips and comments you added while you talked. Everything runs on your Mac.',
+  text: 'Koe is dictation for the Mac. Say what you mean, point at what you mean, and let go: Koe copies your words with the screenshots and comments you made while you talked. Everything runs on your Mac.',
   primary: 'Download for Mac',
-  beta: 'Beta',
-  canary: 'Canary',
+  requirement: 'Free, for macOS 26 and later.',
   soonTitle: 'Koe is almost here.',
-  soonText: 'There is no release on this channel yet. Check back soon.',
-  closing: 'New from us: Koe, on-device dictation for the Mac.',
-  closingLink: 'Meet Koe',
+  soonText: 'There is no release to download yet. Check back soon.',
+  byline: 'by Shinsa',
+  closingTitle: 'Say it once.',
+  closingText: 'Koe brings the screenshots.',
+  callout: 'Also from us',
+  calloutTitle: 'Koe, dictation that sees what you mean.',
+  calloutText:
+    'Hold Fn and talk. Take screenshots and comment on the screen as you go, and Koe copies it all as one message, ready for any agent. On your Mac, nothing sent anywhere.',
+  calloutLink: 'Meet Koe',
 };
+
+export const koeSections = {
+  talk: {
+    id: 'how',
+    title: 'Talk, point, paste.',
+    text: 'Hold Fn and say what you see. Take a screenshot or click anything to comment on it, and keep talking. Let go, and one paste brings your words and every picture, each where you said it.',
+  },
+  settings: {
+    id: 'settings',
+    title: 'One page of settings.',
+    text: 'Your shortcuts, the speech model and what happens when you finish. Koe can pause your music while you talk and play it again when you are done.',
+  },
+  features: {
+    id: 'features',
+    title: 'Made for talking to agents.',
+    text: 'Everything Koe does fits in the pill at the bottom of your screen.',
+  },
+} satisfies Record<string, SectionCopy>;
 
 export const koeFeatures: { icon: IconName; title: string; text: string }[] = [
   {

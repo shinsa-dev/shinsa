@@ -1,11 +1,10 @@
 import { CACHE_ORIGIN, type Channel, PRODUCTS, type Product, SHINSA } from '../releases/schema.ts';
-import { CHANNEL_SUFFIXES } from './schema.ts';
 
 export function resolveChannel(pathname: string): { product: Product; channel: Channel } | null {
   const path = pathname.replace(/\/+$/, '');
   for (const product of PRODUCTS) {
     if (!path.startsWith(product.downloadPath)) continue;
-    const channel = CHANNEL_SUFFIXES[path.slice(product.downloadPath.length)];
+    const channel = product.channelSuffixes[path.slice(product.downloadPath.length)];
     if (channel) return { product, channel };
   }
   return null;

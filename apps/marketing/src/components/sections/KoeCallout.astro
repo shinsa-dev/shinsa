@@ -1,0 +1,29 @@
+---
+import { KoePillView } from '../demos/koe/pill';
+import { koe } from '../../lib/content';
+import { koeSite } from '../../lib/site';
+import Button from '../ui/Button.astro';
+---
+
+<section class='flex flex-col px-6 pb-24'>
+  <div
+    class='corner-superellipse/1.125 mx-auto grid w-full max-w-5xl overflow-hidden rounded-3xl bg-sidebar ring-1 ring-bg-3 md:grid-cols-[1fr_1.1fr]'
+  >
+    <div class='flex flex-col items-start gap-4 p-8 md:p-10'>
+      <span class='flex items-center gap-2 text-fg-2 text-sm'>
+        <img src='/koe/koe.svg' alt='' width='24' height='24' class='size-6' />
+        {koe.callout}
+      </span>
+      <h2 class='font-medium text-2xl text-fg-4 tracking-tight text-balance md:text-3xl'>{koe.calloutTitle}</h2>
+      <p class='text-base text-fg-2 leading-relaxed text-pretty'>{koe.calloutText}</p>
+      <Button href={koeSite.path} variant='outline' class='mt-2'>{koe.calloutLink}</Button>
+    </div>
+    <a
+      href={koeSite.path}
+      aria-label={koe.calloutLink}
+      class='koe-desktop relative flex min-h-60 items-end justify-center p-8 md:min-h-0'
+    >
+      <KoePillView pill={{ kind: 'session', clock: '0:08', attached: 1 }} className='shadow-2xl' />
+    </a>
+  </div>
+</section>

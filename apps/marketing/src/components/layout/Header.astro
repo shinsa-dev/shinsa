@@ -1,6 +1,6 @@
 ---
 import { Logo } from '@shinsa/ui/components/logo';
-import { sections } from '../../lib/content';
+import { koe, sections } from '../../lib/content';
 import { koeSite, site } from '../../lib/site';
 import Button from '../ui/Button.astro';
 
@@ -10,7 +10,6 @@ const links = [
   { label: 'Code', href: `/#${sections.code.id}` },
   { label: 'Agents', href: `/#${sections.tasks.id}` },
   { label: 'Safety', href: `/#${sections.guard.id}` },
-  { label: 'Koe', href: koeSite.path },
 ];
 ---
 
@@ -23,6 +22,13 @@ const links = [
         <Logo className='size-3.25' />
       </span>
       Shinsa
+    </a>
+    <a
+      href={koeSite.path}
+      class='-ms-3 flex h-6 items-center max-sm:hidden gap-1.5 rounded-full border border-bg-3 ps-1 pe-2.5 text-fg-3 text-xs transition-colors duration-150 hover:bg-bg-a1 hover:text-fg-4'
+    >
+      <img src='/koe/koe.svg' alt='' width='16' height='16' class='size-4' />
+      {koe.callout}: Koe
     </a>
     <nav class='mx-auto hidden items-center gap-1 md:flex' aria-label='Sections'>
       {

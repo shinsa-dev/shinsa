@@ -16,7 +16,7 @@ export const KOE_RELEASES_PATH = '/koe/releases';
 
 export const UPDATE_PATHS = [UPDATES_PATH, KOE_APPCAST_PATH, KOE_RELEASES_PATH];
 
-export const KOE_APPCAST_FILES: readonly string[] = ['stable.xml', 'beta.xml', 'canary.xml'];
+export const KOE_APPCAST_FILES: readonly string[] = ['stable.xml', 'canary.xml'];
 
 export const APPCAST_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
