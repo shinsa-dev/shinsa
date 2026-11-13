@@ -5,11 +5,14 @@ import {
   INITIATIVE_LIMITS,
   type Initiative,
   type InitiativePhase,
+  isLeadTask,
   NO_FOCUS,
   resolveInitiativeText,
   selectInitiativePhase,
   type Task,
+  type TeamInitiativeRef,
 } from '../domain/index.ts';
+import { isTeamTask } from '../share/teams.ts';
 import { listInitiativeMembers, listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
@@ -88,6 +91,11 @@ export function changeMembership(decider: Decider, task: Task, next: Membership)
   decider.emit({ type: 'task.initiative_changed', taskId: task.id, ...next });
 }
 
+function changeTeamMembership(decider: Decider, task: Task, next: TeamInitiativeRef | null) {
+  if (isSameValue(task.teamInitiative ?? null, next)) return;
+  decider.emit({ type: 'task.team_initiative_changed', taskId: task.id, teamInitiative: next });
+}
+
 function dropRemovedPhases(decider: Decider, initiative: Initiative) {
   for (const task of listInitiativeMembers(decider.state, initiative.id)) {
     if (Option.getOrNull(selectInitiativePhase(initiative, task.initiativePhaseId))) continue;
@@ -163,13 +171,42 @@ function resolveMembership(decider: Decider, initiativeId: string, phaseId: stri
   return { initiativeId: initiative.id, phaseId: phaseId ?? null };
 }
 
+type TeamTarget = NonNullable<CommandOf<'task.join_initiative'>['team']>;
+
+function resolveTeamTarget(
+  decider: Decider,
+  task: Task,
+  initiativeId: string,
+  phaseId: string | null,
+  team: TeamTarget
+): TeamInitiativeRef {
+  if (isLeadTask(task)) refuse('A lead task leads its own initiative, so it cannot join a teammate’s.');
+  if (!isTeamTask(decider.state, task, team.teamId)) {
+    throw new DomainError({
+      code: 'initiative_not_shared',
+      message:
+        'This task is not in a project the team sees. Share its project with the team first, then add it to the teammate’s initiative.',
+    });
+  }
+  const name = resolveInitiativeText(team.name).slice(0, INITIATIVE_LIMITS.name) || 'Untitled initiative';
+  return { teamId: team.teamId, instanceId: team.instanceId, initiativeId, phaseId, name };
+}
+
 export function joinInitiative(decider: Decider, command: CommandOf<'task.join_initiative'>) {
   const task = decider.task(command.taskId);
   if (command.initiativeId === null) {
     changeMembership(decider, task, { initiativeId: null, phaseId: null });
+    changeTeamMembership(decider, task, null);
+    return;
+  }
+  if (command.team) {
+    const target = resolveTeamTarget(decider, task, command.initiativeId, command.phaseId, command.team);
+    changeMembership(decider, task, { initiativeId: null, phaseId: null });
+    changeTeamMembership(decider, task, target);
     return;
   }
   changeMembership(decider, task, resolveMembership(decider, command.initiativeId, command.phaseId));
+  changeTeamMembership(decider, task, null);
 }
 
 function isChildOf(task: Task, ids: ReadonlySet<string>) {
@@ -194,6 +231,12 @@ export function listTaskDescendants(tasks: readonly Task[], rootId: string): Tas
 }
 
 export function assertNotInInitiative(decider: Decider, task: Task) {
+  if (task.teamInitiative) {
+    throw new DomainError({
+      code: 'initiative_exists',
+      message: `This task is already in the teammate’s initiative ${task.teamInitiative.name}. Take it out first.`,
+    });
+  }
   const current = task.initiativeId ? decider.state.initiatives[task.initiativeId] : undefined;
   if (!current) return;
   throw new DomainError({
@@ -205,6 +248,7 @@ export function assertNotInInitiative(decider: Decider, task: Task) {
 export function adoptDescendants(decider: Decider, initiative: Initiative, task: Task) {
   const members = [task, ...listTaskDescendants(Object.values(decider.state.tasks), task.id)];
   for (const member of members) {
+    if (member.teamInitiative) continue;
     if (member.initiativeId && decider.state.initiatives[member.initiativeId]) continue;
     changeMembership(decider, member, { initiativeId: initiative.id, phaseId: null });
   }
@@ -231,16 +275,68 @@ interface CreatedLineage {
   createdBy?: { taskId: string };
 }
 
+interface CreatedMembership {
+  initiativeId?: string;
+  initiativePhaseId?: string;
+  teamInitiative?: TeamInitiativeRef;
+}
+
 export function resolveCreatedMembership(
   decider: Decider,
   command: CommandOf<'task.create'>,
-  lineage: CreatedLineage
-): { initiativeId?: string; initiativePhaseId?: string } {
+  lineage: CreatedLineage,
+  projectId: string | null
+): CreatedMembership {
   const sourceId = lineage.parentTaskId ?? lineage.createdBy?.taskId ?? command.forkOf;
   const membership = resolveInheritedMembership(decider, command, sourceId);
-  if (!membership?.initiativeId) return {};
+  if (!membership?.initiativeId) {
+    const teamInitiative =
+      command.initiativeId === undefined && sourceId ? decider.state.tasks[sourceId]?.teamInitiative : null;
+    const project = projectId ? decider.state.projects[projectId] : undefined;
+    const seen = teamInitiative && (project?.teamIds ?? []).includes(teamInitiative.teamId);
+    return seen ? { teamInitiative: { ...teamInitiative } } : {};
+  }
   return {
     initiativeId: membership.initiativeId,
     ...(membership.phaseId ? { initiativePhaseId: membership.phaseId } : {}),
   };
+}
+
+function assertHumanSharesInitiative(decider: Decider) {
+  if (!decider.context.onBehalf) return;
+  throw new DomainError({
+    code: 'human_only',
+    message:
+      'Only the human decides which initiatives a team sees. Tell them they can share it from the lead task’s menu.',
+  });
+}
+
+function writeInitiativeTeams(decider: Decider, initiative: Initiative, teamIds: string[]) {
+  const { teamIds: _previous, teamMembers, ...rest } = initiative;
+  const kept = (teamMembers ?? []).filter((member) => teamIds.includes(member.teamId));
+  const next = { ...rest, ...(kept.length > 0 ? { teamMembers: kept } : {}), updatedAt: decider.context.now };
+  decider.emit({ type: 'initiative.written', initiative: teamIds.length > 0 ? { ...next, teamIds } : next });
+}
+
+export function addInitiativeToTeam(decider: Decider, command: CommandOf<'initiative.add_to_team'>) {
+  assertHumanSharesInitiative(decider);
+  const initiative = findInitiative(decider, command.initiativeId);
+  const teamIds = initiative.teamIds ?? [];
+  if (teamIds.includes(command.teamId)) return;
+  writeInitiativeTeams(decider, initiative, [...teamIds, command.teamId]);
+}
+
+export function removeInitiativeFromTeam(
+  decider: Decider,
+  command: CommandOf<'initiative.remove_from_team'>
+) {
+  assertHumanSharesInitiative(decider);
+  const initiative = findInitiative(decider, command.initiativeId);
+  const teamIds = initiative.teamIds ?? [];
+  if (!teamIds.includes(command.teamId)) return;
+  writeInitiativeTeams(
+    decider,
+    initiative,
+    teamIds.filter((teamId) => teamId !== command.teamId)
+  );
 }

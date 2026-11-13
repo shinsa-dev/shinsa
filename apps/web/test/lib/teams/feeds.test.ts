@@ -48,7 +48,34 @@ function createMachine(overrides: Partial<TeamFeedMachine> = {}): TeamFeedMachin
   };
 }
 
+const INITIATIVE = {
+  id: 'split',
+  name: 'Chat split',
+  description: '',
+  phases: [],
+  leadTaskId: 'lead-split',
+  report: null,
+  finished: false,
+  updatedAt: 10,
+};
+
 describe('teammates’ task lists', () => {
+  it('keeps the newest copy of each shared initiative, and leaves the field out when none is shared', () => {
+    const older = { ...INITIATIVE, teamId: 'team1', instanceId: 'p7m2' };
+    const newer = { ...older, name: 'Renamed', updatedAt: 20 };
+    const other = { ...older, instanceId: 'q1' };
+    const merged = mergeTeamFeeds([
+      { machines: [], tasks: [], initiatives: [newer] },
+      { machines: [], tasks: [], initiatives: [older, other] },
+    ]);
+    expect(merged.initiatives?.map((each) => [each.instanceId, each.name])).toEqual([
+      ['p7m2', 'Renamed'],
+      ['q1', 'Chat split'],
+    ]);
+    const plain = mergeTeamFeeds([{ machines: [createMachine()], tasks: [] }]);
+    expect('initiatives' in plain).toBe(false);
+  });
+
   it('merges what each machine watches, keeping the freshest copy of a task and the best status of a machine', () => {
     const older = createTeamFeedTask();
     const newer = createTeamFeedTask({ task: { ...older.task, updatedAt: 20, title: 'Renamed' } });
@@ -332,6 +359,23 @@ describe('the hosted dashboard’s team feeds', () => {
     ]);
     expect(feeds.snapshot().machines[0]?.status).toBe('live');
     expect(published).toBe(2);
+    expect(feeds.snapshot().initiatives).toBeUndefined();
+  });
+
+  it('publishes the initiatives a machine shares, with its team and machine, and drops them on a refusal', async () => {
+    const { feeds, opened } = createHosted({ now: () => 100 });
+    await feeds.start();
+    opened[0]?.handlers.onMessage({
+      t: 'view',
+      data: JSON.stringify({ tasks: [], initiatives: [INITIATIVE], updatedAt: 40 }),
+    });
+    await Bun.sleep(5);
+    expect(feeds.snapshot().initiatives?.map((each) => [each.teamId, each.instanceId, each.id])).toEqual([
+      ['team1', 'p7m2', 'split'],
+    ]);
+    opened[0]?.handlers.onEnd({ reason: 'Not in the team.', gone: true });
+    await Bun.sleep(5);
+    expect(feeds.snapshot().initiatives).toBeUndefined();
   });
 
   it('tries again after a drop, and a minute after a refusal, since the machine may not know a new member yet', async () => {
@@ -472,10 +516,19 @@ describe('the hosted dashboard’s team feeds', () => {
     expect(feeds.snapshot().tasks.map((entry) => [entry.instanceId, entry.task.id])).toEqual([
       ['q1', 'laptop-task'],
     ]);
+    expect(feeds.snapshot().initiatives).toBeUndefined();
+    await relay([
+      await Effect.runPromise(
+        signTeamSnapshot(laptop.privateKey, body({ updatedAt: 910, initiatives: [INITIATIVE] }))
+      ),
+    ]);
+    expect(feeds.snapshot().initiatives?.map((each) => [each.instanceId, each.id])).toEqual([
+      ['q1', 'split'],
+    ]);
     expect(feeds.snapshot().machines[1]).toMatchObject({
       instanceId: 'q1',
       status: 'offline',
-      updatedAt: 900,
+      updatedAt: 910,
     });
     await relay([
       await Effect.runPromise(signTeamSnapshot(laptop.privateKey, body({ updatedAt: 800, tasks: [] }))),

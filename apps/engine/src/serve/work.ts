@@ -8,6 +8,7 @@ import { EunoeServer } from '../eunoe/service.ts';
 import { Extensions } from '../extensions/registry/service.ts';
 import { EngineServer } from '../http/server/service.ts';
 import { LeadWakes } from '../initiatives/service.ts';
+import { TeamMembers } from '../initiatives/team-members/service.ts';
 import { ServeLock } from '../instance/lock/service.ts';
 import { describeError } from '../log/redact.ts';
 import { Remote, TeamFeeds } from '../remote/index.ts';
@@ -36,6 +37,7 @@ export const WorkLayer = Layer.effectDiscard(
     const transcripts = yield* Transcripts;
     const briefings = yield* BriefingWriter;
     const leads = yield* LeadWakes;
+    const teamMembers = yield* TeamMembers;
     const inbox = yield* MessageInbox;
     const schedules = yield* Schedules;
     const slack = yield* Slack;
@@ -105,6 +107,7 @@ export const WorkLayer = Layer.effectDiscard(
     yield* remote.start;
     yield* Effect.forkDetach(slack.start);
     yield* teamFeeds.start;
+    yield* teamMembers.start;
     yield* briefings.schedule;
     yield* leads.recover;
     yield* extensions.syncSnapshot;

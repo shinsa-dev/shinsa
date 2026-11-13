@@ -176,8 +176,9 @@ not chat text.
 - **Initiatives.** An effort of many tasks, in any repositories, is an initiative, and an initiative is a task: its
   lead, whose agent you talk to, files and orders the effort's tasks and is woken as they move, and whose Overview is
   the report sheet of what needs you, what runs, what comes next by phase, what shipped or was dropped and the
-  decisions taken. Home lists the open ones, plans and tasks become one with a click, and it is a focus target
-  (`docs/engine.md` → Initiatives).
+  decisions taken. Home lists the open ones, plans and tasks become one with a click, and it is a focus target. You
+  can share one with a team: teammates' own tasks join it from their machines, each keeping its owner, and count on
+  its sheet (`docs/engine.md` → Initiatives).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
   request watch, Merge queues). A conflict is resolved by the agent merging the base in, never by rebasing, in every workspace
@@ -1379,6 +1380,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   tasks to file, each in its phase; approving it files them. Where it stands is its report, shown like a result, and
   what only you can settle reaches you as its questions in Needs you, not as a list to read. Each task still merges on
   its own: an initiative with one phase is also the smaller form, a few tasks across repositories with one overview.
+- **Shared with a team** (2026-11-10). A large effort is rarely one person's: an initiative stays one record on its
+  owner's machine and is shared with a team as a project is, by you alone. Teammates see its lead task and sheet,
+  their own tasks join it from their machines and keep their owner, the lead counts them and is woken as they move,
+  and their agents can message it. Gates stay with each task's owner, so the lead closes nobody's.
 - **Not yet.** Triage suggesting membership from a request, a lead that rewrites what you filed into its
   initiative, and initiatives in the iOS app.
 

@@ -128,6 +128,18 @@ const InitiativePhaseInput = Strict(
   'phase'
 );
 
+const TeammateTaskRef = Strict(
+  { handle: NullByDefault(IdText, FIELD_MESSAGES.text), title: Text(ROUND_LIMITS.title) },
+  'The teammate’s task',
+  'task'
+);
+
+const TeamInitiativeTarget = Strict(
+  { teamId: IdText, instanceId: IdText, name: Text(ID_LIMIT) },
+  'A teammate’s initiative',
+  'team'
+);
+
 const NamedAccount = OrNull(RunAccount, FIELD_MESSAGES.object).pipe(
   Schema.refine(Predicate.isNotNull, { message: 'account must name an account.' })
 );
@@ -186,6 +198,7 @@ export const UserCommand = Schema.Union([
     why: Optional(Text(ROUND_LIMITS.why), FIELD_MESSAGES.text),
     shape: OptionalChoice(TASK_SHAPES),
     comments: Optional(List(ReviewComment, 100), FIELD_MESSAGES.list),
+    fromTeammateTask: Optional(TeammateTaskRef, FIELD_MESSAGES.object),
   }),
   Command('round.ship', { taskId: TaskId, number: Count, shipping: Choice(ROUND_SHIPPINGS) }),
   Command('round.update', { taskId: TaskId, number: Count, request: Text() }),
@@ -262,10 +275,13 @@ export const UserCommand = Schema.Union([
     phases: Optional(List(InitiativePhaseInput, 50), FIELD_MESSAGES.list),
   }),
   Command('initiative.adopt_task', { taskId: TaskId }),
+  Command('initiative.add_to_team', { initiativeId: InitiativeId, teamId: IdText }),
+  Command('initiative.remove_from_team', { initiativeId: InitiativeId, teamId: IdText }),
   Command('task.join_initiative', {
     taskId: TaskId,
     initiativeId: OrNull(InitiativeId, FIELD_MESSAGES.text),
     phaseId: NullByDefault(IdText, FIELD_MESSAGES.text),
+    team: Optional(TeamInitiativeTarget, FIELD_MESSAGES.object),
   }),
   Command('memory.accept', { memoryId: MemoryId }),
   Command('memory.remove', { memoryId: MemoryId }),

@@ -2,12 +2,13 @@ import { STAGE_WORDS } from '../chat/references.ts';
 import { describeTaskName } from '../chat/text.ts';
 import {
   type InitiativeMilestone,
+  type TeammateMilestoneTask,
   type InitiativeMilestoneKind,
   resolveGateDefinition,
   type Task,
 } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
-import type { InitiativeSheet } from './types.ts';
+import type { InitiativeSheet, InitiativeTeammateTask } from './types.ts';
 
 const SETTLED_LIMIT = 10;
 
@@ -31,6 +32,17 @@ function describeSection(title: string, lines: string[]) {
 function describeWaits(waitsOn: readonly Task[]) {
   if (waitsOn.length === 0) return null;
   return `waits on ${waitsOn.map((task) => task.handle ?? describeTaskName(task)).join(', ')}`;
+}
+
+function describeTeammate(task: TeammateMilestoneTask) {
+  const name = task.handle ? `${task.handle} ${task.title}` : task.title;
+  return task.owner ? `${name}, @${task.owner}’s task` : `${name}, a teammate’s task`;
+}
+
+function describeTeammateLine({ member, phase }: InitiativeTeammateTask) {
+  const where = phase ? `, phase ${phase.name}` : '';
+  const state = member.gate ? `waits for its owner: ${member.gate}` : STAGE_WORDS[member.stage];
+  return `- ${describeTeammate(member)}${where}: ${state}`;
 }
 
 export function describeInitiativeDigest(sheet: InitiativeSheet) {
@@ -61,6 +73,10 @@ export function describeInitiativeDigest(sheet: InitiativeSheet) {
       'Dropped',
       sheet.dropped.slice(0, SETTLED_LIMIT).map((entry) => describeMember(entry.task, entry.reason))
     ),
+    ...describeSection(
+      'Teammates’ tasks, on their own machines, with their own gates',
+      sheet.teammates.map(describeTeammateLine)
+    ),
   ];
   return lines.length === 0 ? 'The initiative has no tasks yet.' : lines.join('\n').trim();
 }
@@ -68,8 +84,9 @@ export function describeInitiativeDigest(sheet: InitiativeSheet) {
 export function describeMilestones(state: ShinsaState, milestones: readonly InitiativeMilestone[]) {
   return milestones
     .map((milestone) => {
-      const task = state.tasks[milestone.taskId];
-      const name = task ? `${describeTaskName(task)} (shinsa://task/${task.id})` : 'A task';
+      const task = milestone.teammate ? undefined : state.tasks[milestone.taskId];
+      const local = task ? `${describeTaskName(task)} (shinsa://task/${task.id})` : 'A task';
+      const name = milestone.teammate ? describeTeammate(milestone.teammate) : local;
       const text = milestone.text ? `: ${milestone.text}` : '';
       return `- ${name} ${MILESTONE_WORDS[milestone.kind]}${text}`;
     })

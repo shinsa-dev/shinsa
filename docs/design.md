@@ -3217,7 +3217,10 @@ Only these, and they win over anything below:
     member's initiative fact or ⌘K. The composer's Kind of task stays on Auto unless you
     pick Initiative. A member's Overview facts name its initiative and phase and open the lead task, and its menus
     carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's
-    menu carries Edit the initiative.
+    menu carries Edit the initiative and Share with a team (a submenu of your teams, each ticked while shared). Once a
+    teammate's task is in the initiative the card uses All tasks' team table (`TEAM_TASK_LIST_COLUMNS`, with Repository
+    and Owner), and a teammate's row opens read-only as on All tasks. The join menus list a teammate's shared initiatives
+    under Teammates’ initiatives.
 
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own

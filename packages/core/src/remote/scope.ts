@@ -7,9 +7,10 @@ import { resolveStatePatch, type StatePatch } from '../protocol/patch.ts';
 import type { TerminalsSnapshot } from '../protocol/terminals.ts';
 import { hasScope } from '../scopes/index.ts';
 import type { AccessScopes, ActionScope } from '../scopes/schema.ts';
-import { isTeamTask } from '../share/teams.ts';
+import { isSharedLead, isTeamTask } from '../share/teams.ts';
 import type { StateChanges } from '../state/draft.ts';
 import { createState, type ShinsaState } from '../state/project.ts';
+import { listOpenGates } from '../state/queries.ts';
 import { OWNER_ONLY_MESSAGE } from './local-only.ts';
 
 type CommandScope = Exclude<ActionScope, 'services' | 'fork'>;
@@ -142,17 +143,27 @@ function resolveCommandScope(type: string): CommandScope {
   return 'actions';
 }
 
+function isLeadMessage(state: ShinsaState, teamId: string, command: ScopedCommand, task: Task | undefined) {
+  if (command.type !== 'task.message' || !command.fromTeammateTask || command.kind) return false;
+  if (!task || task.stage !== 'leading' || listOpenGates(state, task.id).length > 0) return false;
+  return isSharedLead(state, task, teamId);
+}
+
 function resolveTeamRefusal(
   state: ShinsaState,
   actor: ScopedActor,
-  scopes: AccessScopes,
+  team: Extract<ActorScope, { kind: 'team' }>,
   command: ScopedCommand,
   taskId: string
 ) {
   if (command.type === 'task.give_back') return Option.none<string>();
+  const task = state.tasks[taskId];
+  if (isLeadMessage(state, team.teamId, command, task)) return Option.none<string>();
   const scope = resolveCommandScope(command.type);
-  const held = scope !== 'share' && isHeldBy(state.tasks[taskId], actor);
-  return hasScope(scopes, scope) || held ? Option.none<string>() : Option.some(TEAM_SCOPE_MESSAGES[scope]);
+  const held = scope !== 'share' && isHeldBy(task, actor);
+  return hasScope(team.scopes, scope) || held
+    ? Option.none<string>()
+    : Option.some(TEAM_SCOPE_MESSAGES[scope]);
 }
 
 export function resolveScopedRefusal(state: ShinsaState, actor: ScopedActor, command: UserCommand) {
@@ -167,7 +178,7 @@ export function resolveScopedRefusal(state: ShinsaState, actor: ScopedActor, com
   const gate = command.type === 'gate.answer' ? state.gates[command.gateId] : undefined;
   if (gate && KEYBOARD_GATES.has(gate.type)) return Option.some(SCOPE_MESSAGES.gate);
   return scope.kind === 'team'
-    ? resolveTeamRefusal(state, actor, scope.scopes, command, taskId)
+    ? resolveTeamRefusal(state, actor, scope, command, taskId)
     : Option.none<string>();
 }
 

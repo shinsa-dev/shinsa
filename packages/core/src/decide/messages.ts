@@ -24,6 +24,7 @@ import {
 import type { EventOf } from '../events/index.ts';
 import {
   describeReplyInstruction,
+  type LeadNote,
   resolveCommentedMessage,
   resolveHumanFixPrompt,
 } from '../prompts/index.ts';
@@ -183,7 +184,17 @@ function restartStep(decider: Decider, task: Task, text: string) {
   }
 }
 
-function resolveLeadNote(decider: Decider, text: string) {
+function resolveLeadNote(decider: Decider, text: string, sent: Sent): LeadNote {
+  const guest = decider.context.guest;
+  if (guest) {
+    const task = sent.fromTeammateTask ?? null;
+    return {
+      text,
+      byAgent: task !== null,
+      fromTask: null,
+      fromTeammate: { login: guest.login, name: guest.name, task },
+    };
+  }
   const byAgent = decider.context.onBehalf === true;
   const byTask = byAgent ? decider.context.byTask : null;
   return { text, byAgent, fromTask: byTask ? (decider.state.tasks[byTask] ?? null) : null };
@@ -192,6 +203,7 @@ function resolveLeadNote(decider: Decider, text: string) {
 interface Sent {
   texts: string[];
   comments: readonly ReviewComment[];
+  fromTeammateTask?: TeammateTaskRef;
 }
 
 function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: Sent) {
@@ -202,7 +214,7 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
     case 'kept':
       return;
     case 'lead':
-      startLeadTurn(decider, task.id, resolveLeadNote(decider, text));
+      startLeadTurn(decider, task.id, resolveLeadNote(decider, text, sent));
       return;
     case 'steer':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);
@@ -257,10 +269,13 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
   }
 }
 
+type TeammateTaskRef = NonNullable<CommandOf<'task.message'>['fromTeammateTask']>;
+
 interface MessageSend extends MessageRoute {
   taskId: string;
   texts: string[];
   comments?: readonly ReviewComment[];
+  fromTeammateTask?: TeammateTaskRef;
 }
 
 function resolveMessageKind(
@@ -343,7 +358,8 @@ export function isHeldForYou(state: ShinsaState, task: Task) {
 function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
   const task = decider.task(send.taskId);
   const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
-  const sent: Sent = { texts, comments: send.comments ?? [] };
+  const teammate = send.fromTeammateTask ? { fromTeammateTask: send.fromTeammateTask } : {};
+  const sent: Sent = { texts, comments: send.comments ?? [], ...teammate };
   const text = resolveCommentedMessage(texts.join('\n\n'), sent.comments);
   const delivery = assertMessageAccepted(decider.state, task, text);
   if (isRepeatedMessage(task, text, decider.context.now)) return;

@@ -7,6 +7,8 @@ import {
   type Initiative,
   INITIATIVE_LIMITS,
   type InitiativeMilestone,
+  type InitiativeTeamMember,
+  isInitiativeInTeam,
   resolveGateDefinition,
   resolveInitiativeText,
   selectLeadInitiative,
@@ -20,6 +22,7 @@ import {
   validateInitiativeReport,
 } from '../initiatives/index.ts';
 import { type LeadNote, resolveAgentPrompt, resolveLeadPrompt } from '../prompts/index.ts';
+import { isSameTeamMembers } from '../share/teams.ts';
 import { listInitiatives, selectInitiativeLead } from '../state/initiatives.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listActiveRuns, listOpenGates } from '../state/queries.ts';
@@ -315,4 +318,74 @@ export function syncInitiativeMilestones(decider: Decider, before: ShinsaState) 
     decider.emit({ type: 'initiative.milestones_queued', initiativeId, milestones });
     requestWake(decider, findInitiative(decider, initiativeId));
   }
+}
+
+interface TeamMilestone {
+  kind: InitiativeMilestone['kind'];
+  text: string;
+}
+
+function resolveTeamMilestone(
+  before: InitiativeTeamMember | undefined,
+  after: InitiativeTeamMember
+): TeamMilestone | null {
+  if (!before) return { kind: 'joined', text: '' };
+  if (before.stage !== after.stage) {
+    const kind = resolveStagedKind(after.stage);
+    if (kind) return { kind, text: '' };
+    if (before.stage === 'planning' && after.stage === 'building') return { kind: 'plan_approved', text: '' };
+  }
+  if (!before.gate && after.gate) return { kind: 'gate_opened', text: after.gate };
+  return null;
+}
+
+function resolveMemberKey(member: Pick<InitiativeTeamMember, 'instanceId' | 'taskId'>) {
+  return `${member.instanceId}:${member.taskId}`;
+}
+
+function listTeamMilestones(
+  decider: Decider,
+  previous: readonly InitiativeTeamMember[],
+  members: readonly InitiativeTeamMember[]
+): InitiativeMilestone[] {
+  const known = new Map(previous.map((member) => [resolveMemberKey(member), member]));
+  return members.flatMap((member) => {
+    const found = resolveTeamMilestone(known.get(resolveMemberKey(member)), member);
+    if (!found) return [];
+    return [
+      {
+        taskId: member.taskId,
+        kind: found.kind,
+        text: clip(found.text),
+        at: decider.context.now,
+        teammate: {
+          instanceId: member.instanceId,
+          handle: member.handle,
+          title: member.title,
+          owner: member.owner,
+        },
+      },
+    ];
+  });
+}
+
+export function recordTeamMembers(decider: Decider, command: CommandOf<'initiative.record_team_members'>) {
+  const initiative = decider.state.initiatives[command.initiativeId];
+  if (!initiative || !isInitiativeInTeam(initiative, command.teamId)) return;
+  if (Option.isNone(selectInitiativeLead(decider.state, initiative))) return;
+  const members = command.members
+    .filter((member) => member.teamId === command.teamId)
+    .slice(0, INITIATIVE_LIMITS.teamMembers);
+  const previous = (initiative.teamMembers ?? []).filter((member) => member.teamId === command.teamId);
+  if (isSameTeamMembers(previous, members)) return;
+  decider.emit({
+    type: 'initiative.team_members_recorded',
+    initiativeId: initiative.id,
+    teamId: command.teamId,
+    members,
+  });
+  const milestones = listTeamMilestones(decider, previous, members);
+  if (milestones.length === 0) return;
+  decider.emit({ type: 'initiative.milestones_queued', initiativeId: initiative.id, milestones });
+  requestWake(decider, findInitiative(decider, initiative.id));
 }

@@ -5,9 +5,12 @@ import {
   compareTasks,
   type Initiative,
   isLeadTask,
+  type InitiativeTeamMember,
   isTaskSettled,
   NO_FOCUS,
+  RUN_STAGES,
   type Task,
+  type TaskStage,
 } from '../domain/index.ts';
 import { listWaitsOn, resolveQueue } from '../queue/rank.ts';
 import { listInitiativeWork } from '../state/initiatives.ts';
@@ -19,6 +22,8 @@ import type {
   InitiativePhaseGroup,
   InitiativePhaseProgress,
   InitiativeSheet,
+  InitiativeTeammateSection,
+  InitiativeTeammateTask,
 } from './types.ts';
 
 const DECISION_LIMIT = 100;
@@ -27,9 +32,27 @@ function resolvePhaseOrder(initiative: Initiative) {
   return [...initiative.phases.map((phase) => phase.id), null];
 }
 
-function resolvePhaseKey(initiative: Initiative, task: Task) {
-  const phaseId = task.initiativePhaseId ?? null;
+interface PhasedMember {
+  stage: TaskStage;
+  phaseId: string | null;
+}
+
+function resolvePhaseId(initiative: Initiative, phaseId: string | null) {
   return initiative.phases.some((phase) => phase.id === phaseId) ? phaseId : null;
+}
+
+function resolvePhaseKey(initiative: Initiative, task: Task) {
+  return resolvePhaseId(initiative, task.initiativePhaseId ?? null);
+}
+
+function listPhasedMembers(initiative: Initiative, members: readonly Task[]): PhasedMember[] {
+  return [
+    ...members.map((task) => ({ stage: task.stage, phaseId: resolvePhaseKey(initiative, task) })),
+    ...(initiative.teamMembers ?? []).map((member) => ({
+      stage: member.stage,
+      phaseId: resolvePhaseId(initiative, member.phaseId),
+    })),
+  ];
 }
 
 function selectPhase(initiative: Initiative, phaseId: string | null) {
@@ -53,8 +76,9 @@ function listNext(state: ShinsaState, initiative: Initiative, tasks: Task[]): In
 }
 
 function listProgress(initiative: Initiative, members: Task[]): InitiativePhaseProgress[] {
+  const phased = listPhasedMembers(initiative, members);
   return resolvePhaseOrder(initiative).flatMap((phaseId) => {
-    const tasks = members.filter((task) => resolvePhaseKey(initiative, task) === phaseId);
+    const tasks = phased.filter((member) => member.phaseId === phaseId);
     if (tasks.length === 0 && phaseId === null) return [];
     const dropped = tasks.filter((task) => task.stage === 'cancelled').length;
     const shipped = tasks.filter((task) => isTaskSettled(task)).length - dropped;
@@ -107,6 +131,27 @@ function listTaskDecisions(task: Task): InitiativeDecision[] {
   return [...rounds, ...current, ...calls];
 }
 
+function resolveTeammateSection(member: InitiativeTeamMember): InitiativeTeammateSection {
+  if (member.stage === 'cancelled') return 'dropped';
+  if (isTaskSettled(member)) return 'shipped';
+  if (member.gate) return 'owner';
+  return RUN_STAGES.has(member.stage) ? 'now' : 'next';
+}
+
+function listTeammates(initiative: Initiative): InitiativeTeammateTask[] {
+  const order = resolvePhaseOrder(initiative);
+  return (initiative.teamMembers ?? [])
+    .map((member) => {
+      const phaseId = resolvePhaseId(initiative, member.phaseId);
+      return { member, phase: selectPhase(initiative, phaseId), section: resolveTeammateSection(member) };
+    })
+    .sort(
+      (left, right) =>
+        order.indexOf(left.phase?.id ?? null) - order.indexOf(right.phase?.id ?? null) ||
+        (left.member.handle ?? left.member.title).localeCompare(right.member.handle ?? right.member.title)
+    );
+}
+
 function compareByRecent(left: Task, right: Task) {
   return (
     (right.closedAt ?? right.updatedAt) - (left.closedAt ?? left.updatedAt) || left.id.localeCompare(right.id)
@@ -148,6 +193,7 @@ export function resolveInitiativeSheet(
     dropped,
     decisions,
     progress: listProgress(initiative, members),
+    teammates: listTeammates(initiative),
   });
 }
 

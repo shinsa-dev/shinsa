@@ -1222,6 +1222,8 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'initiative.lead_woken':
     case 'initiative.reported':
     case 'task.initiative_changed':
+    case 'task.team_initiative_changed':
+    case 'initiative.team_members_recorded':
       applyInitiativeEvent(state, event);
       break;
     case 'memory.written':

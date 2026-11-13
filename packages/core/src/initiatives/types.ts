@@ -1,4 +1,4 @@
-import type { Initiative, InitiativePhase, Task } from '../domain/index.ts';
+import type { Initiative, InitiativePhase, InitiativeTeamMember, Task } from '../domain/index.ts';
 import type { QueuedGate } from '../queue/types.ts';
 
 export interface InitiativeNextTask {
@@ -33,6 +33,14 @@ export interface InitiativeDecision {
   at: number;
 }
 
+export type InitiativeTeammateSection = 'owner' | 'now' | 'next' | 'shipped' | 'dropped';
+
+export interface InitiativeTeammateTask {
+  member: InitiativeTeamMember;
+  phase: InitiativePhase | null;
+  section: InitiativeTeammateSection;
+}
+
 export interface InitiativeSheet {
   initiative: Initiative;
   needsYou: QueuedGate[];
@@ -42,4 +50,5 @@ export interface InitiativeSheet {
   dropped: InitiativeDroppedTask[];
   decisions: InitiativeDecision[];
   progress: InitiativePhaseProgress[];
+  teammates: InitiativeTeammateTask[];
 }

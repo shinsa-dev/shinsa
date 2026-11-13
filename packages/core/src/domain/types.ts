@@ -16,6 +16,7 @@ import type { ViewScope } from '../scopes/schema.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
 import type { UsageLimitScope, UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
+import type { TeamInitiativeRef } from './initiatives.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
@@ -544,6 +545,7 @@ export interface Task {
   teammateFork?: TeammateFork | null;
   initiativeId?: string | null;
   initiativePhaseId?: string | null;
+  teamInitiative?: TeamInitiativeRef | null;
   splits?: TaskSplit[];
   scheduleId?: string | null;
   sourceReport?: SourceReport | null;

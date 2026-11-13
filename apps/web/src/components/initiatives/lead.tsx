@@ -3,7 +3,11 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 
-export function LeadReport({ initiative }: { initiative: Initiative }) {
+export function LeadReport({
+  initiative,
+}: {
+  initiative: Pick<Initiative, 'id'> & { report?: { narrative: string } | null };
+}) {
   if (!initiative.report) return null;
   return (
     <Panel

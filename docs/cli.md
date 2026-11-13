@@ -321,7 +321,7 @@ Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create
 
 #### shinsa tasks message
 
-Send a message to a task's agent. At an open decision it is your feedback, never an approval.
+Send a message to a task's agent, or to the lead of an initiative a teammate shared with your team. At an open decision it is your feedback, never an approval.
 
 ```
 shinsa tasks message <task> <text...> [--as <feedback|acknowledge|new_round|separate_task>] [--json]
@@ -730,7 +730,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 #### shinsa tasks join-initiative
 
-Add a task to an initiative, or move it to another phase. Tasks it files later join the same initiative and phase.
+Add a task to an initiative, yours or one a teammate shared with your team, or move it to another phase. Tasks it files later join the same initiative and phase.
 
 ```
 shinsa tasks join-initiative <task> <initiative> [--phase <text>] [--json]
@@ -878,6 +878,36 @@ Every task agent's tool: `initiatives_adopt`. Sends `initiative.adopt_task`.
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa initiatives add-to-team
+
+Show an initiative to a team: its lead task and its sheet, read-only. Teammates’ own tasks can then join it.
+
+```
+shinsa initiatives add-to-team <initiative> <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `initiative.add_to_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa initiatives remove-from-team
+
+Stop showing an initiative to a team. Teammates’ tasks in it leave its sheet.
+
+```
+shinsa initiatives remove-from-team <initiative> <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `initiative.remove_from_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 
 ### gates
 
