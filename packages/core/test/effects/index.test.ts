@@ -29,6 +29,9 @@ describe('resolveEffectKey', () => {
     expect(resolveEffectKey({ kind: 'autopilot.judge', taskId: 't', gateId: 'g', shadow: false }, 9)).toBe(
       'autopilot.judge:g:9'
     );
+    expect(resolveEffectKey({ kind: 'autopilot.weigh', taskId: 't', suggestionId: 's' }, 9)).toBe(
+      'autopilot.weigh:t:s'
+    );
   });
 
   test('repeatable effects are keyed by the event that asked for them', () => {
@@ -54,6 +57,9 @@ describe('resolveEffectLane', () => {
     expect(resolveEffectLane({ kind: 'run.steer', runId: 'r', text: 'x' })).toBe('steer:r');
     expect(resolveEffectLane({ kind: 'question.resolve', gateId: 'g' })).toBe('gate:g');
     expect(resolveEffectLane({ kind: 'autopilot.judge', taskId: 't', gateId: 'g', shadow: false })).toBe(
+      'autopilot:t'
+    );
+    expect(resolveEffectLane({ kind: 'autopilot.weigh', taskId: 't', suggestionId: 's' })).toBe(
       'autopilot:t'
     );
     expect(resolveEffectLane({ kind: 'briefing.request', projectId: 'a' })).toBe('briefing');
