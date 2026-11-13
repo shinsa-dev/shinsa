@@ -428,7 +428,8 @@ model. The Worker's part of it:
   other account, a Slack workspace's id as `workspace_id` (never `team_id`, which is one of our teams), a sealed
   value as `sealed_*`; a JSON column (`features`, `scopes`) is checked with `json_valid`. The test fails on a table missing from its list, one not strict, a foreign key without an index
   a value of the wrong type and text that is not JSON. A change to the schema is a new file after it (`0002_…`), never an edit to one D1
-  has applied.
+  has applied. `0004_drop_tunnel_columns.sql` drops `machines.tunnel_id` and `dns_record_id`, the per-machine tunnel's
+  ids the relay replaced; the test pins the columns of `machines`.
 - **What logs keep.** Failures of 500 or more with their cause, and the ids and statuses of what a machine or Slack
   refused (`WorkerLogger`); never a body, and every secret is `Redacted`, so a cause prints it as `<redacted>`.
   Workers Logs record each request's URL too, which for a webhook includes its token.
