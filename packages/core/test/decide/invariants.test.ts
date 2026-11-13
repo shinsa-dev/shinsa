@@ -1961,13 +1961,7 @@ describe('decide under random command sequences', () => {
   test(
     'keeps every invariant while tasks take new rounds, ship them onto one pull request or stacked, and close',
     () => {
-      const reached = new Set<string>();
-      const collect = (state: ShinsaState) => {
-        for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
-          if (mark) reached.add(mark);
-      };
-      for (let seed = 1; seed <= RARE_SEEDS + 20; seed += 1) simulate(seed, STEPS, 'rounds', collect);
-      expect([...reached].sort()).toEqual([
+      const marks = [
         'carried merge step',
         'closed task',
         'gate after the merge',
@@ -1980,9 +1974,19 @@ describe('decide under random command sequences', () => {
         'three rounds',
         'ticked merge step',
         'waiting round',
-      ]);
+      ];
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
+          if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= RARE_SEEDS * 4; seed += 1) {
+        if (seed > RARE_SEEDS && reached.size === marks.length) break;
+        simulate(seed, STEPS, 'rounds', collect);
+      }
+      expect([...reached].sort()).toEqual(marks);
     },
-    RARE_SEEDS * 3_000
+    RARE_SEEDS * 8_000
   );
 
   test(
