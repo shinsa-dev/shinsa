@@ -30,7 +30,6 @@ import {
   type MachineChoice,
   NO_UNREACHABLE_MACHINES,
   type UnreachableMachine,
-  useEngineFeature,
   useMachines,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
@@ -43,7 +42,6 @@ import {
   hasMachineChoice,
   isProjectOnMachine,
   listNewTaskMachines,
-  listNewTaskKinds,
   listNewTaskPriorities,
   listNewTaskProjects,
   listNewTaskStarts,
@@ -66,8 +64,6 @@ import { listOpenTaskChoices, orderChains } from '@/lib/tasks/groups.ts';
 import { resolveTaskMenuIcon } from '@/lib/tasks/status.ts';
 
 const PRIORITY_ITEMS = listNewTaskPriorities();
-
-const KIND_ITEMS = listNewTaskKinds();
 
 function ProjectField({
   items,
@@ -228,7 +224,6 @@ export function NewTaskFields({
   onChoose: (part: Partial<NewTaskChoices>) => void;
 }) {
   const { choices, shownProject, open, stackable, placement } = resolveForm(state, chosen, machines);
-  const initiatives = useEngineFeature('initiatives');
   const pickedMachine = choices.machine === 'auto' ? null : choices.machine;
   const projects = state
     ? listNewTaskProjects(state, connection.selectMachine).filter((item) =>
@@ -237,17 +232,6 @@ export function NewTaskFields({
     : [];
   return (
     <>
-      {initiatives && (
-        <SelectField
-          label='Kind of task'
-          size='sm'
-          variant='ghost'
-          align='start'
-          items={KIND_ITEMS}
-          value={choices.kind}
-          onValueChange={(kind) => onChoose({ kind })}
-        />
-      )}
       {hasMachineChoice(machines, unreachable) && (
         <SelectField
           label='Machine'
@@ -293,7 +277,7 @@ export function NewTaskForm() {
   const attachments = useAttachments();
   const { dragging, dropProps, onPaste } = useFileDrop(attachments);
   const ready = canSendDraft(request, attachments.drafts, busy);
-  const copy = describeNewTask(choices.start, choices.kind);
+  const copy = describeNewTask(choices.start);
   const choose = (part: Partial<NewTaskChoices>) => setChosen((current) => ({ ...current, ...part }));
   useNewTaskRequest((draft) => {
     if (draft) setRequest(draft);
