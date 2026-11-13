@@ -4,7 +4,7 @@ import { Bucket } from '../bucket/service.ts';
 import { answerBytes, answerUnsatisfiable } from '../bytes.ts';
 import { EdgeCache } from '../cache/service.ts';
 import { parseDownloadPointer } from '../releases/pointer.ts';
-import { type Channel, DownloadPointer } from '../releases/schema.ts';
+import { type Channel, DownloadPointer, type Product, SHINSA } from '../releases/schema.ts';
 import { ReleaseFeed } from '../releases/service.ts';
 import { resolveFallbackUrl, selectChannelVersion } from '../releases/versions.ts';
 import {
@@ -29,30 +29,39 @@ export class Downloads extends Context.Service<
       const assets = yield* Assets;
       const decodePointerText = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
 
-      const requestPointer = Effect.fn('Downloads.requestPointer')(function* (channel: Channel) {
-        const object = yield* bucket.get(resolveChannelKey(channel), Option.none());
+      const requestPointer = Effect.fn('Downloads.requestPointer')(function* (
+        product: Product,
+        channel: Channel
+      ) {
+        const object = yield* bucket.get(resolveChannelKey(channel, product), Option.none());
         if (Option.isNone(object)) return Option.none<DownloadPointer>();
         const value = yield* decodePointerText(yield* object.value.text);
         return Option.fromNullishOr(parseDownloadPointer(value));
       });
 
-      const selectPointer = (channel: Channel) =>
-        cache.remember(resolvePointerCacheKey(channel), DownloadPointer, requestPointer(channel));
+      const selectPointer = (product: Product, channel: Channel) =>
+        cache.remember(
+          resolvePointerCacheKey(channel, product),
+          DownloadPointer,
+          requestPointer(product, channel)
+        );
 
       const resolveDownloadPointer = Effect.fn('Downloads.resolveDownloadPointer')(function* (
+        product: Product,
         channel: Channel
       ) {
-        const pointer = yield* selectPointer(channel);
+        const pointer = yield* selectPointer(product, channel);
         if (Option.isSome(pointer) || channel !== 'stable') return pointer;
-        return yield* selectPointer('beta');
+        return yield* selectPointer(product, product.stableFallback);
       });
 
       const streamPointer = Effect.fn('Downloads.streamPointer')(function* (
         request: Request,
+        product: Product,
         pointer: DownloadPointer
       ) {
         const validators = resolveValidators(pointer);
-        const headers = createDmgHeaders(pointer, validators);
+        const headers = createDmgHeaders(product, pointer, validators);
         const precondition = resolvePrecondition(request.headers, validators);
         if (precondition) return Option.some(new Response(null, { status: precondition, headers }));
         const range = resolveRequestedRange(request, pointer, validators);
@@ -65,19 +74,26 @@ export class Downloads extends Context.Service<
         return Option.map(object, (found) => answerBytes(headers, pointer.size, range, found.body));
       });
 
-      const streamFromBucket = (request: Request, channel: Channel) =>
-        resolveDownloadPointer(channel).pipe(
+      const streamFromBucket = (request: Request, product: Product, channel: Channel) =>
+        resolveDownloadPointer(product, channel).pipe(
           Effect.flatMap(
             Option.match({
               onNone: () => Effect.succeedNone,
-              onSome: (pointer) => streamPointer(request, pointer),
+              onSome: (pointer) => streamPointer(request, product, pointer),
+            })
+          ),
+          Effect.tapError((error) =>
+            Effect.annotateLogs(Effect.logError('Download read from R2 failed'), {
+              product: product.name,
+              channel,
+              error,
             })
           ),
           Effect.orElseSucceed(() => Option.none<Response>())
         );
 
       const selectPointerVersion = (channel: Channel) =>
-        resolveDownloadPointer(channel).pipe(
+        resolveDownloadPointer(SHINSA, channel).pipe(
           Effect.map(Option.map((pointer) => pointer.version)),
           Effect.orElseSucceed(() => Option.none<string>())
         );
@@ -93,8 +109,14 @@ export class Downloads extends Context.Service<
         return new Response(`${version}\n`, { status: 200, headers: VERSION_HEADERS });
       });
 
-      const redirectToGitHub = Effect.fn('Downloads.redirectToGitHub')(function* (channel: Channel) {
-        const location = resolveFallbackUrl(yield* feed.listVersions, channel);
+      const redirectToFallback = Effect.fn('Downloads.redirectToFallback')(function* (
+        product: Product,
+        channel: Channel
+      ) {
+        const location = yield* Option.match(product.comingSoonUrl, {
+          onSome: Effect.succeed,
+          onNone: () => Effect.map(feed.listVersions, (tags) => resolveFallbackUrl(tags, channel)),
+        });
         return new Response(null, {
           status: 302,
           headers: { Location: location, 'Cache-Control': 'no-store' },
@@ -105,11 +127,11 @@ export class Downloads extends Context.Service<
         const { pathname } = new URL(request.url);
         const versionChannel = resolveVersionChannel(pathname);
         if (versionChannel) return yield* respondVersion(versionChannel);
-        const channel = resolveChannel(pathname);
-        if (!channel) return yield* assets.fetch(request);
-        const download = yield* streamFromBucket(request, channel);
+        const target = resolveChannel(pathname);
+        if (!target) return yield* assets.fetch(request);
+        const download = yield* streamFromBucket(request, target.product, target.channel);
         if (Option.isSome(download)) return download.value;
-        return yield* redirectToGitHub(channel);
+        return yield* redirectToFallback(target.product, target.channel);
       });
 
       return Downloads.of({ respond });

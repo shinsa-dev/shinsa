@@ -13,6 +13,7 @@ import DemoWindow from '../components/layout/DemoWindow.astro';
 import Section from '../components/layout/Section.astro';
 import Closing from '../components/sections/Closing.astro';
 import Hero from '../components/sections/Hero.astro';
+import KoeCallout from '../components/sections/KoeCallout.astro';
 import Site from '../layouts/Site.astro';
 import { sections } from '../lib/content';
 import { listGuardedCommands } from '../lib/guard';
@@ -63,5 +64,6 @@ const guarded = await Effect.runPromise(listGuardedCommands);
     </div>
   </Section>
   <Closing />
+  <KoeCallout />
   <Toasts client:only='react' />
 </Site>

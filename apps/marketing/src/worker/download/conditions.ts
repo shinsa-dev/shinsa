@@ -1,6 +1,6 @@
 import { DateTime, Option } from 'effect';
 import { parseRange } from '../bytes.ts';
-import type { DownloadPointer } from '../releases/schema.ts';
+import type { DownloadPointer, Product } from '../releases/schema.ts';
 import { DMG_HEADERS, type Validators } from './schema.ts';
 
 function listEntityTags(header: string) {
@@ -58,10 +58,10 @@ export function resolveRequestedRange(request: Request, pointer: DownloadPointer
   return parseRange(header, pointer.size);
 }
 
-export function createDmgHeaders(pointer: DownloadPointer, validators: Validators) {
+export function createDmgHeaders(product: Product, pointer: DownloadPointer, validators: Validators) {
   return new Headers({
     ...DMG_HEADERS,
-    'Content-Disposition': `attachment; filename="Shinsa-${pointer.version}.dmg"`,
+    'Content-Disposition': `attachment; filename="${product.fileStem}-${pointer.version}.dmg"`,
     ETag: validators.etag,
     'Last-Modified': validators.lastModified,
   });

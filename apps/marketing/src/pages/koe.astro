@@ -1,0 +1,119 @@
+---
+import { Icon } from '@shinsa/ui/components/icon';
+import KoeBundle from '../components/koe/KoeBundle.astro';
+import KoeTools from '../components/koe/KoeTools.astro';
+import KoeVideo from '../components/koe/KoeVideo.astro';
+import Section from '../components/layout/Section.astro';
+import Button from '../components/ui/Button.astro';
+import Site from '../layouts/Site.astro';
+import { koe, koeFeatures, koeModels, koeSections, koeSpeed } from '../lib/content';
+import { koeSite } from '../lib/site';
+---
+
+<Site title={koeSite.title} description={koeSite.description} product='koe'>
+  <section id='soon' class='group flex flex-col px-6 pt-14 pb-12 md:pt-20 md:pb-16'>
+    <div id='top' class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
+      <img src='/koe/koe.svg' alt='' width='88' height='88' class='size-22' />
+      <h1 class='font-medium text-4xl leading-[1.08] tracking-tight text-balance md:text-5xl'>
+        <span class='text-fg-4'>{koe.headline}</span>{' '}<span class='text-fg-2'>{koe.headlineRest}</span>
+      </h1>
+      <p class='max-w-[40rem] text-base text-fg-2 leading-relaxed text-pretty md:text-lg'>{koe.text}</p>
+      <div class='hidden flex-col items-center gap-1 rounded-xl border border-bg-3 bg-bg-1 px-5 py-4 group-target:flex'>
+        <p class='font-medium text-fg-4 text-sm'>{koe.soonTitle}</p>
+        <p class='text-fg-2 text-sm'>{koe.soonText}</p>
+      </div>
+      <div class='mt-1 flex flex-col items-center gap-2'>
+        <div class='flex flex-wrap items-center justify-center gap-2'>
+          <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+          <Button href={koeSite.githubUrl} variant='secondary' icon='IconGithub' iconSize='md' external>
+            {koe.secondary}
+          </Button>
+        </div>
+        <p class='text-fg-2 text-sm'>{koe.requirement}</p>
+      </div>
+    </div>
+    <KoeVideo
+      name='koe-session'
+      width={2548}
+      height={1492}
+      label={koe.sessionLabel}
+      captions={koe.sessionCaptions}
+      class='mx-auto mt-12 w-full max-w-5xl scroll-mt-24 shadow-lg md:mt-16'
+      id={koe.demoId}
+    />
+  </section>
+  <KoeTools />
+  <Section copy={koeSections.bundle}>
+    <KoeBundle />
+  </Section>
+  <Section copy={koeSections.speed}>
+    <div class='grid gap-4 sm:grid-cols-2'>
+      {
+        koeSpeed.stats.map((stat) => (
+          <div class='koe-speed flex flex-col items-center gap-1 rounded-2xl px-6 py-12 text-center ring-1 ring-bg-3'>
+            <span class='font-medium text-5xl text-fg-4 tracking-tight tabular-nums md:text-6xl'>{stat.value}</span>
+            <span class='text-fg-2 text-sm'>{stat.label}</span>
+          </div>
+        ))
+      }
+    </div>
+    <p slot='after' class='mx-auto max-w-2xl text-center text-fg-2 text-xs leading-relaxed text-pretty'>
+      {koeSpeed.method}
+    </p>
+  </Section>
+  <Section copy={koeSections.models}>
+    <div class='grid gap-px overflow-hidden rounded-2xl bg-bg-3 ring-1 ring-bg-3 sm:grid-cols-2'>
+      {
+        koeModels.map((model) => (
+          <div class='flex items-center gap-3 bg-background px-5 py-4'>
+            <div class='flex min-w-0 flex-1 flex-col'>
+              <span class='flex items-center gap-2 font-medium text-fg-4 text-sm'>
+                {model.name}
+                {model.note && (
+                  <span class='rounded-full bg-primary-a2 px-2 py-0.5 font-medium text-primary-text text-xs'>
+                    {model.note}
+                  </span>
+                )}
+              </span>
+              <span class='text-fg-2 text-sm'>{model.languages}</span>
+            </div>
+            <span class='shrink-0 text-fg-2 text-sm tabular-nums'>{model.size}</span>
+          </div>
+        ))
+      }
+    </div>
+  </Section>
+  <section class='flex flex-col px-6 py-12 md:py-16'>
+    <div class='mx-auto grid w-full max-w-5xl gap-x-10 gap-y-8 sm:grid-cols-3'>
+      {
+        koeFeatures.map((feature) => (
+          <div class='flex flex-col gap-1'>
+            <h3 class='flex items-center gap-2 font-medium text-fg-4 text-sm [--icon-size:var(--icon-size-md)]'>
+              <span class='text-fg-2'>
+                <Icon name={feature.icon} />
+              </span>
+              {feature.title}
+            </h3>
+            <p class='text-fg-2 text-sm leading-relaxed text-pretty'>{feature.text}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+  <section class='flex flex-col px-6 pt-16 pb-24'>
+    <div class='mx-auto flex max-w-xl flex-col items-center gap-6 text-center'>
+      <h2 class='font-medium text-3xl tracking-tight text-balance md:text-4xl'>
+        <span class='text-fg-4'>{koe.closingTitle}</span>{' '}<span class='text-fg-2'>{koe.closingText}</span>
+      </h2>
+      <div class='flex flex-col items-center gap-2'>
+        <div class='flex flex-wrap items-center justify-center gap-2'>
+          <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+          <Button href={koeSite.githubUrl} variant='secondary' icon='IconGithub' iconSize='md' external>
+            {koe.secondary}
+          </Button>
+        </div>
+        <p class='text-fg-2 text-sm'>{koe.requirement}</p>
+      </div>
+    </div>
+  </section>
+</Site>

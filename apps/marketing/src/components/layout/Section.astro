@@ -20,4 +20,9 @@ const { copy } = Astro.props;
   <div class='@container mx-auto mt-8 w-full max-w-5xl md:mt-10' data-chip>
     <slot />
   </div>
+  {Astro.slots.has('after') && (
+    <div class='mx-auto mt-4 w-full max-w-5xl'>
+      <slot name='after' />
+    </div>
+  )}
 </section>

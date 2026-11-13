@@ -98,6 +98,14 @@ body {
   opacity: 0.7;
 }
 
+img,
+video,
+svg,
+picture {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .board svg {
   display: block;
 }
@@ -193,5 +201,124 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .demo-try [data-live] [data-slot="button"] {
     animation: none;
+  }
+}
+
+.koe-desktop {
+  background:
+    radial-gradient(60% 70% at 15% 10%, var(--color-primary-a2), transparent 70%),
+    radial-gradient(50% 60% at 90% 100%, var(--color-purple-a2), transparent 70%), var(--color-sidebar);
+}
+
+.koe-speed {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--color-sidebar);
+}
+
+.koe-speed::before,
+.koe-speed::after {
+  position: absolute;
+  z-index: -1;
+  inset: -20%;
+  filter: blur(48px);
+  mix-blend-mode: plus-lighter;
+  content: "";
+}
+
+.koe-speed::before {
+  background:
+    radial-gradient(34% 46% at 4% 8%, var(--color-primary-a4), transparent 72%),
+    radial-gradient(28% 40% at 22% 0%, var(--color-sky-a3), transparent 72%),
+    radial-gradient(30% 44% at 96% 96%, var(--color-purple-a3), transparent 72%);
+  animation: koe-glow-a 12s ease-in-out infinite alternate;
+}
+
+.koe-speed::after {
+  background:
+    radial-gradient(26% 38% at 0% 92%, var(--color-pink-a3), transparent 72%),
+    radial-gradient(30% 42% at 100% 6%, var(--color-primary-a4), transparent 72%),
+    radial-gradient(24% 34% at 80% 100%, var(--color-sky-a3), transparent 72%);
+  animation: koe-glow-b 15s ease-in-out infinite alternate;
+}
+
+.koe-speed:nth-child(2)::before {
+  background:
+    radial-gradient(32% 44% at 96% 4%, var(--color-purple-a3), transparent 72%),
+    radial-gradient(26% 38% at 74% 0%, var(--color-pink-a3), transparent 72%),
+    radial-gradient(30% 44% at 2% 98%, var(--color-sky-a3), transparent 72%);
+  animation-duration: 14s;
+  animation-direction: alternate-reverse;
+}
+
+.koe-speed:nth-child(2)::after {
+  background:
+    radial-gradient(28% 40% at 100% 90%, var(--color-primary-a4), transparent 72%),
+    radial-gradient(26% 36% at 0% 10%, var(--color-sky-a3), transparent 72%),
+    radial-gradient(22% 32% at 28% 100%, var(--color-purple-a3), transparent 72%);
+  animation-duration: 17s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes koe-glow-a {
+  from {
+    opacity: 0.75;
+    transform: translate(-3%, -2%) scale(1);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(3%, 2%) scale(1.06);
+  }
+}
+
+@keyframes koe-glow-b {
+  from {
+    opacity: 1;
+    transform: translate(2%, 3%) scale(1.05);
+  }
+
+  to {
+    opacity: 0.7;
+    transform: translate(-2%, -3%) scale(1);
+  }
+}
+
+.koe-caption {
+  opacity: 0;
+  translate: 0 4px;
+  transition:
+    opacity 180ms ease-out,
+    translate 180ms ease-out;
+}
+
+.koe-caption[data-shown] {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.koe-word {
+  opacity: 0;
+  filter: blur(4px);
+  transition:
+    opacity 160ms ease-out,
+    filter 160ms ease-out;
+}
+
+.koe-word[data-said] {
+  opacity: 1;
+  filter: blur(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .koe-speed::before,
+  .koe-speed::after {
+    animation: none;
+  }
+
+  .koe-caption,
+  .koe-word {
+    transition: none;
   }
 }

@@ -1,0 +1,50 @@
+---
+import { koe, koeSections, koeTools } from '../../lib/content';
+import { koeSite } from '../../lib/site';
+import Button from '../ui/Button.astro';
+
+const links = [
+  { label: 'How it works', href: `#${koe.demoId}` },
+  { label: 'Tools', href: `#${koeTools[0]!.id}` },
+  { label: 'Speed', href: `#${koeSections.speed.id}` },
+  { label: 'Models', href: `#${koeSections.models.id}` },
+];
+---
+
+<header
+  class='sticky top-0 z-40 bg-background px-6 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-8 after:bg-linear-to-b after:from-background after:to-transparent after:opacity-0 after:transition-opacity after:duration-300 in-data-scrolled:after:opacity-100'
+>
+  <div class='mx-auto flex h-14 max-w-5xl items-center gap-6'>
+    <div class='flex items-center gap-2'>
+      <a href={`${koeSite.path}#top`} class='flex items-center gap-1.5 font-medium text-fg-4 text-sm' aria-label='Koe'>
+        <img src='/koe/koe.svg' alt='' width='20' height='20' class='size-5' />
+        Koe
+      </a>
+      <a href='/' class='text-fg-2 text-sm transition-colors hover:text-fg-4'>{koe.byline}</a>
+    </div>
+    <nav class='mx-auto hidden items-center gap-1 md:flex' aria-label='Sections'>
+      {
+        links.map((link) => (
+          <a
+            href={link.href}
+            class='rounded-control px-2.5 py-1 text-fg-2 text-sm transition-colors duration-150 hover:bg-bg-a1 hover:text-fg-4'
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+    <div class='ms-auto flex items-center gap-1.5 md:ms-0'>
+      <Button
+        href={koeSite.githubUrl}
+        variant='secondary'
+        size='icon'
+        icon='IconGithub'
+        iconSize='md'
+        label='GitHub'
+        external
+      />
+      <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+    </div>
+  </div>
+</header>

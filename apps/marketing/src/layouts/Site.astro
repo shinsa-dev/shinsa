@@ -3,24 +3,28 @@ import areal from '@shinsa/ui/styles/fonts/ABCArealVariable.woff2?url';
 import '../styles/global.css';
 import Backdrop from '../components/layout/Backdrop.astro';
 import Header from '../components/layout/Header.astro';
-import { site } from '../lib/site';
+import KoeHeader from '../components/layout/KoeHeader.astro';
+import { koeSite, site } from '../lib/site';
 
 interface Props {
   title: string;
   description: string;
   noindex?: boolean;
+  product?: 'shinsa' | 'koe';
 }
 
-const { title, description, noindex = false } = Astro.props;
+const { title, description, noindex = false, product = 'shinsa' } = Astro.props;
+const isKoe = product === 'koe';
+const appName = isKoe ? 'Koe' : site.name;
 const canonical = new URL(Astro.url.pathname, site.url).href;
 const image = new URL('/og.png', site.url).href;
 const imageAlt = `${site.title}. Home with a Needs you and an In progress list.`;
 const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
-  name: site.name,
+  name: appName,
   description,
-  url: site.url,
+  url: isKoe ? new URL(koeSite.path, site.url).href : site.url,
   image,
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'macOS',
@@ -41,8 +45,8 @@ const structuredData = {
     <link rel='canonical' href={canonical} />
     <meta name='robots' content={noindex ? 'noindex, nofollow, noarchive' : 'index, follow, max-image-preview:large'} />
     {noindex && <meta name='referrer' content='no-referrer' />}
-    <meta name='application-name' content={site.name} />
-    <meta name='apple-mobile-web-app-title' content={site.name} />
+    <meta name='application-name' content={appName} />
+    <meta name='apple-mobile-web-app-title' content={appName} />
     <meta name='theme-color' media='(prefers-color-scheme: light)' content='#ffffff' />
     <meta name='theme-color' media='(prefers-color-scheme: dark)' content='#121214' />
     <link rel='icon' href='/favicon.ico' sizes='any' />
@@ -75,9 +79,14 @@ const structuredData = {
   </head>
   <body class='relative flex min-h-dvh flex-col bg-background text-fg-3'>
     <Backdrop />
-    <Header />
+    {isKoe ? <KoeHeader /> : <Header />}
     <main id='content' class='relative z-10 flex-1'>
       <slot />
     </main>
+    <script>
+      document.addEventListener('dragstart', (event) => {
+        if (event.target instanceof Element && event.target.closest('img, video, svg, picture')) event.preventDefault();
+      });
+    </script>
   </body>
 </html>
