@@ -123,7 +123,6 @@ function listActedGates(state: ShinsaState, answered: Gate, decision: GateDecisi
         isGateKind(gate.type) &&
         isJudgedBy(gate, answered, decision)
     )
-    .sort((a, b) => (a.answeredAt ?? 0) - (b.answeredAt ?? 0))
     .map((gate) => ({ gate, kind: 'acted' as const, reason: gate.autopilotAnswer ?? '' }));
 }
 
