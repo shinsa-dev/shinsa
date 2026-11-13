@@ -9,6 +9,7 @@ import {
   resolveCurrentRound,
   type Task,
 } from '../domain/index.ts';
+import type { ShinsaState } from '../state/project.ts';
 import {
   canChangeStack,
   isBundleMember,
@@ -22,7 +23,6 @@ import {
   resolveBundleMembers,
   selectStackRefusal,
 } from '../state/queries.ts';
-import type { ShinsaState } from '../state/project.ts';
 import { type Decider, describeWaiting, quoteTitles } from './decider.ts';
 import { startWork } from './lifecycle.ts';
 import { reviewMergeHold } from './pull-requests.ts';

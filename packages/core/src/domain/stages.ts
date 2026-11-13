@@ -48,10 +48,6 @@ export function hasMergedPullRequest(task: Pick<Task, 'pullRequest'>) {
   return task.pullRequest?.state === 'merged';
 }
 
-export function isDependencyComplete(task: Task) {
-  return isTaskComplete(task) || hasMergedPullRequest(task);
-}
-
 export function hasArmedWait(task: Task) {
   return task.monitor?.status === 'armed' || task.usageWait?.status === 'armed' || isRetryArmed(task);
 }

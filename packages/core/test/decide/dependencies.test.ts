@@ -102,6 +102,34 @@ describe('a task that merged and moved on', () => {
     });
     expect(harness.task(child).stage).toBe('triage');
   });
+
+  test('a wait from before its next round ends with the round it waited for', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    const second = createTask(harness, { request: 'Second' });
+    const child = createTask(harness, { request: 'Child', waitsOn: [first, second] });
+    shipAndMerge(harness, first);
+    harness.send({ type: 'task.message', taskId: first, text: 'Add retries too.', kind: 'new_round' });
+    expect(harness.task(first).stage).not.toBe('merged');
+    expect(harness.task(child).stageReason).toBe('waiting for “Second” to finish');
+
+    shipAndMerge(harness, second);
+    expect(harness.task(child).stage).toBe('triage');
+    expect(harness.task(child).waitsOnRounds).toEqual({ [first]: 1, [second]: 1 });
+  });
+
+  test('a wait held at the merge gate ends with the round it waited for', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    const child = createTask(harness, { request: 'Child', waitsOn: [first] });
+    shipAndMerge(harness, first);
+    harness.send({ type: 'task.message', taskId: first, text: 'Add retries too.', kind: 'new_round' });
+    readyWorktree(harness, child);
+    reachShipping(harness, child);
+    harness.send({ type: 'pull_request.record', taskId: child, pullRequest: pullRequest() });
+    expect(listWaitsOn(harness.state, harness.task(child))).toEqual([]);
+    expect(harness.openGate(child).type).toBe('merge');
+  });
 });
 
 describe('dependencies', () => {

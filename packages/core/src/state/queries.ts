@@ -3,7 +3,7 @@ import {
   DomainError,
   type DomainRefusal,
   type Gate,
-  hasMergedPullRequest,
+  hasMergedSince,
   hasStep,
   isAgentQuestion,
   isDelegatedRun,
@@ -13,6 +13,7 @@ import {
   isTaskSettled,
   parseTaskHandle,
   type Run,
+  resolveCurrentRound,
   resolveRepoWorkspace,
   type Task,
   type TaskStage,
@@ -79,9 +80,18 @@ function listDependencies(state: ShinsaState, task: Task) {
     .filter((dependency) => dependency !== undefined);
 }
 
+function resolveWaitRound(task: Task, dependency: Task) {
+  return task.waitsOnRounds?.[dependency.id] ?? resolveCurrentRound(dependency).number;
+}
+
+export function isWaitOver(task: Task, dependency: Task) {
+  return isDependencyComplete(dependency, resolveWaitRound(task, dependency));
+}
+
 export function listOpenBlockers(state: ShinsaState, task: Task) {
   return listDependencies(state, task).filter(
-    (dependency) => !isTaskSettled(dependency) && !hasMergedPullRequest(dependency)
+    (dependency) =>
+      !isTaskSettled(dependency) && !hasMergedSince(dependency, resolveWaitRound(task, dependency))
   );
 }
 
@@ -261,7 +271,7 @@ export function listPendingStackParents(state: ShinsaState, task: Task) {
 }
 
 export function listPendingDependencies(state: ShinsaState, task: Task) {
-  const pending = listDependencies(state, task).filter((dependency) => !isDependencyComplete(dependency));
+  const pending = listDependencies(state, task).filter((dependency) => !isWaitOver(task, dependency));
   const parents = listPendingStackParents(state, task).filter((parent) => !pending.includes(parent));
   return [...pending, ...parents];
 }
