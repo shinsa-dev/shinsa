@@ -194,6 +194,34 @@ describe('starting and ending runs', () => {
     expect(endedRuns(dispatched)[0]).toMatchObject({ outcome: 'completed' });
   });
 
+  test('a turn that ends with background work still running says so on run.end', async () => {
+    const sessions = createSessions();
+    const { supervisor, dispatched } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+    });
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    sessions.started[0]?.finish('completed', {
+      context: { usedTokens: 1, maxTokens: 2, cacheExpiresAt: null, backgroundWork: true },
+    });
+    await running;
+    expect(endedRuns(dispatched)[0]).toMatchObject({ outcome: 'completed', backgroundWork: true });
+  });
+
+  test('a turn with no background work leaves it off run.end', async () => {
+    const sessions = createSessions();
+    const { supervisor, dispatched } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+    });
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    sessions.started[0]?.finish('completed', {
+      context: { usedTokens: 1, maxTokens: 2, cacheExpiresAt: null, backgroundWork: false },
+    });
+    await running;
+    expect(endedRuns(dispatched)[0]).not.toHaveProperty('backgroundWork');
+  });
+
   test('counts the agent’s process toward its task until the turn ends', async () => {
     const sessions = createSessions();
     const { ledger } = createMonitor();
