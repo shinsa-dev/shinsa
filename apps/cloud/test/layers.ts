@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SqliteClient } from '@effect/sql-sqlite-bun';
-import { ConfigProvider, Effect, Layer, Logger } from 'effect';
+import { ConfigProvider, Effect, Layer } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { SqlClient } from 'effect/sql';
 import { TestClock } from 'effect/testing';
@@ -121,16 +121,3 @@ export const flipTest = <A, E>(
   effect: Effect.Effect<A, E, Layer.Success<ReturnType<typeof servicesTest>>>,
   options: ServicesOptions = {}
 ) => runTest(Effect.flip(effect), options);
-
-interface LogEntry {
-  readonly level: string;
-  readonly message: unknown;
-}
-
-export function createLogRecorder() {
-  const entries: LogEntry[] = [];
-  const logger = Logger.make(({ logLevel, message }) => {
-    entries.push({ level: logLevel, message });
-  });
-  return { entries, layer: Logger.layer([logger]) };
-}

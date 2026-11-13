@@ -9,7 +9,6 @@ import {
   type Queue,
   type Redacted,
   Schema,
-  type Scope,
 } from 'effect';
 import type { Socket } from 'effect/socket';
 import type { RelayConnector } from './service.ts';
@@ -102,8 +101,6 @@ export interface RelayLink {
   readonly closed: Effect.Effect<string>;
   readonly ping: Effect.Effect<boolean>;
 }
-
-export type OpenRelay = (target: RelayTarget) => Effect.Effect<RelayLink, RelayConnectFailed, Scope.Scope>;
 
 export type RelayConnectorLayer = Layer.Layer<RelayConnector>;
 

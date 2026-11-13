@@ -127,8 +127,7 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
                      answers in handlers); http/ tests the logger and deferWork; config/, crypto/, store/ and
                      integrations/ test each service against layers.ts: runTest and flipTest provide CloudServices on
                      SQLite in memory with every migration, TEST_ENV, a TestClock at TEST_NOW and an Upstream (the
-                     fetch every outbound call reaches, its calls recorded, its answers in handlers);
-                     createLogRecorder keeps what a test logs
+                     fetch every outbound call reaches, its calls recorded, its answers in handlers)
 ```
 
 ## How it works
