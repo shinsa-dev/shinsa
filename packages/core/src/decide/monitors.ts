@@ -67,7 +67,7 @@ function runOut(decider: Decider, task: Task, monitor: Monitor, run: Run | null)
   decider.emit({ type: 'monitor.ended', taskId: task.id, monitorId: monitor.id, status: 'exhausted' });
   if (run) decider.endRun(run, 'completed', 'The wait ran out.');
   const title = timedOut ? 'The agent’s wait ran out' : 'The agent’s wait ran out of checks';
-  decider.fail(task.id, title, describeExhausted(monitor, timedOut), null, 'monitor');
+  decider.hold(task.id, title, describeExhausted(monitor, timedOut), null, 'monitor');
 }
 
 function wake(decider: Decider, task: Task, monitor: Monitor) {

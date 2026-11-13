@@ -4,6 +4,7 @@ import {
   type Gate,
   isAgentQuestion,
   isReplyingRun,
+  isRetryArmed,
   isTaskClosed,
   isTaskResting,
   isTaskSettled,
@@ -23,6 +24,7 @@ import {
 import type { EventOf } from '../events/index.ts';
 import {
   describeReplyInstruction,
+  type LeadNote,
   resolveCommentedMessage,
   resolveHumanFixPrompt,
 } from '../prompts/index.ts';
@@ -34,8 +36,10 @@ import { queueMessageForWake } from './delegations.ts';
 import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { requestIteration } from './iterations.ts';
+import { startLeadTurn } from './leads.ts';
 import { learnFromMessage, recordDecisions } from './lessons.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
+import { retryArmedTask } from './retry.ts';
 import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
 import {
   acceptsFollowUp,
@@ -51,6 +55,7 @@ import { findOpenSuggestion, hasRoomForSuggestion, suggestSplitOff } from './sug
 
 type StageEffect =
   | 'kept'
+  | 'lead'
   | 'revise_plan'
   | 'restart_step'
   | 'decline_proposal'
@@ -71,10 +76,12 @@ export type MessageEffect =
 
 type Delivery =
   | { effect: 'steer' | 'wake'; run: Run }
-  | { effect: 'retry' | 'verify_setup' | 'supersede_question'; gate: Gate }
+  | { effect: 'retry'; gate: Gate | null }
+  | { effect: 'verify_setup' | 'supersede_question'; gate: Gate }
   | { effect: StageEffect };
 
 const FEEDBACK_ONLY_EFFECTS: ReadonlySet<MessageEffect> = new Set<MessageEffect>([
+  'lead',
   'retry',
   'verify_setup',
   'supersede_question',
@@ -97,6 +104,7 @@ const STAGE_EFFECT: Record<TaskStage, StageEffect> = {
   investigating: 'restart_step',
   operating: 'restart_step',
   watching: 'restart_step',
+  leading: 'lead',
   awaiting_proposal: 'decline_proposal',
   awaiting_operation: 'operation_notes',
   answered: 'follow_up',
@@ -119,6 +127,7 @@ function resolveDelivery(state: ShinsaState, task: Task): Delivery {
   const gates = listOpenGates(state, task.id);
   const paused = gates.find(isRetriedByMessage);
   if (paused) return { effect: 'retry', gate: paused };
+  if (isRetryArmed(task)) return { effect: 'retry', gate: null };
   const setup = gates.find((gate) => gate.type === 'configuration');
   if (setup) return { effect: 'verify_setup', gate: setup };
   const question = gates.find(isAgentQuestion);
@@ -176,9 +185,26 @@ function restartStep(decider: Decider, task: Task, text: string) {
   }
 }
 
+function resolveLeadNote(decider: Decider, text: string, sent: Sent): LeadNote {
+  const guest = decider.context.guest;
+  if (guest) {
+    const task = sent.fromTeammateTask ?? null;
+    return {
+      text,
+      byAgent: task !== null,
+      fromTask: null,
+      fromTeammate: { login: guest.login, name: guest.name, task },
+    };
+  }
+  const byAgent = decider.context.onBehalf === true;
+  const byTask = byAgent ? decider.context.byTask : null;
+  return { text, byAgent, fromTask: byTask ? (decider.state.tasks[byTask] ?? null) : null };
+}
+
 interface Sent {
   texts: string[];
   comments: readonly ReviewComment[];
+  fromTeammateTask?: TeammateTaskRef;
 }
 
 function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: Sent) {
@@ -187,6 +213,9 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
   const comments = sent.comments.length;
   switch (delivery.effect) {
     case 'kept':
+      return;
+    case 'lead':
+      startLeadTurn(decider, task.id, resolveLeadNote(decider, text, sent));
       return;
     case 'steer':
       if (isReplyingRun(delivery.run)) requestIteration(decider, task.id, note, comments);
@@ -201,7 +230,8 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
       queueMessageForWake(decider, delivery.run, resolveGuestText(decider, delivery.run.taskId, text));
       return;
     case 'retry':
-      answerGate(decider, delivery.gate.id, 'reply', text);
+      if (delivery.gate) answerGate(decider, delivery.gate.id, 'reply', text);
+      else retryArmedTask(decider, task.id, decider.context.onBehalf ? 'shinsa' : 'you', text);
       return;
     case 'verify_setup':
       answerGate(decider, delivery.gate.id, 'approve', null);
@@ -240,10 +270,13 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, sent: 
   }
 }
 
+type TeammateTaskRef = NonNullable<CommandOf<'task.message'>['fromTeammateTask']>;
+
 interface MessageSend extends MessageRoute {
   taskId: string;
   texts: string[];
   comments?: readonly ReviewComment[];
+  fromTeammateTask?: TeammateTaskRef;
 }
 
 function resolveMessageKind(
@@ -326,7 +359,8 @@ export function isHeldForYou(state: ShinsaState, task: Task) {
 function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null): boolean {
   const task = decider.task(send.taskId);
   const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
-  const sent: Sent = { texts, comments: send.comments ?? [] };
+  const teammate = send.fromTeammateTask ? { fromTeammateTask: send.fromTeammateTask } : {};
+  const sent: Sent = { texts, comments: send.comments ?? [], ...teammate };
   const text = resolveCommentedMessage(texts.join('\n\n'), sent.comments);
   const delivery = assertMessageAccepted(decider.state, task, text);
   if (isRepeatedMessage(task, text, decider.context.now)) return false;

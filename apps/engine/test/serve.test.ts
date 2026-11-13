@@ -10,7 +10,7 @@ import type { ModelSource } from '../src/agents/index.ts';
 import { type AgentProvider, type CompletionRequest, Providers } from '../src/agents/providers/index.ts';
 import { SIGN_IN_CALLBACK_PATH } from '../src/extensions/sign-in.ts';
 import { createServerInstance, INSTALL_PATH, LOCK_FILE, resolveBootedAt } from '../src/instance/index.ts';
-import { REMOTE_FILE, TunnelConnectFailed, TunnelConnector } from '../src/remote/index.ts';
+import { RelayConnectFailed, RelayConnector, REMOTE_FILE } from '../src/remote/index.ts';
 import { Shell } from '../src/shell/service.ts';
 import { resolveStateVersion } from '../src/store/index.ts';
 import { TerminalPty } from '../src/terminals/pty/service.ts';
@@ -157,7 +157,7 @@ describe('startShinsa', () => {
     expect(Object.values(second.engine.state.tasks).map((task) => task.request)).toEqual(['Keep me']);
   });
 
-  test('a task with nowhere to work stops at the "Could not start the task" gate', async () => {
+  test('a task with nowhere to work arms a retry for "Could not start the task"', async () => {
     const config = createTestConfig(createTempDir(), { roots: [createTempDir()] });
     const shinsa = await startShinsa(config, {
       models,
@@ -169,8 +169,9 @@ describe('startShinsa', () => {
     });
     started.push(shinsa);
     await shinsa.engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
-    await until('a gate to open', () => Object.keys(shinsa.engine.state.gates).length > 0);
-    expect(Object.values(shinsa.engine.state.gates)[0]?.title).toBe('Could not start the task');
+    const armed = () => Object.values(shinsa.engine.state.tasks).find((task) => task.autoRetry);
+    await until('a retry to be armed', () => armed() !== undefined);
+    expect(armed()?.autoRetry?.title).toBe('Could not start the task');
   });
 
   test('work that needs a repository on a task triaged with none asks for one at the setup gate', async () => {
@@ -321,8 +322,6 @@ describe('startShinsa', () => {
         credentials: {
           instanceId: 'k3x9',
           machineToken: 'm',
-          tunnelToken: 't',
-          tunnelHost: 't-k3x9.shinsa.dev',
           connectKey: 'c',
         },
       })
@@ -330,10 +329,10 @@ describe('startShinsa', () => {
     const localUrls: string[] = [];
     const shinsa = await startShinsa(config, {
       models,
-      remoteConnector: Layer.succeed(TunnelConnector, {
-        open: (_token, localUrl) => {
-          localUrls.push(localUrl);
-          return Effect.fail(new TunnelConnectFailed({ message: 'No tunnel in tests.' }));
+      remoteConnector: Layer.succeed(RelayConnector, {
+        open: (target) => {
+          localUrls.push(target.localUrl);
+          return Effect.fail(new RelayConnectFailed({ message: 'No relay in tests.', status: null }));
         },
       }),
     });

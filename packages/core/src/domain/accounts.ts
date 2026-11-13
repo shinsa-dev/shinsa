@@ -26,6 +26,23 @@ export interface UsagePace {
   need?: number;
 }
 
+export interface AccountModelRoom {
+  account: string;
+  usable: boolean;
+  left: number | null;
+}
+
+export interface ModelRoomReading {
+  family: string;
+  usable: boolean;
+  left: number | null;
+  accounts: readonly AccountModelRoom[];
+}
+
+export interface ModelRoom extends ModelRoomReading {
+  at: number;
+}
+
 export interface UsageWait {
   id: string;
   runId: string;

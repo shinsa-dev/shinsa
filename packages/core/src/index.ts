@@ -1,5 +1,6 @@
 export * from './accounts/index.ts';
 export * from './agent-models/index.ts';
+export * from './agent-models/routing.ts';
 export * from './autopilot/index.ts';
 export * from './briefing/index.ts';
 export * from './browser/index.ts';
@@ -23,6 +24,7 @@ export * from './decide/index.ts';
 export * from './domain/index.ts';
 export * from './effects/index.ts';
 export * from './forecast/index.ts';
+export * from './initiatives/index.ts';
 export type { ShinsaEvent, ShinsaEventInput } from './events/index.ts';
 export * from './presence/index.ts';
 export * from './progress/index.ts';
@@ -106,6 +108,7 @@ export {
   resolvePublicUrl,
   type SplitRequest,
   serializeMergeStepsMarkdown,
+  PLAN_INITIATIVE_NOTE,
   serializePlanMarkdown,
   serializePullRequestMarkdown,
   serializeReportMarkdown,

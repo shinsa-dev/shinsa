@@ -1,4 +1,5 @@
 import { Result, Option } from 'effect';
+import { resolveRetryMilestone } from '../src/decide/fingerprints.ts';
 import {
   type AgentReply,
   applyEvent,
@@ -8,6 +9,7 @@ import {
   type ScopedActor,
   listActiveRuns,
   listOpenGates,
+  MAX_AUTO_RETRIES,
   parseUserCommand,
   type PlanDocument,
   type PullRequest,
@@ -20,6 +22,7 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  type RunAccount,
   type TaskOwner,
   type UserCommand,
   selectOpenIteration,
@@ -256,6 +259,7 @@ export function createTask(
     planFirst?: boolean;
     backlog?: boolean;
     owner?: TaskOwner;
+    account?: RunAccount;
   } = {}
 ) {
   const repoId = options.repoId ?? (Object.keys(harness.state.repos)[0] || registerRepo(harness));
@@ -270,6 +274,7 @@ export function createTask(
       stacksOn: options.stacksOn,
       planFirst: options.planFirst,
       backlog: options.backlog,
+      ...(options.account ? { account: options.account } : {}),
     },
     { actor: options.owner ?? null }
   );
@@ -419,4 +424,62 @@ export function learnUsageRate(harness: Harness) {
       costUsd: 2,
     });
   }
+}
+
+export function planLead(harness: Harness, leadId: string, split: PlanDocument['split'] = undefined) {
+  const initiative = Object.values(harness.state.initiatives).find((entry) => entry.leadTaskId === leadId);
+  const names = (initiative?.phases ?? []).map((phase) => phase.name);
+  const titles = names.length >= 2 ? names : [...(names.length === 1 ? names : ['Start']), 'Wrap up'];
+  proposePlan(harness, leadId, {
+    ...PLAN,
+    phases: titles.map((title) => ({ title, detail: `Finish ${title}.` })),
+    verification: [],
+    ...(split ? { split } : {}),
+  });
+  if (harness.task(leadId).stage === 'awaiting_plan') approve(harness, leadId);
+}
+
+export function createInitiative(
+  harness: Harness,
+  options: { name?: string; description?: string; phases?: string[] } = {}
+) {
+  const name = options.name ?? 'Chat split';
+  const request = options.description ? `${name}\n${options.description}` : name;
+  harness.send({ type: 'task.create', request, repoId: null, initiative: true });
+  const initiative = Object.values(harness.state.initiatives).at(-1);
+  if (!initiative?.leadTaskId) throw new Error('no initiative');
+  if (options.phases) {
+    harness.send({
+      type: 'initiative.write',
+      initiativeId: initiative.id,
+      name: initiative.name,
+      phases: options.phases.map((phase) => ({ id: null, name: phase })),
+    });
+  }
+  return { initiativeId: initiative.id, leadId: initiative.leadTaskId };
+}
+
+export function fireRetry(harness: Harness, taskId: string) {
+  const retry = harness.task(taskId).autoRetry;
+  if (retry?.status !== 'armed') throw new Error(`task ${taskId} has no armed retry`);
+  harness.advance(Math.max(0, retry.at - harness.now));
+  return harness.send({ type: 'task.auto_retry', taskId });
+}
+
+export function spendRetries(harness: Harness, taskId: string) {
+  const task = harness.task(taskId);
+  harness.replay({
+    type: 'task.retry_scheduled',
+    taskId,
+    retry: {
+      at: harness.now,
+      attempt: MAX_AUTO_RETRIES,
+      title: 'Retried',
+      detail: '',
+      runId: null,
+      cause: null,
+      milestone: resolveRetryMilestone(task, Object.values(harness.state.gates)),
+      status: 'spent',
+    },
+  });
 }

@@ -319,6 +319,16 @@ describe('QuickCalls', () => {
     expect(claude.texts).toHaveLength(1);
   });
 
+  test('the writer on Automatic writes with Codex first, and with Claude’s Sonnet when Codex cannot', async () => {
+    const codex = fakeProvider('codex', { text: () => Promise.resolve(null) });
+    const claude = fakeProvider('claude', { text: () => Promise.resolve('{"ok": true}') });
+    const settings = { ...createSettings(), agentModels: { writer: 'auto' } };
+    const quick = createQuickCalls([claude.provider, codex.provider], () => settings);
+    expect(await withQuickOn(() => quick.write('s', 'p'))).toEqual({ ok: true });
+    expect(codex.texts.map((request) => request.model)).toEqual(['gpt-5.6-luna']);
+    expect(claude.texts.map((request) => request.model)).toEqual(['sonnet']);
+  });
+
   test('parseJsonObject tolerates prose, fences and broken JSON', () => {
     expect(parseJsonObject(null)).toBeNull();
     expect(parseJsonObject('{"x": }')).toBeNull();

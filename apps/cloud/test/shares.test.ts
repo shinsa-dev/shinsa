@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { REMOTE_PATHS, resolveShareConnectPath, type ShareConnectResponse } from '@shinsa/core';
-import { createHarness, pairMachine, readJson } from './harness.ts';
+import { createHarness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 describe('a share link', () => {
   test('learns where the machine is without signing in, and nothing else', async () => {
@@ -9,7 +9,7 @@ describe('a share link', () => {
     const response = await harness.post(resolveShareConnectPath(credentials.instanceId), {});
     expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
     expect(await readJson<ShareConnectResponse>(response)).toEqual({
-      url: `wss://${credentials.tunnelHost}`,
+      url: `wss://app.shinsa.dev/__relay/${credentials.instanceId}`,
       online: false,
     });
     await harness.post(
@@ -17,6 +17,9 @@ describe('a share link', () => {
       { localUrl: 'http://127.0.0.1:7446', version: '1' },
       { bearer: credentials.machineToken, sameOrigin: false }
     );
+    const notJoined = await harness.post(resolveShareConnectPath(credentials.instanceId), {});
+    expect((await readJson<ShareConnectResponse>(notJoined)).online).toBe(false);
+    await heartbeat(harness, credentials);
     const online = await harness.post(resolveShareConnectPath(credentials.instanceId), {});
     expect((await readJson<ShareConnectResponse>(online)).online).toBe(true);
   });

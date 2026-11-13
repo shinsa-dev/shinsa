@@ -10,13 +10,13 @@ import {
   resolvePreviewTunnelPath,
 } from '../../packages/core/src/index.ts';
 import { readCookie } from './requests.ts';
-import { type Machine, PREVIEW_ZONE, type TunnelData, USER } from './schema.ts';
+import { type Machine, PREVIEW_ZONE, type RelayData, USER } from './schema.ts';
 
 export function upgradePreview(
   request: Request,
   url: URL,
   machines: Machine[],
-  server: Bun.Server<TunnelData>
+  server: Bun.Server<RelayData>
 ) {
   const address = Option.getOrNull(parsePreviewHost(url.host, PREVIEW_ZONE));
   const machine = machines.find((entry) => entry.id === address?.instanceId);
@@ -24,7 +24,7 @@ export function upgradePreview(
   const access = readCookie(request, PREVIEW_ACCESS_COOKIE);
   if (!(address && machine && (key || access))) return new Response('Not shared', { status: 404 });
   const path = `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`;
-  const data: TunnelData = {
+  const data: RelayData = {
     machine,
     path,
     upstream: null,

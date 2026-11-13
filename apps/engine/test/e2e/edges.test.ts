@@ -110,14 +110,15 @@ describe('the pull request loop', () => {
     await w.until('the worktree to be removed', () => w.task(taskId).worktreePath === null);
   });
 
-  test('a push that keeps failing ends in a failure gate after the retries', async () => {
+  test('a push that keeps failing arms an automatic retry once the effect gives up', async () => {
     const w = await open();
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
     rmSync(w.origin, { recursive: true, force: true });
     await w.answer(await w.untilGate(taskId, 'review'), 'approve');
-    const gate = await w.untilGate(taskId, 'failure');
-    expect(gate.title).toBe('Could not open the pull request');
+    const retry = await w.untilRetry(taskId);
+    expect(retry.title).toBe('Could not open the pull request');
+    expect(w.gates(taskId)).toEqual([]);
     const pushes = w.daemon.log.listEffectStatuses().filter((row) => row.kind === 'pull_request.open');
     expect(pushes).toEqual([
       expect.objectContaining({ kind: 'pull_request.open', status: 'failed', attempts: 5 }),

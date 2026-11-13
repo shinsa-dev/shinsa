@@ -12,6 +12,7 @@ export interface CiRun {
   status: PullRequestCheckStatus;
   required: boolean | null;
   url: string | null;
+  failsOnBase?: boolean;
 }
 
 export interface PullRequestRemark {

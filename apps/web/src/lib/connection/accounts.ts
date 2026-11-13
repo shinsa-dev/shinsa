@@ -2,6 +2,7 @@ import type { AccountImport, AccountPatch, AccountsSnapshot, RunAccount } from '
 import { Effect } from 'effect';
 import { useSyncExternalStore } from 'react';
 import { describeBinding, describeRerun } from '@/lib/accounts/account.ts';
+import type { ProviderChoice } from '@/lib/accounts/providers.ts';
 import { createUsageRecheck } from '@/lib/accounts/recheck.ts';
 import { type SignInDialogState, selectDialogLogin } from '@/lib/accounts/sign-in.ts';
 import { describeUsageWaitToggled } from '@/lib/accounts/usage-wait.ts';
@@ -93,6 +94,10 @@ export function updateAccount(accountId: string, patch: AccountPatch, done: stri
 
 export function removeAccount(accountId: string) {
   return updateAccounts((accounts) => accounts.remove({ payload: { accountId } }), 'Account removed.');
+}
+
+export function chooseProvider(provider: string, choice: ProviderChoice, done: string) {
+  return updateAccounts((accounts) => accounts.provider({ payload: { provider, choice } }), done);
 }
 
 const openSignIn = Effect.fn('Accounts.openSignIn')(function* (

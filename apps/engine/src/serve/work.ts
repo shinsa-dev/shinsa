@@ -7,6 +7,8 @@ import { EngineConfig } from '../config/service.ts';
 import { EunoeServer } from '../eunoe/service.ts';
 import { Extensions } from '../extensions/registry/service.ts';
 import { EngineServer } from '../http/server/service.ts';
+import { LeadWakes } from '../initiatives/service.ts';
+import { TeamMembers } from '../initiatives/team-members/service.ts';
 import { ServeLock } from '../instance/lock/service.ts';
 import { describeError } from '../log/redact.ts';
 import { IdleWatch } from '../presence/idle/service.ts';
@@ -19,6 +21,7 @@ import { MonitorClock } from '../runtime/monitors/service.ts';
 import { WatchdogClock } from '../runtime/watchdogs/service.ts';
 import { Schedules } from '../schedules/service.ts';
 import { Slack } from '../slack/service.ts';
+import { TaskRetry } from '../tasks/index.ts';
 import { Terminals } from '../terminals/service.ts';
 import { MessageInbox } from '../triage/index.ts';
 import { Versions } from '../versions/service.ts';
@@ -35,6 +38,8 @@ export const WorkLayer = Layer.effectDiscard(
     const runs = yield* RunSupervisor;
     const transcripts = yield* Transcripts;
     const briefings = yield* BriefingWriter;
+    const leads = yield* LeadWakes;
+    const teamMembers = yield* TeamMembers;
     const inbox = yield* MessageInbox;
     const schedules = yield* Schedules;
     const slack = yield* Slack;
@@ -45,7 +50,13 @@ export const WorkLayer = Layer.effectDiscard(
     const extensions = yield* Extensions;
     const eunoe = yield* EunoeServer;
     const idle = yield* IdleWatch;
-    const clocks = [yield* MonitorClock, yield* WatchdogClock, yield* AutopilotClock, yield* ShareClock];
+    const clocks = [
+      yield* MonitorClock,
+      yield* WatchdogClock,
+      yield* AutopilotClock,
+      yield* ShareClock,
+      yield* TaskRetry,
+    ];
     const lock = yield* Effect.serviceOption(ServeLock);
     if (Option.isSome(lock)) yield* lock.value.update({ port: server.port, url: server.url });
     yield* (yield* ServerAddress).replace(server.url);
@@ -57,6 +68,7 @@ export const WorkLayer = Layer.effectDiscard(
     const stopWork = Effect.gen(function* () {
       yield* runs.interruptForShutdown;
       yield* briefings.stop;
+      yield* leads.stop;
       yield* inbox.stop;
       yield* schedules.stop;
       yield* slack.stop;
@@ -115,7 +127,9 @@ export const WorkLayer = Layer.effectDiscard(
     yield* remote.start;
     yield* Effect.forkDetach(slack.start);
     yield* teamFeeds.start;
+    yield* teamMembers.start;
     yield* briefings.schedule;
+    yield* leads.recover;
     yield* extensions.syncSnapshot;
     yield* Effect.forkDetach(extensions.syncUsage);
     yield* Effect.logInfo('[Serve] Ready').pipe(

@@ -380,7 +380,7 @@ describe('focus', () => {
         teamId: 'team-1',
         until: null,
       })
-    ).toThrow('Focus on projects or on a team, not both at once.');
+    ).toThrow('Focus on projects, a team or an initiative, one at a time.');
     expect(() =>
       harness.send({ type: 'focus.change', projectId: null, projectIds: [work, 'nope'], until: null })
     ).toThrow('No project nope');
@@ -436,7 +436,7 @@ describe('focus', () => {
     const work = writeProject(harness, { name: 'Work' })?.id ?? '';
     expect(() =>
       harness.send({ type: 'focus.change', projectId: work, teamId: 'team-1', until: null })
-    ).toThrow('Focus on projects or on a team, not both at once.');
+    ).toThrow('Focus on projects, a team or an initiative, one at a time.');
     expect(harness.state.seq).toBe(1);
   });
 

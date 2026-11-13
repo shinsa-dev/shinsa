@@ -35,6 +35,7 @@ const endRun = Effect.fn('RunSupervisor.end')(function* (
     ...(attemptId ? { attemptId } : {}),
     ...(result.failure ? { failure: result.failure } : {}),
     ...(result.context?.cacheExpiresAt ? { cacheExpiresAt: result.context.cacheExpiresAt } : {}),
+    ...(result.context?.backgroundWork ? { backgroundWork: true } : {}),
   };
   yield* world.dispatch(command, { id: `run.end:${attemptId ?? runId}` });
 });

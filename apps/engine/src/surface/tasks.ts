@@ -19,6 +19,7 @@ import type { ChatPage, OpenTarget } from '@shinsa/core/engine-api/schema';
 import { Effect } from 'effect';
 import { type Display, describeTable, type Tone } from '../terminal/index.ts';
 import type { FieldSpec, Values } from './fields.ts';
+import { selectTeammateLead } from './initiatives.ts';
 import {
   findAccount,
   findTaskId,
@@ -29,7 +30,7 @@ import {
   resolveOptionalRepoId,
   type TaskView,
 } from './resolve.ts';
-import type { SurfaceClient } from './schema.ts';
+import type { SurfaceClient, SurfaceFailure } from './schema.ts';
 import { defineAction, defineCommand, defineRead, readValue, type SurfaceSpec } from './spec.ts';
 import { findTeamId, findTeamUser, LOGIN_FIELD, TEAM_FIELD } from './teams.ts';
 
@@ -140,6 +141,7 @@ const buildTaskCreate = Effect.fn('Surface.buildTaskCreate')(function* (
     ...(values.planFirst ? { planFirst: true } : {}),
     ...(values.backlog ? { backlog: true } : {}),
     ...(values.ask ? { mode: 'ask' as const } : {}),
+    ...(values.initiative ? { initiative: true } : {}),
     ...(waitsOn.length > 0 ? { waitsOn } : {}),
     ...(forkOf ? { forkOf } : {}),
     ...(account ? { account } : {}),
@@ -173,6 +175,34 @@ const resolveShareScopesChange = Effect.fn('Surface.shareScopesChange')(function
   const shown = new Set([...SHARE_PRESET_SCOPES[base], ...allow]);
   return VIEW_SCOPES.filter((scope) => shown.has(scope) && !deny.includes(scope));
 });
+
+function isTaskMissing(failure: SurfaceFailure) {
+  return failure instanceof DomainError && failure.code === 'task_not_found';
+}
+
+function withTeammateLead(spec: SurfaceSpec): SurfaceSpec {
+  return {
+    ...spec,
+    run: (client, values, display) =>
+      spec.run(client, values, display).pipe(
+        Effect.catchIf(
+          isTaskMissing,
+          Effect.fn('Surface.messageTeammateLead')(function* (missing) {
+            const lead = client.relay ? yield* selectTeammateLead(client, readValue(values, 'task')) : null;
+            if (!(lead && client.relay)) return yield* Effect.fail(missing);
+            const kind = readValue(values, 'as');
+            yield* client.relay(lead.instanceId, {
+              type: 'task.message',
+              taskId: lead.task.id,
+              text: readValue(values, 'text'),
+              ...(kind ? { kind: kind as MessageKind } : {}),
+            });
+            return { data: { ok: true, taskId: null }, text: `Sent to the lead on ${lead.machine}.` };
+          })
+        )
+      ),
+  };
+}
 
 export const TASK_SPECS: SurfaceSpec[] = [
   defineRead({
@@ -294,6 +324,12 @@ export const TASK_SPECS: SurfaceSpec[] = [
         kind: 'boolean',
         description: 'Only answer a question: no changes, branch or pull request.',
       },
+      {
+        name: 'initiative',
+        kind: 'boolean',
+        description:
+          'Start an initiative: a task whose agent leads a group of tasks, files and orders them, and reports where they stand. The first line names it.',
+      },
       { name: 'after', kind: 'list', description: 'Tasks it waits on before it starts.' },
       {
         name: 'forkFrom',
@@ -305,32 +341,35 @@ export const TASK_SPECS: SurfaceSpec[] = [
     build: buildTaskCreate,
     done: () => 'Created the task. Shinsa brings it back when it needs a decision.',
   }),
-  defineCommand({
-    path: ['tasks', 'message'],
-    summary: "Send a message to a task's agent. At an open decision it is your feedback, never an approval.",
-    command: 'task.message',
-    fields: [
-      TASK_FIELD,
-      { name: 'text', kind: 'text', positional: 'rest', required: true, description: 'The message.' },
-      {
-        name: 'as',
-        kind: 'choice',
-        choices: MESSAGE_KINDS,
-        description:
-          'feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides.',
-      },
-    ],
-    build: Effect.fn('Surface.tasksMessage')(function* (values, client) {
-      const kind = readValue(values, 'as');
-      return {
-        type: 'task.message' as const,
-        taskId: yield* findTaskId(client, readValue(values, 'task')),
-        text: readValue(values, 'text'),
-        ...(kind ? { kind: kind as MessageKind } : {}),
-      };
-    }),
-    done: () => 'Sent.',
-  }),
+  withTeammateLead(
+    defineCommand({
+      path: ['tasks', 'message'],
+      summary:
+        "Send a message to a task's agent, or to the lead of an initiative a teammate shared with your team. At an open decision it is your feedback, never an approval.",
+      command: 'task.message',
+      fields: [
+        TASK_FIELD,
+        { name: 'text', kind: 'text', positional: 'rest', required: true, description: 'The message.' },
+        {
+          name: 'as',
+          kind: 'choice',
+          choices: MESSAGE_KINDS,
+          description:
+            'feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides.',
+        },
+      ],
+      build: Effect.fn('Surface.tasksMessage')(function* (values, client) {
+        const kind = readValue(values, 'as');
+        return {
+          type: 'task.message' as const,
+          taskId: yield* findTaskId(client, readValue(values, 'task')),
+          text: readValue(values, 'text'),
+          ...(kind ? { kind: kind as MessageKind } : {}),
+        };
+      }),
+      done: () => 'Sent.',
+    })
+  ),
   defineCommand({
     path: ['rounds', 'ship'],
     summary:

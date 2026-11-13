@@ -88,6 +88,7 @@ const SAMPLE_ACCOUNT_ACTIONS: AccountActions = {
   importLogin: () => void acknowledgeSample(),
   update: acknowledgeSample,
   remove: () => void acknowledgeSample(),
+  chooseProvider: () => void acknowledgeSample(),
   refresh: acknowledgeSample,
 };
 
@@ -360,6 +361,7 @@ function ModelsSpecimen({ label, initial }: { label: string; initial: Settings }
           settings={settings}
           providers={KNOWN_AGENT_PROVIDERS}
           accounts={null}
+          automatic
           update={(patch) => setSettings((current) => ({ ...current, ...patch }))}
         />
       </div>

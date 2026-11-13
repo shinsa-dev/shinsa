@@ -110,21 +110,21 @@ describe('the pre-push hook', () => {
     expect(await git(w.origin, 'show', `refs/heads/${w.task(taskId).branch}:fixed.txt`)).toBe('fixed');
   });
 
-  test('the same hook failure after a fix round stops at a gate that shows the output', async () => {
+  test('the same hook failure after a fix round arms a retry that shows the output', async () => {
     const w = await open();
     writeHook(w, 'echo "the hook always fails"\nexit 1');
     const taskId = await w.createTask();
     await approveReview(w, taskId);
-    const gate = await w.untilGate(taskId, 'failure');
-    expect(gate).toMatchObject({ cause: 'push_hook', title: 'The pre-push hook failed again' });
-    expect(gate.body).toContain('the hook always fails');
+    const retry = await w.untilRetry(taskId);
+    expect(retry).toMatchObject({ cause: 'push_hook', title: 'The pre-push hook failed again' });
+    expect(retry.detail).toContain('the hook always fails');
     expect(w.agents.of('fix')).toHaveLength(1);
     expect(w.task(taskId).pullRequest).toBeNull();
   });
 });
 
 describe('a remote that cannot be reached', () => {
-  test('is retried, each attempt shown with when it runs and why, until the failure gate', async () => {
+  test('is retried, each attempt shown with when it runs and why, until the task arms its own retry', async () => {
     const w = await open();
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
@@ -135,9 +135,9 @@ describe('a remote that cannot be reached', () => {
       if (reason) reasons.add(reason);
     });
     await approveReview(w, taskId);
-    const gate = await w.untilGate(taskId, 'failure');
+    const retry = await w.untilRetry(taskId);
     unsubscribe();
-    expect(gate.title).toBe('Could not open the pull request');
+    expect(retry.title).toBe('Could not open the pull request');
     const retries = w
       .task(taskId)
       .activity.filter((entry) => entry.text.startsWith('Updating the branch failed'))

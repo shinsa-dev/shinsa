@@ -6,7 +6,7 @@ import { isFeedbackOpen, registerFeedbackOpener } from '@/lib/feedback.ts';
 import { resolveEndOfDay } from '@/lib/format/time.ts';
 import { rememberTerminalPath } from '@/lib/terminal/tabs.ts';
 import { spyOnCommands } from '../../support/commands.ts';
-import { createProject, createShinsaState, NOW } from '../../support/state.ts';
+import { createInitiative, createProject, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 const ALL_COMMANDS: ReadonlySet<string> = new Set(USER_COMMAND_TYPES);
 
@@ -333,5 +333,58 @@ describe('appearance', () => {
     pick(light, 'dark');
     expect(localStorage.getItem('shinsa.theme')).toBe('dark');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+  });
+});
+
+describe('the focus choice with initiatives', () => {
+  function focusedOnInitiative(initiativeId: string | null): ShinsaState {
+    return createShinsaState({
+      projects: PROJECTS,
+      initiatives: [createInitiative({ id: 'split', name: 'Chat split', leadTaskId: 'lead' })],
+      tasks: [createTask({ id: 'lead', pipeline: ['lead'], stage: 'leading', initiativeId: 'split' })],
+      patch: { focus: { projectIds: [], except: false, teamId: null, initiativeId, until: null } },
+    });
+  }
+
+  it('lists the initiatives last and shows a focused one as the current choice', () => {
+    const focus = find(
+      listGlobalSections(focusedOnInitiative('split'), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []),
+      'focus.switch'
+    );
+    if (focus.kind !== 'choice') throw new Error('Expected a choice');
+    expect(focus).toMatchObject({ hint: 'Chat split', value: 'initiative:split' });
+    expect(focus.options.at(-1)).toMatchObject({
+      value: 'initiative:split',
+      label: 'Chat split',
+      icon: 'IconTarget',
+    });
+  });
+
+  it('switches to an initiative, naming it, and keeps it in focus for two hours', () => {
+    const sections = listGlobalSections(
+      focusedOnInitiative('split'),
+      { name: 'home' },
+      'system',
+      'cards',
+      ALL_COMMANDS,
+      []
+    );
+    pick(find(sections, 'focus.switch'), 'initiative:split');
+    pick(find(sections, 'focus.switch'), 'initiative:gone');
+    const hours = find(sections, 'focus.hours');
+    if (hours.kind !== 'run') throw new Error('Expected a run');
+    hours.run();
+    expect(spies.sent.mock.calls.map((call) => call[0])).toEqual([
+      { type: 'focus.change', projectId: null, teamId: null, initiativeId: 'split', until: null },
+      { type: 'focus.change', projectId: null, teamId: null, initiativeId: 'gone', until: null },
+      {
+        type: 'focus.change',
+        projectId: null,
+        teamId: null,
+        initiativeId: 'split',
+        until: NOW + 2 * 60 * 60 * 1000,
+      },
+    ] as never);
+    expect(spies.sent.mock.calls[1]?.[1]).toBe('Focused on the initiative.');
   });
 });

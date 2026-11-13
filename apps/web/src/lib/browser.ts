@@ -16,6 +16,9 @@ export const COPY_KEYCHAIN_HINT =
 export const SIGN_IN_WINDOW_NOTE =
   'The window has nothing automating it, so Google lets you sign in. Agents wait until you press Done.';
 
+export const LOCAL_SIGN_IN_HINT =
+  'Sign in through the window. Copying carries cookies only, and a local app keeps its sign-in for this exact port.';
+
 export const SIGN_OUT_TITLE = 'Sign out of everything?';
 
 export const BROWSER_REMOTE_NOTE = 'Signing in happens on the Mac this task runs on. Open Shinsa there.';

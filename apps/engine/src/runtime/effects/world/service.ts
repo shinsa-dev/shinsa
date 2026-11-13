@@ -6,6 +6,7 @@ import { BriefingWriter } from '../../../briefing/service.ts';
 import type { ServerConfig } from '../../../config/index.ts';
 import { EngineConfig } from '../../../config/service.ts';
 import { FeedbackEffects } from '../../../feedback/effects/service.ts';
+import { LeadWakes } from '../../../initiatives/service.ts';
 import type { HandoffEffects } from '../../../remote/handoffs/schema.ts';
 import type { PreviewEffects } from '../../../remote/previews/schema.ts';
 import type { ShareDescriber } from '../../../remote/share-describe/service.ts';
@@ -31,6 +32,7 @@ export class EffectWorld extends Context.Service<
     readonly config: ServerConfig;
     readonly runs: RunSupervisor['Service'];
     readonly briefings: BriefingWriter['Service'];
+    readonly leads: LeadWakes['Service'];
     readonly triage: TriageResolver;
     readonly wordWatch: WatchWriter;
     readonly describeShare: ShareDescriber['Service']['describe'];
@@ -64,6 +66,7 @@ export class EffectWorld extends Context.Service<
         const config = yield* EngineConfig;
         const runs = yield* RunSupervisor;
         const briefings = yield* BriefingWriter;
+        const leads = yield* LeadWakes;
         const evidence = yield* Evidence;
         const feedback = yield* FeedbackEffects;
         const findTask = Effect.fn('EffectWorld.findTask')(function* (taskId: string) {
@@ -84,6 +87,7 @@ export class EffectWorld extends Context.Service<
           config,
           runs,
           briefings,
+          leads,
           triage: options.triage,
           wordWatch: options.wordWatch ?? (() => Effect.succeed({ name: null, text: null })),
           describeShare: options.describeShare ?? (() => Effect.succeed(null)),

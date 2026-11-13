@@ -3,6 +3,7 @@ import { type AutopilotLesson, type AutopilotProfile, EMPTY_AUTOPILOT_PROFILE } 
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type AccountPlan,
+  type ModelRoom,
   type RecordedPace,
   type BacklogCause,
   copyTeammateOriginal,
@@ -15,6 +16,7 @@ import {
   formatTaskHandle,
   type Gate,
   isTaskSettled,
+  type Initiative,
   type MemoryEntry,
   NO_FOCUS,
   NO_PROJECT_KEY,
@@ -29,6 +31,7 @@ import {
   type RepoStart,
   type Run,
   type RunUsage,
+  resolveCurrentRound,
   resolveFocusSelection,
   resolveShapeOf,
   resolveTaskPipeline,
@@ -50,7 +53,7 @@ import { resolveMergeStepKey } from '../report/merge-steps.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
 import { createTesting } from '../report/testing.ts';
 import type { ReportCheck, ReportWalkthroughRevision } from '../report/types.ts';
-import { applyAccountBound, applyAccountPlan, applyUsagePace } from './accounts.ts';
+import { applyAccountBound, applyAccountPlan, applyModelRoom, applyUsagePace } from './accounts.ts';
 import {
   describeCheckChange,
   describeChecks,
@@ -83,6 +86,7 @@ import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyHandoffEvent } from './handoffs.ts';
 import { applyInboxEvent } from './inbox.ts';
+import { applyInitiativeEvent } from './initiatives.ts';
 import { applyIterationEvent } from './iterations.ts';
 import { applyMemoryEvent } from './memory.ts';
 import { applyMoveEvent } from './moves.ts';
@@ -117,6 +121,7 @@ export interface ShinsaState {
   briefings: Record<string, StoredBriefing>;
   schedules: Record<string, Schedule>;
   memories: Record<string, MemoryEntry>;
+  initiatives: Record<string, Initiative>;
   feedback: Record<string, Feedback>;
   watchSuggestions: Record<string, WatchSuggestion>;
   sessionUsage: Record<string, RunUsage>;
@@ -125,6 +130,7 @@ export interface ShinsaState {
   focusHistory: Record<string, FocusSpan>;
   accountPlans: Record<string, AccountPlan>;
   usagePaces: Record<string, RecordedPace>;
+  modelRoom: Record<string, ModelRoom>;
   onBehalfActions: OnBehalfAction[];
   timeZone: string | null;
   autopilotLessons: AutopilotLesson[];
@@ -152,6 +158,7 @@ export function createState(): ShinsaState {
     briefings: {},
     schedules: {},
     memories: {},
+    initiatives: {},
     feedback: {},
     watchSuggestions: {},
     sessionUsage: {},
@@ -160,6 +167,7 @@ export function createState(): ShinsaState {
     focusHistory: {},
     accountPlans: {},
     usagePaces: {},
+    modelRoom: {},
     onBehalfActions: [],
     timeZone: null,
     autopilotLessons: [],
@@ -167,7 +175,8 @@ export function createState(): ShinsaState {
   };
 }
 
-export function briefingKey(focus: FocusProjects | SingleProjectFocus) {
+export function briefingKey(focus: FocusProjects | SingleProjectFocus, initiativeId: string | null = null) {
+  if (initiativeId !== null) return `@${initiativeId}`;
   const selection = resolveFocusSelection(focus);
   const { projectIds, except } = normaliseFocusProjects(selection.projectIds, selection.except);
   if (projectIds.length === 0) return '*';
@@ -408,9 +417,21 @@ function applyDuplicateCleared(state: ShinsaState, event: EventOf<'task.duplicat
   record(state, event.taskId, event.at, { actor: 'you', kind: 'stage', text: 'Not a duplicate after all' });
 }
 
+function resolveWaitsOnRounds(state: ShinsaState, taskId: string, waitsOn: string[]) {
+  const task = state.tasks[taskId];
+  const entries = waitsOn.flatMap((id): [string, number][] => {
+    const kept = task?.waitsOn.includes(id) ? task.waitsOnRounds?.[id] : undefined;
+    if (kept !== undefined) return [[id, kept]];
+    const dependency = state.tasks[id];
+    return dependency ? [[id, resolveCurrentRound(dependency).number]] : [];
+  });
+  return Object.fromEntries(entries);
+}
+
 function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_changed'>) {
   const waitsOn = event.waitsOn;
-  updateTask(state, event.taskId, event.at, { waitsOn });
+  const waitsOnRounds = resolveWaitsOnRounds(state, event.taskId, waitsOn);
+  updateTask(state, event.taskId, event.at, { waitsOn, waitsOnRounds });
   const titles = waitsOn.map((id) => state.tasks[id]?.title ?? 'another task');
   record(state, event.taskId, event.at, {
     actor: event.by ?? 'you',
@@ -931,6 +952,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'usage.pace_recorded':
       applyUsagePace(state, event);
       break;
+    case 'usage.models_recorded':
+      applyModelRoom(state, event);
+      break;
     case 'task.created':
       applyTaskCreated(state, event);
       break;
@@ -1185,6 +1209,8 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'usage_wait.armed':
     case 'usage_wait.ended':
     case 'task.pace_limits_ignored':
+    case 'task.retry_scheduled':
+    case 'task.retry_cleared':
       applyWaitEvent(state, event);
       break;
     case 'run.started':
@@ -1264,6 +1290,16 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'slack.escalation_sent':
     case 'slack.escalation_followed_up':
       applySlackEvent(state, event);
+      break;
+    case 'initiative.written':
+    case 'initiative.removed':
+    case 'initiative.milestones_queued':
+    case 'initiative.lead_woken':
+    case 'initiative.reported':
+    case 'task.initiative_changed':
+    case 'task.team_initiative_changed':
+    case 'initiative.team_members_recorded':
+      applyInitiativeEvent(state, event);
       break;
     case 'memory.written':
     case 'memory.proposed':

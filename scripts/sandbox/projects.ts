@@ -1,8 +1,13 @@
 import { join } from 'node:path';
 import { Effect, FileSystem, Option } from 'effect';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
-import { resolveTaskProject, type Task } from '../../packages/core/src/index.ts';
-import { SandboxFailed, type SeedProject, TEAMMATE } from './schema.ts';
+import {
+  listInitiativeTeamMembers,
+  listTeamTasks,
+  resolveTaskProject,
+  type Task,
+} from '../../packages/core/src/index.ts';
+import { SandboxFailed, type SeedProject, TEAMMATE, TEAMMATE_INITIATIVE_TASK } from './schema.ts';
 import { TEAM } from './team.ts';
 
 export const seedProject = Effect.fn('Sandbox.seedProject')(function* (
@@ -57,6 +62,46 @@ export const shareProjectWithTeam = Effect.fn('Sandbox.shareProjectWithTeam')(fu
 ) {
   if (!projectId) return yield* new SandboxFailed({ message: 'No project to share with the preview team.' });
   yield* engine.core.dispatch({ type: 'project.add_to_team', projectId, teamId: TEAM.id });
+});
+
+export const joinTeammateInitiative = Effect.fn('Sandbox.joinTeammateInitiative')(function* (
+  teammate: Engine,
+  studio: Engine
+) {
+  const initiative = Object.values((yield* studio.core.state).initiatives ?? {}).find(
+    (entry) => entry.name === 'Chat split'
+  );
+  const task = Object.values((yield* teammate.core.state).tasks).find(
+    (entry) => entry.request === TEAMMATE_INITIATIVE_TASK
+  );
+  if (!(initiative && task))
+    return yield* new SandboxFailed({ message: 'No Chat split or teammate task to join it with.' });
+  yield* studio.core.dispatch({
+    type: 'initiative.add_to_team',
+    initiativeId: initiative.id,
+    teamId: TEAM.id,
+  });
+  yield* teammate.core.dispatch(
+    {
+      type: 'task.join_initiative',
+      taskId: task.id,
+      initiativeId: initiative.id,
+      phaseId: initiative.phases[0]?.id ?? null,
+      team: { teamId: TEAM.id, instanceId: 'studio', name: initiative.name },
+    },
+    { actor: { login: TEAMMATE.login, name: TEAMMATE.name, avatarUrl: TEAMMATE.avatarUrl } }
+  );
+  const tasks = listTeamTasks(yield* teammate.core.state, TEAM.id, {
+    owner: TEAMMATE.login,
+    ownerProfile: { name: TEAMMATE.name, avatarUrl: TEAMMATE.avatarUrl },
+    machine: 'Kai’s MacBook',
+  });
+  yield* studio.core.dispatch({
+    type: 'initiative.record_team_members',
+    initiativeId: initiative.id,
+    teamId: TEAM.id,
+    members: listInitiativeTeamMembers(initiative, 'studio', { teamId: TEAM.id, instanceId: 'kai', tasks }),
+  });
 });
 
 export const seedTeammateDuplicate = Effect.fn('Sandbox.seedTeammateDuplicate')(function* (

@@ -1,4 +1,4 @@
-import { readTeamSnapshot, type TeamTask } from '@shinsa/core';
+import { readTeamSnapshot, type TeamInitiative, type TeamTask } from '@shinsa/core';
 import { Effect, FileSystem, Option, Ref } from 'effect';
 import { JsonFile } from '../../files/service.ts';
 import { describeError } from '../../log/redact.ts';
@@ -20,11 +20,14 @@ export const makeTeamSnapshots = Effect.fn('TeamSnapshots.make')(function* (
 
   const read = json.read(path, TeamSnapshotsFile).pipe(
     Effect.map((value) =>
-      (Option.getOrUndefined(value)?.lists ?? []).map(({ tasks, snapshot, ...list }): HeldTeamList => ({
-        ...list,
-        tasks: tasks as TeamTask[],
-        snapshot: Option.getOrNull(readTeamSnapshot(snapshot)),
-      }))
+      (Option.getOrUndefined(value)?.lists ?? []).map(
+        ({ tasks, initiatives, snapshot, ...list }): HeldTeamList => ({
+          ...list,
+          tasks: tasks as TeamTask[],
+          ...(initiatives ? { initiatives: initiatives as TeamInitiative[] } : {}),
+          snapshot: Option.getOrNull(readTeamSnapshot(snapshot)),
+        })
+      )
     ),
     Effect.catchTag('JsonFileUnreadable', (failure) =>
       Effect.logWarning('[Teams] Could not read the kept team snapshots').pipe(

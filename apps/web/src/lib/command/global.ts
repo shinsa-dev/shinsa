@@ -9,10 +9,13 @@ import {
   type FocusTeam,
   resolveFocusTarget,
   resolveFocusUntil,
+  selectFocusInitiative,
   selectFocusProjects,
   selectFocusTeam,
   YOUR_WORK,
 } from '@/lib/focus.ts';
+import { listOpenInitiatives } from '@/lib/initiatives/membership.ts';
+import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
 import {
   LAYOUT_NAMES,
   LAYOUT_ORDER,
@@ -37,18 +40,25 @@ const YOUR_WORK_VALUE = 'all';
 
 const TEAM_VALUE_PREFIX = 'team:';
 
+const INITIATIVE_VALUE_PREFIX = 'initiative:';
+
 function changeFocus(target: FocusTarget, until: number | null, done: string) {
   void sendCommandWithToast({ type: 'focus.change', ...target, until }, done);
 }
 
 function parseFocusValue(value: string): FocusTarget {
   if (value === YOUR_WORK_VALUE) return { projectId: null, teamId: null };
+  if (value.startsWith(INITIATIVE_VALUE_PREFIX))
+    return { projectId: null, teamId: null, initiativeId: value.slice(INITIATIVE_VALUE_PREFIX.length) };
   if (value.startsWith(TEAM_VALUE_PREFIX))
     return { projectId: null, teamId: value.slice(TEAM_VALUE_PREFIX.length) };
   return { projectId: value, teamId: null };
 }
 
 function describeFocusDone(state: ShinsaState, teams: readonly FocusTeam[], target: FocusTarget) {
+  if (target.initiativeId) {
+    return `Focused on ${state.initiatives[target.initiativeId]?.name ?? 'the initiative'}.`;
+  }
   if (target.teamId) {
     const team = teams.find((entry) => entry.id === target.teamId);
     return `Focused on ${team?.name ?? 'the team'}.`;
@@ -58,23 +68,37 @@ function describeFocusDone(state: ShinsaState, teams: readonly FocusTeam[], targ
 }
 
 function resolveFocusValue(target: FocusTarget) {
+  if (target.initiativeId) return `${INITIATIVE_VALUE_PREFIX}${target.initiativeId}`;
   if (target.teamId) return `${TEAM_VALUE_PREFIX}${target.teamId}`;
   if (target.projectIds) return '';
   return target.projectId ?? YOUR_WORK_VALUE;
 }
 
-function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Command {
+function resolveKeptFocus(state: ShinsaState, teams: readonly FocusTeam[]) {
+  const initiative = selectFocusInitiative(state);
   const team = selectFocusTeam(state, teams);
   const selection = selectFocusProjects(state);
+  if (initiative) {
+    const target: FocusTarget = { projectId: null, teamId: null, initiativeId: initiative.id };
+    return { label: initiative.name, target };
+  }
+  return {
+    label: team?.name ?? resolveFocusLabel(state, selection),
+    target: resolveFocusTarget(selection, team?.id ?? null),
+  };
+}
+
+function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Command {
+  const kept = resolveKeptFocus(state, teams);
   return {
     kind: 'choice',
     id: 'focus.switch',
     label: 'Switch focus',
-    hint: team?.name ?? resolveFocusLabel(state, selection) ?? YOUR_WORK,
+    hint: kept.label ?? YOUR_WORK,
     icon: FOCUS_ICON,
-    keywords: ['focus', 'project', 'team', 'filter', 'scope'],
+    keywords: ['focus', 'project', 'team', 'initiative', 'filter', 'scope'],
     heading: 'Focus on',
-    value: resolveFocusValue(resolveFocusTarget(selection, team?.id ?? null)),
+    value: resolveFocusValue(kept.target),
     options: [
       {
         value: YOUR_WORK_VALUE,
@@ -94,6 +118,12 @@ function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Com
         keywords: ['focus', 'team', 'teammates'],
         icon: TEAM_FOCUS_ICON,
       })),
+      ...listOpenInitiatives(state).map((initiative) => ({
+        value: `${INITIATIVE_VALUE_PREFIX}${initiative.id}`,
+        label: initiative.name,
+        keywords: ['focus', 'initiative'],
+        icon: INITIATIVE_ICON,
+      })),
     ],
     pick: (value) => {
       const target = parseFocusValue(value);
@@ -103,11 +133,8 @@ function createFocusSwitch(state: ShinsaState, teams: readonly FocusTeam[]): Com
 }
 
 function listFocusCommands(state: ShinsaState, teams: readonly FocusTeam[]): Command[] {
-  const team = selectFocusTeam(state, teams);
-  const selection = selectFocusProjects(state);
-  const kept = team?.name ?? resolveFocusLabel(state, selection);
+  const { label: kept, target } = resolveKeptFocus(state, teams);
   if (!kept) return [createFocusSwitch(state, teams)];
-  const target = resolveFocusTarget(selection, team?.id ?? null);
   return [
     createFocusSwitch(state, teams),
     {

@@ -23,6 +23,11 @@ export interface SurfaceHookSecrets {
   writeSecret: (scheduleId: string, ref: string | null) => Effect.Effect<string | null>;
 }
 
+export type SurfaceTeammateRelay = (
+  instanceId: string,
+  command: UserCommand
+) => Effect.Effect<void, SurfaceFailure>;
+
 interface SurfaceProjectChanges {
   upsertRepo: (projectId: string, path: string) => Effect.Effect<unknown, SurfaceFailure>;
   upsertFolder: (projectId: string, path: string) => Effect.Effect<unknown, SurfaceFailure>;
@@ -34,6 +39,7 @@ export interface SurfaceClient {
   send: (command: UserCommand) => Effect.Effect<CommandReceipt, SurfaceFailure>;
   projects?: SurfaceProjectChanges;
   hookSecrets?: SurfaceHookSecrets;
+  relay?: SurfaceTeammateRelay;
 }
 
 export interface SurfaceResult {

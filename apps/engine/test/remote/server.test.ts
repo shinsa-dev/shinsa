@@ -33,7 +33,7 @@ import {
   RemoteStore,
   RemoteUrlOpener,
   Teams,
-  TunnelConnector,
+  RelayConnector,
   resolveMachineName,
 } from '../../src/remote/index.ts';
 import type { PreviewLinks, PreviewPeer } from '../../src/remote/previews/schema.ts';
@@ -66,8 +66,6 @@ const CONNECT_KEY = serializeBase64Url(new Uint8Array(32).fill(9));
 const CREDENTIALS = {
   instanceId: 'k3x9',
   machineToken: 'machine',
-  tunnelToken: 'tunnel',
-  tunnelHost: 't-k3x9.shinsa.dev',
   connectKey: CONNECT_KEY,
 };
 
@@ -153,7 +151,7 @@ async function start(
       : {}),
     origin: plane.origin,
     pairPollMs: 1,
-    connector: Layer.succeed(TunnelConnector, {
+    connector: Layer.succeed(RelayConnector, {
       open: () =>
         Effect.acquireRelease(
           Effect.sync(() => {
@@ -165,9 +163,8 @@ async function start(
             Effect.sync(() => {
               connector.stopped = true;
             })
-        ).pipe(Effect.as({ exited: Effect.never })),
+        ).pipe(Effect.as({ closed: Effect.never, ping: Effect.succeed(true) })),
     }),
-    ping: () => Effect.succeed(true),
     maxBodyBytes: 1024 * 1024,
     openUrl:
       options.openUrl ??
@@ -691,10 +688,10 @@ describe('the tunnel entry point', () => {
     expect((await tunnel('/share?id=s1', { headers: { origin: REMOTE_APP_ORIGIN } })).status).toBe(404);
   });
 
-  test('never treats a tunnel request as local, whatever its Host says', async () => {
+  test('never treats a request the relay connector marked as local, whatever its Host says', async () => {
     const { base } = await start();
     const response = await fetch(`${base}/api/health`, {
-      headers: { host: 't-k3x9.shinsa.dev' },
+      headers: { host: new URL(base).host, 'cf-connecting-ip': '203.0.113.9' },
     });
     expect(response.status).toBe(404);
   });
@@ -829,27 +826,25 @@ describe('the remote service', () => {
 
   test('reports its state, starts only when enabled and forgets its credentials when revoked', async () => {
     const { remote, plane, connectors } = await start();
-    const changes: number[] = [];
-    const unsubscribe = remote.subscribe(() => changes.push(1));
+    const changes: boolean[] = [];
+    const unsubscribe = remote.subscribe(() => changes.push(remote.snapshot().paired));
     expect(remote.snapshot()).toMatchObject({
       paired: true,
       enabled: true,
       instanceId: 'k3x9',
       owner: 'mona',
     });
-    expect(remote.tunnelHost).toBe('t-k3x9.shinsa.dev');
     expect(await remote.verifyConnect(null, 'remote')).toBeNull();
     plane.answers.set('/__remote/machine/heartbeat', () => refuse(Revoked));
     await remote.start();
     const deadline = performance.now() + 2_000;
-    while (remote.snapshot().paired && performance.now() < deadline) await Bun.sleep(1);
+    while (!changes.includes(false) && performance.now() < deadline) await Bun.sleep(1);
     expect(remote.snapshot()).toMatchObject({ paired: false, enabled: false, status: 'revoked' });
     expect(connectors[0]?.stopped).toBe(true);
     expect(changes.length).toBeGreaterThan(0);
     unsubscribe();
     await remote.start();
     expect(connectors).toHaveLength(1);
-    expect(remote.tunnelHost).toBeNull();
   });
 });
 
@@ -903,6 +898,7 @@ describe('pairing this machine', () => {
         'slack-linked-threads',
         'slack-task-owner',
         'slack-channel-triggers',
+        'relay',
       ],
     });
     expect((await readSnapshot(await local('/api/remote/pair', {}))).pairing?.claimCode).toBe('K7PQ');

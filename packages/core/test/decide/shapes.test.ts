@@ -29,6 +29,7 @@ import {
   proposePlan,
   pullRequest,
   pushed,
+  reachShipping,
   REPLY,
   registerRepo,
   resolveReply,
@@ -1144,7 +1145,7 @@ describe('a change, then an operation', () => {
     expect(harness.task(taskId).stage).toBe('operating');
   });
 
-  test('a merge that arrives while the task is paused clears the pause and runs the operation', () => {
+  test('a merge that arrives while the task waits to retry clears the retry and runs the operation', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     compose(harness, taskId, [...SHAPE_PIPELINES.change, 'operate']);
@@ -1163,8 +1164,9 @@ describe('a change, then an operation', () => {
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'x' });
-    expect(harness.openGate(taskId).type).toBe('failure');
+    expect(harness.task(taskId).autoRetry?.status).toBe('armed');
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
+    expect(harness.task(taskId).autoRetry?.status).toBe('spent');
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['operation']);
     expect(harness.openGate(taskId).body).toMatch(/^Pull request #42 merged\. The merged code/);
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
@@ -1189,6 +1191,34 @@ describe('a change, then an operation', () => {
     expect(harness.activeRun(taskId).prompt).toContain('How the operation went:');
     reachMergedPullRequest(harness, taskId);
     expect(harness.task(taskId)).toMatchObject({ stage: 'merged', result: { step: 'operate' } });
+  });
+});
+
+describe('a task waiting on a change that runs an operation after the merge', () => {
+  test('gets its merge gate once the change merges, before the operation runs', () => {
+    const harness = createHarness();
+    const base = createTask(harness, { request: 'Add a plan column and backfill it' });
+    compose(harness, base, [...SHAPE_PIPELINES.change, 'operate']);
+    planWithOperation(harness, base);
+    approve(harness, base);
+    const top = createTask(harness, { request: 'Show the plan column' });
+    reachShipping(harness, top);
+    harness.send({ type: 'task.wait_on', taskId: top, waitsOn: [base] });
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(harness.task(top).stageReason).toBe('waiting for “Add a plan column and backfill it” to merge');
+
+    const watches = harness.effectsOf('pull_request.watch').length;
+    reachMergedPullRequest(harness, base);
+    expect(harness.task(base).stage).toBe('awaiting_operation');
+    expect(
+      harness
+        .effectsOf('pull_request.watch')
+        .slice(watches)
+        .map((effect) => effect.taskId)
+    ).toEqual([top]);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(harness.task(top).stage).toBe('awaiting_merge');
+    expect(harness.openGate(top).type).toBe('merge');
   });
 });
 

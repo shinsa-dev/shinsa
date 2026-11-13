@@ -24,10 +24,11 @@
       "migrations_dir": "migrations"
     }
   ],
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "MachineRelay", "script_name": "shinsa-relay" }]
+  },
   "vars": {
-    "CLOUDFLARE_ACCOUNT_ID": "e8563b02f2bf2b6a136f2781445a486f",
-    "TUNNEL_ZONE": "shinsa.dev",
     "PREVIEW_ZONE": "shinsa.page",
-    "MAX_INSTANCES": "50"
+    "MAX_INSTANCES": "10000"
   }
 }

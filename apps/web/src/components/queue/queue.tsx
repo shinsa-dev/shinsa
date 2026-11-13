@@ -1,6 +1,6 @@
 import { resolveBundle, type ShinsaState, type Task } from '@shinsa/core';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
-import { Icon } from '@shinsa/ui/components/icon';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { CompactSection, CompactSections } from '@/components/layout/compact-section.tsx';
@@ -19,15 +19,20 @@ import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { listTeamEscalationRows, TEAM_ESCALATIONS_TITLE } from '@/lib/autopilot.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
+import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
 import { createDisclosureId, type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
+  describeGroupSummary,
   listQueueSections,
+  type QueueEntry,
+  type QueueGroup,
   type QueueItem,
   type QueueSection,
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
 import { hasShareMark } from '@/lib/share/dialog.ts';
+import { BUNDLE_ICON } from '@/lib/tasks/bundles.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 type Variant = 'wide' | 'compact';
@@ -85,7 +90,9 @@ export function WideSection({
           {count === 0 ? (
             <p className='p-2.5 text-2xs text-fg-2'>{empty}</p>
           ) : (
-            <HoverHighlight className='flex flex-col gap-px'>{children}</HoverHighlight>
+            <HoverHighlight holdOverGaps className='flex flex-col gap-px'>
+              {children}
+            </HoverHighlight>
           )}
         </div>
       )}
@@ -99,14 +106,15 @@ export function WideSections({ children }: { children: React.ReactNode }) {
 
 function QueueCompactSection({
   section,
+  count,
   activeTaskId,
   children,
 }: {
   section: QueueSection;
+  count: number;
   activeTaskId: string | null;
   children: React.ReactNode;
 }) {
-  const count = section.items.length;
   return (
     <CompactSection
       persistId={resolveSectionId(section)}
@@ -126,6 +134,80 @@ function QueueCompactSection({
   );
 }
 
+interface RowContext {
+  state: ShinsaState;
+  variant: Variant;
+  activeTaskId: string | null;
+  onNavigate: () => void;
+}
+
+function openTask(context: RowContext, task: Task) {
+  navigate(resolveTaskPath(task));
+  context.onNavigate();
+}
+
+function QueueItemRow({ context, item }: { context: RowContext; item: QueueItem }) {
+  const { state, variant } = context;
+  return (
+    <ListRow
+      leading={<QueueItemGlyph state={state} item={item} />}
+      active={item.task.id === context.activeTaskId}
+      revealWhenActive={variant === 'compact'}
+      title={item.task.title}
+      mark={renderMarks(state, item.task)}
+      summary={
+        <RowSummary
+          state={state}
+          task={item.task}
+          gate={item.kind === 'gate' ? item.gate : null}
+          detail={variant === 'wide'}
+        />
+      }
+      trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
+      onClick={() => openTask(context, item.task)}
+    />
+  );
+}
+
+const GROUP_ICON: Record<QueueGroup['kind'], IconName> = { initiative: INITIATIVE_ICON, bundle: BUNDLE_ICON };
+
+function QueueGroupRows({ context, group }: { context: RowContext; group: QueueGroup }) {
+  const items = group.root ? [group.root, ...group.members] : group.members;
+  const { opens } = group;
+  return (
+    <>
+      <ListRow
+        size='sm'
+        leading={
+          <span className='grid size-5 shrink-0 place-items-center text-fg-2'>
+            <Icon name={GROUP_ICON[group.kind]} size='sm' />
+          </span>
+        }
+        title={group.title}
+        mark={<span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{describeGroupSummary(group)}</span>}
+        active={opens !== null && opens.id === context.activeTaskId}
+        onClick={() => {
+          if (opens) openTask(context, opens);
+        }}
+      />
+      <div className='ms-4 flex flex-col border-s border-border ps-1'>
+        {items.map((item) => (
+          <QueueItemRow key={item.key} context={context} item={item} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function QueueEntryRows({ context, entry }: { context: RowContext; entry: QueueEntry }) {
+  if (entry.kind === 'item') return <QueueItemRow context={context} item={entry.item} />;
+  return <QueueGroupRows context={context} group={entry.group} />;
+}
+
+function resolveEntryKey(entry: QueueEntry) {
+  return entry.kind === 'item' ? entry.item.key : entry.group.key;
+}
+
 function QueueSectionView({
   state,
   section,
@@ -139,34 +221,16 @@ function QueueSectionView({
   activeTaskId: string | null;
   onNavigate: () => void;
 }) {
-  const shown = useProgressiveCount(section.items.length, FIRST_ROWS);
+  const shown = useProgressiveCount(section.entries.length, FIRST_ROWS);
   if (section.items.length === 0 && section.empty === null) return null;
-  const rows = section.items.slice(0, shown).map((item) => (
-    <ListRow
-      key={item.key}
-      leading={<QueueItemGlyph state={state} item={item} />}
-      active={item.task.id === activeTaskId}
-      revealWhenActive={variant === 'compact'}
-      title={item.task.title}
-      mark={renderMarks(state, item.task)}
-      summary={
-        <RowSummary
-          state={state}
-          task={item.task}
-          gate={item.kind === 'gate' ? item.gate : null}
-          detail={variant === 'wide'}
-        />
-      }
-      trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
-      onClick={() => {
-        navigate(resolveTaskPath(item.task));
-        onNavigate();
-      }}
-    />
-  ));
+  const context = { state, variant, activeTaskId, onNavigate };
+  const count = section.items.length;
+  const rows = section.entries
+    .slice(0, shown)
+    .map((entry) => <QueueEntryRows key={resolveEntryKey(entry)} context={context} entry={entry} />);
   if (variant === 'compact') {
     return (
-      <QueueCompactSection section={section} activeTaskId={activeTaskId}>
+      <QueueCompactSection section={section} count={count} activeTaskId={activeTaskId}>
         {rows}
       </QueueCompactSection>
     );
@@ -174,7 +238,7 @@ function QueueSectionView({
   return (
     <WideSection
       title={section.title}
-      count={section.items.length}
+      count={count}
       empty={section.empty}
       persistId={resolveHomeSectionId(section.key)}
       defaultOpen={section.opensOnHome}
@@ -257,6 +321,11 @@ export function TaskQueue({
       />
     )),
   ];
-  if (variant === 'compact') return <CompactSections className={className}>{views}</CompactSections>;
+  if (variant === 'compact')
+    return (
+      <CompactSections holdOverGaps className={className}>
+        {views}
+      </CompactSections>
+    );
   return <>{views}</>;
 }

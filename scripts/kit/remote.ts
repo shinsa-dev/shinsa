@@ -1,6 +1,5 @@
 import { BunServices } from '@effect/platform-bun';
 import { Context, Effect, Layer, Scope } from 'effect';
-import { FetchHttpClient } from 'effect/http';
 import { ProvidersLayer } from '../../apps/engine/src/agents/providers/index.ts';
 import { QuickCalls } from '../../apps/engine/src/agents/quick/index.ts';
 import { Transcripts } from '../../apps/engine/src/agents/transcripts/service.ts';
@@ -11,7 +10,6 @@ import { GitLayer } from '../../apps/engine/src/git/layers.ts';
 import { GitHubLayer } from '../../apps/engine/src/github/layers.ts';
 import { JsonLogger } from '../../apps/engine/src/log/service.ts';
 import { FleetRelay } from '../../apps/engine/src/remote/fleet-relay/service.ts';
-import { TunnelHealth } from '../../apps/engine/src/remote/health/service.ts';
 import {
   createRefusedConnector,
   Handoffs,
@@ -64,7 +62,6 @@ export interface RemoteServicesInput extends RemoteMachineInput {
 function createEdgeLayer(input: RemoteMachineInput) {
   return Layer.mergeAll(
     createRefusedConnector(input.refusal),
-    TunnelHealth.layer.pipe(Layer.provide(FetchHttpClient.layer)),
     Layer.succeed(RemoteUrlOpener, { open: () => Effect.void }),
     Layer.succeed(RemoteOrigin, input.config.remoteOrigin)
   );

@@ -13,6 +13,7 @@ import { EXTENSION_SPECS } from './extensions.ts';
 import { FEEDBACK_SPECS } from './feedback.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
 import { GATE_SPECS } from './gates.ts';
+import { INITIATIVE_SPECS } from './initiatives.ts';
 import { MEMORY_SPECS } from './memory.ts';
 import { REMOTE_SPECS } from './remote.ts';
 import { SCHEDULE_SPECS } from './schedules.ts';
@@ -60,6 +61,7 @@ const COMMAND_SPEC: SurfaceSpec = {
 
 export const SURFACE: SurfaceSpec[] = [
   ...TASK_SPECS,
+  ...INITIATIVE_SPECS,
   ...GATE_SPECS,
   ...WORK_SPECS,
   ...SCHEDULE_SPECS,
@@ -186,6 +188,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
     title: 'Steer tasks and answer what agents ask',
     groups: [
       ['tasks', 'List, open and create tasks; message, retry, reprioritize, cancel or finish one.'],
+      ['initiatives', 'Group tasks into initiatives with phases, and read each one’s sheet.'],
       ['plans', 'Approve a plan, ask the agent to revise it, or reject it.'],
       ['reviews', 'Approve a change, send it back with comments, or reject it.'],
       ['merges', 'Merge a task’s pull request, or decline the merge.'],
@@ -226,7 +229,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
     groups: [
       ['projects', 'Group repositories and folders into projects, with a key for task handles.'],
       ['sources', 'List, add or remove the data sources a project’s agents read.'],
-      ['focus', 'Show only one project’s work, for a while or until you clear it.'],
+      ['focus', 'Show only some projects’ or one initiative’s work, for a while or until you clear it.'],
       ['away', 'Record a span you were away from your Mac, which your turnaround leaves out.'],
       ['autopilot', 'Mark what Autopilot did for you as seen.'],
       ['repos', 'List repositories, and change their checks, base branch or where agents work.'],

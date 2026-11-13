@@ -10,6 +10,8 @@ import {
   isSharedMachine,
   listActiveRuns,
   listOpenGates,
+  isModelRoomMoved,
+  listModelRoom,
   listProviderPaces,
   type ProviderLogin,
   resolveAgentModel,
@@ -18,6 +20,7 @@ import {
   resolveSpentUntil,
   resolveWeeklyReading,
   type ShinsaCommand,
+  type Settings,
   type WeeklyReading,
 } from '@shinsa/core';
 import { Clock, Context, Effect, Exit, Fiber, FileSystem, Layer, Option, Ref } from 'effect';
@@ -29,7 +32,9 @@ import type {
 } from '../../agents/accounts/schema.ts';
 import { resolveClaudeExecutable } from '../../agents/providers/claude/executable.ts';
 import { ProgramVersions } from '../../agents/providers/versions/service.ts';
+import type { ProviderChoices } from '../../config/machine/schema.ts';
 import { EngineConfig } from '../../config/service.ts';
+import { ConfigStore } from '../../config/store/service.ts';
 import { createReadOnlyError } from '../../instance/inspect.ts';
 import { describeError } from '../../log/redact.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
@@ -42,6 +47,7 @@ import { LoginFinishFailed, type LoginOutcome } from '../login/schema.ts';
 import { AccountLogins } from '../login/service.ts';
 import { parseAccountPatch } from '../patch.ts';
 import { type Env, resolveAccountEnv } from '../paths.ts';
+import { isProviderShown, parseProviderChoice, resolveProviderReset } from '../providers.ts';
 import { UsageReadings } from '../readings/service.ts';
 import type { RenewedLogin } from '../renewal/schema.ts';
 import { LoginRenewal } from '../renewal/service.ts';
@@ -73,6 +79,7 @@ export class Accounts extends Context.Service<
     ): Effect.Effect<Effect.Effect<void>>;
     readonly syncProviderLogins: Effect.Effect<void>;
     readonly syncSignIns: Effect.Effect<void>;
+    readonly listHiddenProviders: Effect.Effect<ReadonlySet<string>>;
     lease(request: AccountLeaseRequest): Effect.Effect<AccountLease | null, DomainError>;
     readWeeklyReading(accountId: string, force: boolean): Effect.Effect<WeeklyReading | null>;
     readProviderWeeklyReading(provider: string, force: boolean): Effect.Effect<WeeklyReading | null>;
@@ -98,6 +105,7 @@ export class Accounts extends Context.Service<
       requester?: string | null
     ): Effect.Effect<AccountsSnapshot, AccountsFailure>;
     remove(accountId: unknown, requester?: string | null): Effect.Effect<AccountsSnapshot, AccountsFailure>;
+    chooseProvider(provider: unknown, choice: unknown): Effect.Effect<AccountsSnapshot, AccountsFailure>;
   }
 >()('shinsa/engine/accounts/roster/Accounts') {
   static readonly layer = Layer.effect(
@@ -120,6 +128,7 @@ export class Accounts extends Context.Service<
       const engine = yield* EngineCore;
       const versions = yield* ProgramVersions;
       const input = yield* AccountsInput;
+      const machine = yield* ConfigStore;
       const claudePath = yield* ClaudeCommandPath;
       const refreshInterval = yield* AccountsRefreshInterval;
       const { inspect, userHome } = yield* EngineConfig;
@@ -175,9 +184,26 @@ export class Accounts extends Context.Service<
 
       const listIds = Effect.map(store.listDistinct, (accounts) => accounts.map((account) => account.id));
 
+      const listHiddenProviders = Effect.gen(function* () {
+        const choices = (yield* machine.config).providerLogins;
+        const found = yield* Ref.get(providerLogins);
+        const statusOf = (provider: string) =>
+          found.find((login) => login.provider === provider)?.status ?? null;
+        const ids = new Set([...providerIds, ...found.map((login) => login.provider)]);
+        return new Set(
+          [...ids].filter((provider) => !isProviderShown(choices[provider], statusOf(provider)))
+        );
+      });
+
+      const listShownProviderIds = Effect.map(listHiddenProviders, (hidden) =>
+        readings.providerIds.filter((provider) => !hidden.has(provider))
+      );
+
       const listProviderSummaries = Effect.gen(function* () {
         const summaries: ProviderLogin[] = [];
+        const hidden = yield* listHiddenProviders;
         for (const login of yield* Ref.get(providerLogins)) {
+          if (hidden.has(login.provider)) continue;
           if (!providerIds.has(login.provider)) {
             summaries.push(login);
             continue;
@@ -306,6 +332,23 @@ export class Accounts extends Context.Service<
         }
       });
 
+      const recordModelRoom = Effect.fn('Accounts.recordModelRoom')(function* (next: AccountsSnapshot) {
+        if (inspect) return;
+        const state = yield* engine.state;
+        const models = listModelRoom(next.accounts, state.settings, yield* Clock.currentTimeMillis);
+        if (!isModelRoomMoved(state.modelRoom, models)) return;
+        const key = models
+          .map((model) => `${model.family}=${model.usable ? (model.left ?? '?') : 'spent'}`)
+          .join(',');
+        yield* dispatch({ type: 'usage.models_recorded', models }, `usage-models:${key}:${state.seq}`).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning('[Accounts] Could not record the room each model has').pipe(
+              Effect.annotateLogs({ error: describeError(failure) })
+            )
+          )
+        );
+      });
+
       const changed = Effect.gen(function* () {
         if (yield* Ref.get(stopped)) return;
         const next = yield* snapshot;
@@ -315,6 +358,7 @@ export class Accounts extends Context.Service<
         for (const listener of yield* Ref.get(listeners)) yield* listener(next);
         yield* recordPlans(next.accounts);
         yield* recordPaces(next);
+        yield* recordModelRoom(next);
       });
 
       const subscribe = (listener: (snapshot: AccountsSnapshot) => Effect.Effect<void>) =>
@@ -333,7 +377,43 @@ export class Accounts extends Context.Service<
         yield* limits.refresh(yield* listIds, force);
       });
 
-      const refreshProviderUsage = (force: boolean) => providerLimits.refresh(readings.providerIds, force);
+      const refreshProviderUsage = (force: boolean) =>
+        Effect.flatMap(listShownProviderIds, (ids) => providerLimits.refresh(ids, force));
+
+      const isProviderRemoved = (provider: string) =>
+        Effect.map(machine.config, (config) => config.providerLogins[provider] === 'removed');
+
+      const writeProviderChoices = Effect.fn('Accounts.writeProviderChoices')(function* (
+        choices: ProviderChoices
+      ) {
+        yield* machine
+          .update({ providerLogins: choices })
+          .pipe(
+            Effect.catchTag('JsonFileWriteFailed', (failure) =>
+              Effect.fail(new AccountStepFailed({ message: failure.message }))
+            )
+          );
+      });
+
+      const keepSignedInProviders = Effect.gen(function* () {
+        if (inspect) return;
+        const choices = (yield* machine.config).providerLogins;
+        const fresh = (yield* Ref.get(providerLogins)).filter(
+          (login) => login.status === 'signed_in' && choices[login.provider] === undefined
+        );
+        if (fresh.length === 0) return;
+        const added: ProviderChoices = {
+          ...choices,
+          ...Object.fromEntries(fresh.map((login) => [login.provider, 'added' as const])),
+        };
+        yield* writeProviderChoices(added).pipe(
+          Effect.catch((failure) =>
+            Effect.logWarning('[Accounts] Could not keep a provider sign-in in config.json').pipe(
+              Effect.annotateLogs({ error: describeError(failure) })
+            )
+          )
+        );
+      });
 
       const answerProviderSignIns = Effect.gen(function* () {
         for (const login of yield* Ref.get(providerLogins)) {
@@ -365,6 +445,7 @@ export class Accounts extends Context.Service<
             )
           )
         );
+        yield* keepSignedInProviders;
         yield* answerProviderSignIns;
         yield* changed;
       });
@@ -522,7 +603,7 @@ export class Accounts extends Context.Service<
         provider: string,
         force: boolean
       ) {
-        if (!providerIds.has(provider)) return null;
+        if (!providerIds.has(provider) || (yield* isProviderRemoved(provider))) return null;
         const pushed = (yield* providerLimits.snapshot(provider)).source === 'push';
         yield* providerLimits.refresh([provider], force || pushed);
         return Option.getOrNull(resolveWeeklyReading(yield* providerLimits.snapshot(provider)));
@@ -534,6 +615,7 @@ export class Accounts extends Context.Service<
       ) {
         const unknown: FastModeAvailability = 'unknown';
         if (accountId === null && providerIds.has(provider)) {
+          if (yield* isProviderRemoved(provider)) return unknown;
           yield* providerLimits.refresh([provider], false);
           return (yield* providerLimits.snapshot(provider)).fastMode ?? unknown;
         }
@@ -607,7 +689,12 @@ export class Accounts extends Context.Service<
         const latest = (yield* engine.state).runs[runId]?.attempts?.at(-1);
         const accountId = latest?.account?.id;
         if (!accountId) {
-          if (notice.kind === 'rate_limit' && latest && providerIds.has(latest.provider))
+          if (
+            notice.kind === 'rate_limit' &&
+            latest &&
+            providerIds.has(latest.provider) &&
+            !(yield* isProviderRemoved(latest.provider))
+          )
             yield* providerLimits.recordPush(latest.provider, notice);
           return;
         }
@@ -824,6 +911,37 @@ export class Accounts extends Context.Service<
         return yield* snapshot;
       });
 
+      const resetProviderRoles = Effect.fn('Accounts.resetProviderRoles')(function* (provider: string) {
+        const settings: Settings = (yield* engine.state).settings;
+        const reset = resolveProviderReset(settings, provider);
+        if (Option.isNone(reset)) return;
+        yield* dispatch(
+          { type: 'settings.change', patch: reset.value },
+          `provider-removed:${provider}:${(yield* engine.state).seq}`
+        );
+      });
+
+      const chooseProvider = Effect.fn('Accounts.chooseProvider')(function* (
+        provider: unknown,
+        choice: unknown
+      ) {
+        yield* assertChangeable;
+        if (typeof provider !== 'string' || !providerIds.has(provider))
+          return yield* new DomainError({
+            code: 'provider_invalid',
+            message: 'Name a provider Shinsa runs.',
+          });
+        const chosen = parseProviderChoice(choice);
+        if (Option.isNone(chosen))
+          return yield* new DomainError({ code: 'choice_invalid', message: 'Choose added or removed.' });
+        const choices = (yield* machine.config).providerLogins;
+        yield* writeProviderChoices({ ...choices, [provider]: chosen.value });
+        if (chosen.value === 'removed') yield* resetProviderRoles(provider);
+        else yield* settleAll([syncProviderLogins, refreshProviderUsage(true)]);
+        yield* changed;
+        return yield* snapshot;
+      });
+
       yield* accountChanges.listen(changed);
       yield* engine.observe(() => {
         runFork(changed);
@@ -836,6 +954,7 @@ export class Accounts extends Context.Service<
         subscribe,
         syncProviderLogins,
         syncSignIns,
+        listHiddenProviders,
         lease: rotation.lease,
         readWeeklyReading,
         readProviderWeeklyReading,
@@ -850,6 +969,7 @@ export class Accounts extends Context.Service<
         importAccount,
         update,
         remove,
+        chooseProvider,
       });
     })
   );

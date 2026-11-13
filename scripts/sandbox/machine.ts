@@ -75,8 +75,6 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
   const credentials = {
     instanceId: id,
     machineToken: `preview-${id}`,
-    tunnelToken: `preview-${id}`,
-    tunnelHost: `t-${id}.shinsa.dev`,
     connectKey,
   };
   const remoteFile = JSON.stringify({
@@ -129,7 +127,7 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
         evidence,
         transcripts,
         terminals,
-        refusal: 'The preview runs no tunnel.',
+        refusal: 'The preview runs no relay.',
         localUrl: ORIGIN,
         version: 'preview',
         maxBodyBytes: 32 * 1024 * 1024,

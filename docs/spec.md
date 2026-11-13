@@ -173,6 +173,12 @@ not chat text.
   One stacked on another as a bundle starts once that one is ready to merge, and the bundle merges as one.
   Priority and what a decision unblocks only decide how high it sits in Needs you (`docs/engine.md`
   → Scheduling).
+- **Initiatives.** An effort of many tasks, in any repositories, is an initiative, and an initiative is a task: its
+  lead, whose agent you talk to, files and orders the effort's tasks and is woken as they move, and whose Overview is
+  the report sheet of what needs you, what runs, what comes next by phase, what shipped or was dropped and the
+  decisions taken. Home lists the open ones, plans and tasks become one with a click, and it is a focus target. You
+  can share one with a team: teammates' own tasks join it from their machines, each keeping its owner, and count on
+  its sheet (`docs/engine.md` → Initiatives).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
   request watch, Merge queues). A conflict is resolved by the agent merging the base in, never by rebasing, in every workspace
@@ -259,8 +265,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   task. No tabs, no project tree; a sidebar only if you pick that layout.
 - **Request box.** Always one keystroke away (Home's composer, or ⌘K). Type, send, keep working. It
   does not navigate. The project defaults to the focus project; When to start and Priority default
-  to Auto, and picking one overrides what Shinsa would decide. The kind of task is not asked: the
-  classifier and the agent decide it.
+  to Auto, and picking one overrides what Shinsa would decide. The composer never asks for the kind
+  of task: the classifier and the agent decide it.
 - **Attachments.** Home's composer, every task composer and a question's answer box take files and
   images: the paperclip, a paste or a drop. Each shows as a chip above the text while it uploads and
   can be removed; a message or an answer can be attachments alone. The chat shows them as thumbnails
@@ -457,7 +463,7 @@ task showing its machine, and with several machines New task places each task au
 where a router reads your plain-English policies, each machine's projects and how busy it is, and sends it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`). Share task (a task's menu) makes a link,
 `app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
-access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
+access to that one task through the machine's relay, sealed with the key in the link, which no server sees. It is the
 owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
 Review, Code (a private repository's too, from the working copy before a pull request) and Chat, with the agents'
 live output and tool calls but never your messages to them, and it changes the moment the task does. Share as picks
@@ -490,7 +496,7 @@ address, fork it onto their own machine and make share links for it. Every perso
 Offline with when they were last seen, and leaving the team, taking a project out of it or narrowing someone's scopes
 ends their access at once (`docs/engine.md` → Teams → Teammates act on team tasks).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
-`<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
+`<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's relay, hot reload
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
 task, says when the service is stopped or the machine offline, and is only yours to share; unlike a task's link it is
 not sealed end to end, since a browser loads it as plain pages (`docs/engine.md` → Sharing a preview).
@@ -543,8 +549,8 @@ own machine in Settings → General → Slack (`docs/engine.md` → Slack).
   mid-run (`load_mcp_server`, `load_skill`). Each run's chat
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
-  opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
-  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
+  opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through one relay socket the
+  machine dials out to Shinsa's own relay, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
   tasks you share by link, as a read-only projection without their chat (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
@@ -1183,7 +1189,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   the same loop as Home's input with everything on Auto: triage picks the project, the repository, the kind (a
   question is answered and ends there) and the priority.
 - **One shared bot, locked to its owner.** The app lives on app.shinsa.dev and relays each mention to the machine of
-  the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
+  the Slack user who wrote it, over remote access's relay; someone who has not connected Slack to their own Shinsa
   gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds
   a Slack token, and the relay stores no message text.
 - **The thread follows the task, in Block Kit**: one status message edited in place as it moves, one post for each
@@ -1264,7 +1270,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   machine, with full control, without an invite or a request; their browser adds itself with the team's key the next
   time they open Shinsa Cloud. You take it back under Remote access, like any member.
 - **Nothing about the work leaves your machine for the cloud.** app.shinsa.dev keeps who is in which team, never a
-  task. Each view is read from the owner's machine over its tunnel and sealed with a team key that lives only on
+  task. Each view is read from the owner's machine over its relay and sealed with a team key that lives only on
   members' machines and browsers, carried in the join link's fragment, which no server receives.
 - **Offline teammates stay listed.** Each machine keeps the last list it got from every teammate's machine, beside
   `remote.json`, and shows it marked Offline with when it was last updated; the live list replaces it once the
@@ -1359,6 +1365,43 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   `request_browser_sign_in`, and you answer from a card on the task, often in one click.
 - **Not yet.** Safari and Firefox, Linux and Windows, two users of one site in one project, and fixed addresses for
   dev apps that keep their sign-in in localStorage across ports.
+
+### Initiatives and their lead (2026-11-09)
+
+- **Why.** One effort (SW-101's restart of the chat stack) grew past twenty tasks across three repositories and a
+  week, each merging on its own. Nothing named the effort, so what was being worked on, what came next and why a
+  piece was dropped lived only in your head, and its steering happened in PR 1's own chat. A bundle is the wrong
+  shape: one repository, one merge (`docs/engine.md` → Initiatives).
+- **A layer above tasks, not a new chat.** An initiative is a named group of tasks with phases, in any repository of
+  any project, so it is not a project (projects are the directories you focus on). A phase is a label; order is the
+  waits you already have, and each task still ships its own pull request. A task a member files, splits off or forks
+  joins the same initiative and phase by itself, and Make an initiative from this task gathers a task and everything
+  it filed after the fact.
+- **A report sheet from state.** The page answers what needs you, what is being worked on, what comes next by phase
+  and what it waits on, what shipped, what was dropped and why, and the decisions taken (accepted plans' goals and
+  judgement calls), with no model call. An initiative is also a focus target, so Home and the queue narrow to it.
+- **A lead you talk to.** A global manager chat was the alternative: any task's agent can already manage all of
+  Shinsa, and an unscoped chat would mix every project. Instead an initiative gets a lead, a task with one session
+  for the effort's life that files and orders its tasks with the tools agents already have, wakes on batched member
+  milestones (30 s debounce, the milestones in the user turn so its cached prefix holds), answers your messages and
+  its members', and writes where it stands at the top of the page. It opens no pull request and closes no gate.
+- **An initiative is a kind of task, set up for you** (same day, after a first look). A separate Initiatives page and
+  navigation entry, created by hand, was one more thing to keep up with. Now an initiative is its lead task: its
+  Overview is the sheet, Home lists the open ones, marking it done finishes it and cancelling it dissolves it. You
+  never pick one in the composer, which leaves the kind of every task to Shinsa: a plan whose split is one long effort
+  asks for `initiative`, so approving the plan makes it, Make an initiative from this task forks the lead from that
+  task's chat, and any agent can add a task, the lead being told.
+- **A lead plans, then leads** (same day, after a second look). The lead keeps a task's notions instead of a page of
+  its own: a new initiative's lead first proposes a plan whose phases are the initiative's and whose split is the
+  tasks to file, each in its phase; approving it files them. Where it stands is its report, shown like a result, and
+  what only you can settle reaches you as its questions in Needs you, not as a list to read. Each task still merges on
+  its own: an initiative with one phase is also the smaller form, a few tasks across repositories with one overview.
+- **Shared with a team** (2026-11-10). A large effort is rarely one person's: an initiative stays one record on its
+  owner's machine and is shared with a team as a project is, by you alone. Teammates see its lead task and sheet,
+  their own tasks join it from their machines and keep their owner, the lead counts them and is woken as they move,
+  and their agents can message it. Gates stay with each task's owner, so the lead closes nobody's.
+- **Not yet.** Triage suggesting membership from a request, a lead that rewrites what you filed into its
+  initiative, and initiatives in the iOS app.
 
 ## 11. Open questions
 

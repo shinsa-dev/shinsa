@@ -47,6 +47,7 @@ export interface AgentSessionInput {
   storeImage?: ImageStore;
   account?: SessionAccount;
   onActivity?: () => void;
+  handedOver?: () => boolean;
   onProcess?: (pid: number) => void;
   compaction?: CompactionMode;
   fold?: boolean;

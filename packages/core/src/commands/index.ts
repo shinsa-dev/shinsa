@@ -1,4 +1,5 @@
 import type {
+  ModelRoomReading,
   BundleConflict,
   CheckEvidence,
   ConfigProblem,
@@ -19,6 +20,7 @@ import type {
   RunOutcome,
   RunUsage,
   TaskPriority,
+  PresetShape,
   TaskShape,
   TaskSize,
   TeammateOriginal,
@@ -53,6 +55,7 @@ import type { AutopilotSystemCommand } from './autopilot.ts';
 import type { DelegationAgentCommand, DelegationSystemCommand } from './delegations.ts';
 import type { FeedbackAgentCommand, FeedbackSystemCommand } from './feedback.ts';
 import type { HandoffSystemCommand } from './handoffs.ts';
+import type { InitiativeAgentCommand, InitiativeSystemCommand } from './initiatives.ts';
 import type { MemoryAgentCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand } from './schedules.ts';
@@ -70,7 +73,7 @@ export interface MessageRoute {
   kind?: MessageKind;
   title?: string;
   why?: string;
-  shape?: TaskShape;
+  shape?: PresetShape;
 }
 
 export type InquiryShape = Extract<TaskShape, 'answer' | 'investigate' | 'research'>;
@@ -196,6 +199,7 @@ type AgentCommand =
   | DelegationAgentCommand
   | ScheduleAgentCommand
   | MemoryAgentCommand
+  | InitiativeAgentCommand
   | FeedbackAgentCommand;
 
 type SystemCommand =
@@ -240,6 +244,7 @@ type SystemCommand =
       attemptId?: string | null;
       failure?: RunFailure | null;
       cacheExpiresAt?: number | null;
+      backgroundWork?: boolean;
     }
   | {
       type: 'run.attempt';
@@ -307,6 +312,7 @@ type SystemCommand =
     }
   | { type: 'pull_request.record_update_conflict'; taskId: string; base: string; files: string[] }
   | { type: 'bundle.record_check'; taskId: string; conflict: BundleConflict | null }
+  | { type: 'bundle.record_merge_conflict'; taskId: string; conflict: BundleConflict }
   | { type: 'pull_request.record_hook_failure'; taskId: string; output: string; failures: string[] | null }
   | {
       type: 'pull_request.record_closed';
@@ -316,6 +322,7 @@ type SystemCommand =
     }
   | { type: 'evidence.record_uploads'; taskId: string; uploads: EvidenceUpload[] }
   | { type: 'usage_wait.resume'; taskId: string; waitId: string }
+  | { type: 'task.auto_retry'; taskId: string }
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
@@ -330,6 +337,7 @@ type SystemCommand =
     }
   | { type: 'clock.record'; timeZone: string }
   | { type: 'idle.record'; inputAt: number; away: { from: number; to: number } | null }
+  | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand
@@ -338,6 +346,7 @@ type SystemCommand =
   | AutopilotSystemCommand
   | FeedbackSystemCommand
   | ShareSystemCommand
+  | InitiativeSystemCommand
   | HandoffSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };

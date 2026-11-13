@@ -9,11 +9,13 @@ import { findRemoteStylesheet, listSandboxSections, listSharedMachineLinks, resp
 import { upgradePreview } from './previews.ts';
 import {
   seedProject,
+  joinTeammateInitiative,
   seedTeammateDuplicate,
   selectBusiestProject,
   shareMachine,
   shareProjectWithTeam,
 } from './projects.ts';
+import { RELAY_SOCKET, upgradeRelay } from './relay.ts';
 import {
   ENROLL,
   HOST,
@@ -31,7 +33,7 @@ import {
   type SandboxPageModule,
   SHARE_CONNECT,
   TEAMMATE_TASKS,
-  type TunnelData,
+  type RelayData,
   USER,
 } from './schema.ts';
 import { createServicePreview, respondToggle } from './services.ts';
@@ -39,7 +41,6 @@ import { createPreviewShares, respondShareConnect } from './shares.ts';
 import { respondSandboxSlack, seedSlackSamples, serializeSlackPage, SLACK_PAGE } from './slack.ts';
 import { teammateLink } from './team.ts';
 import { seedTeammateWork } from './teammate-work.ts';
-import { TUNNEL_SOCKET, upgradeTunnel } from './tunnel.ts';
 
 export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -86,6 +87,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   yield* shareProjectWithTeam(teammate.engine, paywalls.projectId ?? undefined);
   const studioProject = yield* selectBusiestProject(studio.engine);
   yield* shareProjectWithTeam(studio.engine, studioProject);
+  yield* joinTeammateInitiative(teammate.engine, studio.engine);
   const [teamTask] = Object.values((yield* teammate.engine.core.state).tasks);
   yield* seedTeammateWork(teammate, teammateData, teamTask);
   const keptOver = yield* seedTeammateDuplicate(studio.engine, studioProject, teamTask);
@@ -164,7 +166,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   yield* Effect.acquireRelease(
     Effect.try({
       try: () =>
-        Bun.serve<TunnelData>({
+        Bun.serve<RelayData>({
           port: PORT,
           hostname: HOST,
           fetch(request, server) {
@@ -172,11 +174,11 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
             const socket = request.headers.get('upgrade')?.toLowerCase() === 'websocket';
             if (socket && isPreviewHost(url.host, PREVIEW_ZONE))
               return upgradePreview(request, url, teammates, server);
-            const tunneled = upgradeTunnel(request, url, teammates, server);
-            if (tunneled !== null) return tunneled;
+            const relayed = upgradeRelay(request, url, teammates, server);
+            if (relayed !== null) return relayed;
             return run(respond(request, url));
           },
-          websocket: TUNNEL_SOCKET,
+          websocket: RELAY_SOCKET,
         }),
       catch: (error) =>
         new SandboxFailed({ message: `Serving the sandbox on ${ORIGIN} failed: ${String(error)}` }),
