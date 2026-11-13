@@ -535,5 +535,25 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
         },
       },
     },
+    {
+      id: 'task-local-sign-in',
+      request: 'Show the trial length on the local paywall preview',
+      title: 'Show trial length on the paywall preview',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'waiting for your answer',
+      branch: 'feat/paywall-trial-length',
+      ageHours: 0.2,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 5, summary: 'Asked to sign the browser in.' }],
+      gate: {
+        type: 'browser_sign_in',
+        title: 'Sign in to localhost',
+        body: 'The local dashboard sends me to its sign-in page before the paywall preview.',
+        details: {
+          browserSignIn: { url: 'http://localhost:64892/', site: 'localhost' },
+        },
+      },
+    },
   ];
 }

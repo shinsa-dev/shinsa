@@ -6283,13 +6283,27 @@ you: Settings → Browser ─────────┤
   first; a kill would lose the sign-ins made since the last write. Both modes run with `--use-mock-keychain`, so the
   profile encrypts the same way in each and Chrome never asks for your Keychain. Browser state lives in these folders,
   never in the event log.
+- **A profile an earlier engine left open** (`host/holder.ts`, since 2026-11-11). The host keeps its browsers only in
+  memory, so an engine that was killed (a crash, a forced quit, an update) leaves its Chrome running, and Chrome refuses
+  a second one on the same folder (exit code 21, `PROFILE_IN_USE_CODE`). Before each launch the host reads the
+  profile's `SingletonLock` (`<host>-<pid>`): a live process on this machine whose command line opens exactly that
+  folder (`--user-data-dir=<folder>`) is an earlier engine's Chrome, so it is stopped (SIGTERM, which Chrome treats as
+  a quit and writes its cookies, then SIGKILL after `stopTimeout`) and logged as `[Browser] Stopped a Chrome an earlier
+  Shinsa left running`. Any other live holder is never killed: the call fails with `profile_in_use`, whose message
+  names the process to quit. A lock whose process is gone is left to Chrome, which takes it over itself. A lock under
+  another host name is this Mac's own under an earlier name (macOS renames it with the network), which Chrome refuses
+  with 21 even when its process is gone: a live process opening that folder is stopped as above, and otherwise the
+  stale `Singleton*` files are removed (`[Browser] Removed a profile lock Chrome left under another host name`). When Chrome still exits with 21, the host reclaims and starts once more, then says the profile is in
+  use. When the engine starts, it stops every headless Chrome an earlier engine left on a profile in `browserDir`
+  before it launches any of its own (`sweepOrphans`, holding the host's lock); a sign-in window you left open stays,
+  until that project's browser is next needed.
 - **Agents reach it through the engine** (`BrowserProxy`). Each run of a task in a project is issued a key
   (`RunSupervisor.issueBrowser`) that the run's scope revokes when it ends, closing its connections; the endpoint,
   `ws://127.0.0.1:<port>/browser/cdp/<key>`, goes into the run's environment as `PLAYWRIGHT_MCP_CDP_ENDPOINT`
   (`resolveBrowserEnv`), for Claude's process and Codex's app server alike, never into the prompt (Caching, below).
   The route refuses a connection from outside this machine, from another site's Origin, or with a key that is not a
-  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start or the sign-in
-  window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
+  live run's, and answers `browser_unavailable` (503) when Chrome is not installed, fails to start, finds its profile
+  held by another program or the sign-in window is open. It relays the debugging protocol both ways and refuses `Browser.close` and `Browser.crash`, so one
   agent cannot take every other agent's pages down. Every agent shares the default context, so the cookies are one
   jar, but each connection sees only its own pages (`createTargetFilter`): a page counts as its own when it opened it
   (`Target.createTarget`) or a page of its own opened it (a popup, by `openerId`). Every other page is hidden from its
@@ -6323,11 +6337,27 @@ you: Settings → Browser ─────────┤
   waits on it like a question (Gates, above); a task with no project is refused (`browser_no_project`). The task
   overview shows it as a card (`BrowserSignInCard`): Copy from your default browser copies that site and answers the
   gate in one click when that browser is signed in to it (not offered for Google sites), Open sign-in window then Done answers it the same way, Choose
-  sites… opens the copy dialog, and Skip rejects it. Approve tells the agent the browser is signed in and to open the
-  page again; reject to carry on without it (`resolveBrowserSignInReply`). Only you answer it, and copying and the
-  window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip, and a guest or a
-  teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page first, to use the
-  repository's own test users where it has them, and never to launch a browser of their own to sign in.
+  sites… opens the copy dialog, and Skip rejects it. For a local address (`localhost`, `127.0.0.1`, `[::1]`,
+  `*.localhost`, or any address with a port: `isLocalSignInUrl`) Open sign-in window comes first and Copy second, with
+  a hint that copying carries cookies only and a local app keeps its sign-in for that exact port. Reject tells the
+  agent to carry on without it. Approve is checked before the agent hears it (since 2026-11-11): `BrowserSignInCheck`
+  (`apps/engine/src/browser/check/`) takes a lease on the project's Chrome (`BrowserHost.acquire`), opens the gate's
+  `url`, the page the agent wants to see and never the sign-in page it was sent to (the tool's field says so, since a sign-in page opens fine signed out), in a new page over the browser connection (`Target.createTarget`, which no agent's connection sees), reads the
+  page's `document.readyState` and `location.href` every 250 ms until it has loaded and its address has held still for
+  1.5 s, at most 12 s (`BrowserSignInCheckSettings`), and closes the page. The result (`SignInCheck`: `landed {url}`,
+  or `unchecked {reason}` when Chrome is missing, does not start, the sign-in window is open, the page never settles
+  or Chrome refuses) goes into `resolveBrowserSignInReply` and the resume prompt for a run that was let go while
+  waiting (`Questions`). Only a page that ends on the requested origin, port included, is "signed in", and the reply
+  names where it landed; a page sent to another origin (a sign-in host such as `…authkit.app`) is "still not signed
+  in", with where it landed, that copying carries cookies only and that a local app's session belongs to one port,
+  and the agent asks again for the window; an unchecked one says why and tells the agent to ask again if the page
+  still asks for a sign-in. A failed check does not reopen the gate. It cannot tell an app that redirects more than
+  1.5 s after loading. Before it, every approve replied "signed in": copying `localhost` cookies from Dia never
+  carried a WorkOS AuthKit session kept in localStorage, and the agent was told it was signed in. Only you answer it,
+  and copying and the window happen on this machine, so on app.shinsa.dev the card offers only I signed in and Skip,
+  and a guest or a teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page
+  first, to use the repository's own test users where it has them, never to launch a browser of their own to sign in,
+  and for a local dev server to ask with the exact address of the run they screenshot and keep that run.
 - **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
   started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
   never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
@@ -6338,8 +6368,8 @@ you: Settings → Browser ─────────┤
   /api/browser/projects/:projectId`, `GET /api/browser/sources`, `GET /api/browser/sources/:sourceId/sites`, and
   `POST` `copy`, `window`, `window/close`, `sites/remove` and `sign-out` under `/api/browser/projects/:projectId/`. The section is hidden on app.shinsa.dev.
 - **Limits.** Agents of one project share one cookie jar, so two tasks that need different users of the same site
-  collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage does not carry
-  across a task's ports.
+  collide. A copied `localhost` cookie works on any port, but a token a dev app keeps in localStorage belongs to one
+  origin, port included: it is never copied, and a service restarted on a new port needs a new sign-in in the window.
 
 ## The agent loop
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { ShinsaCommand, ShinsaState } from '@shinsa/core';
+import type { ShinsaCommand, ShinsaState, SignInCheck } from '@shinsa/core';
+import { Effect } from 'effect';
 import type { AgentSessionInput, AgentSessionResult } from '../../src/agents/providers/index.ts';
 import { createTestEvidence } from '../helpers/evidence.ts';
 import { createTempDir, createTestConfig, until } from '../helpers/index.ts';
@@ -35,10 +36,17 @@ function createSessions() {
   return { started, startSession: adaptStarter(start) };
 }
 
-function setup(patch: (state: ShinsaState) => void = () => undefined) {
+interface CheckOptions {
+  readonly landed?: SignInCheck | null;
+}
+
+function setup(patch: (state: ShinsaState) => void = () => undefined, options: CheckOptions = {}) {
   const sessions = createSessions();
+  const checked: { profile: string; url: string }[] = [];
+  const landed: SignInCheck | null =
+    options.landed === undefined ? { kind: 'landed', url: SIGN_IN.url } : options.landed;
   const stub = createStubEngine((state) => {
-    state.repos['repo-1'] = createRepo();
+    state.repos['repo-1'] = createRepo({ projectId: 'project-1' });
     state.tasks['task-1'] = createTask({ worktreePath: createTempDir() });
     state.runs['run-1'] = createRun();
     patch(state);
@@ -52,9 +60,18 @@ function setup(patch: (state: ShinsaState) => void = () => undefined) {
     createTestEvidence(config.evidenceDir),
     {
       startSession: sessions.startSession,
+      signInCheck: landed
+        ? {
+            check: (profile, url) =>
+              Effect.sync(() => {
+                checked.push({ profile, url });
+                return landed;
+              }),
+          }
+        : undefined,
     }
   );
-  return { ...stub, sessions, supervisor };
+  return { ...stub, sessions, supervisor, checked };
 }
 
 function listRequests(dispatched: ShinsaCommand[]) {
@@ -91,8 +108,47 @@ describe('request_browser_sign_in', () => {
     expect(listRequests(context.dispatched)[0]).toMatchObject({ runId: 'run-1', ...SIGN_IN });
     await answer(context, gateId, 'approve');
     expect(await reply).toBe(
-      'The human signed your project’s shared browser in to vercel.com. Open the page again and carry on. It stays signed in for later tasks of this project too.'
+      'The human signed your project’s shared browser in to vercel.com: https://vercel.com/login now opens https://vercel.com/login. Open the page again and carry on. It stays signed in for later tasks of this project too.'
     );
+    expect(context.checked).toEqual([{ profile: 'project-1', url: SIGN_IN.url }]);
+    finish();
+    await run;
+  });
+
+  test('a page that still sends the browser to a sign-in host is reported as not signed in', async () => {
+    const authkit = 'https://superwalllocal.authkit.app/?redirect_uri=https://vercel.com/login';
+    const context = setup(undefined, { landed: { kind: 'landed', url: authkit } });
+    const run = context.supervisor.execute('run-1');
+    await until('the session', () => context.sessions.started.length === 1);
+    const { input, finish } = context.sessions.started[0] as FakeSession;
+    const reply = input.tools.handle('request_browser_sign_in', SIGN_IN, new AbortController().signal);
+    await answer(context, await requested(context), 'approve');
+    const text = await reply;
+    expect(text).toContain('The shared browser is still not signed in to vercel.com');
+    expect(text).toContain(`sends it to ${authkit}`);
+    expect(text).toContain('Open sign-in window');
+    finish();
+    await run;
+  });
+
+  test.each([
+    ['no browser to check with', () => undefined, null],
+    [
+      'a task outside every project',
+      (state: ShinsaState) => {
+        state.repos['repo-1'] = createRepo();
+      },
+      undefined,
+    ],
+  ] as const)('with %s, the reply says the sign-in was not checked', async (_, patch, landed) => {
+    const context = setup(patch, { landed });
+    const run = context.supervisor.execute('run-1');
+    await until('the session', () => context.sessions.started.length === 1);
+    const { input, finish } = context.sessions.started[0] as FakeSession;
+    const reply = input.tools.handle('request_browser_sign_in', SIGN_IN, new AbortController().signal);
+    await answer(context, await requested(context), 'approve');
+    expect(await reply).toContain('but I could not check it: the shared browser did not answer.');
+    expect(context.checked).toEqual([]);
     finish();
     await run;
   });
@@ -106,6 +162,7 @@ describe('request_browser_sign_in', () => {
     const skipped = input.tools.handle('request_browser_sign_in', SIGN_IN, live.signal);
     await answer(context, await requested(context), 'reject');
     expect(await skipped).toContain('The human skipped signing in to vercel.com.');
+    expect(context.checked).toEqual([]);
 
     const stopping = new AbortController();
     const withdrawn = input.tools.handle('request_browser_sign_in', SIGN_IN, stopping.signal);
@@ -138,6 +195,7 @@ describe('request_browser_sign_in', () => {
     expect(context.sessions.started[0]?.input.prompt).toContain(
       'You asked the human to sign your project’s shared browser in to vercel.com.\n\nThe human signed'
     );
+    expect(context.checked).toHaveLength(1);
     context.sessions.started[0]?.finish();
     await resumed;
   });
