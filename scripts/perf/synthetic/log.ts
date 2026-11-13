@@ -159,7 +159,13 @@ function walkTask(writer: Writer, taskId: string, random: () => number, meterTim
   meter(writer, taskId, meterTimes);
   const reviewer = writer.activeRun(taskId);
   if (!reviewer) return;
-  writer.send({ type: 'agent.report_review', runId: reviewer.id, summary: null, findings: [] });
+  writer.send({
+    type: 'agent.report_review',
+    runId: reviewer.id,
+    summary: null,
+    ratings: { confidence: 'high', risk: 'low' },
+    findings: [],
+  });
   if (random() < 0.2) return;
   const review = writer.openGate(taskId);
   if (!review) return;

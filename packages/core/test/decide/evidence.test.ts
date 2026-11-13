@@ -58,7 +58,13 @@ function reachRevision(options: { phaseFiles?: [string[], string[]] } = {}) {
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   const reviewer = harness.activeRun(taskId).id;
   attach(harness, reviewer, { key: 'settings-dark', uri: '/e/review.png' });
-  harness.send({ type: 'agent.report_review', runId: reviewer, summary: null, findings: [] });
+  harness.send({
+    type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
+    runId: reviewer,
+    summary: null,
+    findings: [],
+  });
   harness.send({
     type: 'gate.answer',
     gateId: harness.openGate(taskId).id,
@@ -231,6 +237,7 @@ describe('a fix accounts for the evidence attached before it', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],

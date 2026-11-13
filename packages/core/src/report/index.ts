@@ -84,6 +84,7 @@ export {
   PLAN_SPLIT_ORDERS,
   PROTOCOL_LIMITS,
   REPLY_OUTCOMES,
+  REVIEW_RATINGS,
   REVIEW_PAYLOAD_VERSION,
   type ReviewPayload,
   type ReviewPayloadEvidence,

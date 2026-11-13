@@ -25,7 +25,13 @@ import {
 } from './fields.ts';
 import { SCHEDULE_TRIGGER_KINDS, WEBHOOK_ENCODINGS } from './schedules.ts';
 import {
+  ACTIVE_DAY_LIMIT,
+  AUTO_MERGES,
+  AUTOPILOT_CONTACT_KINDS,
+  AUTOPILOT_GATES,
+  AUTOPILOT_LEVELS,
   COMPACTION_MODES,
+  MAX_AUTOPILOT_CONTACTS,
   MERGE_METHODS,
   PLAN_APPROVALS,
   type SETTINGS_KEYS,
@@ -92,6 +98,49 @@ export type Unbranded<T> =
       ? { [Key in keyof T]: Unbranded<T[Key]> }
       : T;
 
+const SLACK_CONTACT_ID_MESSAGE = 'A Slack id is letters, digits, dots, dashes and underscores.';
+
+const SlackContactId = Id(64).check(
+  Schema.isPattern(/^[A-Za-z0-9._-]+$/, { message: SLACK_CONTACT_ID_MESSAGE })
+);
+
+const SLACK_IMAGE_MESSAGE = 'A Slack picture is an https address.';
+
+const SlackContactImage = Id(500).check(
+  Schema.isPattern(/^https:\/\/\S+$/, { message: SLACK_IMAGE_MESSAGE })
+);
+
+const SlackContactFields = { teamId: SlackContactId, id: SlackContactId, name: Id(80) };
+
+export const AutopilotContactPatch = Tagged('kind', AUTOPILOT_CONTACT_KINDS, [
+  Schema.Struct({ kind: Schema.Literal('slack_channel'), ...SlackContactFields }),
+  Schema.Struct({
+    kind: Schema.Literal('slack_person'),
+    ...SlackContactFields,
+    image: Schema.optionalKey(SlackContactImage),
+  }),
+]);
+
+const AutopilotPatch = Strict(
+  {
+    enabled: Schema.optionalKey(Bool),
+    level: Schema.optionalKey(Choice(AUTOPILOT_LEVELS)),
+    gates: Schema.optionalKey(List(Choice(AUTOPILOT_GATES), AUTOPILOT_GATES.length)),
+    autoMerge: Schema.optionalKey(Choice(AUTO_MERGES)),
+    escalate: Schema.optionalKey(Bool),
+    ignoreUsageLimits: Schema.optionalKey(Bool),
+    contacts: Schema.optionalKey(List(AutopilotContactPatch, MAX_AUTOPILOT_CONTACTS)),
+  },
+  'Autopilot',
+  'autopilot'
+);
+
+const ActiveDayPatch = Strict(
+  { weekday: WholeNumber, from: WholeNumber, to: WholeNumber },
+  'Active hours',
+  'activeHours day'
+);
+
 export const SettingsPatch = Strict(
   {
     defaultProvider: Schema.optionalKey(Id()),
@@ -121,10 +170,12 @@ export const SettingsPatch = Strict(
     watchdogHours: Schema.optionalKey(WholeNumber),
     watchdogFirstCheckMinutes: Schema.optionalKey(WholeNumber),
     watchdogMaxGapHours: Schema.optionalKey(WholeNumber),
+    autopilot: Schema.optionalKey(AutopilotPatch),
     watchdogsIgnoreUsageLimits: Schema.optionalKey(Bool),
     autoPace: Schema.optionalKey(Bool),
     autoPaceResets: Schema.optionalKey(Bool),
     sharedTeams: Schema.optionalKey(List(Id())),
+    activeHours: Schema.optionalKey(OrNull(List(ActiveDayPatch, ACTIVE_DAY_LIMIT), FIELD_MESSAGES.list)),
   } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
   'Settings',
   'patch'

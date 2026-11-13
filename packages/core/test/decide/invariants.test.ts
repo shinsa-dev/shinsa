@@ -296,6 +296,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
       case 'reviewer':
         commands.push({
           type: 'agent.report_review',
+          ratings: { confidence: 'high', risk: 'low' },
           runId,
           summary: chance(random, 0.5) ? 'Checked the change.' : null,
           findings: randomFindings(random),
@@ -592,13 +593,15 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   }
   commands.push(...listMergeStepCommands(state));
   if (chance(random, 0.05)) {
+    const approvePlans = pick(random, ['when_asked', 'large', 'always'] as const) ?? 'when_asked';
     commands.push({
       type: 'settings.change',
       patch: {
-        approvePlans: pick(random, ['when_asked', 'large', 'always'] as const) ?? 'when_asked',
+        approvePlans,
         maxFixRounds: pick(random, [null, 1, 3]) ?? null,
         agentModels: chance(random, 0.5) ? { answerer: 'sonnet' } : {},
         agentProviders: chance(random, 0.3) ? { answerer: 'codex' } : {},
+        autopilot: { enabled: approvePlans === 'large' },
       },
     });
   }
@@ -691,6 +694,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
     if (run.role === 'reviewer') {
       const review: ShinsaCommand = {
         type: 'agent.report_review',
+        ratings: { confidence: 'high', risk: 'low' },
         runId,
         summary: null,
         findings: [{ severity: 'blocking', file: 'a.ts', line: 1, message: `Again ${state.seq % 2}` }],
@@ -1567,6 +1571,8 @@ function simulate(
   let view = connectView(state);
   let counter = 0;
   let outageCounter = 0;
+  let learned = 0;
+  const walked = () => (learned === 0 ? state : { ...state, seq: state.seq - learned });
   const apply = (
     step: number,
     now: number,
@@ -1581,6 +1587,7 @@ function simulate(
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
       const stamped = { ...event, seq: replayed.seq + 1, at: now } as ShinsaEvent;
+      if (stamped.type === 'autopilot.decided') learned += 1;
       assertOneSessionPerTask(replayed, stamped, `seed ${seed}, step ${step}, after ${command.type}`);
       log.push(stamped);
       replayed = applyEvent(replayed, stamped);
@@ -1610,10 +1617,10 @@ function simulate(
     const combined = sideStream === 'compositions';
     const shapes = sideStream === 'shapes' || combined ? shaping : null;
     const command = combined
-      ? nextCommand(state, random, random, null, shapes, true)
-      : nextCommand(state, random, side, extra, shapes);
+      ? nextCommand(walked(), random, random, null, shapes, true)
+      : nextCommand(walked(), random, side, extra, shapes);
     apply(step, now, command, () => `${seed}-${++counter}`);
-    const sideCommand = selectSideCommand(sideStream, state, randoms, now);
+    const sideCommand = selectSideCommand(sideStream, walked(), randoms, now);
     if (sideCommand) {
       const onBehalf = sideStream === 'on_behalf' || sideCommand.type === 'schedule.write';
       apply(step, now, sideCommand, () => `${seed}-${sideStream}-${++outageCounter}`, onBehalf);
@@ -1934,13 +1941,13 @@ describe('decide under random command sequences', () => {
         'merged while ready',
         'ready in its bundle',
       ];
-      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) {
+      for (let seed = 1; seed <= RARE_SEEDS * 2; seed += 1) {
         if (seed > SEEDS && reached.size === marks.length) break;
         simulate(seed, STEPS, 'bundles', collect);
       }
       expect([...reached].sort()).toEqual(marks);
     },
-    RARE_SEEDS * 2_000
+    RARE_SEEDS * 4_000
   );
 
   test(
@@ -1995,13 +2002,7 @@ describe('decide under random command sequences', () => {
   test(
     'keeps every invariant while tasks take new rounds, ship them onto one pull request or stacked, and close',
     () => {
-      const reached = new Set<string>();
-      const collect = (state: ShinsaState) => {
-        for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
-          if (mark) reached.add(mark);
-      };
-      for (let seed = 1; seed <= RARE_SEEDS + 30; seed += 1) simulate(seed, STEPS, 'rounds', collect);
-      expect([...reached].sort()).toEqual([
+      const marks = [
         'carried merge step',
         'closed task',
         'gate after the merge',
@@ -2014,9 +2015,19 @@ describe('decide under random command sequences', () => {
         'three rounds',
         'ticked merge step',
         'waiting round',
-      ]);
+      ];
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
+          if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= RARE_SEEDS * 4; seed += 1) {
+        if (seed > RARE_SEEDS && reached.size === marks.length) break;
+        simulate(seed, STEPS, 'rounds', collect);
+      }
+      expect([...reached].sort()).toEqual(marks);
     },
-    RARE_SEEDS * 3_000
+    RARE_SEEDS * 8_000
   );
 
   test(

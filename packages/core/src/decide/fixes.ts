@@ -14,6 +14,7 @@ import {
   resolveReviewFixPrompt,
 } from '../prompts/index.ts';
 import type { ReviewFinding } from '../report/types.ts';
+import { isFindingFixedBeforeReview } from './autopilot.ts';
 import type { Decider } from './decider.ts';
 import {
   countFixRepeats,
@@ -202,27 +203,15 @@ export function startFix(
   );
 }
 
-function isDismissed(task: Task, finding: ReviewFinding) {
-  return (task.dismissedFindings ?? []).some(
-    (dismissed) =>
-      dismissed.file === finding.file &&
-      dismissed.line === finding.line &&
-      dismissed.message === finding.message
+function listFindingsToFix(decider: Decider, task: Task, findings: readonly ReviewFinding[]) {
+  return findings.filter((finding) =>
+    isFindingFixedBeforeReview(decider.state, decider.context.now, task, finding)
   );
-}
-
-function isFixedBeforeReview(task: Task, finding: ReviewFinding) {
-  if (finding.severity === 'blocking') return true;
-  return finding.severity === 'should_fix' && task.approveAfterFix === true;
-}
-
-function listFindingsToFix(task: Task, findings: readonly ReviewFinding[]) {
-  return findings.filter((finding) => isFixedBeforeReview(task, finding) && !isDismissed(task, finding));
 }
 
 export function reuseLastReview(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
-  if (listFindingsToFix(task, task.findings).length === 0) {
+  if (listFindingsToFix(decider, task, task.findings).length === 0) {
     openReviewGate(decider, taskId);
     return;
   }
@@ -231,7 +220,7 @@ export function reuseLastReview(decider: Decider, taskId: string) {
 
 export function reactToFindings(decider: Decider, taskId: string, findings: ReviewFinding[]) {
   const task = decider.task(taskId);
-  const toFix = listFindingsToFix(task, findings);
+  const toFix = listFindingsToFix(decider, task, findings);
   if (toFix.length === 0) {
     openReviewGate(decider, taskId);
     return;

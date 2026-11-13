@@ -1795,7 +1795,9 @@ usage limit reached with auto-resume off, a cancelled task this one waits on or 
 out, and a signed-out account.
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
-behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).
+behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below). The one
+exception is the pre-approval you give yourself: with Autopilot on, a review or merge gate may be approved for you
+by the policy you set, and only those two (Process and structure → Autopilot).
 
 Each gate takes only the answers that mean something for it (`gate.answer` refuses the rest):
 a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
@@ -2127,7 +2129,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   it filed, so the watchdog never passes with the issue open; only a report this watchdog already holds is refused
   (`report_filed`). A watchdog's filing always forks the shipped
   task (`fork_from` naming any other is refused, `fork_watchdog`), so the fix starts from this conversation and goes
-  through every gate; it takes the task's repository unless one is named, and its priority. The filed task keeps
+  through every gate; it takes the task's repository unless one is named, and its priority unless the check sets `urgency` (Autopilot, below). The filed task keeps
   `Task.sourceReport` with `scheduleId: null` and the `watchdogId`, `createdBy {kind: 'watchdog'}`, and its request
   quotes the report ("Reported in <server> …"); its Filed by fact names the watchdog and opens the shipped task, and its Reported in card holds the report.
   The check ends with `report_read {summary}` (`PURPOSE_HAND_OVERS.watch`). One that filed nothing is healthy and
@@ -2293,6 +2295,239 @@ checks it ran.
   reviewer is told not to report them again unless the code around them changed. Your decision
   resets the round count.
 
+### Autopilot
+
+Autopilot is your delegate: at each point where a task would wait for you it decides, like a trusted colleague,
+whether to act for you, bring it to you, or, as a last resort, send it to your team. It is a pre-approval you give,
+never a power Shinsa takes: the policy is the human-only setting `autopilot` (Settings → Agents → Autopilot,
+`AutopilotPolicy` in `domain/settings.ts`), off by default, and every action it takes is recorded with its reason.
+Two layers decide: core's hard limits, which a model can never cross, and inside them a short model call that
+judges the case. The rules are core's (`autopilot/` for the facts, limits, prompt, lessons, your decision profile,
+the score and Handled by Autopilot;
+`decide/autopilot.ts` for the commands; the folds in `state/autopilot.ts`); the judge and the clock are the
+engine's (`autopilot/judge.ts`, `runtime/autopilot/`).
+
+```
+gate opens ──► askAutopilot
+                 ├─ hard limits refuse ──► autopilot.forwarded (why) ──► waits for you
+                 └─ allowed ──► autopilot.judging ──► autopilot.judge (quick call)
+                                   └─► autopilot.judgment {verdict, reason, reply}
+                                         ├─ limits checked again; forward ──► waits for you
+                                         └─ act ──► approve / reply / merge, with the reason
+you answer it later ──► lesson (autopilot.learned) ──► next judgment's prompt
+you answer any gate ──► autopilot.decided ──► profile ──► every prompt
+gate left to you ──► shadow judge ──► autopilot.guessed ──► score
+```
+
+- **The reviewer rates every change.** `report_review` requires `confidence` and `risk`, each `low`, `medium` or
+  `high` (`ReviewRatings`), kept on the task as `reviewRatings` from `review.reported` and cleared by a new round.
+  The reviewer's prompt says the human may be approved for on its ratings, and to rate confidence down and risk up
+  when in doubt. The review's summary, on the Review tab and the Overview's review card, leads with both as badges
+  (`ReviewRatings`, `resolveReviewRatingsView`), whether Autopilot is on or off, with a hint for a quick read (high
+  confidence, low risk) or a careful one (low confidence or high risk).
+- **Urgency is the task's priority.** A task you mark urgent is urgent; a watchdog check or a watch's read may set
+  `urgency` on `file_report` (a `TaskPriority`), which becomes the filed task's priority instead of the watched task's.
+- **The policy.** `enabled` (false); `level`, how much it may do alone (`AutopilotLevel`: `ask_first`, `balanced` by
+  default, or `most`); `gates`, which of your decisions it may act on (`AutopilotGate`: `plans`, `questions`,
+  `reviews`, `suggestions` and `watchdogTasks`; all but `suggestions` by default); `autoMerge` (`AutoMerge`: `off`, `low_risk` by default, or `approved`, every
+  change it approved); `escalate` (true), whether it may send an urgent change to your team; `ignoreUsageLimits`
+  (true), whether an urgent task's runs skip the usage and cost limits; `contacts`, who in Slack also hears of an
+  escalation (none by default, at most `MAX_AUTOPILOT_CONTACTS`, 5; each an `AutopilotContact`, a `slack_channel`
+  or `slack_person` with its workspace `teamId`, Slack `id` and `name`, listed once, `isSameAutopilotContact`;
+  Escalating in Slack, below). `settings.change` takes a partial `autopilot` and merges it into the current policy,
+  `gates` and `contacts` replaced whole.
+- **The facts.** For a plan, question, review, merge or your OK gate (`selectJudgedGateKind`; your OK only on a
+  task a watchdog filed, below), `resolveAutopilotFacts`
+  gathers what a colleague would weigh: urgency (`isUrgentTask`: urgent and not set on your behalf), whether a
+  watchdog filed it, the reviewer's confidence and risk, the plan's size (phases and files), whether the plan asks
+  for you (it runs an operation, splits, is in the backlog, was created plan first or asks for `approval`), whether
+  you approved the review yourself, how long the gate has waited, and where you are (`resolveAutopilotPresence`):
+  inside your usual hours or not (Your hours, below), active when you were seen in the last 30 minutes
+  (`AUTOPILOT_LIMITS.activeMinutes`; anything you do in Shinsa or on your Mac counts, `state.presence`), and how
+  long you have been away.
+- **The hard limits** (`resolveAutopilotLimits`, a ceiling per level in `AUTOPILOT_CEILINGS`):
+
+  | Level | Risk it acts on | Risk when urgent | Largest plan it approves |
+  |---|---|---|---|
+  | `ask_first` (Ask me first) | low | low | 2 phases, 4 files |
+  | `balanced` (Balanced) | low | medium | 4 phases, 10 files |
+  | `most` (Most things) | medium | high | 6 phases, 20 files |
+
+  A gate whose kind is not in `gates` waits for you. A plan within the size and not held for you may be approved;
+  a question may be answered; a review needs `high` confidence and a risk within the ceiling (the urgent one for an
+  urgent task), and an escalated review always waits for you. A merge needs `autoMerge` on, a review Autopilot
+  approved (`Task.autopiloted`; one you approved yourself is never merged for you), `high` confidence and a risk
+  within `low` (`low_risk`) or the level's ceiling (`approved`), or the urgent ceiling once you have been away 60
+  minutes of the wait (`AUTOPILOT_LIMITS.awayMinutes`); and nothing that refuses a merge (`resolveMergeRefusal`: an
+  open pre-merge step of it or its bundle, or edits not pushed). Each refusal carries why ("The reviewer’s
+  confidence is medium.") and whether a setting made it.
+- **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
+  and asks for `autopilot.judge {taskId, gateId, shadow: false}`, a replay-safe effect on lane `task:<id>`: the engine builds the
+  prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
+  task's request, plan goal or question, the facts, the last 8 lessons of that kind of gate and your decision profile
+  for it, below, in the user prompt)
+  and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
+  'forward', reason, reply}`. It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
+  ("Autopilot could not reach a model, so this waits for you."). Core ignores a judgment for a gate no longer open
+  or no longer judging, checks the limits again (the state may have moved), and then acts: a plan is approved
+  (`answerGateForYou`), a question answered with the reply (with no reply it waits for you: "Autopilot was not sure
+  what to answer"), a review approved as "Fix and approve" does (`approveReviewAhead`), a merge started
+  (`gate.answered` `ahead`, then the usual merge). Every action is `gate.answered` with `autopilot: <reason>`
+  (the reason clipped to 240 characters, the reply to 2,000), shown in the activity as done for you by Autopilot
+  with the reason as its detail. A forward keeps why on the gate (`autopilot.forwarded`, `Gate.autopilotHeld`) and
+  waits for you as always. While a task is a review candidate, `reactToFindings` sends the review's `should_fix`
+  findings to the Agent as well as its blocking ones (`isFindingFixedBeforeReview`), so it never approves past a
+  finding you would have fixed.
+- **It learns from you** (`autopilot/lessons.ts`). When you answer a gate after Autopilot acted on the task
+  (approved its plan or review, answered its question) or brought it to you for a reason it could judge (not a
+  setting), each answer becomes a lesson (`listAutopilotLessonsToLearn`, `autopilot.learned`,
+  `state.autopilotLessons`, the last 50): which gate, what Autopilot did, what you answered (`approved`, `revised`,
+  `rejected` or `replied`), your words (280 characters), and the facts it had. Approving later work on a task it
+  acted on counts as keeping that call. A guest's answers on a handed-off task teach it nothing. Each judgment's
+  prompt lists the last 8 lessons of its kind of gate. When you corrected 2 of its last 4 actions at one kind of
+  gate, that kind is paused, a hard limit, not the model's choice (`resolveLessonLimit`): "You changed what
+  Autopilot did at your last few reviews, so it brings them to you for now." A later approval of what it brought
+  you ends the pause.
+- **Your decision profile** (`autopilot/profile.ts`, `state.autopilotProfile`). Every decision you make, whether
+  Autopilot touched the gate or not, is kept: each answer on a plan, question, review, merge or your OK gate, each
+  review finding you mark fix or dismiss, and each suggested task you accept, dismiss or keep in its task
+  (`listGateDecisionDrafts`), and each message you send a task's agent (`message`, `sent`), priority you change
+  (`priority`, `raised` or `lowered`), task you cancel (`cancel`, `cancelled`), task you file (`request`, `filed`,
+  its request as the note: `createTaskAsYou` marks `task.created` with `learned`) and file you first change in the
+  Code tab (`edit`, `edited`, its path as the note: `task.edited` with `learned`). The rest are recorded from
+  `decide/lessons.ts` as `autopilot.decided {decisions}`; a filed task and an edit fold into the profile from their own
+  event, so learning them adds no event to the log. An
+  `AutopilotDecision` keeps its kind (`AutopilotDecisionKind`), your answer (`AutopilotDecisionAnswer`: `approved`,
+  `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted`, `kept`, `sent`, `raised`, `lowered`,
+  `cancelled`, `filed` or `edited`), the project, the reviewer's risk, the plan's
+  scope, whether the task was urgent or filed by a watchdog, whether Autopilot had brought it to you (`touched`),
+  its guess (below) and your words (280 characters). Nothing an agent or a schedule does on your behalf counts, nor
+  a guest's answers on a handed-off task. Every decision counts, with no cap: the profile keeps a count per kind,
+  per kind and project and per kind and risk (`AutopilotTally`), each with its all-time `answers` and a
+  recency-weighted `recent` share, where a decision's weight halves every 30 days (`AUTOPILOT_PROFILE_LIMITS
+  .halfLifeDays`), so what you did lately leads and your first decisions still count. Only the words it quotes are
+  bounded: the last 200 decisions are kept for their notes. Each judgment's prompt carries
+  `listAutopilotProfileLines`: how you answered that kind of point overall, in the task's project and at its risk,
+  with the recent lean ("lately approved 83%, revised 17%"), then how you steer your tasks (your messages, code edits,
+  the tasks you file, priority changes and cancellations, `STEERING_KINDS`, read by every kind of point), then up to 3 of your recent notes,
+  within 1,200 characters, the point's own counts first. This is a summary the model reads, not a model trained on you.
+- **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
+  merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
+  (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
+  stored on the gate (`autopilot.guessed`, `Gate.autopilotGuess`) and acts on nothing. A gate it judged and then
+  brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
+  A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
+  guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
+  (`AutopilotDecision.guess`) and folded into a running agreement (`AutopilotProfile.agreement`: every guess ever
+  scored, how many agreed, and both weighted so each older guess counts half as much after 50 newer ones,
+  `AUTOPILOT_SCORE_LIMITS.halfLife`). Approving agrees with `act`, changing or rejecting with `forward`; questions
+  are not scored, since a reply has no yes or no. `resolveAutopilotScore` turns it into `progress`, from 0 to 1:
+  the lesser of how many guesses were scored against 50 and the weighted agreement against 90%, and into `value`,
+  the score out of 100 Settings shows: the weighted agreement once 50 guesses are scored, and before that at most
+  the share of 50 scored times 90, so it reaches 90 exactly when progress is full. It suggests `most`
+  once progress is full and `balanced` otherwise, so a run of recent misses lowers it again; it never changes your
+  level, which moves only when you choose one.
+- **Suggested tasks** (`suggestions` gate, off by default). Each new suggested task is weighed when an agent
+  suggests it (`weighSuggestion`, `resolveAutopilotSuggestionLimit`: Autopilot on, the gate on, any level but Ask
+  me first, never one you split off yourself or one that would stack on this task) through `autopilot.weigh
+  {taskId, suggestionId}`, a replay-safe effect on the engine's quick call (`createAutopilotWeigher`,
+  `selectAutopilotSuggestionRequest`, with your profile for suggested tasks), answered as `autopilot.weighed
+  {verdict: 'accept' | 'dismiss' | 'forward', reason}`. Core checks the limits again, then accepts it as you would
+  (starting after this task merges when the agent asked for that) or dismisses it, with `autopilot: <reason>` on
+  `suggestion.settled`; `forward`, a settled suggestion or no model leaves it to you.
+- **Watchdog tasks** (`watchdogTasks` gate, on by default). On a task a watchdog filed (`isWatchdogTask`), your OK
+  gate on its proposal is judged like any other gate and Autopilot may give your OK, unless the plan asks for you
+  (`limitProposal`). Everything after still passes its own gates under the same policy. Your OK on any other task
+  is always yours.
+- **Handled by Autopilot on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
+  that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Handled by Autopilot, first on Home above
+  Needs you: what it did, the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
+  stays in Recently finished); with two or more rows, Mark all seen clears them (`autopilot.seen {gateIds}`, human-only, `Gate.autopilotSeen`; `shinsa autopilot seen`). Each notifies once when
+  it happens and its notification closes when you mark it seen; none counts in the Needs you badge.
+- **Urgent merges while you are away.** With the policy on, an urgent task's open merge gate is checked every hour
+  (`autopilot.scheduled`, `Gate.autopilotDue {at}`, `syncAutopilotDeadlines` after `task.prioritize` and
+  `settings.change`; a task no longer urgent, or a policy off, loses it). `AutopilotClock` fires `autopilot.fire
+  {taskId, gateId, dueAt}` (command id `autopilot:<gate>:<dueAt>`) at it; core ignores a fire for another check, a
+  gate no longer open or a closed task. At each check it escalates when it may (below), asks for a judgment when
+  it may merge, or, when it promised a merge in an escalation and now cannot, revises that escalation
+  (`task.escalation_revised`, keeping its `at`: the new reason, `mergesAt` null and `blockedBy`, so the card stops
+  promising the merge, and each Slack message it sent is edited in place to match); then sets the next check.
+- **Escalation is the last resort** (`limitEscalate`). Only with `escalate` on, for an urgent task the reviewer rated
+  `high` risk, never while you are active, and only once you have been away 60 minutes of the merge's wait.
+  It sets `Task.escalation {at, reason, handoff}` (`task.escalated`, "Escalated by Autopilot" in the activity), with
+  `mergesAt` the next check when it may also merge (Most things), or `blockedBy` why it cannot.
+- **Escalating to your team.** `Task.escalation` is a shared status field, so it travels in your team listing
+  (Teams, below). On every teammate's machine `listTeamEscalations` (`queue/escalations.ts`) picks the open escalated
+  tasks out of the team feed: they show in Needs you as "Sent by your team" (an amber megaphone tile and a line such as
+  "Mona’s urgent fix, found by a watchdog, waited 1 hour for its merge"), count in the page badge, and each sends one
+  notification that opens the task. The escalation carries its hand-off (`EscalationHandoff`, `resolveEscalationHandoff`,
+  taken once at the escalation): how long the merge waited, why Autopilot could not merge it (`blockedBy`, a `MergeBlock` code each reader's page words for them, so a teammate never reads "you approved"), when the
+  owner last acted in Shinsa (`ownerActiveAt`, the latest hour of `presence`), the watchdog and shipped change that
+  found the issue (`foundBy`), the reviewer's ratings and
+  when Autopilot merges it next (`mergesAt`). The task's Overview shows it as a panel above the now card
+  (`HandoffPanel`, `listHandoffParagraphs`): "Why this reached you" for a teammate, in three short paragraphs (why it reached them, what it fixes, what to do now) with the owner's live presence from the
+  team feed, and "Sent to your team" for you. A teammate merges it from the task's page only when your team settings
+  let them answer decisions on your tasks; otherwise they review it read-only and reach you. The
+  escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in
+  no team escalates only in its own activity and Overview ("Sent to your team"), so while none of your projects is
+  in a team, Settings → Agents → Autopilot says "No project shared with a team" in Who it asks.
+- **Escalating in Slack.** The team escalation always happens; each of `contacts` adds one Slack message to it, so
+  a channel and a teammate, or several of each, are asked at once. Without a project shared with a team and with no
+  contacts there is no one to ask, so the Your team row shows a warning while `escalate` is on (`isAskWaiting`). `escalate()` asks for one
+  `slack.escalate {taskId, escalatedAt, contact, part: 'message'}` per contact (lane `slack-escalation:<task>`, so they
+  go one after the other), and the engine posts "Urgent change needs a review" through app.shinsa.dev's
+  `/__remote/slack/notify` (`serializeSlackEscalation`: the title, why it reached them, what Autopilot does next (merges
+  it at a time unless someone acts first, waits, or what blocks it), the reviewer's ratings, the pull request and
+  Review in Shinsa, laid out like the review card). A channel gets it as a post, a person as a direct message from
+  the Shinsa app. The link opens the team's task page (`/teams/<team>/<machine>/<task>`) when the project is in a
+  team, its first team when in several, else the owner's task page (`resolveSlackEscalationUrl`). The engine records
+  where each went or why not with `slack.record_escalation` (`slack.escalation_sent`, one entry per contact in
+  `Task.slackEscalations [{escalatedAt, contact, channelId, ts, followUpTs}]`, which a later escalation's first record
+  replaces; `selectSlackEscalationPost` finds one), and the activity reads "Sent to #oncall in Slack" or "Could not
+  reach #oncall in Slack" with the reason as its detail, once per contact. When the escalation clears (its merge
+  gate answered, withdrawn or superseded) and again when the pull request is recorded merged, `syncSlackEscalations`
+  asks for every message that posted, even to a contact removed from the settings since, and the engine edits each
+  to "No longer needs anyone" with why (merged, closed, or decided in Shinsa). Once merged it also replies in each
+  message's thread (`part: 'follow_up'`, `resolveSlackEscalationFollowUp`): "Merged", that Shinsa keeps watching it
+  with each watchdog's state and the steps still to do after the merge, and to keep an eye on it too (or, with no
+  watchdog, only to keep an eye on it). The reply's ts is kept with `slack.record_escalation_follow_up`
+  (`slack.escalation_followed_up`), and every later watchdog event or ticked step edits it, as the merge message of a
+  thread is. The contacts are chosen in Settings → Agents → Autopilot, in the Who it asks block (Settings, below): your team in Shinsa
+  first, "Always on" or "No project shared with a team", then each Slack channel (its name, no #) and person (their Slack
+  picture, `image` from `users.list`'s `image_72`, kept on the contact) with a button to remove it. Add from Slack
+  opens one search over Channels and People (`listContactOptions`, the chosen ones ticked, the rest disabled at five,
+  a workspace choice at its top when Slack is connected in more than one), and each pick saves at once. Send a test
+  (`POST /api/slack/test {contact}`, owner only, feature `autopilot-slack`) posts a sample escalation to each contact
+  with a line saying it is a test (`serializeSlackEscalationTest`) and says in a toast whether each arrived. The lists
+  come from `GET /api/slack/directory?teamId=` (`SlackDirectoryView`: the public channels the app is in, the private
+  ones it shares with an account linked to the machine, every person who is neither a bot nor deactivated, with
+  their picture, up to ten pages of 200 each, and a `problem` instead of an error), searched in the page. Add from
+  Slack and Send a test are disabled, with why, while Slack is not connected or the engine does not announce
+  `autopilot-slack`. The sandbox (`bun run sandbox`) stands in for Slack on Studio (`scripts/sandbox/slack.ts`): the
+  directory, the posts and their edits, drawn as Slack draws them on `/sandbox/slack`, with a sample escalation and
+  its merged reply, and #leads refusing posts to try a failure.
+- **What it never does.** It never closes an operation, result, secret, failure, setup or Sign in gate, an
+  escalated review, a plan held for you, or your OK on a task no watchdog filed, never ticks a step around the merge, never acts while the hard limits
+  refuse whatever the model says, and never gets past GitHub: a merge GitHub refuses opens the usual failure gate.
+- **Settings** (Settings → Agents → Autopilot, `AutopilotSettings`, `lib/autopilot.ts`). The header has Turn on while
+  it is off, with one line on what it does, and the on and off choice once on. Acting for you: On its own (the
+  level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews,
+  Suggested tasks, Watchdog tasks: Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
+  approved). Who it asks: Your team (Only as a last resort, or Never), your team in Shinsa and the Slack contacts.
+  Usage limits (Ignore them or Keep them). How well it knows you: Autopilot score, a percentage at the end of its row (`value`: the recency-weighted share of its guesses that matched you, held lower while it has
+  few; a count has no maximum, so it shows a score, not how many decisions), with how many of how many it guessed
+  right under it and Most things suggested at 90, and the suggested level with a Use button while it differs from
+  yours. There is no separate agreement row: once it has enough guesses the score is that agreement.
+- **Urgent work and usage limits.** With the policy on and `ignoreUsageLimits` set (`isUsageLimitExempt`), an urgent
+  task's runs skip both holds before they start: `holdForBudget` (the task's usage and cost limits) and `holdForPace`
+  (the daily and project usage limits). Marking a task urgent starts a step either hold stopped (`releasePaceHolds`
+  and `releaseBudgetHolds` after `task.prioritize`), and so does a settings change that exempts it.
+- **Only urgency you set counts.** An agent may prioritize a task on your behalf, so a priority set that way, or a
+  task an agent created urgent on your behalf, is marked `Task.priorityOnBehalf` and counts as not urgent for
+  Autopilot: it widens no approval rule, sets no deadline and skips no limit. Your own `task.prioritize` clears the
+  mark, and so does triage's choice; a watchdog's urgent fork (`file_report` `urgency`) is not on your behalf and
+  counts.
+
 ### Questions
 
 - `ask` takes optional `choices` (2 to 4, different from each other) and a `recommendation`
@@ -2446,6 +2681,8 @@ checks it ran.
   is held by Claude's last 24 hours, a step on Codex by Codex's, since a percentage of one provider's weekly limit
   means nothing on another. Settings → Agent usage → Limits, Daily usage limit counts every task; a
   project's usage limit (its dialog, or `shinsa projects write --usage-limit`, 0 for off) counts only its tasks.
+  An urgent task skips them, and its own limits, while Autopilot ignores usage limits (Process and structure →
+  Autopilot).
   Like the task limit they are checked when a step would start (`dispatchRuns`, after the task limit), never
   mid-turn, and never for work an agent delegates within a step that already started. When the last 24 hours
   reach a limit (`resolvePaceHold`; with both reached, the one that frees up later), the queued step ends before it starts
@@ -2531,11 +2768,40 @@ checks it ran.
     running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
     3:40 PM" or "next", `listWaitingBuilds`), the first two by name and the rest in a popover; once you are back it
     adds how many tasks built overnight are ready for your review (`describeOvernightReviews`).
+- **Your hours** (`presence/hours.ts`, `presence/schema.ts`; pure, one model for Autopilot, Auto pace and Home).
+  `resolveActiveHours(state, now)` gives an `Option` of `ActiveHours {source, timeZone, week, observedDays}`, `week` 168 booleans,
+  one per hour of the week from Sunday 0:00 on your clock, none when it has too little to go on.
+  - **Your clock.** The engine sends `clock.record {timeZone}` on every start with the Mac's time zone, kept as
+    `state.timeZone` (`clock.recorded` only when it changed); every hour is read on it (`resolveLocalSlot`), so 9:00
+    is your 9:00 through daylight saving. Before the first record it is UTC.
+  - **Learned** (`resolveLearnedHours`, `ACTIVE_HOURS_LIMITS`), over the last 28 days. Away spans first: an hour is
+    covered when an `away` span covers at least half of it, and an hour of the week is yours when it was covered less
+    than half the time (`source: 'away'`). With fewer than 3 days of spans, your own activity (`state.presence`, the
+    commands you sent and the hours you used your Mac): an hour of the week is yours when you were active in it at least 15% of the time
+    (`source: 'activity'`). With fewer than 3 days of either, null. Each day counts half as much every 14 days back,
+    so a new routine takes over within weeks, and each hour of the week is learned on its own weekday once it has 2
+    days of it, or from the same hour on every day until then, so a weekend away never counts on a Friday.
+  - **Your Mac.** The engine reads how long the keyboard and mouse have been idle every 30 seconds
+    (`IdleWatch`, `presence/idle/`; `MacIdle` reads `HIDIdleTime` from `ioreg -c IOHIDSystem -d 4`,
+    `presence/mac-idle/`, null off a Mac) and sends `idle.record {inputAt, away}`: `inputAt` the last input, and
+    `away {from, to}` once 10 or more idle minutes end (`observeInput`, in core's `presence/`, the
+    same tracker the Mac app uses). Core records the span as `away.recorded`, as the Mac app's own `away.record` is, and the hour you
+    used the Mac as `mac.used` (once an hour, into `state.presence`), so Autopilot counts you active while you work
+    with Shinsa closed. Off a Mac, or when `ioreg` fails, nothing is sent.
+  - **Set by hand.** `activeHours`, a human-only setting (null by default), is a list of `ActiveDay {weekday, from,
+    to}` (weekday 0 for Sunday, whole hours 0 to 24, no overlaps, at most 14), which wins over what was learned
+    (`source: 'override'`) until you clear it with null.
+  - **Reading it.** `isActiveAt(hours, at)` (true with none: unknown counts as here) and
+    `resolveNextActiveChange(hours, at)`, the next 15-minute step where you go from here to away or back, or none
+    when the week never changes. Settings → Agents → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) is laid
+    out like the Forecast card: a header with your hours a week, a line on whether you are usually active now and
+    until when (on your hours' time zone), a week timeline (a row per weekday from Monday on a 24-hour track, your
+    usual hours filled, Now marked on today, a legend), where they come from, or that it is still learning; it
+    sets them by hand in its own block below the timeline (Set by hand copies the longest learned span of each day, never the gaps around it, so a short blip such as an hour at 1:00 stays outside your hours and every day keeps its start and end pickers; with nothing learned it starts from weekdays 9:00 to 17:00) or clears them
+    (Use learned hours); it shows only on an engine with `active-hours`.
 - **The night shift** (`costs/away.ts`, `prompts/night.ts`), on top of Auto pace and needing no setting of its own.
-  Your away hours are learned from the last 14 days (`AWAY_LIMITS`): an hour of the day is away when the `away`
-  spans cover at least half of it on at least half the days observed, given at least 3 days of spans; with fewer,
-  it falls back to activity, an hour with any presence on under 15% of the days. With neither, there is no night
-  shift. Only the Agent is told, in its user turn, never its system prompt (`resolveNightShiftTold`): while it plans
+  Your away hours are the hours outside Your hours (above, `isActiveAt`). With nothing learned and none set, there
+  is no night shift. Only the Agent is told, in its user turn, never its system prompt (`resolveNightShiftTold`): while it plans
   a task whose build will probably wait (you are away, admission holds are queued, or the budget has no room), that
   it builds unattended and should ask every question now; while it builds or fixes during your away hours, that it
   should decide what it can, record each choice as a judgement call (a summary line for a fix), and use `ask` only
@@ -3932,8 +4198,10 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `usage.auto_pace_resets` for `autoPaceResets` and `focus.projects` for `focus.change`'s `projectIds` and `except`, today;
-  Settings → Teams, the review's Fix and approve choice and
+  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `usage.auto_pace_resets` for `autoPaceResets`, `focus.projects` for `focus.change`'s `projectIds`
+  and `except`, `autopilot` for the `autopilot` setting and `autopilot-slack` for its Slack `contacts`,
+  `GET /api/slack/directory` and `POST /api/slack/test`, today; Settings → Teams, Settings → Agents → Autopilot,
+  the review's Fix and approve choice and
   What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
   `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
   dashboard, merges nothing and gets no command, and Settings → Machines says "Update Shinsa on <name> to reach it from
@@ -4442,7 +4710,8 @@ engine enrols and relays (Teammates act on team tasks, below). Teams need remote
   You, or the owner's first name as a user tag, Kai, the machine in its hint) and their repository
   (`SharedListing.repo`); their rows are `TeamTaskListRow` (`components/teams/tasks.tsx`), read-only. Home stays yours
   alone: it never lists a teammate's task. A teammate's task never waits for you, so it never counts towards Needs you, the queue, the
-  guide or a notification. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
+  guide or a notification, except one Autopilot escalated to the team (`Task.escalation`, Process and structure →
+  Autopilot): it shows in Needs you as "Sent by your team", counts in the page badge and notifies you once. Opening one goes to `/teams/<team>/<machine>/<task>` (`routes/team-task.tsx`), the shared
   task page (`SharedTaskPage`, read-only, its Chat the agents' output only) fed by the engine relay in the local app and, on app.shinsa.dev, by
   a team channel the browser opens with its own key. On app.shinsa.dev, and in the Mac app for a machine its engine
   relays (the local fleet relay, Teammates act on team tasks), a teammate's machine in the fleet
@@ -5263,6 +5532,19 @@ engine ──its watched channels, on every change──►
   restarts (`#sessionRefused`). Any other refusal (`channel_not_found`, `ratelimited`, `invalid_auth`) is logged and
   answered 502 `slack_failed`, which the engine logs as a warning and tries again at the next status change, so a
   passing failure never turns the status off. The posts, reactions and status message carry on as they are.
+- **Autopilot escalations** are the one post outside a thread (Process and structure → Autopilot, Escalating in
+  Slack): `/__remote/slack/notify` posts to a channel or a person's id, which opens the app's direct message (the
+  manifest turns on the app's Messages tab, read-only, so the message shows; no new scope), edits that message
+  once it clears, and replies in its thread once merged (`reply`, only under a message the machine posted);
+  `/__remote/slack/directory` lists who it may go to, each person with their picture. The hosted page's CSP allows
+  Slack's picture hosts (`avatars.slack-edge.com`, `a.slack-edge.com`, `secure.gravatar.com`). Both work only in a workspace the machine is
+  linked in, and a private channel only when a Slack account linked to that machine is in it too (`users.conversations`
+  for that account with the bot's token, which lists only the private channels the two share), so a linked person who
+  is not in a private channel can neither see its name nor post into it as the bot. The target is checked before each
+  first post: a channel with `conversations.info` (never a direct message), a person with `users.info` (never a bot or
+  a deactivated account). A post Slack refuses (the app not in the channel, the channel archived, the person deactivated), or
+  remote access off, is recorded once with the reason and never retried; app.shinsa.dev busy or unreachable is
+  retried by the outbox. A failed edit is only logged.
 - **Failures.** `slack.evaluate`, `slack.post`, `slack.merge`, `slack.react` and `slack.status` are replay-safe effects in the thread's lane
   (`slack:<thread key>`), so a thread's posts go out in order. A post app.shinsa.dev answers with 429, a 5xx or not
   at all is retried by the outbox (the relay call through `RemoteClient` fails with `SlackFailed` or a retryable
@@ -5304,7 +5586,7 @@ plainly what protects what.
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
     `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
-    `watchdogsIgnoreUsageLimits`, `autoPace`), a
+    `watchdogsIgnoreUsageLimits`, `autopilot`, `autoPace`), a
     project's usage limit (`Project.usageLimit`) and a repository's own check commands,
     workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
     (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
@@ -5602,7 +5884,7 @@ truth, and a snapshot only saves replaying it.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
   `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
   one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`; the first, `stack-lists`, turns the single `stacksOn` of
-  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null; `slack-thread-updates` gives every stored Slack channel trigger from before the option `threadUpdates: true`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
+  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null; `slack-thread-updates` gives every stored Slack channel trigger from before the option `threadUpdates: true`; `reset-paces` gives every `usage.pace_recorded` from before resets a `resetPace` and `endingPace` equal to its pace and `resetEndsAt` null; the last, `review-ratings`, gives every `review.reported` from before the reviewer's ratings `ratings: null`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
   in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it

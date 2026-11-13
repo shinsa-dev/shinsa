@@ -2,11 +2,17 @@ import {
   type Project,
   type Repo,
   type ShinsaEventInput,
+  AUTOPILOT_DEFAULTS,
   createSettings,
   formatTaskHandle,
   NO_PROJECT_KEY,
 } from '../../packages/core/src/index.ts';
 import { DAY, HOUR } from '../kit/time.ts';
+import {
+  pushSeedAutopilotDecisions,
+  pushSeedAutopilotHandled,
+  pushSeedAutopilotLessons,
+} from './autopilot.ts';
 import { listSeedEvidenceEvents } from './evidence.ts';
 import { pushSeedFeedback } from './feedback.ts';
 import { applySeedInitiative, pushSeedInitiative } from './initiatives.ts';
@@ -28,6 +34,20 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
     settings: {
       ...createSettings(),
       taskUsageLimit: 10,
+      autopilot: {
+        ...AUTOPILOT_DEFAULTS,
+        enabled: true,
+        contacts: [
+          { kind: 'slack_channel', teamId: 'T02SUPERWALL', id: 'C07ONCALL', name: 'oncall' },
+          {
+            kind: 'slack_person',
+            teamId: 'T02SUPERWALL',
+            id: 'U04MAYA',
+            name: 'Maya Chen',
+            image: 'https://avatars.githubusercontent.com/u/9919?s=72',
+          },
+        ],
+      },
       autoPace: true,
       agentModels: { agent: 'auto', reviewer: 'auto', answerer: 'auto' },
       autoPaceResets: true,
@@ -51,6 +71,9 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
   });
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);
+  pushSeedAutopilotLessons(push);
+  pushSeedAutopilotDecisions(push);
+  pushSeedAutopilotHandled(push);
   const runEnds = new Map(
     timeline.flatMap(({ at, event }) => (event.type === 'run.ended' ? [[event.runId, at] as const] : []))
   );

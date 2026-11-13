@@ -384,7 +384,7 @@ async function runDefault(turn: Turn) {
       });
     }
     case 'reviewer':
-      return callTool(turn, 'report_review', { findings: [] });
+      return callTool(turn, 'report_review', { confidence: 'high', risk: 'low', findings: [] });
     case 'fix':
       return callTool(turn, 'complete_fix', { summary: 'Fixed it.' });
     case 'operate':

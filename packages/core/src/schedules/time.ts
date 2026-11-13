@@ -62,7 +62,7 @@ function readWallClock(timeZone: string, at: number): WallClock & { second: numb
   };
 }
 
-function resolveOffset(timeZone: string, at: number) {
+export function resolveTimeZoneOffset(timeZone: string, at: number) {
   const wall = readWallClock(timeZone, at);
   const local = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
   return local - Math.floor(at / 1000) * 1000;
@@ -81,8 +81,8 @@ function isWallClock(timeZone: string, at: number, wall: WallClock) {
 
 export function resolveZonedInstant(timeZone: string, wall: WallClock) {
   const local = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute);
-  const before = local - resolveOffset(timeZone, local - TRANSITION_REACH);
-  const after = local - resolveOffset(timeZone, local + TRANSITION_REACH);
+  const before = local - resolveTimeZoneOffset(timeZone, local - TRANSITION_REACH);
+  const after = local - resolveTimeZoneOffset(timeZone, local + TRANSITION_REACH);
   const valid = [before, after].filter((at) => isWallClock(timeZone, at, wall));
   if (valid.length > 0) return Math.min(...valid);
   return before;

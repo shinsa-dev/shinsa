@@ -47,9 +47,11 @@ import type {
   ReportWalkthrough,
   ReportWalkthroughRevision,
   ReviewFinding,
+  ReviewRatings,
   SuggestedTask,
 } from '../report/types.ts';
 import type { Coverage } from '../test-coverage/types.ts';
+import type { AutopilotSystemCommand } from './autopilot.ts';
 import type { DelegationAgentCommand, DelegationSystemCommand } from './delegations.ts';
 import type { FeedbackAgentCommand, FeedbackSystemCommand } from './feedback.ts';
 import type { HandoffSystemCommand } from './handoffs.ts';
@@ -122,6 +124,7 @@ type AgentCommand =
       type: 'agent.report_review';
       runId: string;
       summary: string | null;
+      ratings: ReviewRatings;
       findings: ReviewFinding[];
       disagreements?: { call: number; reason: string }[];
     }
@@ -332,12 +335,15 @@ type SystemCommand =
       endingPace: number | null;
       resetEndsAt: number | null;
     }
+  | { type: 'clock.record'; timeZone: string }
+  | { type: 'idle.record'; inputAt: number; away: { from: number; to: number } | null }
   | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand
   | SlackSystemCommand
   | WatchdogSystemCommand
+  | AutopilotSystemCommand
   | FeedbackSystemCommand
   | ShareSystemCommand
   | InitiativeSystemCommand

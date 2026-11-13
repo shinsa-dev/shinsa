@@ -486,6 +486,7 @@ function fileReport(
     text: 'I lost an hour of edits when the tab reloaded.\nAgain today.',
     forkOf: null,
     repoId: null,
+    urgency: null,
     ...input,
   });
 }
@@ -561,6 +562,17 @@ describe('filing reports from an intake turn', () => {
     fileReport(harness, taskId, { reportId: 'other', link: null, author: null, postedAt: null });
     expect(listFiled(harness)).toHaveLength(2);
     expect(listFiled(harness).at(-1)?.request).toContain('Reported in slack (id other):');
+  });
+
+  test('a report filed with an urgency takes it as its priority, and one without leaves it to triage', () => {
+    const { harness, taskId } = createIntake();
+    fire(harness);
+    fileReport(harness, taskId, { urgency: 'urgent' });
+    fileReport(harness, taskId, { reportId: 'other', link: null });
+    const [urgent, plain] = listFiled(harness);
+    expect(urgent?.priority).toBe('urgent');
+    expect(urgent?.auto?.priority).toBe(false);
+    expect(plain?.auto?.priority).toBe(true);
   });
 
   test('a report about shipped work is filed as a fork of the task that shipped it', () => {

@@ -249,10 +249,18 @@ export interface ReviewDisagreement {
   reason: string;
 }
 
+export type ReviewRating = 'low' | 'medium' | 'high';
+
+export interface ReviewRatings {
+  confidence: ReviewRating;
+  risk: ReviewRating;
+}
+
 export interface ReviewHandOver {
   summary: string | null;
   findings: ReviewFinding[];
   disagreements: { call: number; reason: string }[];
+  ratings: ReviewRatings;
 }
 
 export interface PhaseHandOver {

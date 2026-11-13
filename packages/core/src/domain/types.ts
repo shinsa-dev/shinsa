@@ -1,3 +1,4 @@
+import type { AutopilotVerdict } from '../autopilot/schema.ts';
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   AgentReply,
@@ -9,6 +10,7 @@ import type {
   ReportWalkthrough,
   ReviewDisagreement,
   ReviewFinding,
+  ReviewRatings,
   TaskCheck,
   WorkReport,
 } from '../report/types.ts';
@@ -30,7 +32,7 @@ import type {
   TaskResult,
   TriageDecisions,
 } from './shapes.ts';
-import type { SlackThreadLink } from './slack.ts';
+import type { SlackEscalationPost, SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
 import type { WorkspaceMode } from './workspaces.ts';
@@ -467,6 +469,37 @@ export interface BundlePullRequest {
   number: number;
 }
 
+export interface Autopiloted {
+  at: number;
+  reason: string;
+}
+
+export interface AutopilotDue {
+  at: number;
+}
+
+export interface EscalationFinder {
+  server: string | null;
+  shippedTaskTitle: string | null;
+}
+
+export type MergeBlock = 'self_approved' | 'pre_merge_steps' | 'edits_not_pushed';
+
+export interface EscalationHandoff {
+  waitedMinutes: number;
+  ownerActiveAt: number | null;
+  foundBy: EscalationFinder | null;
+  ratings: ReviewRatings | null;
+  mergesAt: number | null;
+  blockedBy: MergeBlock | null;
+}
+
+export interface TaskEscalation {
+  at: number;
+  reason: string;
+  handoff: EscalationHandoff;
+}
+
 export interface Task {
   id: string;
   handle?: string | null;
@@ -526,6 +559,10 @@ export interface Task {
   dismissedFindings?: ReviewFinding[];
   approveAfterFix?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
+  reviewRatings?: ReviewRatings | null;
+  priorityOnBehalf?: boolean;
+  autopiloted?: Autopiloted | null;
+  escalation?: TaskEscalation | null;
   reviewedInput?: string | null;
   monitor?: Monitor | null;
   autoRetry?: AutoRetry | null;
@@ -572,6 +609,7 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   slack?: SlackThreadLink | null;
+  slackEscalations?: SlackEscalationPost[];
   backlog?: TaskBacklog | null;
   share?: TaskShare | null;
   previews?: PreviewShare[];
@@ -796,6 +834,14 @@ export interface Gate {
   recommendation?: string | null;
   cause?: GateCause;
   escalation?: ReviewEscalation;
+  autopilotHeld?: string;
+  autopilotJudging?: boolean;
+  autopilotGuess?: AutopilotVerdict;
+  autopilotAnswer?: string;
+  autopilotTeaches?: boolean;
+  autopilotLearned?: boolean;
+  autopilotSeen?: boolean;
+  autopilotDue?: AutopilotDue | null;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;
   provider?: string;

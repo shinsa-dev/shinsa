@@ -1,3 +1,5 @@
+import { isSameAutopilotContact } from '../domain/settings.ts';
+import { describeSlackContact } from '../domain/slack.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
@@ -10,7 +12,9 @@ type SlackEvent = Extract<
       | 'slack.status_posted'
       | 'slack.decided'
       | 'slack.merge_announced'
-      | 'slack.merge_posted';
+      | 'slack.merge_posted'
+      | 'slack.escalation_sent'
+      | 'slack.escalation_followed_up';
   }
 >;
 
@@ -51,6 +55,38 @@ function applyMergePosted(state: ShinsaState, event: EventOf<'slack.merge_posted
   });
 }
 
+function applyEscalationSent(state: ShinsaState, event: EventOf<'slack.escalation_sent'>) {
+  const earlier = (state.tasks[event.taskId]?.slackEscalations ?? []).filter(
+    (post) => post.escalatedAt === event.escalatedAt
+  );
+  const post = {
+    escalatedAt: event.escalatedAt,
+    contact: event.contact,
+    channelId: event.channelId,
+    ts: event.ts,
+    followUpTs: null,
+  };
+  updateTask(state, event.taskId, event.at, { slackEscalations: [...earlier, post] });
+  const contact = describeSlackContact(event.contact);
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'decision',
+    text: event.problem === null ? `Sent to ${contact} in Slack` : `Could not reach ${contact} in Slack`,
+    detail: event.problem,
+  });
+}
+
+function applyEscalationFollowedUp(state: ShinsaState, event: EventOf<'slack.escalation_followed_up'>) {
+  const posts = state.tasks[event.taskId]?.slackEscalations ?? [];
+  updateTask(state, event.taskId, event.at, {
+    slackEscalations: posts.map((post) =>
+      post.escalatedAt === event.escalatedAt && isSameAutopilotContact(post.contact, event.contact)
+        ? { ...post, followUpTs: event.ts }
+        : post
+    ),
+  });
+}
+
 export function applySlackEvent(state: ShinsaState, event: SlackEvent) {
   switch (event.type) {
     case 'slack.thread_linked':
@@ -67,6 +103,12 @@ export function applySlackEvent(state: ShinsaState, event: SlackEvent) {
       return;
     case 'slack.merge_posted':
       applyMergePosted(state, event);
+      return;
+    case 'slack.escalation_sent':
+      applyEscalationSent(state, event);
+      return;
+    case 'slack.escalation_followed_up':
+      applyEscalationFollowedUp(state, event);
       return;
   }
 }

@@ -117,6 +117,8 @@ describe('fix loops', () => {
     const w = await open();
     w.agents.queue('reviewer', async (agent) => {
       await agent.call('report_review', {
+        confidence: 'high',
+        risk: 'low',
         summary: 'Read the greeting change; it prints the wrong word.',
         findings: [
           {

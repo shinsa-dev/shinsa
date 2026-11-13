@@ -1,4 +1,5 @@
 import { Result, Option } from 'effect';
+import { type AutopilotLesson, type AutopilotProfile, EMPTY_AUTOPILOT_PROFILE } from '../autopilot/schema.ts';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type AccountPlan,
@@ -65,6 +66,19 @@ import {
   describeStage,
   describeUnreachedTeammates,
 } from './activity.ts';
+import {
+  applyAutopilotForwarded,
+  applyAutopilotGuessed,
+  applyAutopilotDecided,
+  applyAutopilotLearned,
+  applyAutopilotSeen,
+  applyAutopilotJudging,
+  applyAutopilotScheduled,
+  applyEscalationRevised,
+  applyTaskEscalated,
+  applyEditLearned,
+  applyTaskRequestLearned,
+} from './autopilot.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
 import { applyFeedbackEvent } from './feedback.ts';
@@ -118,6 +132,9 @@ export interface ShinsaState {
   usagePaces: Record<string, RecordedPace>;
   modelRoom: Record<string, ModelRoom>;
   onBehalfActions: OnBehalfAction[];
+  timeZone: string | null;
+  autopilotLessons: AutopilotLesson[];
+  autopilotProfile: AutopilotProfile;
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
 }
@@ -152,6 +169,9 @@ export function createState(): ShinsaState {
     usagePaces: {},
     modelRoom: {},
     onBehalfActions: [],
+    timeZone: null,
+    autopilotLessons: [],
+    autopilotProfile: EMPTY_AUTOPILOT_PROFILE,
   };
 }
 
@@ -208,6 +228,7 @@ function createTaskRecord(event: EventOf<'task.created'>): Task {
     stage: 'triage',
     stageReason: 'sizing up the work',
     priority: event.priority,
+    ...(event.onBehalf ? { priorityOnBehalf: true } : {}),
     branch: null,
     worktreePath: null,
     plan: null,
@@ -366,7 +387,10 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
 }
 
 function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>) {
-  updateTask(state, event.taskId, event.at, { priority: event.priority });
+  updateTask(state, event.taskId, event.at, {
+    priority: event.priority,
+    priorityOnBehalf: event.onBehalf === true,
+  });
   if (event.by !== 'you') return;
   record(state, event.taskId, event.at, {
     actor: 'you',
@@ -713,6 +737,7 @@ function applyWorkSubmitted(state: ShinsaState, event: EventOf<'work.submitted'>
 function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported'>) {
   updateTask(state, event.taskId, event.at, {
     reviewSummary: event.summary,
+    reviewRatings: event.ratings,
     findings: event.findings,
     reviewDisagreements: event.disagreements ?? [],
     reviewedInput: event.seen,
@@ -883,6 +908,7 @@ function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
   recordCourierTask(state, event);
   recordFork(state, event);
   applyScheduledTask(state, event);
+  applyTaskRequestLearned(state, event);
 }
 
 export function applyEvent(state: ShinsaState, event: ShinsaEvent): ShinsaState {
@@ -913,6 +939,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'away.recorded':
       recordAway(state, event);
+      break;
+    case 'clock.recorded':
+      state.timeZone = event.timeZone;
+      break;
+    case 'mac.used':
+      recordPresence(state, event.usedAt);
       break;
     case 'account.plan_recorded':
       applyAccountPlan(state, event);
@@ -1051,6 +1083,33 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'gate.superseded':
       applyGateEvent(state, event);
       break;
+    case 'autopilot.scheduled':
+      applyAutopilotScheduled(state, event);
+      break;
+    case 'autopilot.judging':
+      applyAutopilotJudging(state, event);
+      break;
+    case 'autopilot.guessed':
+      applyAutopilotGuessed(state, event);
+      break;
+    case 'autopilot.forwarded':
+      applyAutopilotForwarded(state, event);
+      break;
+    case 'autopilot.decided':
+      applyAutopilotDecided(state, event);
+      break;
+    case 'autopilot.learned':
+      applyAutopilotLearned(state, event);
+      break;
+    case 'autopilot.seen':
+      applyAutopilotSeen(state, event);
+      break;
+    case 'task.escalated':
+      applyTaskEscalated(state, event);
+      break;
+    case 'task.escalation_revised':
+      applyEscalationRevised(state, event);
+      break;
     case 'evidence.attached':
       applyEvidenceAttached(state, event);
       break;
@@ -1105,6 +1164,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.edited':
       applyEdited(state, event);
+      applyEditLearned(state, event);
       break;
     case 'task.edits_told':
       updateTask(state, event.taskId, event.at, { untoldEdits: [] });
@@ -1227,6 +1287,8 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'slack.decided':
     case 'slack.merge_announced':
     case 'slack.merge_posted':
+    case 'slack.escalation_sent':
+    case 'slack.escalation_followed_up':
       applySlackEvent(state, event);
       break;
     case 'initiative.written':

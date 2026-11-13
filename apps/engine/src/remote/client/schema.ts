@@ -12,9 +12,13 @@ import {
   type RemoteMember,
   type RemoteUser,
   type RemoteUserId,
+  type SlackDirectory,
+  type SlackDirectoryQuery,
   type SlackChannels,
   type SlackChannelWatches,
   type SlackLinks,
+  type SlackRelayNotified,
+  type SlackRelayNotify,
   type SlackRelayPost,
   type SlackRelayPosted,
   type SlackRelayReacted,
@@ -44,6 +48,7 @@ import type {
   SlackBlocksRefused,
   SlackFailed,
   SlackNotInstalled,
+  SlackNotLinked,
   TeamsFull,
   ThreadNotForwarded,
 } from '@shinsa/core/remote/errors';
@@ -96,6 +101,8 @@ type MachineCall<A, E = never> = RemoteCall<A, E | Revoked>;
 export type Token = Redacted.Redacted<string>;
 
 type ThreadFailure = ThreadNotForwarded | SlackNotInstalled;
+
+type WorkspaceFailure = SlackNotLinked | SlackNotInstalled;
 
 export interface PairingCalls {
   start(request: PairStartRequest): RemoteCall<PairStartResponse, RateLimited>;
@@ -150,6 +157,14 @@ export interface SlackRelayCalls {
     session: SlackRelaySession
   ): MachineCall<SlackRelaySessionSet, ThreadFailure | SlackFailed>;
   react(token: Token, reaction: SlackRelayReaction): MachineCall<SlackRelayReacted, ThreadFailure>;
+  directory(
+    token: Token,
+    query: SlackDirectoryQuery
+  ): MachineCall<SlackDirectory, WorkspaceFailure | SlackFailed>;
+  notify(
+    token: Token,
+    notify: SlackRelayNotify
+  ): MachineCall<SlackRelayNotified, WorkspaceFailure | PostNotYours | SlackFailed | SlackBlocksRefused>;
   channels(token: Token): MachineCall<SlackChannels, SlackFailed>;
   watches(token: Token, watches: SlackChannelWatches): MachineCall<void, SlackFailed>;
 }

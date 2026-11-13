@@ -1,4 +1,5 @@
-import { resolveSlackThreadKey, type SlackThreadRef } from '../domain/slack.ts';
+import type { AutopilotContact } from '../domain/settings.ts';
+import { resolveSlackThreadKey, type SlackEscalationPart, type SlackThreadRef } from '../domain/slack.ts';
 import type { BundlePullRequest } from '../domain/types.ts';
 import type { SlackMentionReaction } from '../slack/messages.ts';
 import type { SlackPost } from '../slack/posts.ts';
@@ -42,6 +43,15 @@ export type ShinsaEffect =
   | { kind: 'slack.post'; thread: SlackThreadRef; taskId: string; post: SlackPost }
   | { kind: 'slack.merge'; thread: SlackThreadRef; taskId: string; round: number }
   | { kind: 'slack.react'; thread: SlackThreadRef; messageTs: string; reaction: SlackMentionReaction }
+  | {
+      kind: 'slack.escalate';
+      taskId: string;
+      escalatedAt: number;
+      contact: AutopilotContact;
+      part: SlackEscalationPart;
+    }
+  | { kind: 'autopilot.judge'; taskId: string; gateId: string; shadow: boolean }
+  | { kind: 'autopilot.weigh'; taskId: string; suggestionId: string }
   | { kind: 'feedback.draft'; feedbackId: string }
   | { kind: 'feedback.file'; feedbackId: string };
 
@@ -81,6 +91,9 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'slack.post': 'replay_safe',
   'slack.merge': 'replay_safe',
   'slack.react': 'replay_safe',
+  'slack.escalate': 'replay_safe',
+  'autopilot.judge': 'replay_safe',
+  'autopilot.weigh': 'replay_safe',
   'feedback.draft': 'replay_safe',
   'feedback.file': 'process_bound',
 };
@@ -110,6 +123,10 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.runId}:${seq}`;
     case 'question.resolve':
       return `${effect.kind}:${effect.gateId}`;
+    case 'autopilot.judge':
+      return `${effect.kind}:${effect.gateId}:${seq}`;
+    case 'autopilot.weigh':
+      return `${effect.kind}:${effect.taskId}:${effect.suggestionId}`;
     case 'run.wake':
     case 'delegation.steer':
       return `${effect.kind}:${effect.runId}:${effect.generation}`;
@@ -119,6 +136,8 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.mention.eventId}`;
     case 'slack.status':
       return `${effect.kind}:${effect.taskId}:${seq}`;
+    case 'slack.escalate':
+      return `${effect.kind}:${effect.part}:${effect.taskId}:${effect.escalatedAt}:${effect.contact.teamId}:${effect.contact.id}:${seq}`;
     case 'preview.link':
       return `${effect.kind}:${effect.taskId}:${effect.serviceId}:${seq}`;
     case 'slack.post':
@@ -176,6 +195,9 @@ export function resolveEffectLane(effect: ShinsaEffect) {
       return `steer:${effect.runId}`;
     case 'question.resolve':
       return `gate:${effect.gateId}`;
+    case 'autopilot.judge':
+    case 'autopilot.weigh':
+      return `autopilot:${effect.taskId}`;
     case 'delegation.reply':
       return `reply:${effect.runId}`;
     case 'pull_request.watch':
@@ -195,6 +217,8 @@ export function resolveEffectLane(effect: ShinsaEffect) {
     case 'slack.react':
     case 'slack.status':
       return `slack:${resolveSlackThreadKey(effect.thread)}`;
+    case 'slack.escalate':
+      return `slack-escalation:${effect.taskId}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':

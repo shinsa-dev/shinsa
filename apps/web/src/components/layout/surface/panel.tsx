@@ -11,7 +11,6 @@ export function Panel({
   title,
   icon,
   count,
-  meta,
   action,
   defaultOpen = true,
   flush = false,
@@ -21,7 +20,6 @@ export function Panel({
   title: string;
   icon: IconName;
   count?: number;
-  meta?: React.ReactNode;
   action?: React.ReactNode;
   defaultOpen?: boolean;
   flush?: boolean;
@@ -44,7 +42,6 @@ export function Panel({
         </IconSlot>
         {title}
         {count !== undefined && <span className='shrink-0 font-normal text-fg-2 tabular-nums'>{count}</span>}
-        {meta && <span className='ms-auto shrink-0 ps-3'>{meta}</span>}
       </DisclosureHeader>
       {disclosure.open && (
         <div className={cn('flex flex-col border-t border-border', !flush && 'gap-3 p-3')}>{children}</div>

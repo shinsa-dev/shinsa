@@ -12,7 +12,7 @@ import type { NotificationWorker } from '@/lib/notifications/schema.ts';
 import { installDesktop } from '../../support/desktop.ts';
 import { installNotifications } from '../../support/notifications.ts';
 
-const NOTICE = { gateId: 'g-1', taskId: 't-1', title: 'Paint it', body: 'Which colour?' };
+const NOTICE = { tag: 'g-1', taskId: 't-1', title: 'Paint it', body: 'Which colour?', path: null };
 
 function createWorker() {
   const shown: { title: string; options: NotificationOptions }[] = [];
@@ -122,7 +122,7 @@ describe('browser notifications', () => {
   it('closes a decision’s notification once it no longer needs you, and leaves the others', async () => {
     fake = installNotifications('granted');
     showDecisionNotification(NOTICE, '/tasks/SW-1', () => undefined);
-    showDecisionNotification({ ...NOTICE, gateId: 'g-2' }, '/tasks/SW-1', () => undefined);
+    showDecisionNotification({ ...NOTICE, tag: 'g-2' }, '/tasks/SW-1', () => undefined);
     dismissDecisionNotification('g-1', null);
     dismissDecisionNotification('g-1', null);
     expect(fake.shown.map((notice) => notice.closed)).toEqual([true, false]);

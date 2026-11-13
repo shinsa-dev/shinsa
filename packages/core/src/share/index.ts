@@ -17,6 +17,7 @@ import type {
   Repo,
   Run,
   Task,
+  TaskEscalation,
   TaskDuplicate,
 } from '../domain/types.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
@@ -278,6 +279,7 @@ function createBlankTask(task: Task, grants: Grants): Task {
     suggestions: [],
     usageWait: null,
     triageDecisions: null,
+    escalation: null,
     auto: task.auto,
     result: resolveSharedResult(task.result, grants),
     proposal: resolveSharedProposal(task.proposal, grants),
@@ -298,6 +300,18 @@ function redactDuplicate(duplicate: TaskDuplicate): TaskDuplicate {
   };
 }
 
+function copyEscalation(escalation: TaskEscalation): TaskEscalation {
+  const { handoff } = escalation;
+  return {
+    ...escalation,
+    handoff: {
+      ...handoff,
+      foundBy: handoff.foundBy ? { ...handoff.foundBy } : null,
+      ratings: handoff.ratings ? { ...handoff.ratings } : null,
+    },
+  };
+}
+
 const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants) => Partial<Task>>> = {
   identity: (task) => ({ handle: task.handle ?? null, title: task.title, size: task.size }),
   requests: (task) => ({ request: splitMessageAttachments(task.request).text }),
@@ -313,11 +327,13 @@ const TASK_GROUP_FIELDS: Partial<Record<ShareGroup, (task: Task, grants: Grants)
     branch: task.branch,
     stageReason: task.stageReason,
     duplicate: task.duplicate ? redactDuplicate(task.duplicate) : null,
+    escalation: task.escalation ? copyEscalation(task.escalation) : null,
   }),
   plan: (task) => ({ triageDecisions: task.triageDecisions ?? null }),
   reports: (task) => ({ phaseReports: task.phaseReports.map(redactPhaseReport), fixRounds: task.fixRounds }),
   review: (task) => ({
     reviewSummary: task.reviewSummary,
+    reviewRatings: task.reviewRatings ?? null,
     findings: task.findings.map(redactFinding),
     reviewDisagreements: task.reviewDisagreements ?? [],
   }),

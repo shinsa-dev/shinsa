@@ -20,6 +20,7 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
 import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
+import { HandoffPanel } from '@/components/overview/handoff-panel.tsx';
 import { NowCard } from '@/components/overview/now-card.tsx';
 import { RequestsPanel } from '@/components/overview/reply-report.tsx';
 import { ResultPanel } from '@/components/overview/result-panel.tsx';
@@ -190,6 +191,7 @@ export function OverviewTab({
         <TaskScrollHeader />
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <PostMergePanel state={state} task={task} gate={gate} />
+          <HandoffPanel task={task} />
           {((!sheet && !shared) || gate || task.stage !== 'leading') && (
             <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
           )}

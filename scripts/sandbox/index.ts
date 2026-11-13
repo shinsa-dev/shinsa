@@ -38,6 +38,7 @@ import {
 } from './schema.ts';
 import { createServicePreview, respondToggle } from './services.ts';
 import { createPreviewShares, respondShareConnect } from './shares.ts';
+import { respondSandboxSlack, seedSlackSamples, serializeSlackPage, SLACK_PAGE } from './slack.ts';
 import { teammateLink } from './team.ts';
 import { seedTeammateWork } from './teammate-work.ts';
 
@@ -99,18 +100,27 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
     try: () => import(join(ROOT, 'apps/web/src/components/sandbox/sandbox-page.tsx')),
     catch: (error) => new SandboxFailed({ message: `Loading the sandbox page failed: ${String(error)}` }),
   });
+  const studioOrigin = `http://${HOST}:${studio.machine.port}`;
+  yield* seedSlackSamples(yield* studio.engine.core.state, (taskId) => `${studioOrigin}/tasks/${taskId}`);
   const laptopTasks = Object.values((yield* laptop.engine.core.state).tasks).filter(
     (task) => task.repoId === website.id
   );
   const sharedLinks = listSharedMachineLinks(laptop.machine, laptopTasks);
-  const sections = listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview, {
-    duplicate: keptOver.handle ?? keptOver.id,
-    original: teamTask?.handle ?? null,
-  });
-  let page = serializeSandboxPage(
-    [...sections, { title: 'A shared machine', links: sharedLinks }],
-    yield* findRemoteStylesheet()
-  );
+  const sections = [
+    ...listSandboxSections(machines, teammate.machine, shares, teamTaskPath, preview, {
+      duplicate: keptOver.handle ?? keptOver.id,
+      original: teamTask?.handle ?? null,
+    }),
+    { title: 'A shared machine', links: sharedLinks },
+    {
+      title: 'Autopilot in Slack',
+      links: [
+        { label: 'Studio: Settings → Agents, Autopilot', url: `${studioOrigin}/settings?tab=agents` },
+        { label: 'What Slack shows, stood in', url: `${ORIGIN}${SLACK_PAGE}` },
+      ],
+    },
+  ];
+  let page = serializeSandboxPage(sections, yield* findRemoteStylesheet());
   const cloud = yield* createSandboxCloud(SANDBOX_DIR, new URL(PREVIEW_ZONE).host, USER.id, teammates).pipe(
     Effect.mapError(
       (error) => new SandboxFailed({ message: `Starting the stand-in cloud failed: ${String(error)}` })
@@ -122,6 +132,12 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
       if (isPreviewHost(url.host, PREVIEW_ZONE)) return yield* Effect.promise(() => cloud.respond(request));
       if (url.pathname === SANDBOX_PATH)
         return new Response(page, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+      if (url.pathname === SLACK_PAGE)
+        return new Response(serializeSlackPage(), {
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      const slack = yield* respondSandboxSlack(request, url, studio.machine);
+      if (slack) return slack;
       const toggled = respondToggle(shared, url);
       if (toggled) return yield* toggled;
       const share = SHARE_CONNECT.exec(url.pathname);

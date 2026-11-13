@@ -213,7 +213,7 @@ describe('a Codex turn', () => {
     const codex = new FakeCodex();
     codex.script('reviewer', [
       { write: 'sneaky.md', content: 'no' },
-      { tool: 'report_review', args: { findings: [] } },
+      { tool: 'report_review', args: { confidence: 'high', risk: 'low', findings: [] } },
     ]);
     const started = createInput('reviewer');
     await start(codex, started).done;

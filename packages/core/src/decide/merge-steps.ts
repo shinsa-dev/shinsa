@@ -80,6 +80,12 @@ export function assertMergeStepsDone(decider: Decider, gate: Gate, decision: Gat
   }
 }
 
+export function hasOpenPreMergeSteps(decider: Decider, task: Task) {
+  return [task, ...listBundleFollowers(decider.state, task)].some(
+    (member) => listOpenMergeSteps(member, 'pre_merge').length > 0
+  );
+}
+
 export function assertNoMergeStepsLeft(task: Task) {
   const open = listDuePostMergeSteps(task);
   if (open.length === 0) return;

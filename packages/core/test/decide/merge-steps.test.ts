@@ -81,6 +81,7 @@ function reachMergeGate(steps: MergeStep[] = [SECRET, MIGRATION]) {
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: null,
     findings: [],
@@ -110,6 +111,7 @@ function reviseSteps(harness: Harness, taskId: string, steps: MergeStep[]) {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -165,6 +167,7 @@ describe('the steps around the merge', () => {
     harness.send({ type: 'checks.record', taskId: top, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(top).id,
       summary: null,
       findings: [],
@@ -336,6 +339,7 @@ describe('the steps around the merge', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],

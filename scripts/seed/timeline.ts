@@ -238,6 +238,7 @@ function pushTaskReview(task: SeedTask, push: Push, clock: SeedClock) {
     gateId,
     decision: 'approve',
     response: null,
+    ...(task.review.autopilot ? { ahead: true, autopilot: task.review.autopilot } : {}),
   });
 }
 
@@ -498,6 +499,7 @@ function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
       type: 'review.reported',
       taskId: task.id,
       summary: task.reviewSummary ?? null,
+      ratings: task.reviewRatings ?? null,
       findings: task.findings,
       seen: null,
       ...(task.reviewDisagreements ? { disagreements: task.reviewDisagreements } : {}),

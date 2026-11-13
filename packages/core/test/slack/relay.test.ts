@@ -5,6 +5,7 @@ import {
   parseSlackRelayReaction,
   parseSlackRelaySession,
   resolveSlackConnectUrl,
+  resolveSlackEscalationUrl,
   resolveSlackLastUsedAt,
   resolveSlackLinkedPath,
   resolveSlackReadableText,
@@ -129,6 +130,27 @@ describe('links back to app.shinsa.dev', () => {
       'https://app.shinsa.dev/slack/connect?instance=k3%20x'
     );
     expect(resolveSlackTaskUrl('https://app.shinsa.dev', 'id-1')).toBe('https://app.shinsa.dev/tasks/id-1');
+  });
+
+  test('an escalation opens the team’s page when the project is in a team, otherwise the task page', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = harness.state.tasks[taskId];
+    if (!task) throw new Error('missing task');
+    const project = { id: 'p1', name: 'Shinsa', color: 'blue', key: 'LOC', description: '', folders: [] };
+    const stateWith = (teamIds?: string[]) => ({
+      ...harness.state,
+      tasks: { [taskId]: { ...task, projectId: 'p1' } },
+      projects: { p1: { ...project, ...(teamIds ? { teamIds } : {}) } },
+    });
+    const origin = 'https://app.shinsa.dev';
+    expect(resolveSlackEscalationUrl(origin, stateWith(['team 1', 'team2']), taskId, 'k3x9')).toBe(
+      `${origin}/teams/team%201/k3x9/${taskId}`
+    );
+    expect(resolveSlackEscalationUrl(origin, stateWith(), taskId, 'k3x9')).toBe(`${origin}/tasks/${taskId}`);
+    expect(resolveSlackEscalationUrl(origin, harness.state, taskId, 'k3x9')).toBe(
+      `${origin}/tasks/${taskId}`
+    );
   });
 });
 

@@ -60,6 +60,7 @@ import type {
   ReplyOutcome,
   ReportCheck,
   ReviewFinding,
+  ReviewRating,
   WatchdogStart,
   WorkReport,
 } from './types.ts';
@@ -208,6 +209,8 @@ export const FINDING_SEVERITIES: readonly [ReviewFinding['severity'], ...ReviewF
   'should_fix',
   'optional',
 ];
+
+export const REVIEW_RATINGS: readonly [ReviewRating, ...ReviewRating[]] = ['low', 'medium', 'high'];
 
 const L = PROTOCOL_LIMITS;
 
@@ -603,6 +606,8 @@ const Finding = HandOverRecord({
 
 export const ReviewInput = HandOverRecord({
   summary: OptionalText(L.reviewSummary),
+  confidence: OneOf(REVIEW_RATINGS),
+  risk: OneOf(REVIEW_RATINGS),
   findings: Items(Finding, L.findingCount),
   disagreements: Items(
     HandOverRecord({

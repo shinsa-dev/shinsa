@@ -288,6 +288,7 @@ describe('verdicts on review findings', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [
@@ -388,6 +389,7 @@ describe('fixing findings, then approving', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [{ severity: 'should_fix', file: 'a.ts', line: 3, message: 'Rename it.' }],
@@ -420,6 +422,7 @@ describe('fixing findings, then approving', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings,
@@ -733,6 +736,7 @@ describe('decisions only the human makes', () => {
     harness.send({ type: 'checks.record', taskId: operation, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(operation).id,
       summary: null,
       findings: [],

@@ -1,4 +1,10 @@
-import { resolveFocusTeam, type ShinsaState, type TeamFeedTask } from '@shinsa/core';
+import {
+  listTeamEscalations,
+  resolveFocusTeam,
+  type ShinsaState,
+  type TeamEscalation,
+  type TeamFeedTask,
+} from '@shinsa/core';
 import { Badge } from '@shinsa/ui/components/badge';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -70,6 +76,14 @@ export function useTeamTasks(): TeamTasks {
     );
   }, [feed, teams, machines, listed]);
   return { teams, entries };
+}
+
+export function useTeamEscalations(): TeamEscalation[] {
+  const { entries } = useTeamTasks();
+  return React.useMemo(
+    () => listTeamEscalations({ machines: [], tasks: entries.map((item) => item.entry) }),
+    [entries]
+  );
 }
 
 export function TeamFeedRefusals({ state }: { state: ShinsaState }) {

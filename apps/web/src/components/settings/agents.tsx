@@ -1,6 +1,5 @@
 import type { AccountsSnapshot, AgentProviderInfo, Settings } from '@shinsa/core';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
-import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
@@ -50,15 +49,9 @@ import {
   WATCHDOG_SETTING_FIELDS,
   WATCHDOG_SETTINGS_TITLE,
 } from '@/lib/settings.ts';
+import { AutopilotSettings } from './autopilot.tsx';
 import { DelegationLimitDialog } from './delegation-limit-dialog.tsx';
-import {
-  SETTING_LABEL,
-  SETTING_ROW,
-  SETTING_ROW_WRAPS,
-  SETTINGS_SHELF,
-  SettingRow,
-  SettingsGroup,
-} from './group.tsx';
+import { DescribedRow, SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
 
 type SettingsUpdate = (patch: Partial<Settings>) => void;
 
@@ -112,26 +105,6 @@ function AgentSelects({
         className='w-30'
       />
     </>
-  );
-}
-
-function DescribedRow({
-  title,
-  description,
-  children,
-}: {
-  title: React.ReactNode;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS)}>
-      <div className={cn(SETTING_LABEL, 'flex flex-col')}>
-        <div className='flex min-w-0 items-center gap-1.5 text-xs text-fg-4'>{title}</div>
-        <p className='text-2xs text-fg-2'>{description}</p>
-      </div>
-      <div className='flex shrink-0 items-center gap-1.5'>{children}</div>
-    </div>
   );
 }
 
@@ -263,7 +236,15 @@ function DelegationLimitField({ settings }: { settings: Settings }) {
   );
 }
 
-export function AgentSettings({ settings, automatic }: { settings: Settings; automatic: boolean }) {
+export function AgentSettings({
+  settings,
+  automatic,
+  afterAutopilot,
+}: {
+  settings: Settings;
+  automatic: boolean;
+  afterAutopilot?: React.ReactNode;
+}) {
   const providers = useAgentProviders();
   const accounts = useAccounts();
   return (
@@ -304,6 +285,8 @@ export function AgentSettings({ settings, automatic }: { settings: Settings; aut
           />
         </SettingRow>
       </SettingsGroup>
+      <AutopilotSettings settings={settings} />
+      {afterAutopilot}
       <SettingsGroup title={WATCHDOG_SETTINGS_TITLE}>
         {WATCHDOG_SETTING_FIELDS.map((field) => (
           <SettingRow key={field.key} title={field.title}>

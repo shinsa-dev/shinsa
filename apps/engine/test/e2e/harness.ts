@@ -171,7 +171,7 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
     agent.say('Made the change.');
   },
   reviewer: async (agent) => {
-    await agent.call('report_review', { findings: [] });
+    await agent.call('report_review', { confidence: 'high', risk: 'low', findings: [] });
   },
   answerer: async (agent) => {
     await callReplying(agent, 'answer', { answer: 'It lives in a.txt.' });

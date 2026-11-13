@@ -373,6 +373,40 @@ describe('startShinsa', () => {
   });
 });
 
+describe('startShinsa and the time zone of this Mac', () => {
+  test('records it on start, and a zone core refuses is only logged', async () => {
+    const recorded = await startShinsa(createTestConfig(createTempDir()), {
+      models,
+      triage: () => Effect.succeed(null),
+      resolveLogin: () => Promise.resolve(null),
+    });
+    started.push(recorded);
+    expect(recorded.engine.state.timeZone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const zone = spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+      this: Intl.DateTimeFormat
+    ) {
+      return { ...resolvedOptions.call(this), timeZone: 'Not/AZone' };
+    });
+    const logs = captureLogs();
+    try {
+      const shinsa = await startShinsa(createTestConfig(createTempDir()), {
+        models,
+        triage: () => Effect.succeed(null),
+        resolveLogin: () => Promise.resolve(null),
+      });
+      started.push(shinsa);
+      expect(shinsa.engine.state.timeZone).toBeNull();
+      expect(logs.fieldsOf('[Serve] Could not record the time zone of this Mac')).toEqual([
+        expect.objectContaining({ error: expect.stringContaining('Not/AZone') }),
+      ]);
+    } finally {
+      zone.mockRestore();
+      logs.restore();
+    }
+  });
+});
+
 describe('one Shinsa per data directory', () => {
   test('a second Shinsa on the same data folder is refused with the first one’s address, until it stops', async () => {
     const config = createTestConfig(createTempDir());

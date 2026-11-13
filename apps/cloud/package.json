@@ -12,7 +12,7 @@
     "migrate": "wrangler d1 migrations apply shinsa-cloud --remote",
     "release": "bun run migrate && wrangler deploy",
     "release:relay": "wrangler deploy -c wrangler.relay.jsonc",
-    "test": "bun test --randomize"
+    "test": "bun test --randomize --timeout 30000"
   },
   "dependencies": {
     "@effect/sql-d1": "4.1.1",

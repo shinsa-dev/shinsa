@@ -347,6 +347,7 @@ function mergeRound(harness: Harness, taskId: string) {
     type: 'agent.report_review',
     runId: harness.activeRun(taskId).id,
     summary: null,
+    ratings: { confidence: 'high', risk: 'low' },
     findings: [],
   });
   approveGate(harness, taskId);

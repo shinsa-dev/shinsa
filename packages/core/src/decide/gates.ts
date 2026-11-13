@@ -21,6 +21,7 @@ import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
 import { requestIteration } from './iterations.ts';
 import { startPlanInitiative } from './leads.ts';
+import { learnFromAnswer } from './lessons.ts';
 import { settleTask, startPlanning } from './lifecycle.ts';
 import { assertMergeStepsDone } from './merge-steps.ts';
 import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
@@ -184,8 +185,15 @@ function approveReview(decider: Decider, taskId: string) {
   shipReviewedWork(decider, taskId);
 }
 
-export function approveReviewAhead(decider: Decider, gate: Gate) {
-  decider.emit({ type: 'gate.answered', gateId: gate.id, decision: 'approve', response: null, ahead: true });
+export function approveReviewAhead(decider: Decider, gate: Gate, autopilot: string | null = null) {
+  decider.emit({
+    type: 'gate.answered',
+    gateId: gate.id,
+    decision: 'approve',
+    response: null,
+    ahead: true,
+    ...(autopilot === null ? {} : { autopilot }),
+  });
   decider.requestBriefing(gate.taskId);
   approveReview(decider, gate.taskId);
 }
@@ -248,6 +256,20 @@ function answerDecision(
   if (gate.type === 'merge') approveMerge(decider, gate);
 }
 
+export function answerGateForYou(
+  decider: Decider,
+  gate: Gate,
+  decision: 'approve' | 'reply',
+  response: string | null,
+  reason: string
+) {
+  decider.emit({ type: 'gate.answered', gateId: gate.id, decision, response, autopilot: reason });
+  decider.requestBriefing(gate.taskId);
+  if (gate.type === 'question') answerQuestion(decider, gate);
+  else if (gate.type === 'proposal') answerProposal(decider, gate, decision);
+  else answerDecision(decider, gate, decision, response, []);
+}
+
 export function answerGate(
   decider: Decider,
   gateId: string,
@@ -266,6 +288,7 @@ export function answerGate(
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
   const thenApprove = options.thenApprove ? { thenApprove: true } : {};
+  learnFromAnswer(decider, { gate, decision, response, verdicts: options.verdicts ?? [] });
   decider.emit({
     type: 'gate.answered',
     gateId,

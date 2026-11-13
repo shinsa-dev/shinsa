@@ -549,6 +549,7 @@ function mergeWithSessions(harness: Harness, taskId: string) {
   linkSession(harness, taskId, 'reviewer-1');
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: null,
     findings: [],

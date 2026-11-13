@@ -370,6 +370,12 @@ describe('projects and focus', () => {
     expect(fake.sent).toEqual([{ type: 'away.record', from: 1_000, to: 5_000 }]);
   });
 
+  test('marks what Autopilot did for you as seen', async () => {
+    const fake = createFakeClient({});
+    expect((await runSpec(fake, ['autopilot', 'seen', 'gate-1', 'gate-2'])).text).toBe('Marked as seen.');
+    expect(fake.sent).toEqual([{ type: 'autopilot.seen', gateIds: ['gate-1', 'gate-2'] }]);
+  });
+
   test('focuses on projects, on all but some, for a while or until cleared', async () => {
     setSystemTime(new Date(1_000));
     try {

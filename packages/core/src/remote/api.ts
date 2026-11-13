@@ -2,7 +2,11 @@ import { Context, Schema } from 'effect';
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSecurity } from 'effect/http-api';
 import {
   SLACK_RELAY_PATHS,
+  SlackDirectory,
+  SlackDirectoryQuery,
   SlackLinks,
+  SlackRelayNotified,
+  SlackRelayNotify,
   SlackRelayPost,
   SlackRelayPosted,
   SlackRelayReacted,
@@ -74,6 +78,7 @@ import {
   SlackBlocksRefused,
   SlackFailed,
   SlackNotInstalled,
+  SlackNotLinked,
   TeamsFull,
   ThreadNotForwarded,
   resolveRemoteFailureWire as wire,
@@ -365,6 +370,8 @@ class MachineTeamsGroup extends HttpApiGroup.make('machineTeams')
 
 const THREAD_FAILURES = [wire(ThreadNotForwarded), wire(SlackNotInstalled)];
 
+const WORKSPACE_FAILURES = [wire(SlackNotLinked), wire(SlackNotInstalled)];
+
 class SlackRelayGroup extends HttpApiGroup.make('slackRelay')
   .add(
     HttpApiEndpoint.get('links', SLACK_RELAY_PATHS.links, { success: SlackLinks }),
@@ -384,6 +391,16 @@ class SlackRelayGroup extends HttpApiGroup.make('slackRelay')
       success: SlackRelayReacted,
       error: [...THREAD_FAILURES],
     }),
+    HttpApiEndpoint.get('directory', SLACK_RELAY_PATHS.directory, {
+      query: SlackDirectoryQuery,
+      success: SlackDirectory,
+      error: [...WORKSPACE_FAILURES, wire(SlackFailed)],
+    }),
+    HttpApiEndpoint.post('notify', SLACK_RELAY_PATHS.notify, {
+      payload: SlackRelayNotify,
+      success: SlackRelayNotified,
+      error: [...WORKSPACE_FAILURES, wire(PostNotYours), wire(SlackFailed), wire(SlackBlocksRefused)],
+    }).annotate(BodyLimit, SLACK_RELAY_POST_LIMIT_BYTES),
     HttpApiEndpoint.get('channels', SLACK_RELAY_PATHS.channels, {
       success: SlackChannels,
       error: [wire(SlackFailed)],

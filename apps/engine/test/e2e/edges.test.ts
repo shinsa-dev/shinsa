@@ -372,7 +372,7 @@ describe('review fixes', () => {
     const w = await open();
     w.agents.queue('reviewer', async (agent) => {
       agent.write('a.txt', 'reviewer was here\n');
-      await agent.call('report_review', { findings: [] });
+      await agent.call('report_review', { confidence: 'high', risk: 'low', findings: [] });
     });
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');

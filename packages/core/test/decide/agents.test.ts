@@ -629,6 +629,7 @@ describe('the reviewer disagrees with a judgement call', () => {
     ]);
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -654,6 +655,7 @@ describe('the reviewer disagrees with a judgement call', () => {
     expect(() =>
       harness.send({
         type: 'agent.report_review',
+        ratings: { confidence: 'high', risk: 'low' },
         runId: harness.activeRun(taskId).id,
         summary: null,
         findings: [],
@@ -666,6 +668,7 @@ describe('the reviewer disagrees with a judgement call', () => {
     const { harness, taskId } = reachReview();
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],

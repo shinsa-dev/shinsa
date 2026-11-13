@@ -14,6 +14,7 @@ import type {
   ReportCheck,
   ReviewDisagreement,
   ReviewFinding,
+  ReviewRatings,
   RunPurpose,
   RunRole,
   ShinsaEventInput,
@@ -98,6 +99,7 @@ export interface SeedTask {
   summary?: string;
   reviewSummary?: string;
   findings?: ReviewFinding[];
+  reviewRatings?: ReviewRatings;
   reviewDisagreements?: ReviewDisagreement[];
   runs?: SeedRun[];
   gate?: { type: GateType; title: string; body: string; details?: Partial<Gate> };
@@ -120,7 +122,7 @@ export interface SeedTask {
   timed?: TimedSeedEvent[];
   provider?: 'codex';
   revision?: { afterRun: number; response: string };
-  review?: { minutes: number };
+  review?: { minutes: number; autopilot?: string };
   script?: (push: Push, clock: SeedClock) => void;
 }
 

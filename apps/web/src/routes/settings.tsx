@@ -6,6 +6,7 @@ import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { AccountSettings } from '@/components/settings/accounts.tsx';
+import { ActiveHoursSettings } from '@/components/settings/active-hours.tsx';
 import { AgentSettings, useAutomaticModel } from '@/components/settings/agents.tsx';
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
@@ -105,7 +106,11 @@ function TabSections({
     case 'agents':
       return (
         <>
-          <AgentSettings settings={state.settings} automatic={automatic} />
+          <AgentSettings
+            settings={state.settings}
+            automatic={automatic}
+            afterAutopilot={<ActiveHoursSettings state={state} />}
+          />
           <MemorySettings state={state} />
           <VersionSettings />
         </>

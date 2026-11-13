@@ -761,12 +761,16 @@ describe('validatePlanHandOver reads the plan document', () => {
   });
 });
 
+const RATED = { confidence: 'low', risk: 'high' } as const;
+
 describe('validateReview', () => {
   test('anchors each finding, defaulting the end line to the start', () => {
     expect(
       readValue(
         validateReview({
           summary: ' Checked the retry path. ',
+          confidence: 'high',
+          risk: 'medium',
           findings: [
             {
               severity: 'blocking',
@@ -782,6 +786,7 @@ describe('validateReview', () => {
       )
     ).toEqual({
       summary: 'Checked the retry path.',
+      ratings: { confidence: 'high', risk: 'medium' },
       findings: [
         {
           severity: 'blocking',
@@ -800,11 +805,19 @@ describe('validateReview', () => {
 
   test('keeps the judgement calls the reviewer disagrees with, each once', () => {
     expect(
-      readValue(validateReview({ findings: [], disagreements: [{ call: 2, reason: ' Too wide. ' }] }))
-    ).toEqual({ summary: null, findings: [], disagreements: [{ call: 2, reason: 'Too wide.' }] });
+      readValue(
+        validateReview({ ...RATED, findings: [], disagreements: [{ call: 2, reason: ' Too wide. ' }] })
+      )
+    ).toEqual({
+      summary: null,
+      ratings: RATED,
+      findings: [],
+      disagreements: [{ call: 2, reason: 'Too wide.' }],
+    });
     expect(
       errorsOf(
         validateReview({
+          ...RATED,
           findings: [],
           disagreements: [
             { call: 0, reason: 'x' },
@@ -821,11 +834,17 @@ describe('validateReview', () => {
   });
 
   test('an empty review is fine, a broken finding is not', () => {
-    expect(readValue(validateReview({}))).toEqual({ summary: null, findings: [], disagreements: [] });
+    expect(readValue(validateReview(RATED))).toEqual({
+      summary: null,
+      ratings: RATED,
+      findings: [],
+      disagreements: [],
+    });
     expect(
       errorsOf(
         validateReview({
           summary: 'x'.repeat(PROTOCOL_LIMITS.reviewSummary + 1),
+          confidence: 'certain',
           findings: [
             {
               severity: 'nit',
@@ -840,6 +859,8 @@ describe('validateReview', () => {
       )
     ).toEqual([
       `summary is ${PROTOCOL_LIMITS.reviewSummary + 1} characters; the limit is ${PROTOCOL_LIMITS.reviewSummary}.`,
+      'confidence must be one of low, medium, high.',
+      'risk must be one of low, medium, high.',
       'findings[0].end comes before findings[0].line.',
       `findings[0].title is ${PROTOCOL_LIMITS.findingTitle + 1} characters; the limit is ${PROTOCOL_LIMITS.findingTitle}.`,
       `findings[0].fix is ${PROTOCOL_LIMITS.findingFix + 1} characters; the limit is ${PROTOCOL_LIMITS.findingFix}.`,

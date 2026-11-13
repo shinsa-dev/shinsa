@@ -5,9 +5,11 @@ import {
   listTeamInitiatives,
   listTeamProjectIds,
   listTeamTasks,
+  resolveSharedListing,
   resolveTeamMembersKey,
   TEAM_SETTLED_LIMIT,
 } from '../../src/index.ts';
+import { SHARE_PRESET_SCOPES } from '../../src/share/presets.ts';
 import {
   approve,
   createHarness,
@@ -110,6 +112,36 @@ describe('the team task list', () => {
     harness.send({ type: 'project.add_to_team', projectId: shared.projectId, teamId: 'team-1' });
     const taskId = createTask(harness, { repoId: shared.repoId });
     expect(isTeamTask(harness.state, { ...harness.task(taskId), watchHome: true }, 'team-1')).toBe(false);
+  });
+});
+
+describe('an escalated team task', () => {
+  test('carries its escalation to the team, and a status share leaves it out', () => {
+    const harness = createHarness();
+    const shared = teamRepo(harness, 'paywall-next', 'Superwall');
+    harness.send({ type: 'project.add_to_team', projectId: shared.projectId, teamId: 'team-1' });
+    const taskId = createTask(harness, { repoId: shared.repoId });
+    const handoff = {
+      waitedMinutes: 60,
+      ownerActiveAt: 1_000,
+      foundBy: { server: 'cloudflare', shippedTaskTitle: 'Ship the paywall list' },
+      ratings: { confidence: 'high' as const, risk: 'low' as const },
+      mergesAt: null,
+      blockedBy: null,
+    };
+    const escalation = {
+      at: harness.now,
+      reason: 'Urgent, and the merge waited 60 minutes for you.',
+      handoff,
+    };
+    const task = { ...harness.task(taskId), escalation };
+    const state = { ...harness.state, tasks: { ...harness.state.tasks, [taskId]: task } };
+    expect(listTeamTasks(state, 'team-1', CONTEXT)[0]?.task.escalation).toEqual(escalation);
+    expect(
+      resolveSharedListing(state, task, [], SHARE_PRESET_SCOPES.standard).task.escalation?.handoff
+    ).toEqual(handoff);
+    expect(listTeamTasks(harness.state, 'team-1', CONTEXT)[0]?.task.escalation).toBeNull();
+    expect(resolveSharedListing(state, task, [], SHARE_PRESET_SCOPES.status).task.escalation).toBeNull();
   });
 });
 

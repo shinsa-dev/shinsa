@@ -772,6 +772,95 @@ describe('a project’s usage limit', () => {
   });
 });
 
+describe('Autopilot and usage limits', () => {
+  const AUTOPILOT_ON = { type: 'settings.change', patch: { autopilot: { enabled: true } } } as const;
+
+  function makeUrgent(harness: Harness, taskId: string) {
+    harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' });
+  }
+
+  test('ignores them for an urgent task by default, so marking it urgent starts its held step', () => {
+    const { harness, taskId, run } = heldAtPace({ daily: -1 });
+    harness.send(AUTOPILOT_ON);
+    expect(isHeldStepStarted(harness, run.id)).toBe(false);
+    makeUrgent(harness, taskId);
+    expect(isHeldStepStarted(harness, run.id)).toBe(true);
+    expect(waitOf(harness, taskId).status).toBe('resumed');
+  });
+
+  test('an urgent task never pauses at its cost limit, and a normal one still does', () => {
+    const { harness, taskId } = limited(5);
+    harness.send(AUTOPILOT_ON);
+    makeUrgent(harness, taskId);
+    meter(harness, taskId, 6);
+    proposePlan(harness, taskId);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build' });
+    const normal = limited(5);
+    normal.harness.send(AUTOPILOT_ON);
+    meter(normal.harness, normal.taskId, 6);
+    proposePlan(normal.harness, normal.taskId);
+    expect(normal.harness.openGate(normal.taskId)).toMatchObject({ cause: 'budget' });
+  });
+
+  test('turning Autopilot on releases an urgent task it paused at its cost limit', () => {
+    const { harness, taskId } = limited(5);
+    makeUrgent(harness, taskId);
+    meter(harness, taskId, 6);
+    proposePlan(harness, taskId);
+    expect(harness.openGate(taskId)).toMatchObject({ cause: 'budget' });
+    harness.send(AUTOPILOT_ON);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build' });
+  });
+
+  test('marking a task urgent yourself releases it from its cost limit', () => {
+    const { harness, taskId } = limited(5);
+    harness.send(AUTOPILOT_ON);
+    meter(harness, taskId, 6);
+    proposePlan(harness, taskId);
+    expect(harness.openGate(taskId)).toMatchObject({ cause: 'budget' });
+    makeUrgent(harness, taskId);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build' });
+  });
+
+  test('urgency an agent set on your behalf keeps every limit, until you mark it urgent yourself', () => {
+    const { harness, taskId } = limited(5);
+    harness.send(AUTOPILOT_ON);
+    harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' }, { onBehalf: true });
+    expect(harness.task(taskId)).toMatchObject({ priority: 'urgent', priorityOnBehalf: true });
+    meter(harness, taskId, 6);
+    proposePlan(harness, taskId);
+    expect(harness.openGate(taskId)).toMatchObject({ cause: 'budget' });
+    const held = heldAtPace({ daily: -1 });
+    held.harness.send(AUTOPILOT_ON);
+    held.harness.send(
+      { type: 'task.prioritize', taskId: held.taskId, priority: 'urgent' },
+      { onBehalf: true }
+    );
+    expect(isHeldStepStarted(held.harness, held.run.id)).toBe(false);
+    held.harness.send({ type: 'task.prioritize', taskId: held.taskId, priority: 'high' });
+    makeUrgent(held.harness, held.taskId);
+    expect(held.harness.task(held.taskId).priorityOnBehalf).toBe(false);
+    expect(isHeldStepStarted(held.harness, held.run.id)).toBe(true);
+  });
+
+  test('keeps the limits when you switch that off, or when Autopilot is off', () => {
+    const off = heldAtPace({ daily: -1 });
+    makeUrgent(off.harness, off.taskId);
+    expect(isHeldStepStarted(off.harness, off.run.id)).toBe(false);
+    const kept = heldAtPace({ daily: -1 });
+    kept.harness.send({
+      type: 'settings.change',
+      patch: { autopilot: { enabled: true, ignoreUsageLimits: false } },
+    });
+    makeUrgent(kept.harness, kept.taskId);
+    expect(isHeldStepStarted(kept.harness, kept.run.id)).toBe(false);
+    expect(waitOf(kept.harness, kept.taskId).status).toBe('armed');
+  });
+});
+
 function recordPace(
   harness: Harness,
   pace: number | null,

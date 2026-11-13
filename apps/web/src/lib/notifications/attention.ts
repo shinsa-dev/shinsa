@@ -6,13 +6,22 @@ import {
   listOpenGates,
   type QueuedGate,
   resolveQueue,
+  resolveTeamEscalationTag,
   type ShinsaState,
   type Task,
+  type TeamEscalation,
 } from '@shinsa/core';
+import {
+  describeTeamEscalationSummary,
+  type DoneForYouRow,
+  listDoneForYouRows,
+  resolveDoneForYouTag,
+} from '@/lib/autopilot.ts';
 import { flattenWhitespace } from '@/lib/format/count.ts';
 import { stripMarkdown } from '@/lib/format/markdown.ts';
 import { describeOperationIntro } from '@/lib/overview/operation.ts';
 import { resolveGateNow } from '@/lib/tasks/now.ts';
+import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
 
 type PageStatus = 'working' | 'waiting' | 'failed' | 'idle';
 
@@ -22,19 +31,24 @@ export interface PageAttention {
 }
 
 export interface DecisionNotice {
-  gateId: string;
+  tag: string;
   taskId: string;
   title: string;
   body: string;
+  path: string | null;
 }
 
 const APP_NAME = 'Shinsa';
 
 const BODY_MAX = 180;
 
-export function resolvePageAttention(state: ShinsaState, now: number): PageAttention {
+export function resolvePageAttention(
+  state: ShinsaState,
+  now: number,
+  escalations: readonly TeamEscalation[] = []
+): PageAttention {
   const queue = resolveQueue(state, now);
-  const badge = queue.ready.length;
+  const badge = queue.ready.length + escalations.length;
   if (queue.ready.some((entry) => isPausingGate(entry.gate))) return { status: 'failed', badge };
   if (badge > 0) return { status: 'waiting', badge };
   return { status: queue.working.length > 0 ? 'working' : 'idle', badge };
@@ -67,24 +81,55 @@ function describeBody({ gate, task, reason }: QueuedGate) {
 
 export function describeDecision(entry: QueuedGate): DecisionNotice {
   return {
-    gateId: entry.gate.id,
+    tag: entry.gate.id,
     taskId: entry.task.id,
     title: entry.task.title,
     body: resolveBody(describeBody(entry)),
+    path: null,
   };
 }
 
-export function listOpenGateIds(state: ShinsaState) {
-  return new Set(
-    listOpenGates(state)
-      .filter((gate) => !isGateHeld(state, gate))
-      .map((gate) => gate.id)
-  );
+export function describeTeamEscalation(escalation: TeamEscalation): DecisionNotice {
+  const { entry } = escalation;
+  return {
+    tag: resolveTeamEscalationTag(escalation),
+    taskId: entry.task.id,
+    title: entry.task.title,
+    body: `${describeTeamEscalationSummary(escalation)}, so Autopilot sent it to your team.`,
+    path: resolveTeamTaskPath(resolveTeamTaskTarget(entry)),
+  };
 }
 
-export function listNewDecisions(previous: ReadonlySet<string> | null, state: ShinsaState, now: number) {
+function describeDoneForYou(row: DoneForYouRow): DecisionNotice {
+  return {
+    tag: resolveDoneForYouTag(row.gateId),
+    taskId: row.taskId,
+    title: row.title,
+    body: resolveBody(`${row.summary} ${row.reason}`),
+    path: null,
+  };
+}
+
+export function listOpenNoticeTags(state: ShinsaState, escalations: readonly TeamEscalation[] = []) {
+  return new Set([
+    ...listDoneForYouRows(state).map((row) => resolveDoneForYouTag(row.gateId)),
+    ...listOpenGates(state)
+      .filter((gate) => !isGateHeld(state, gate))
+      .map((gate) => gate.id),
+    ...escalations.map(resolveTeamEscalationTag),
+  ]);
+}
+
+export function listNewDecisions(
+  previous: ReadonlySet<string> | null,
+  state: ShinsaState,
+  now: number,
+  escalations: readonly TeamEscalation[] = []
+) {
   if (previous === null) return [];
-  return resolveQueue(state, now)
-    .ready.filter((entry) => !previous.has(entry.gate.id))
-    .map(describeDecision);
+  return [
+    ...resolveQueue(state, now).ready.map(describeDecision),
+    ...escalations.map(describeTeamEscalation),
+    ...listDoneForYouRows(state).map(describeDoneForYou),
+  ].filter((notice) => !previous.has(notice.tag));
 }

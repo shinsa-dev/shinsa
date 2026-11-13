@@ -321,6 +321,17 @@ describe('the Slack app’s manifest', () => {
     });
     expect(manifest.settings.socket_mode_enabled).toBe(false);
   });
+
+  test('shows the app’s direct messages, so an escalation sent to a person arrives, and takes no replies there', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../slack-manifest.json'), 'utf8')
+    ) as { features: { app_home: Record<string, boolean> } };
+    expect(manifest.features.app_home).toEqual({
+      home_tab_enabled: false,
+      messages_tab_enabled: true,
+      messages_tab_read_only_enabled: true,
+    });
+  });
 });
 
 describe('connecting Slack to a machine', () => {
@@ -1473,6 +1484,290 @@ describe('what a machine does through the relay', () => {
     expect(await (await react({ ...target, add: 'x', remove: null })).json()).toEqual({ applied: false });
     expect((await react({ ...target, add: null, remove: null })).status).toBe(400);
     expect((await react({ ...target, threadTs: '555.1', add: 'x', remove: null })).status).toBe(403);
+  });
+});
+
+describe('telling a channel or a person about an escalation', () => {
+  const MESSAGE = {
+    text: 'Urgent change needs someone',
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Urgent change needs someone' } }],
+  };
+
+  const NOTIFY = { teamId: 'T1', kind: 'slack_channel', id: 'C9', replace: null, message: MESSAGE };
+
+  async function linkedSetup() {
+    const setup = await setUp();
+    const auth = { bearer: setup.machine.machineToken, sameOrigin: false };
+    const notify = (body: unknown, bearer = setup.machine.machineToken) =>
+      setup.harness.post(SLACK_RELAY_PATHS.notify, body, { ...auth, bearer });
+    const directory = (teamId: string, bearer = setup.machine.machineToken) =>
+      setup.harness.call(`${SLACK_RELAY_PATHS.directory}?teamId=${teamId}`, {
+        headers: { authorization: `Bearer ${bearer}` },
+      });
+    setup.slack.answers['chat.postMessage'] = (body) => ({
+      ok: true,
+      ts: '700.1',
+      channel: body.channel === 'U7' ? 'D7' : body.channel,
+    });
+    setup.slack.answers['users.conversations'] = () => ({ ok: true, channels: [] });
+    setup.slack.answers['users.info'] = (body) =>
+      body.user === 'U7'
+        ? { ok: true, user: { name: 'kai', profile: { real_name: 'Kai Tanaka' } } }
+        : { ok: false, error: 'user_not_found' };
+    return { ...setup, notify, directory };
+  }
+
+  const errorOf = async (response: Response) =>
+    (await readJson<{ error: { code: string; message: string } }>(response)).error;
+
+  test('lists the public channels the app is in, the private ones it shares with you, and the people who can get a message, by name', async () => {
+    const { slack, directory } = await linkedSetup();
+    slack.answers['users.conversations'] = () => ({ ok: true, channels: [{ id: 'G5', name: 'leads' }] });
+    slack.answers['conversations.list'] = (body) =>
+      body.cursor
+        ? { ok: true, channels: [{ id: 'C3', name: 'alerts', is_member: true }] }
+        : {
+            ok: true,
+            channels: [
+              { id: 'C9', name: 'oncall', is_member: true },
+              { id: 'C4', name: 'random', is_member: false },
+            ],
+            response_metadata: { next_cursor: 'next' },
+          };
+    slack.answers['users.list'] = () => ({
+      ok: true,
+      members: [
+        {
+          id: 'U7',
+          name: 'kai',
+          profile: {
+            real_name: 'Kai Tanaka',
+            display_name: 'kai',
+            image_72: 'https://avatars.slack-edge.com/kai_72.png',
+          },
+        },
+        { id: 'U8', name: 'mo', profile: { real_name: '', display_name: 'Mo' } },
+        { id: 'U9', name: 'zed' },
+        { id: 'U2', name: 'gone', deleted: true },
+        { id: 'B1', name: 'deploybot', is_bot: true },
+        { id: 'USLACKBOT', name: 'slackbot' },
+        { id: 'U0', profile: {} },
+      ],
+      response_metadata: { next_cursor: '' },
+    });
+    const listed = await directory('T1');
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual({
+      teamId: 'T1',
+      channels: [
+        { id: 'C3', name: 'alerts' },
+        { id: 'G5', name: 'leads' },
+        { id: 'C9', name: 'oncall' },
+      ],
+      people: [
+        { id: 'U7', name: 'Kai Tanaka', image: 'https://avatars.slack-edge.com/kai_72.png' },
+        { id: 'U8', name: 'Mo' },
+        { id: 'U9', name: 'zed' },
+      ],
+    });
+    const [first, second] = slack.callsTo('conversations.list');
+    expect(slack.callsTo('users.conversations')[0]?.body).toMatchObject({
+      user: 'U1',
+      types: 'private_channel',
+      exclude_archived: 'true',
+    });
+    expect(first?.body).toMatchObject({
+      types: 'public_channel',
+      exclude_archived: 'true',
+      limit: '200',
+      cursor: '',
+    });
+    expect(first?.token).toBe('xoxb-bot-token');
+    expect(second?.body).toMatchObject({ cursor: 'next' });
+  });
+
+  test('replies in the thread of its own post, and only there', async () => {
+    const { slack, notify } = await linkedSetup();
+    await notify(NOTIFY);
+    const reply = { channelId: 'C9', threadTs: '700.1' };
+    const replied = await notify({ ...NOTIFY, reply, message: { ...MESSAGE, text: 'Merged' } });
+    expect(replied.status).toBe(200);
+    expect(slack.callsTo('chat.postMessage').at(-1)?.body).toMatchObject({
+      channel: 'C9',
+      thread_ts: '700.1',
+      text: 'Merged',
+    });
+    expect(slack.callsTo('conversations.info')).toHaveLength(1);
+    const elsewhere = await notify({ ...NOTIFY, reply: { channelId: 'C9', threadTs: '1.1' } });
+    expect(elsewhere.status).toBe(403);
+  });
+
+  test('stops after ten pages of a very large workspace', async () => {
+    const { slack, directory } = await linkedSetup();
+    slack.answers['conversations.list'] = () => ({
+      ok: true,
+      channels: [],
+      response_metadata: { next_cursor: 'more' },
+    });
+    slack.answers['users.list'] = () => ({ ok: true, members: [] });
+    expect((await directory('T1')).status).toBe(200);
+    expect(slack.callsTo('conversations.list')).toHaveLength(10);
+  });
+
+  test('posts to a channel, then edits that post', async () => {
+    const { slack, notify } = await linkedSetup();
+    const posted = await notify(NOTIFY);
+    expect(await posted.json()).toEqual({ channelId: 'C9', ts: '700.1' });
+    expect(slack.callsTo('chat.postMessage').at(-1)?.body).toEqual({
+      channel: 'C9',
+      text: MESSAGE.text,
+      blocks: MESSAGE.blocks,
+      unfurl_links: false,
+      unfurl_media: false,
+    });
+    const replace = { channelId: 'C9', ts: '700.1' };
+    const edited = await notify({
+      ...NOTIFY,
+      replace,
+      message: { ...MESSAGE, text: 'No longer needs anyone' },
+    });
+    expect(await edited.json()).toEqual(replace);
+    expect(slack.callsTo('chat.update').at(-1)?.body).toMatchObject({
+      channel: 'C9',
+      ts: '700.1',
+      text: 'No longer needs anyone',
+    });
+  });
+
+  test('sends a person a direct message from the app, and edits it in that conversation', async () => {
+    const { slack, notify } = await linkedSetup();
+    const posted = await notify({ ...NOTIFY, kind: 'slack_person', id: 'U7' });
+    expect(await posted.json()).toEqual({ channelId: 'D7', ts: '700.1' });
+    expect(slack.callsTo('chat.postMessage').at(-1)?.body).toMatchObject({ channel: 'U7' });
+    const replace = { channelId: 'D7', ts: '700.1' };
+    expect((await notify({ ...NOTIFY, kind: 'slack_person', id: 'U7', replace })).status).toBe(200);
+    expect(slack.callsTo('chat.update').at(-1)?.body).toMatchObject({ channel: 'D7', ts: '700.1' });
+  });
+
+  test('posts in a private channel only when the Slack account connected to this machine is in it', async () => {
+    const { slack, notify } = await linkedSetup();
+    slack.answers['conversations.info'] = (body) => ({
+      ok: true,
+      channel: { id: body.channel, is_private: true },
+    });
+    const outside = await notify({ ...NOTIFY, id: 'G6' });
+    expect(outside.status).toBe(502);
+    expect((await errorOf(outside)).message).toBe(
+      'Shinsa posts in a private channel only when the Slack account connected to this machine is in it.'
+    );
+    expect(slack.callsTo('chat.postMessage')).toHaveLength(0);
+    slack.answers['users.conversations'] = () => ({ ok: true, channels: [{ id: 'G6', name: 'leads' }] });
+    expect(await (await notify({ ...NOTIFY, id: 'G6' })).json()).toEqual({ channelId: 'G6', ts: '700.1' });
+  });
+
+  test('posts to a channel only when it is one, and to a person only when they can get a message', async () => {
+    const { slack, notify } = await linkedSetup();
+    slack.answers['conversations.info'] = (body) => ({
+      ok: true,
+      channel: { id: body.channel, is_im: true },
+    });
+    expect((await errorOf(await notify({ ...NOTIFY, id: 'D3' }))).message).toBe(
+      'That is not a Slack channel.'
+    );
+    slack.answers['conversations.info'] = (body) => ({
+      ok: true,
+      channel: { id: body.channel, is_mpim: true },
+    });
+    expect((await errorOf(await notify({ ...NOTIFY, id: 'G3' }))).message).toBe(
+      'That is not a Slack channel.'
+    );
+    slack.answers['conversations.info'] = () => ({ ok: false, error: 'channel_not_found' });
+    expect((await errorOf(await notify({ ...NOTIFY, id: 'G9' }))).message).toBe(
+      'Slack could not find that channel or person.'
+    );
+    const person = (id: string) => notify({ ...NOTIFY, kind: 'slack_person', id });
+    expect((await errorOf(await person('G9'))).message).toBe('Slack could not find that person.');
+    slack.answers['users.info'] = () => ({ ok: true, user: { is_bot: true } });
+    expect((await errorOf(await person('B1'))).message).toBe('Slack could not find that person.');
+    slack.answers['users.info'] = () => ({ ok: true, user: { deleted: true } });
+    expect((await errorOf(await person('U2'))).message).toBe('That person’s Slack account is deactivated.');
+    expect(slack.callsTo('chat.postMessage')).toHaveLength(0);
+  });
+
+  test('is refused in a workspace this machine is not connected to, or once the app was removed', async () => {
+    const { harness, session, slack, notify, directory } = await linkedSetup();
+    const elsewhere = await notify({ ...NOTIFY, teamId: 'T9' });
+    expect(elsewhere.status).toBe(410);
+    expect((await directory('T9')).status).toBe(410);
+    const other = await pairMachine(harness, session);
+    const unlinked = await notify(NOTIFY, other.machineToken);
+    expect(unlinked.status).toBe(403);
+    expect(await errorOf(unlinked)).toEqual({
+      code: 'slack_not_linked',
+      message: 'This machine is not connected to that Slack workspace.',
+    });
+    expect((await directory('T1', other.machineToken)).status).toBe(403);
+    expect(slack.callsTo('chat.postMessage')).toHaveLength(0);
+    harness.db.sqlite.exec('DELETE FROM slack_workspaces');
+    const removed = await notify(NOTIFY);
+    expect(removed.status).toBe(410);
+    expect(await errorOf(removed)).toEqual({
+      code: 'slack_not_installed',
+      message: 'Shinsa is not in that Slack workspace.',
+    });
+  });
+
+  test('cannot edit a message it did not post, and needs the machine token and a message it understands', async () => {
+    const { notify, directory } = await linkedSetup();
+    const foreign = await notify({ ...NOTIFY, replace: { channelId: 'C9', ts: '999.9' } });
+    expect((await errorOf(foreign)).code).toBe('post_not_yours');
+    expect((await notify(NOTIFY, 'stolen')).status).toBe(401);
+    expect((await directory('T1', 'stolen')).status).toBe(401);
+    expect((await notify({ ...NOTIFY, kind: 'team' })).status).toBe(400);
+    expect((await notify({ ...NOTIFY, message: { text: '', blocks: [] } })).status).toBe(400);
+  });
+
+  test('says in words why Slack refused, and logs it', async () => {
+    const { slack, notify } = await linkedSetup();
+    const refusal = async (error: string) => {
+      slack.answers['chat.postMessage'] = () => ({ ok: false, error });
+      return notify(NOTIFY);
+    };
+    const outside = await refusal('not_in_channel');
+    expect(outside.status).toBe(502);
+    expect((await errorOf(outside)).message).toBe(
+      'The Shinsa app is not in that channel. Invite it with /invite @Shinsa.'
+    );
+    expect((await errorOf(await refusal('user_disabled'))).message).toBe(
+      'That person’s Slack account is deactivated.'
+    );
+    expect((await errorOf(await refusal('ratelimited'))).message).toBe(
+      'Slack did not take the post (ratelimited).'
+    );
+    expect((await refusal('invalid_blocks')).status).toBe(422);
+    expect(failures).toHaveBeenCalledWith('[Cloud] Slack did not take a post', {
+      error: expect.objectContaining({ code: 'not_in_channel' }),
+      code: 'not_in_channel',
+    });
+    slack.answers['chat.postMessage'] = () => ({ ok: true, ts: '700.1' });
+    expect((await errorOf(await notify(NOTIFY))).message).toBe('Slack did not say where the post went.');
+    slack.answers['chat.update'] = () => ({ ok: false, error: 'message_not_found' });
+    slack.answers['chat.postMessage'] = () => ({ ok: true, ts: '700.2', channel: 'C9' });
+    await notify(NOTIFY);
+    const edit = await notify({ ...NOTIFY, replace: { channelId: 'C9', ts: '700.2' } });
+    expect((await errorOf(edit)).message).toBe('Slack did not take the post (message_not_found).');
+  });
+
+  test('says when Slack will not list the workspace, and logs it', async () => {
+    const { slack, directory } = await linkedSetup();
+    slack.answers['conversations.list'] = () => ({ ok: false, error: 'missing_scope' });
+    const refused = await directory('T1');
+    expect(refused.status).toBe(502);
+    expect((await errorOf(refused)).message).toBe('Slack did not list the workspace (missing_scope).');
+    expect(failures).toHaveBeenCalledWith('[Cloud] Slack did not list a directory', {
+      error: expect.objectContaining({ code: 'missing_scope' }),
+      method: 'conversations.list',
+    });
   });
 });
 

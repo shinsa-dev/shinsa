@@ -22,6 +22,7 @@ import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { MergeStepsPanel } from '@/components/review/merge-steps.tsx';
 import { REVIEW_SELECTED, RemoveNoteButton, ReviewNote } from '@/components/review/note.tsx';
 import { PointIndex } from '@/components/review/point-index.tsx';
+import { ReviewRatings } from '@/components/review/ratings.tsx';
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
@@ -34,6 +35,7 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { useReviewKeys } from '@/hooks/use-review-keys.ts';
 import { useStructuralValue } from '@/hooks/use-structural-value.ts';
+import { describeAgentReviewNote } from '@/lib/autopilot.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listReviewCommands } from '@/lib/command/review.ts';
 import { type Loaded, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
@@ -44,7 +46,6 @@ import { resolveReviewItemIdentity } from '@/lib/review/identity.ts';
 import type { ReviewStep } from '@/lib/review/keys.ts';
 import { listMergeWaits, type MergeWaitView } from '@/lib/review/merge-steps.ts';
 import {
-  describeAgentReview,
   describeItemPlace,
   describePointCount,
   listOtherFiles,
@@ -443,9 +444,7 @@ const AgentReview = React.memo(function AgentReviewPanel({
       {reviewed || chapter ? (
         <div className='flex flex-col gap-1'>
           {task.reviewSummary && <Prose text={task.reviewSummary} />}
-          <p className='text-xs text-fg-3'>
-            {describeAgentReview(task.findings)} A signal for you, never the approval.
-          </p>
+          <p className='text-xs text-fg-3'>{describeAgentReviewNote(task)}</p>
         </div>
       ) : (
         <p className='text-xs text-fg-2'>The agent review has not run yet.</p>
@@ -564,6 +563,7 @@ function ReviewSummary({
       title={report.headline}
       action={gate && <ReviewActions state={state} task={task} gate={gate} />}
     >
+      <ReviewRatings task={task} />
       {gate?.escalation && <p className='text-xs text-fg-3'>{describeEscalationBody(gate.escalation)}</p>}
       <p className='text-xs text-fg-3'>{describePointCount(points)}</p>
       {!task.report && (

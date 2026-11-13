@@ -1,18 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
-import { createSettings, type Settings } from '@shinsa/core';
+import { AUTOPILOT_DEFAULTS, createSettings, resolveEngineInfo, type Settings } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
+import {
+  AUTO_MERGE_DESCRIPTION,
+  AUTOPILOT_BLOCKS,
+  AUTOPILOT_LEVEL_DESCRIPTION,
+  AUTOPILOT_OFF,
+  AUTOPILOT_ROWS,
+  AUTOPILOT_TURN_ON,
+  TEAM_CONTACT,
+} from '@/lib/autopilot.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { spyOnEngine } from '../../support/engine.ts';
+import { readFetchCall } from '../../support/fetch.ts';
 import {
   holdAcks,
   listSentCommands,
   pushAccounts,
+  pushState,
   releaseAcks,
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
+import { createAutopilotProfile, createProject, createShinsaState } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -42,7 +55,7 @@ function renderAgents(settings: Settings = createSettings(), automatic = false) 
   );
 }
 
-async function choose(label: string, option: string) {
+async function choose(label: string, option: string | RegExp) {
   fireEvent.click(screen.getByRole('combobox', { name: label }));
   await settle();
   const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
@@ -245,5 +258,293 @@ describe('Settings → Agents → Engine', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await settle();
     expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { delegationLimit: 3 } }]);
+  });
+});
+
+describe('Settings → Agents → Autopilot', () => {
+  const ESCALATING: Settings = {
+    ...createSettings(),
+    autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },
+  };
+
+  it('shows only on an engine that has Autopilot', () => {
+    const engine = resolveEngineInfo('1.0.0');
+    spyOnEngine({ ...engine, features: engine.features.filter((feature) => feature !== 'autopilot') });
+    renderAgents(ESCALATING);
+    expect(screen.queryByRole('combobox', { name: 'Autopilot' })).toBeNull();
+  });
+
+  it('says it is off, and shows its three blocks once on', async () => {
+    spyOnEngine();
+    const { unmount } = renderAgents();
+    await settle();
+    expect(screen.getByText(AUTOPILOT_OFF)).toBeTruthy();
+    expect(screen.queryByText(AUTOPILOT_BLOCKS.acting.title)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: AUTOPILOT_TURN_ON }));
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true } } },
+    ]);
+    unmount();
+    renderAgents(ESCALATING);
+    await settle();
+    for (const block of Object.values(AUTOPILOT_BLOCKS)) expect(screen.getByText(block.title)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.usage })).toBeTruthy();
+  });
+
+  it('sets how much it does on its own, which gates it decides and Auto merge', async () => {
+    spyOnEngine();
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.level }).textContent).toBe('Balanced');
+    expect(screen.getByText(AUTOPILOT_LEVEL_DESCRIPTION.balanced)).toBeTruthy();
+    expect(screen.getByText(AUTO_MERGE_DESCRIPTION.low_risk)).toBeTruthy();
+    await choose(AUTOPILOT_ROWS.level, /^Most things/);
+    await choose('Agent questions', 'Always ask me');
+    await choose(AUTOPILOT_ROWS.autoMerge, 'Off, I merge');
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
+      {
+        type: 'settings.change',
+        patch: { autopilot: { ...ESCALATING.autopilot, gates: ['plans', 'reviews', 'watchdogTasks'] } },
+      },
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, autoMerge: 'off' } } },
+    ]);
+  });
+
+  it('shows how well it knows you and uses the level it suggests only when you click', async () => {
+    spyOnEngine();
+    pushState(
+      createShinsaState({
+        patch: { autopilotProfile: createAutopilotProfile({ agreed: 46, disagreed: 4 }) },
+      })
+    );
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
+    const percent = screen.getByText(/^\d+%$/).textContent ?? '';
+    expect(Number.parseInt(percent, 10)).toBeGreaterThanOrEqual(90);
+    expect(screen.queryByRole('meter')).toBeNull();
+    expect(screen.queryByText('Ready')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.queryByText('Agrees with you')).toBeNull();
+    expect(screen.queryByText('50')).toBeNull();
+    expect(screen.queryByText('What it learned')).toBeNull();
+    expect(listSentCommands()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
+    ]);
+  });
+
+  it('says the suggested level is in use once you already chose it', async () => {
+    spyOnEngine();
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText('0%')).toBeTruthy();
+    expect(screen.queryByText('Learning')).toBeNull();
+    expect(screen.getByText('In use')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();
+  });
+
+  it('warns when nobody can be asked, and stops warning once your team is never contacted', async () => {
+    spyOnEngine();
+    const { unmount } = renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(TEAM_CONTACT.alone)).toBeTruthy();
+    expect(document.querySelector('.text-warning')).toBeTruthy();
+    unmount();
+    renderAgents({ ...ESCALATING, autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, escalate: false } });
+    await settle();
+    expect(document.querySelector('.text-warning')).toBeNull();
+  });
+
+  it('asks your team once a project is shared with one', async () => {
+    spyOnEngine();
+    pushState(createShinsaState({ projects: [createProject({ id: 'p1', teamIds: ['team-1'] })] }));
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(TEAM_CONTACT.shared)).toBeTruthy();
+    await choose(AUTOPILOT_ROWS.escalate, /^Never/);
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, escalate: false } } },
+    ]);
+  });
+
+  describe('Escalate to', () => {
+    const SLACK = {
+      remote: true,
+      connectUrl: null,
+      links: [{ teamId: 'T1', teamName: 'Overclock', userId: 'U1', userName: 'Christo', linkedAt: 1 }],
+      problem: null,
+    };
+    const DIRECTORY = {
+      teamId: 'T1',
+      channels: [
+        { id: 'C1', name: 'oncall' },
+        { id: 'C2', name: 'eng' },
+      ],
+      people: [{ id: 'U7', name: 'Kai', image: 'https://avatars.slack-edge.com/kai.png' }],
+      problem: null,
+    };
+
+    function answerSlack(slack: unknown = SLACK) {
+      providers.mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+        const { path } = readFetchCall(input, init);
+        if (path === '/api/slack') return Response.json(slack);
+        if (path === '/api/slack/directory?teamId=T1') return Response.json(DIRECTORY);
+        if (path === '/api/slack/test') {
+          const { contact } = JSON.parse(String(init?.body)) as { contact: { id: string } };
+          return Response.json(
+            contact.id === 'C1' ? { sent: true, problem: null } : { sent: false, problem: 'Not in it.' }
+          );
+        }
+        return new Response('offline', { status: 503 });
+      }) as typeof fetch);
+    }
+
+    const ADD = 'Add from Slack';
+
+    async function openPicker() {
+      fireEvent.click(screen.getByRole('button', { name: ADD }));
+      await settle();
+      await settle();
+      return screen.getByRole('dialog');
+    }
+
+    function pick(dialog: HTMLElement, name: string) {
+      fireEvent.click(within(dialog).getByRole('option', { name }));
+    }
+
+    it('lists your team first, with no Slack contacts by default', async () => {
+      spyOnEngine();
+      answerSlack();
+      renderAgents(ESCALATING);
+      await settle();
+      expect(screen.getByText(TEAM_CONTACT.title)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Stop / })).toBeNull();
+      expect((screen.getByRole('button', { name: 'Send a test' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('disables adding from Slack until Slack is connected, saying where', async () => {
+      spyOnEngine();
+      answerSlack({ ...SLACK, links: [] });
+      renderAgents(ESCALATING);
+      await settle();
+      expect((screen.getByRole('button', { name: ADD }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('disables it on an engine that cannot send to Slack', async () => {
+      const engine = resolveEngineInfo('1.0.0');
+      spyOnEngine({
+        ...engine,
+        features: engine.features.filter((feature) => feature !== 'autopilot-slack'),
+      });
+      answerSlack();
+      renderAgents(ESCALATING);
+      await settle();
+      expect((screen.getByRole('button', { name: ADD }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('searches the channels Shinsa is in and the people, and adds the one you pick', async () => {
+      spyOnEngine();
+      answerSlack();
+      renderAgents(ESCALATING);
+      await settle();
+      const dialog = await openPicker();
+      expect(within(dialog).getByText('Channels')).toBeTruthy();
+      expect(within(dialog).getByText('People')).toBeTruthy();
+      fireEvent.change(within(dialog).getByPlaceholderText('Search channels and people'), {
+        target: { value: 'ka' },
+      });
+      await settle();
+      expect(within(dialog).queryByRole('option', { name: 'eng' })).toBeNull();
+      pick(dialog, 'Kai');
+      expect(listSentCommands()).toEqual([
+        {
+          type: 'settings.change',
+          patch: {
+            autopilot: {
+              ...ESCALATING.autopilot,
+              contacts: [
+                {
+                  kind: 'slack_person',
+                  teamId: 'T1',
+                  id: 'U7',
+                  name: 'Kai',
+                  image: 'https://avatars.slack-edge.com/kai.png',
+                },
+              ],
+            },
+          },
+        },
+      ]);
+    });
+
+    it('keeps a channel and a teammate both, each removable on its own', async () => {
+      spyOnEngine();
+      answerSlack();
+      const channel = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C1', name: 'oncall' };
+      const person = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
+      renderAgents({
+        ...ESCALATING,
+        autopilot: { ...ESCALATING.autopilot!, contacts: [channel, person] },
+      } as Settings);
+      await settle();
+      expect(screen.getByText('oncall')).toBeTruthy();
+      expect(screen.queryByText('#oncall')).toBeNull();
+      const dialog = await openPicker();
+      expect(within(dialog).getByRole('option', { name: 'oncall' }).querySelector('.invisible')).toBeNull();
+      expect(within(dialog).getByRole('option', { name: 'eng' }).querySelector('.invisible')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Stop posting in #oncall' }));
+      expect(listSentCommands()).toEqual([
+        {
+          type: 'settings.change',
+          patch: { autopilot: { ...ESCALATING.autopilot, contacts: [person] } },
+        },
+      ]);
+    });
+
+    it('shows a person’s Slack picture, and sends a test to each contact', async () => {
+      spyOnEngine();
+      answerSlack();
+      const channel = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C1', name: 'oncall' };
+      const person = { ...DIRECTORY.people[0]!, kind: 'slack_person' as const, teamId: 'T1' };
+      const { container } = renderAgents({
+        ...ESCALATING,
+        autopilot: { ...ESCALATING.autopilot!, contacts: [channel] },
+      } as Settings);
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: 'Send a test' }));
+      await settle();
+      expect(toasts.success).toHaveBeenCalledWith('Sent a test to Slack');
+      renderAgents({
+        ...ESCALATING,
+        autopilot: { ...ESCALATING.autopilot!, contacts: [person] },
+      } as Settings);
+      await settle();
+      expect(
+        container.ownerDocument.querySelector('img[src="https://avatars.slack-edge.com/kai.png"]')
+      ).toBeTruthy();
+      fireEvent.click(screen.getAllByRole('button', { name: 'Send a test' }).at(-1)!);
+      await settle();
+      expect(toasts.error).toHaveBeenCalledWith('Not sent to Kai: Not in it.');
+    });
+
+    it('asks which workspace when Slack is connected in more than one', async () => {
+      spyOnEngine();
+      answerSlack({
+        ...SLACK,
+        links: [
+          ...SLACK.links,
+          { teamId: 'T2', teamName: 'Acme', userId: 'U1', userName: 'Christo', linkedAt: 1 },
+        ],
+      });
+      renderAgents(ESCALATING);
+      await settle();
+      await openPicker();
+      expect(screen.getByRole('combobox', { name: 'Slack workspace' }).textContent).toBe('Overclock');
+      await choose('Slack workspace', 'Acme');
+      expect(screen.getByRole('combobox', { name: 'Slack workspace' }).textContent).toBe('Acme');
+    });
   });
 });

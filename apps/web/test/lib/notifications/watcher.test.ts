@@ -32,7 +32,7 @@ function setUp(preferences: Partial<NotificationPreferences>) {
     preferences: () => ({ ...DEFAULT_PREFERENCES, ...preferences }),
     play: (soundId, count) => plays.push([soundId, count]),
     notify: (notice) => notices.push(notice),
-    dismiss: (gateId) => dismissed.push(gateId),
+    dismiss: (tag) => dismissed.push(tag),
     quiet: (notice) => page.quiet || page.quietTasks.has(notice.taskId),
   });
   return { watcher, plays, notices, dismissed, page };
@@ -69,7 +69,7 @@ describe('a quiet page', () => {
     expect(plays).toEqual([]);
     expect(notices).toEqual([]);
     watcher.observe(state(['g-1', 'g-2']));
-    expect(notices.map((notice) => notice.gateId)).toEqual(['g-2']);
+    expect(notices.map((notice) => notice.tag)).toEqual(['g-2']);
   });
 });
 
@@ -79,10 +79,50 @@ describe('a page quiet for some tasks only', () => {
     page.quietTasks.add('t-2');
     watcher.observe(state([]));
     watcher.observe(state(['g-1', 'far-1']));
-    expect(notices.map((notice) => notice.gateId)).toEqual(['g-1']);
+    expect(notices.map((notice) => notice.tag)).toEqual(['g-1']);
     expect(plays).toEqual([['chime', 1]]);
     watcher.observe(state(['g-1', 'far-1', 'far-2']));
     expect(plays).toHaveLength(1);
+  });
+});
+
+describe('a teammate’s escalation', () => {
+  it('chimes and notifies when a teammate’s task is escalated, and closes it once it is not', () => {
+    const { watcher, plays, notices, dismissed } = setUp({ sound: 'always', notify: 'always' });
+    const escalation = {
+      entry: {
+        task: createTask({ id: 'k-1', title: 'Fix the checkout' }),
+        gates: [],
+        project: null,
+        repo: null,
+        owner: null,
+        machine: 'Studio',
+        teamId: 'core',
+        instanceId: 'm-kai',
+      },
+      escalation: {
+        at: NOW,
+        reason: 'Urgent.',
+        handoff: {
+          waitedMinutes: 60,
+          ownerActiveAt: null,
+          foundBy: null,
+          ratings: null,
+          mergesAt: null,
+          blockedBy: null,
+        },
+      },
+    };
+    watcher.observe(state([]));
+    watcher.observe(state([]), [escalation]);
+    expect(plays).toEqual([['chime', 1]]);
+    expect(notices.map((notice) => [notice.tag, notice.path])).toEqual([
+      [`escalation:m-kai k-1:${NOW}`, '/teams/core/m-kai/k-1'],
+    ]);
+    watcher.observe(state([]), [escalation]);
+    expect(notices).toHaveLength(1);
+    watcher.observe(state([]));
+    expect(dismissed).toEqual([`escalation:m-kai k-1:${NOW}`]);
   });
 });
 
@@ -130,7 +170,7 @@ describe('chiming and notifying on new decisions', () => {
     watcher.observe(operation('Wait for the deploy.'));
     watcher.observe(operation('Wait for the deploy, then skip the cache.'));
     expect(plays).toEqual([['chime', 1]]);
-    expect(notices.map((notice) => notice.gateId)).toEqual(['g-1']);
+    expect(notices.map((notice) => notice.tag)).toEqual(['g-1']);
   });
 
   it('stays quiet about decisions outside the focus project, and when the focus lifts', () => {

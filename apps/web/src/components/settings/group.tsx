@@ -18,7 +18,7 @@ export const SETTING_ROW = `flex min-h-10 items-center gap-4 py-1 ${ROW_INSET}`;
 
 export const SETTING_ROW_WRAPS = 'max-sm:flex-wrap max-sm:gap-y-1.5';
 
-export const SETTING_LABEL = 'min-w-0 flex-1 max-sm:flex-[1_0_auto] max-sm:max-w-full';
+const SETTING_LABEL = 'min-w-0 flex-1 max-sm:flex-[1_0_auto] max-sm:max-w-full';
 
 export const SETTINGS_SUBHEADING = `mt-1.5 border-border border-t pt-2.5 pb-0.5 text-2xs text-fg-2 first:mt-0 first:border-t-0 first:pt-1.5 ${ROW_INSET}`;
 
@@ -72,6 +72,26 @@ export function SettingsGroup({
 
 export function SettingsCard({ className, children }: { className?: string; children: React.ReactNode }) {
   return <Card className={cn('gap-0 p-1.5', className)}>{children}</Card>;
+}
+
+export function DescribedRow({
+  title,
+  description,
+  children,
+}: {
+  title: React.ReactNode;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn(SETTING_ROW, SETTING_ROW_WRAPS)}>
+      <div className={cn(SETTING_LABEL, 'flex flex-col')}>
+        <div className='flex min-w-0 items-center gap-1.5 text-xs text-fg-4'>{title}</div>
+        <p className='text-2xs text-fg-2'>{description}</p>
+      </div>
+      <div className='flex shrink-0 items-center gap-1.5'>{children}</div>
+    </div>
+  );
 }
 
 export function SettingRow({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {

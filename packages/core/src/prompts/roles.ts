@@ -470,7 +470,8 @@ export function resolveReviewerPrompt(
     'Add a fix of at most 600 characters when you know what to change: a sentence, or a short code block.',
     'Write a summary of one or two sentences, at most 400 characters: what you checked and your overall view of the change.',
     describeDismissedFindings(task),
-    'Call `report_review` with your summary and your findings (an empty list if there are none), then stop.',
+    'Rate the change twice, honestly: Shinsa may approve it for the human on your ratings. `confidence` is how sure you are that it does what was asked and breaks nothing once your findings are fixed: `high` only when you read every changed line and the tests prove it. `risk` is what breaks if it is wrong: `low` for a contained change, `high` for data, money, security, auth, a migration, the release or anything hard to undo. When in doubt, rate confidence down and risk up.',
+    'Call `report_review` with your summary, your ratings and your findings (an empty list if there are none), then stop.',
     'You are a signal for the human, never the approval.',
   ].join('\n');
 }

@@ -226,6 +226,7 @@ function finishRound(push: Push, clock: SeedClock, script: RoundScript, counter:
     type: 'review.reported',
     taskId: TASK,
     summary: `I read the change for “${script.title}” and ran its tests. Nothing to report.`,
+    ratings: null,
     findings: [],
     seen: null,
   });

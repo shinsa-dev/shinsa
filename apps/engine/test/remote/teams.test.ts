@@ -332,6 +332,28 @@ describe('a team view of this machine', () => {
     ).not.toContain('ghp_secret');
   });
 
+  test('an escalated task carries its escalation, so a teammate’s Needs you can show it', async () => {
+    const escalation = {
+      at: 40,
+      reason: 'Urgent, and the merge waited 60 minutes for you.',
+      handoff: {
+        waitedMinutes: 60,
+        ownerActiveAt: null,
+        foundBy: null,
+        ratings: null,
+        mergesAt: null,
+        blockedBy: null,
+      },
+    };
+    const { teams } = await setUp({
+      patch: (state) => {
+        state.tasks['task-1'] = createTask({ repoId: 'repo-1', activity: [], escalation });
+      },
+    });
+    const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];
+    expect(view?.tasks[0]?.task.escalation).toEqual(escalation);
+  });
+
   test('a machine with no credentials signs nothing, since no teammate could tell which machine it is', async () => {
     const { teams } = await setUp({ file: { credentials: null } });
     const [view] = (await openViewer(teams, KAI.id, LIST)).views() as TeamListView[];

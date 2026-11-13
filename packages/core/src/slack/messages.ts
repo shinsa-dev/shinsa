@@ -1,10 +1,18 @@
 import { Option } from 'effect';
 import { STAGE_WORDS } from '../chat/references.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
-import { isTaskClosed, isTaskResting } from '../domain/rounds.ts';
+import { isTaskClosed, isTaskResting, resolveCurrentRound } from '../domain/rounds.ts';
 import type { DeliveringStep, TaskResult } from '../domain/shapes.ts';
 import type { SlackDecided } from '../domain/slack.ts';
-import type { Gate, GateDecision, GateType, Task, TaskStage } from '../domain/types.ts';
+import type {
+  Gate,
+  GateDecision,
+  GateType,
+  MergeBlock,
+  Task,
+  TaskEscalation,
+  TaskStage,
+} from '../domain/types.ts';
 import type { Watchdog, WatchdogStatus } from '../domain/watchdogs.ts';
 import { assembleReport } from '../report/assemble.ts';
 import { serializePlanMarkdown, serializeReportMarkdown } from '../report/markdown.ts';
@@ -659,6 +667,130 @@ function serializeSlackTripped(
     summary: watchdog.checks.at(-1)?.summary ?? null,
     filed,
   });
+}
+
+function describeSlackWait(minutes: number) {
+  if (minutes % 60 !== 0) return describeCount(minutes, 'minute');
+  return describeCount(minutes / 60, 'hour');
+}
+
+function describeSlackRatings(escalation: TaskEscalation) {
+  const ratings = escalation.handoff.ratings;
+  return ratings ? `${capitalise(ratings.confidence)} confidence, ${ratings.risk} risk` : 'Not rated';
+}
+
+const SLACK_MERGE_BLOCKS: Record<MergeBlock, string> = {
+  self_approved: 'Its owner approved the review by hand, so a person merges it.',
+  pre_merge_steps: 'A step before the merge is not ticked yet.',
+  edits_not_pushed: 'Its owner’s edits are not pushed yet.',
+};
+
+function describeSlackEscalationNext({ handoff }: TaskEscalation) {
+  if (handoff.blockedBy) return SLACK_MERGE_BLOCKS[handoff.blockedBy];
+  if (handoff.mergesAt === null) return 'It waits until someone merges it.';
+  return `Autopilot merges it ${serializeSlackDate(handoff.mergesAt)} unless someone acts first.`;
+}
+
+function describeSlackEscalationWhy({ handoff }: TaskEscalation) {
+  const waited =
+    handoff.waitedMinutes === 0
+      ? 'It is urgent and ready to merge.'
+      : `It is urgent and waited ${describeSlackWait(handoff.waitedMinutes)} for a merge.`;
+  return handoff.foundBy ? `A watchdog found the issue it fixes. ${waited}` : waited;
+}
+
+interface SlackEscalationView {
+  title: string;
+  why: string;
+  next: string;
+  review: string;
+  note: string | null;
+}
+
+function serializeSlackEscalationView(ref: SlackTaskRef, view: SlackEscalationView): SlackMessage {
+  return createSlackMessage(`${ref.label} is urgent and needs a review.`, [
+    ...(view.note ? [createSlackContext([escapeSlackText(view.note)])] : []),
+    createSlackHeader('Urgent change needs a review'),
+    createSlackSection(
+      serializeLines([`*${escapeSlackText(view.title)}*`, escapeSlackText(view.why), view.next])
+    ),
+    createSlackFields([
+      { label: 'Review', value: escapeSlackText(view.review) },
+      { label: 'Pull request', value: serializePullRequestField(ref, 'Not open yet') },
+    ]),
+    createSlackActions([createOpenButton('Review in Shinsa', ref.url)]),
+    serializeFooter(ref),
+  ]);
+}
+
+export function serializeSlackEscalation(task: Task, escalation: TaskEscalation, taskUrl: string) {
+  return serializeSlackEscalationView(resolveTaskRef(task, taskUrl), {
+    title: task.title,
+    why: describeSlackEscalationWhy(escalation),
+    next: describeSlackEscalationNext(escalation),
+    review: describeSlackRatings(escalation),
+    note: null,
+  });
+}
+
+export const SLACK_ESCALATION_TEST_NOTE = 'A test from Shinsa’s Autopilot settings. Nothing needs you.';
+
+export function serializeSlackEscalationTest(settingsUrl: string, now: number) {
+  return serializeSlackEscalationView(
+    { label: 'Settings → Agents → Autopilot', url: settingsUrl, pullRequest: null },
+    {
+      title: 'Fix the checkout timeout',
+      why: 'It is urgent and ready to merge.',
+      next: `Autopilot merges it ${serializeSlackDate(now + 3_600_000)} unless someone acts first.`,
+      review: 'High confidence, low risk',
+      note: SLACK_ESCALATION_TEST_NOTE,
+    }
+  );
+}
+
+function describeSlackEscalationEnd(task: Task) {
+  if (task.pullRequest?.state === 'merged') return 'Merged. What happens next is in the thread.';
+  if (isTaskClosed(task)) return 'The task is closed.';
+  return 'Its owner decided the merge in Shinsa.';
+}
+
+export function serializeSlackEscalationCleared(task: Task, taskUrl: string) {
+  const ref = resolveTaskRef(task, taskUrl);
+  return serializeNote(
+    `${ref.label} no longer needs anyone.`,
+    'No longer needs anyone',
+    describeSlackEscalationEnd(task),
+    ref
+  );
+}
+
+export function resolveSlackEscalationMessage(
+  state: ShinsaState,
+  taskId: string,
+  escalatedAt: number,
+  taskUrl: string
+): Option.Option<SlackMessage> {
+  const task = state.tasks[taskId];
+  if (!task) return Option.none();
+  const escalation = task.escalation;
+  if (escalation?.at === escalatedAt) return Option.some(serializeSlackEscalation(task, escalation, taskUrl));
+  return Option.some(serializeSlackEscalationCleared(task, taskUrl));
+}
+
+export function resolveSlackEscalationFollowUp(
+  state: ShinsaState,
+  taskId: string,
+  taskUrl: string
+): Option.Option<SlackMessage> {
+  const task = state.tasks[taskId];
+  if (task?.pullRequest?.state !== 'merged') return Option.none();
+  const round = resolveCurrentRound(task).number;
+  const merged = serializeSlackMerged(task, round, taskUrl);
+  const watched = (task.watchdogs ?? []).some((watchdog) => watchdog.round === round);
+  const lead = watched
+    ? '*Merged*\nShinsa keeps watching it after the merge. Keep an eye on it too.'
+    : '*Merged*\nNothing watches it after the merge, so keep an eye on it.';
+  return Option.some({ ...merged, blocks: [createSlackSection(lead), ...merged.blocks.slice(1)] });
 }
 
 export function serializeSlackDeclined() {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import type { EventOf } from '../../src/events/index.ts';
 import {
+  AUTOPILOT_DEFAULTS,
   HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   type Repo,
@@ -344,7 +345,13 @@ describe('acting for the human', () => {
     expect(reviewer.role).toBe('reviewer');
     expect(reviewer.prompt).not.toContain('Keep the old flag.');
     expect(harness.task(taskId).untoldMessages).toHaveLength(1);
-    harness.send({ type: 'agent.report_review', runId: reviewer.id, summary: null, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
+      runId: reviewer.id,
+      summary: null,
+      findings: [],
+    });
     harness.send({ type: 'task.message', taskId, text: 'hello', kind: 'feedback' });
     expect(harness.activeRun(taskId).prompt).toContain(KEPT_NOTE);
   });
@@ -366,10 +373,12 @@ describe('acting for the human', () => {
       delegationLimit: 4,
       shareLimit: 'week',
       sharePreset: 'status',
+      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },
       watchdogsIgnoreUsageLimits: false,
       autoPace: true,
       autoPaceResets: true,
       sharedTeams: ['team-1'],
+      activeHours: [{ weekday: 1, from: 9, to: 17 }],
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],

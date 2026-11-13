@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
+  AUTOPILOT_DEFAULTS,
   createSettings,
   createState,
   isEunoeCompaction,
@@ -11,6 +12,7 @@ import {
   resolveAttentionLimit,
   resolveAutoPace,
   resolveAutoPaceResets,
+  resolveAutopilotPolicy,
   resolveCompaction,
   resolveDelegationLimit,
   resolveFastMode,
@@ -69,11 +71,21 @@ describe('the settings a command may change', () => {
       placementPolicies: [],
       shareLimit: 'until_done',
       sharePreset: 'standard',
+      autopilot: AUTOPILOT_DEFAULTS,
       autoPace: false,
       autoPaceResets: false,
       sharedTeams: [],
+      activeHours: null,
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
+  });
+});
+
+describe('resolveAutopilotPolicy', () => {
+  test('is off by default, and fills in what the setting leaves out', () => {
+    expect(resolveAutopilotPolicy(createSettings())).toEqual(AUTOPILOT_DEFAULTS);
+    expect(AUTOPILOT_DEFAULTS.enabled).toBe(false);
+    expect(resolveAutopilotPolicy({ ...createSettings(), autopilot: undefined })).toEqual(AUTOPILOT_DEFAULTS);
   });
 });
 

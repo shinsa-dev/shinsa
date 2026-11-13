@@ -97,6 +97,7 @@ function mergeIn(harness: Harness, watchdogs: WatchdogSpec[] = [LATENCY], steps:
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: null,
     findings: [],
@@ -175,6 +176,7 @@ function fileIssue(harness: Harness, taskId: string, filing: Partial<CommandOf<'
     text: 'p95 of POST /checkout is 1.8 s in Safari since the merge.',
     forkOf: null,
     repoId: null,
+    urgency: null,
     ...filing,
   });
 }
@@ -255,6 +257,7 @@ describe('arming watchdogs', () => {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({
       type: 'agent.report_review',
+      ratings: { confidence: 'high', risk: 'low' },
       runId: harness.activeRun(taskId).id,
       summary: null,
       findings: [],
@@ -481,6 +484,15 @@ describe('a watch check', () => {
     const deferred = watchdog(harness, taskId);
     expect(deferred.runId).toBeNull();
     expect(deferred.nextCheckAt).toBe(harness.now + 15 * MINUTE_MS);
+  });
+
+  test('a report it files as urgent makes its fork urgent, whatever the shipped task’s priority', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    fileIssue(harness, taskId, { urgency: 'urgent' });
+    const fork = Object.values(harness.state.tasks).find((task) => task.forkOf === taskId);
+    expect(fork?.priority).toBe('urgent');
+    expect(harness.task(taskId).priority).toBe('normal');
   });
 
   test('a report it files forks the shipped task, and the check that filed it trips the watchdog', () => {

@@ -53,6 +53,74 @@ export function resolveShareEnd(limit: ShareLimit, now: number): Option.Option<n
   return span === undefined ? Option.none() : Option.some(now + span);
 }
 
+export type AutopilotLevel = 'ask_first' | 'balanced' | 'most';
+
+export const AUTOPILOT_LEVELS: readonly AutopilotLevel[] = ['ask_first', 'balanced', 'most'];
+
+export type AutopilotGate = 'plans' | 'questions' | 'reviews' | 'suggestions' | 'watchdogTasks';
+
+export const AUTOPILOT_GATES: readonly AutopilotGate[] = [
+  'plans',
+  'questions',
+  'reviews',
+  'suggestions',
+  'watchdogTasks',
+];
+
+export type AutoMerge = 'off' | 'low_risk' | 'approved';
+
+export const AUTO_MERGES: readonly AutoMerge[] = ['off', 'low_risk', 'approved'];
+
+export type AutopilotContactKind = 'slack_channel' | 'slack_person';
+
+export const AUTOPILOT_CONTACT_KINDS: readonly AutopilotContactKind[] = ['slack_channel', 'slack_person'];
+
+export interface AutopilotContact {
+  kind: AutopilotContactKind;
+  teamId: string;
+  id: string;
+  name: string;
+  image?: string;
+}
+
+export const MAX_AUTOPILOT_CONTACTS = 5;
+
+export function isSameAutopilotContact(left: AutopilotContact, right: AutopilotContact) {
+  return left.kind === right.kind && left.teamId === right.teamId && left.id === right.id;
+}
+
+export interface ActiveDay {
+  weekday: number;
+  from: number;
+  to: number;
+}
+
+export const ACTIVE_DAY_LIMIT = 14;
+
+export interface AutopilotPolicy {
+  enabled: boolean;
+  level: AutopilotLevel;
+  gates: AutopilotGate[];
+  autoMerge: AutoMerge;
+  escalate: boolean;
+  ignoreUsageLimits: boolean;
+  contacts: AutopilotContact[];
+}
+
+export const AUTOPILOT_DEFAULTS: AutopilotPolicy = {
+  enabled: false,
+  level: 'balanced',
+  gates: ['plans', 'questions', 'reviews', 'watchdogTasks'],
+  autoMerge: 'low_risk',
+  escalate: true,
+  ignoreUsageLimits: true,
+  contacts: [],
+};
+
+export function resolveAutopilotPolicy(settings: Settings): AutopilotPolicy {
+  return { ...AUTOPILOT_DEFAULTS, ...settings.autopilot };
+}
+
 export interface Settings {
   defaultProvider: string;
   defaultModel: string | null;
@@ -82,9 +150,11 @@ export interface Settings {
   placementPolicies?: string[];
   shareLimit?: ShareLimit;
   sharePreset?: SharePreset;
+  autopilot?: AutopilotPolicy;
   autoPace?: boolean;
   autoPaceResets?: boolean;
   sharedTeams?: string[];
+  activeHours?: ActiveDay[] | null;
 }
 
 export const SETTINGS_KEYS = [
@@ -116,9 +186,11 @@ export const SETTINGS_KEYS = [
   'placementPolicies',
   'shareLimit',
   'sharePreset',
+  'autopilot',
   'autoPace',
   'autoPaceResets',
   'sharedTeams',
+  'activeHours',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -135,10 +207,12 @@ export const HUMAN_ONLY_SETTINGS = [
   'delegationLimit',
   'shareLimit',
   'sharePreset',
+  'autopilot',
   'watchdogsIgnoreUsageLimits',
   'autoPace',
   'autoPaceResets',
   'sharedTeams',
+  'activeHours',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
@@ -220,9 +294,11 @@ const DEFAULT_SETTINGS: Settings = {
   placementPolicies: [],
   shareLimit: DEFAULT_SHARE_LIMIT,
   sharePreset: DEFAULT_SHARE_PRESET,
+  autopilot: AUTOPILOT_DEFAULTS,
   autoPace: false,
   autoPaceResets: false,
   sharedTeams: [],
+  activeHours: null,
 };
 
 export function createSettings(): Settings {

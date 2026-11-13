@@ -143,6 +143,7 @@ function reachReview(harness: Harness) {
   });
   harness.send({
     type: 'agent.report_review',
+    ratings: { confidence: 'high', risk: 'low' },
     runId: harness.activeRun(taskId).id,
     summary: 'Looks right.',
     findings: [{ severity: 'optional', file: 'src/b.ts', line: 5, message: 'Rename it.' }],
