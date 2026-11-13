@@ -182,7 +182,7 @@ export const QUEUE_STATES = new Set<MergeQueueState>([
 
 export const MEANINGFUL_REVIEWS = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
 
-export const BASE_HISTORY_DEPTH = 5;
+const BASE_HISTORY_DEPTH = 5;
 
 const COMMENT_FIELDS = 'totalCount nodes{id author{login __typename} createdAt lastEditedAt body url}';
 
