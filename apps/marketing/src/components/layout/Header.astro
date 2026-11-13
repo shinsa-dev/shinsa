@@ -1,7 +1,7 @@
 ---
 import { Logo } from '@shinsa/ui/components/logo';
 import { sections } from '../../lib/content';
-import { site } from '../../lib/site';
+import { koeSite, site } from '../../lib/site';
 import Button from '../ui/Button.astro';
 
 const links = [
@@ -10,6 +10,7 @@ const links = [
   { label: 'Code', href: `/#${sections.code.id}` },
   { label: 'Agents', href: `/#${sections.tasks.id}` },
   { label: 'Safety', href: `/#${sections.guard.id}` },
+  { label: 'Koe', href: koeSite.path },
 ];
 ---
 

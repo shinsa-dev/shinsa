@@ -1,0 +1,49 @@
+---
+import { Icon } from '@shinsa/ui/components/icon';
+import Button from '../components/ui/Button.astro';
+import Site from '../layouts/Site.astro';
+import { koe, koeFeatures } from '../lib/content';
+import { koeSite } from '../lib/site';
+---
+
+<Site title={koeSite.title} description={koeSite.description}>
+  <section id='soon' class='group flex flex-col px-6 pt-16 pb-20 md:pt-24 md:pb-24'>
+    <div class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
+      <img src='/koe/koe.svg' alt='' width='96' height='96' class='size-24' />
+      <h1 class='font-medium text-4xl leading-[1.08] tracking-tight text-balance md:text-5xl'>
+        <span class='text-fg-4'>{koe.headline}</span>{' '}<span class='text-fg-2'>{koe.headlineRest}</span>
+      </h1>
+      <p class='max-w-[38rem] text-base text-fg-2 leading-relaxed text-pretty md:text-lg'>{koe.text}</p>
+      <div class='hidden flex-col items-center gap-1 rounded-xl border border-bg-3 bg-bg-1 px-5 py-4 group-target:flex'>
+        <p class='font-medium text-fg-4 text-sm'>{koe.soonTitle}</p>
+        <p class='text-fg-2 text-sm'>{koe.soonText}</p>
+      </div>
+      <div class='mt-2 flex flex-col items-center gap-3'>
+        <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+        <div class='flex items-center gap-3 text-fg-2 text-sm'>
+          <a href={koeSite.betaUrl} class='underline-offset-4 transition-colors hover:text-fg-3 hover:underline'>
+            {koe.beta}
+          </a>
+          <a href={koeSite.canaryUrl} class='underline-offset-4 transition-colors hover:text-fg-3 hover:underline'>
+            {koe.canary}
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class='mx-auto mt-20 grid w-full max-w-5xl gap-x-10 gap-y-8 border-bg-3 border-t pt-12 sm:grid-cols-2 lg:grid-cols-3'>
+      {
+        koeFeatures.map((feature) => (
+          <div class='flex flex-col gap-1'>
+            <h2 class='flex items-center gap-2 font-medium text-fg-4 text-sm [--icon-size:var(--icon-size-md)]'>
+              <span class='text-fg-2'>
+                <Icon name={feature.icon} />
+              </span>
+              {feature.title}
+            </h2>
+            <p class='text-fg-2 text-sm leading-relaxed text-pretty'>{feature.text}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+</Site>

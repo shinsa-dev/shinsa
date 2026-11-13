@@ -9,3 +9,13 @@ export const site = {
   cloudUrl: 'https://app.shinsa.dev',
   githubUrl: 'https://github.com/shinsa-dev/shinsa',
 };
+
+export const koeSite = {
+  path: '/koe',
+  title: 'Koe: Dictation for the Mac, on Device',
+  description:
+    'Hold Fn and talk. Koe writes it down on your Mac and copies one bundle: your words with the screenshots, clips and comments you added while you talked.',
+  downloadUrl: 'https://shinsa.dev/koe/download',
+  betaUrl: 'https://shinsa.dev/koe/download/beta',
+  canaryUrl: 'https://shinsa.dev/koe/download/canary',
+};

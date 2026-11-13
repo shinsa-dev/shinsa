@@ -1,7 +1,7 @@
 ---
 import { Icon } from '@shinsa/ui/components/icon';
-import { closing, features, hero, principles } from '../../lib/content';
-import { site } from '../../lib/site';
+import { closing, features, hero, koe, principles } from '../../lib/content';
+import { koeSite, site } from '../../lib/site';
 import Button from '../ui/Button.astro';
 ---
 
@@ -47,4 +47,12 @@ import Button from '../ui/Button.astro';
       {hero.beta}
     </a>
   </div>
+  <a
+    href={koeSite.path}
+    class='mx-auto mt-16 flex items-center gap-3 rounded-xl border border-bg-3 px-4 py-3 text-sm transition-colors hover:bg-bg-a1'
+  >
+    <img src='/koe/koe.svg' alt='' width='32' height='32' class='size-8' />
+    <span class='text-fg-2'>{koe.closing}</span>
+    <span class='font-medium text-fg-4'>{koe.closingLink}</span>
+  </a>
 </section>

@@ -151,3 +151,49 @@ export const openTask = {
   source:
     'Nothing here is stored or sent anywhere: your browser reads this review from the link in the pull request. The pull request on GitHub is the record.',
 };
+
+export const koe = {
+  headline: 'Hold Fn and talk.',
+  headlineRest: 'Koe writes it down.',
+  text: 'Koe is dictation for the Mac. Hold Fn, say what you mean and let go: Koe copies your words, with the screenshots, clips and comments you added while you talked. Everything runs on your Mac.',
+  primary: 'Download for Mac',
+  beta: 'Beta',
+  canary: 'Canary',
+  soonTitle: 'Koe is almost here.',
+  soonText: 'There is no release on this channel yet. Check back soon.',
+  closing: 'New from us: Koe, on-device dictation for the Mac.',
+  closingLink: 'Meet Koe',
+};
+
+export const koeFeatures: { icon: IconName; title: string; text: string }[] = [
+  {
+    icon: 'IconKeyboard',
+    title: 'Hold Fn, talk, let go',
+    text: 'One key starts and finishes. Pick your own shortcut in Settings if Fn is taken.',
+  },
+  {
+    icon: 'IconCamera1',
+    title: 'Screenshots as you talk',
+    text: 'Point at what you mean. The screenshot lands in the transcript where you said it.',
+  },
+  {
+    icon: 'IconVideo',
+    title: 'Clips of what happened',
+    text: 'Record a few seconds of the screen and pick the frame that shows it.',
+  },
+  {
+    icon: 'IconBubbleText',
+    title: 'Comments on the screen',
+    text: 'Click anything to comment on it. What you say next becomes the note.',
+  },
+  {
+    icon: 'IconClipboard2',
+    title: 'One bundle to paste',
+    text: 'Your words and every attachment go on the clipboard together, ready for a chat, an issue or an agent.',
+  },
+  {
+    icon: 'IconLock',
+    title: 'On device',
+    text: 'Your voice, text and captures never leave your Mac. Only speech models and Koe’s own updates are downloaded.',
+  },
+];
