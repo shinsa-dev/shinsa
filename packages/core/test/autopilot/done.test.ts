@@ -30,6 +30,7 @@ function approvedForYou(harness: Harness) {
     verdict: 'act',
     reason: 'Small and clear.',
     reply: null,
+    shadow: false,
   });
   return { taskId, gateId: gate.id };
 }

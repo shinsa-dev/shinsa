@@ -1,7 +1,7 @@
 import type { Repo, ShinsaCommand, ShinsaEvent, ShinsaState, Task } from '@shinsa/core';
 import { Context, Duration, Effect, Layer } from 'effect';
 import { RunSupervisor } from '../../../agents/supervisor/service.ts';
-import type { AutopilotJudge } from '../../../autopilot/judge.ts';
+import type { AutopilotJudge, AutopilotWeigher } from '../../../autopilot/judge.ts';
 import { BriefingWriter } from '../../../briefing/service.ts';
 import type { ServerConfig } from '../../../config/index.ts';
 import { EngineConfig } from '../../../config/service.ts';
@@ -37,6 +37,7 @@ export class EffectWorld extends Context.Service<
     readonly wordWatch: WatchWriter;
     readonly describeShare: ShareDescriber['Service']['describe'];
     readonly judgeAutopilot: AutopilotJudge;
+    readonly weighSuggestion: AutopilotWeigher;
     readonly timeZone: string;
     readonly findRepository: RepositoryFinder;
     readonly resolveLogin: LoginLookup;
@@ -91,6 +92,7 @@ export class EffectWorld extends Context.Service<
           wordWatch: options.wordWatch ?? (() => Effect.succeed({ name: null, text: null })),
           describeShare: options.describeShare ?? (() => Effect.succeed(null)),
           judgeAutopilot: options.judgeAutopilot ?? (() => Effect.succeed(null)),
+          weighSuggestion: options.weighSuggestion ?? (() => Effect.succeed(null)),
           timeZone: options.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
           findRepository: options.findRepository ?? (() => Effect.succeed(null)),
           resolveLogin: options.resolveLogin

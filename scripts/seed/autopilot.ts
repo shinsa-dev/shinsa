@@ -1,4 +1,12 @@
-import type { AutopilotLesson, Gate, ShinsaEventInput } from '../../packages/core/src/index.ts';
+import type {
+  AutopilotDecision,
+  AutopilotDecisionAnswer,
+  AutopilotDecisionKind,
+  AutopilotLesson,
+  AutopilotVerdict,
+  Gate,
+  ShinsaEventInput,
+} from '../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../kit/time.ts';
 import { NOW } from './kit.ts';
 
@@ -37,6 +45,69 @@ export function pushSeedAutopilotLessons(push: (at: number, event: ShinsaEventIn
     createSeedLesson('merge-1', 6, { gate: 'merge', kind: 'acted', answer: 'approved' }),
   ];
   for (const lesson of lessons) push(lesson.at, { type: 'autopilot.learned', lessons: [lesson] });
+}
+
+const SEED_DECISION_PROJECTS = ['project-superwall', 'project-basket', 'project-personal'] as const;
+
+const SEED_DECISION_KINDS: readonly AutopilotDecisionKind[] = [
+  'review',
+  'plan',
+  'merge',
+  'review',
+  'finding',
+  'plan',
+  'suggestion',
+  'question',
+];
+
+const SEED_DISAGREEMENTS = new Set([9, 26, 41, 58]);
+
+const SEED_NOTES: Readonly<Record<number, string>> = {
+  9: 'Keep the old route until the mobile app ships.',
+  26: 'Split the migration into its own task.',
+  41: 'Too broad for one pull request.',
+};
+
+function resolveSeedAnswer(kind: AutopilotDecisionKind, index: number): AutopilotDecisionAnswer {
+  if (kind === 'finding') return index % 3 === 0 ? 'dismissed' : 'fixed';
+  if (kind === 'suggestion') return index % 2 === 0 ? 'accepted' : 'dismissed';
+  if (kind === 'question') return 'replied';
+  if (SEED_DISAGREEMENTS.has(index)) return 'revised';
+  return index % 9 === 0 ? 'revised' : 'approved';
+}
+
+function resolveSeedGuess(kind: AutopilotDecisionKind, answer: AutopilotDecisionAnswer, index: number) {
+  if (kind !== 'plan' && kind !== 'review' && kind !== 'merge') return null;
+  const agreeing: AutopilotVerdict = answer === 'approved' ? 'act' : 'forward';
+  if (!SEED_DISAGREEMENTS.has(index)) return agreeing;
+  return agreeing === 'act' ? 'forward' : 'act';
+}
+
+function createSeedDecision(index: number): AutopilotDecision {
+  const kind = SEED_DECISION_KINDS[index % SEED_DECISION_KINDS.length] ?? 'review';
+  const answer = resolveSeedAnswer(kind, index);
+  return {
+    at: NOW - (9 * 24 - index * 2) * HOUR,
+    taskId: 'seed-autopilot',
+    gateId: kind === 'finding' || kind === 'suggestion' ? null : `seed-decision-${index}`,
+    kind,
+    answer,
+    projectId: SEED_DECISION_PROJECTS[index % SEED_DECISION_PROJECTS.length] ?? null,
+    risk: index % 5 === 0 ? 'medium' : 'low',
+    scope: kind === 'plan' ? { phases: 2 + (index % 3), files: 3 + (index % 5) } : null,
+    urgent: false,
+    watchdog: index % 11 === 0,
+    touched: index % 4 === 0,
+    guess: resolveSeedGuess(kind, answer, index),
+    note: SEED_NOTES[index] ?? null,
+  };
+}
+
+export function pushSeedAutopilotDecisions(push: (at: number, event: ShinsaEventInput) => void) {
+  for (let index = 0; index < 90; index += 1) {
+    const decision = createSeedDecision(index);
+    push(decision.at, { type: 'autopilot.decided', decisions: [decision] });
+  }
 }
 
 interface SeedHandled {

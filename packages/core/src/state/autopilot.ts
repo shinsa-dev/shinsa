@@ -1,3 +1,8 @@
+import {
+  createAutopilotDecision,
+  type DecisionDraft,
+  recordAutopilotDecisions,
+} from '../autopilot/profile.ts';
 import { AUTOPILOT_LESSON_LIMITS } from '../autopilot/schema.ts';
 import type { EventOf } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
@@ -9,6 +14,10 @@ export function applyAutopilotScheduled(state: ShinsaState, event: EventOf<'auto
 
 export function applyAutopilotJudging(state: ShinsaState, event: EventOf<'autopilot.judging'>) {
   updateGate(state, event.gateId, { autopilotJudging: true });
+}
+
+export function applyAutopilotGuessed(state: ShinsaState, event: EventOf<'autopilot.guessed'>) {
+  updateGate(state, event.gateId, { autopilotGuess: event.verdict });
 }
 
 export function applyAutopilotForwarded(state: ShinsaState, event: EventOf<'autopilot.forwarded'>) {
@@ -35,6 +44,32 @@ export function applyAutopilotLearned(state: ShinsaState, event: EventOf<'autopi
   );
   for (const lesson of event.lessons)
     if (lesson.kind === 'acted') updateGate(state, lesson.gateId, { autopilotLearned: true });
+}
+
+export function applyAutopilotDecided(state: ShinsaState, event: EventOf<'autopilot.decided'>) {
+  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, event.decisions);
+}
+
+function learnOne(
+  state: ShinsaState,
+  taskId: string,
+  draft: Omit<DecisionDraft, 'task' | 'gate'>,
+  at: number
+) {
+  const task = state.tasks[taskId];
+  if (!task) return;
+  const decision = createAutopilotDecision({ ...draft, task, gate: null }, at);
+  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, [decision]);
+}
+
+export function applyTaskRequestLearned(state: ShinsaState, event: EventOf<'task.created'>) {
+  if (event.learned)
+    learnOne(state, event.taskId, { kind: 'request', answer: 'filed', note: event.request }, event.at);
+}
+
+export function applyEditLearned(state: ShinsaState, event: EventOf<'task.edited'>) {
+  if (event.learned)
+    learnOne(state, event.taskId, { kind: 'edit', answer: 'edited', note: event.path }, event.at);
 }
 
 export function applyAutopilotSeen(state: ShinsaState, event: EventOf<'autopilot.seen'>) {

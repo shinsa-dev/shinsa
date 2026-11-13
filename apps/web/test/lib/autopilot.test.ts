@@ -3,6 +3,7 @@ import {
   AUTOPILOT_DEFAULTS,
   type AutopilotContact,
   createSettings,
+  EMPTY_AUTOPILOT_PROFILE,
   type MergeBlock,
   type SlackDirectoryView,
   type SlackSnapshot,
@@ -13,7 +14,7 @@ import {
   AUTOPILOT_GATE_ROWS,
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
-  listAutopilotLearnedRows,
+  resolveAutopilotScoreView,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
   describeContactPickerEmpty,
@@ -38,7 +39,7 @@ import {
   resolveEscalationFact,
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
-import { createGate, createLesson, createShinsaState, createTask, NOW } from '../support/state.ts';
+import { createAutopilotProfile, createGate, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
@@ -248,29 +249,68 @@ describe('the Autopilot settings', () => {
     for (const sentence of sentences) expect(sentence).toMatch(/^[A-Z][^.]*\.$/);
   });
 
-  it('says what it learned per gate, and which gates it paused after your corrections', () => {
-    expect(listAutopilotLearnedRows({ autopilotLessons: [] })).toEqual([]);
-    const lessons = [
-      createLesson({ id: 'a', gate: 'plan', kind: 'acted', answer: 'approved' }),
-      createLesson({ id: 'b', gate: 'plan', kind: 'forwarded', answer: 'approved' }),
-      createLesson({ id: 'c', gate: 'plan', kind: 'forwarded', answer: 'revised' }),
-      createLesson({ id: 'd', gate: 'review', kind: 'acted', answer: 'revised' }),
-      createLesson({ id: 'e', gate: 'review', kind: 'acted', answer: 'rejected' }),
-    ];
-    expect(listAutopilotLearnedRows({ autopilotLessons: lessons })).toEqual([
-      {
-        gate: 'plan',
-        title: 'Plans',
-        detail: 'Did 1 for you: you kept 1. Brought you 2, you approved 1 as they were.',
-        paused: null,
+  it('scores nothing and suggests Balanced before it learned anything', () => {
+    expect(resolveAutopilotScoreView({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'balanced')).toEqual({
+      score: {
+        detail:
+          'How often it guesses your plans, reviews and merges right, out of 100. It starts once you decide some.',
+        value: 0,
+        percent: '0%',
       },
-      {
-        gate: 'review',
-        title: 'Reviews',
-        detail: 'Did 2 for you: you kept 0, you changed 2.',
-        paused: 'You changed its last few reviews, so it brings reviews to you for now.',
+      suggested: {
+        level: 'balanced',
+        detail: 'Balanced while it learns. Most things once the score reaches 90%.',
+        apply: null,
       },
-    ]);
+    });
+  });
+
+  it('keeps suggesting Balanced while it agrees with you too rarely or over too few decisions', () => {
+    const few = createAutopilotProfile({
+      agreed: 10,
+      disagreed: 0,
+      unscored: 2,
+      tallies: [
+        { kind: 'plan', total: 3 },
+        { kind: 'review', total: 8 },
+        { kind: 'finding', total: 1 },
+        { kind: 'merge', total: 2 },
+      ],
+    });
+    const view = resolveAutopilotScoreView({ autopilotProfile: few }, 'ask_first');
+    expect(view.score).toEqual({
+      detail: 'It guessed you right on 10 of 10 so far and needs more to be sure.',
+      value: 18,
+      percent: '18%',
+    });
+    expect(view.suggested).toMatchObject({ level: 'balanced', apply: 'Use Balanced' });
+    const unsure = createAutopilotProfile({
+      agreed: 40,
+      disagreed: 20,
+      tallies: [{ kind: 'review', total: 60 }],
+    });
+    const unsureView = resolveAutopilotScoreView({ autopilotProfile: unsure }, 'balanced');
+    expect(unsureView).toMatchObject({
+      score: { detail: 'It guessed you right on 40 of 60, but not often enough lately.' },
+      suggested: { level: 'balanced', apply: null },
+    });
+    expect(unsureView.score.value).toBeLessThan(90);
+  });
+
+  it('suggests Most things once the score reaches 90', () => {
+    const sure = createAutopilotProfile({ agreed: 46, disagreed: 4 });
+    const view = resolveAutopilotScoreView({ autopilotProfile: sure }, 'balanced');
+    expect(view.score).toMatchObject({
+      detail: 'It guessed you right on 46 of 50, the recent ones counting most.',
+    });
+    expect(view.score.value).toBeGreaterThanOrEqual(90);
+    expect(view.score.percent).toBe(`${view.score.value}%`);
+    expect(view.suggested).toEqual({
+      level: 'most',
+      detail: 'It agrees with you often enough to act alone on most work.',
+      apply: 'Use Most things',
+    });
+    expect(resolveAutopilotScoreView({ autopilotProfile: sure }, 'most').suggested.apply).toBeNull();
   });
 
   it('adds or drops one gate and keeps the others', () => {

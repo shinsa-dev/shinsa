@@ -1,5 +1,5 @@
 import { Result, Option } from 'effect';
-import type { AutopilotLesson } from '../autopilot/schema.ts';
+import { type AutopilotLesson, type AutopilotProfile, EMPTY_AUTOPILOT_PROFILE } from '../autopilot/schema.ts';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type AccountPlan,
@@ -68,12 +68,16 @@ import {
 } from './activity.ts';
 import {
   applyAutopilotForwarded,
+  applyAutopilotGuessed,
+  applyAutopilotDecided,
   applyAutopilotLearned,
   applyAutopilotSeen,
   applyAutopilotJudging,
   applyAutopilotScheduled,
   applyEscalationRevised,
   applyTaskEscalated,
+  applyEditLearned,
+  applyTaskRequestLearned,
 } from './autopilot.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
@@ -130,6 +134,7 @@ export interface ShinsaState {
   onBehalfActions: OnBehalfAction[];
   timeZone: string | null;
   autopilotLessons: AutopilotLesson[];
+  autopilotProfile: AutopilotProfile;
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
 }
@@ -166,6 +171,7 @@ export function createState(): ShinsaState {
     onBehalfActions: [],
     timeZone: null,
     autopilotLessons: [],
+    autopilotProfile: EMPTY_AUTOPILOT_PROFILE,
   };
 }
 
@@ -902,6 +908,7 @@ function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
   recordCourierTask(state, event);
   recordFork(state, event);
   applyScheduledTask(state, event);
+  applyTaskRequestLearned(state, event);
 }
 
 export function applyEvent(state: ShinsaState, event: ShinsaEvent): ShinsaState {
@@ -1082,8 +1089,14 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'autopilot.judging':
       applyAutopilotJudging(state, event);
       break;
+    case 'autopilot.guessed':
+      applyAutopilotGuessed(state, event);
+      break;
     case 'autopilot.forwarded':
       applyAutopilotForwarded(state, event);
+      break;
+    case 'autopilot.decided':
+      applyAutopilotDecided(state, event);
       break;
     case 'autopilot.learned':
       applyAutopilotLearned(state, event);
@@ -1151,6 +1164,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.edited':
       applyEdited(state, event);
+      applyEditLearned(state, event);
       break;
     case 'task.edits_told':
       updateTask(state, event.taskId, event.at, { untoldEdits: [] });

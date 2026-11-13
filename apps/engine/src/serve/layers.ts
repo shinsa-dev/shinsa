@@ -10,7 +10,7 @@ import { ProgramVersions } from '../agents/providers/versions/service.ts';
 import { QuickCalls, QuickFastMode } from '../agents/quick/index.ts';
 import { RunSupervisorLayer } from '../agents/supervisor/layers.ts';
 import { TeammateTasks } from '../agents/tool-calls/schema.ts';
-import { createAutopilotJudge } from '../autopilot/judge.ts';
+import { createAutopilotJudge, createAutopilotWeigher } from '../autopilot/judge.ts';
 import { BriefingWriter } from '../briefing/service.ts';
 import { BrowserLayer } from '../browser/layers.ts';
 import { resolveEngineChangelog } from '../changelog/index.ts';
@@ -404,6 +404,7 @@ function createEffectsLayer(options: ShinsaOptions, instance: ServerInstance) {
         wordWatch: createWatchWriter(quick.write),
         describeShare: (yield* ShareDescriber).describe,
         judgeAutopilot: createAutopilotJudge(quick.classify),
+        weighSuggestion: createAutopilotWeigher(quick.classify),
         draftFeedback: yield* FeedbackDrafter,
         instance,
         ...(options.resolveLogin ? { resolveLogin: options.resolveLogin } : {}),

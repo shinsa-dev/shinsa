@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
-import { createAutopilotJudge } from '../../src/autopilot/judge.ts';
+import { createAutopilotJudge, createAutopilotWeigher } from '../../src/autopilot/judge.ts';
 
 function createAsk(answer: unknown) {
   const calls: { system: string; prompt: string; schema: unknown }[] = [];
@@ -41,5 +41,22 @@ describe('the Autopilot judge', () => {
     expect(await Effect.runPromise(createAutopilotJudge(createAsk(null).ask)('s', 'p'))).toBeNull();
     const odd = createAsk({ verdict: 'maybe', reason: 'x' });
     expect(await Effect.runPromise(createAutopilotJudge(odd.ask)('s', 'p'))).toBeNull();
+  });
+});
+
+describe('weighing a suggested task', () => {
+  test('asks with its own schema and keeps the verdict and the reason', async () => {
+    const { ask, calls } = createAsk({ verdict: 'dismiss', reason: 'Repeats open work.' });
+    expect(await Effect.runPromise(createAutopilotWeigher(ask)('system', 'prompt'))).toEqual({
+      verdict: 'dismiss',
+      reason: 'Repeats open work.',
+    });
+    expect(calls[0]?.schema).toEqual(expect.objectContaining({ required: ['verdict', 'reason'] }));
+  });
+
+  test('gives nothing for no answer or one it cannot read', async () => {
+    expect(await Effect.runPromise(createAutopilotWeigher(createAsk(null).ask)('s', 'p'))).toBeNull();
+    const odd = createAsk({ verdict: 'act', reason: 'x' });
+    expect(await Effect.runPromise(createAutopilotWeigher(odd.ask)('s', 'p'))).toBeNull();
   });
 });

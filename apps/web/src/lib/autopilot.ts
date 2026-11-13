@@ -1,11 +1,12 @@
 import {
+  AUTOPILOT_SCORE_LIMITS,
   type AutopilotContact,
   type AutopilotContactKind,
   type AutopilotDone,
   type AutopilotGateKind,
-  type AutopilotGateLessons,
   type AutopilotGate,
   type AutopilotLevel,
+  type AutopilotScore,
   type AutoMerge,
   HOUR_MS,
   isSameAutopilotContact,
@@ -16,8 +17,8 @@ import {
   type AutopilotPolicy,
   type Project,
   type ReviewRating,
-  resolveAutopilotLessonSummary,
   resolveAutopilotPolicy,
+  resolveAutopilotScore,
   type Settings,
   type ShinsaState,
   type SlackDirectoryView,
@@ -88,6 +89,16 @@ export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string; descript
     title: 'Reviews',
     description: 'Approves a change the reviewer is highly confident in, so its pull request opens.',
   },
+  {
+    gate: 'suggestions',
+    title: 'Suggested tasks',
+    description: 'Accepts or dismisses a suggested task when it is sure what you would do.',
+  },
+  {
+    gate: 'watchdogTasks',
+    title: 'Watchdog tasks',
+    description: 'Gives your OK on the fix a watchdog task proposes, which still passes every gate after.',
+  },
 ];
 
 export const AUTOPILOT_GATE_ITEMS: SettingItem<'on' | 'off'>[] = [
@@ -136,57 +147,53 @@ export const AUTOPILOT_BLOCKS = {
   acting: { title: 'Acting for you', icon: 'IconShieldCheck' },
   merging: { title: 'Merging', icon: 'IconMerged' },
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
-  learned: { title: 'What it learned', icon: 'IconLightbulbGlow' },
+  score: { title: 'How well it knows you', icon: 'IconGauge' },
 } as const;
 
-export const AUTOPILOT_LEARNED_EMPTY =
-  'Nothing yet. It learns each time you approve, change or reject what it did or brought to you.';
+export const AUTOPILOT_SCORE_ROWS = {
+  score: 'Autopilot score',
+  suggested: 'Suggested level',
+} as const;
 
-const LEARNED_TITLE: Record<AutopilotGateKind, string> = {
-  plan: 'Plans',
-  question: 'Agent questions',
-  review: 'Reviews',
-  merge: 'Merges',
+const LEVEL_LABEL: Record<AutopilotLevel, string> = {
+  ask_first: 'Ask me first',
+  balanced: 'Balanced',
+  most: 'Most things',
 };
 
-const LEARNED_PAUSED: Record<AutopilotGateKind, string> = {
-  plan: 'You changed its last few plans, so it brings plans to you for now.',
-  question: 'You changed its last few answers, so it brings questions to you for now.',
-  review: 'You changed its last few reviews, so it brings reviews to you for now.',
-  merge: 'You changed its last few merges, so it brings merges to you for now.',
-};
-
-export interface AutopilotLearnedRow {
-  gate: AutopilotGateKind;
-  title: string;
-  detail: string;
-  paused: string | null;
+export interface AutopilotScoreView {
+  score: { detail: string; value: number; percent: string };
+  suggested: { level: AutopilotLevel; detail: string; apply: string | null };
 }
 
-function describeLearned(lessons: AutopilotGateLessons) {
-  const parts = [];
-  if (lessons.acted > 0) {
-    const changed = lessons.corrected > 0 ? `, you changed ${lessons.corrected}` : '';
-    parts.push(`Did ${lessons.acted} for you: you kept ${lessons.kept}${changed}.`);
-  }
-  if (lessons.forwarded > 0) {
-    const could = lessons.couldHaveActed > 0 ? `, you approved ${lessons.couldHaveActed} as they were` : '';
-    parts.push(`Brought you ${lessons.forwarded}${could}.`);
-  }
-  return parts.join(' ');
+function describeScore(score: AutopilotScore) {
+  if (score.scored === 0)
+    return 'How often it guesses your plans, reviews and merges right, out of 100. It starts once you decide some.';
+  if (score.ready)
+    return `It guessed you right on ${score.agreed} of ${score.scored}, the recent ones counting most.`;
+  if (score.scored < AUTOPILOT_SCORE_LIMITS.minScored)
+    return `It guessed you right on ${score.agreed} of ${score.scored} so far and needs more to be sure.`;
+  return `It guessed you right on ${score.agreed} of ${score.scored}, but not often enough lately.`;
 }
 
-export function listAutopilotLearnedRows(
-  state: Pick<ShinsaState, 'autopilotLessons'>
-): AutopilotLearnedRow[] {
-  return resolveAutopilotLessonSummary(state)
-    .gates.filter((lessons) => lessons.acted + lessons.forwarded > 0)
-    .map((lessons) => ({
-      gate: lessons.gate,
-      title: LEARNED_TITLE[lessons.gate],
-      detail: describeLearned(lessons),
-      paused: lessons.paused ? LEARNED_PAUSED[lessons.gate] : null,
-    }));
+function describeSuggested(score: AutopilotScore) {
+  if (score.ready) return 'It agrees with you often enough to act alone on most work.';
+  return `Balanced while it learns. Most things once the score reaches ${AUTOPILOT_SCORE_LIMITS.agreement * 100}%.`;
+}
+
+export function resolveAutopilotScoreView(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  level: AutopilotLevel
+): AutopilotScoreView {
+  const score = resolveAutopilotScore(state);
+  return {
+    score: { detail: describeScore(score), value: score.value, percent: `${score.value}%` },
+    suggested: {
+      level: score.suggested,
+      detail: describeSuggested(score),
+      apply: score.suggested === level ? null : `Use ${LEVEL_LABEL[score.suggested]}`,
+    },
+  };
 }
 
 export const AUTOPILOT_ROWS = {
@@ -561,6 +568,7 @@ const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
   question: 'Autopilot answered an agent’s question for you.',
   review: 'Autopilot approved the review for you.',
   merge: 'Autopilot started the merge for you.',
+  proposal: 'Autopilot gave your OK on a watchdog task’s fix.',
 };
 
 const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
@@ -568,6 +576,7 @@ const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone
   question: { icon: 'IconBubbleCheck', tone: 'blue' },
   review: { icon: 'IconCheckCircle2', tone: 'blue' },
   merge: { icon: 'IconMerged', tone: 'green' },
+  proposal: { icon: 'IconCheckCircle2', tone: 'purple' },
 };
 
 export interface DoneForYouRow {

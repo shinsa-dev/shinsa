@@ -4,18 +4,16 @@ import { resolveAutopilotFacts } from './limits.ts';
 import {
   AUTOPILOT_LESSON_LIMITS,
   type AutopilotGateKind,
-  type AutopilotGateLessons,
   type AutopilotLesson,
   type AutopilotLessonAnswer,
   type AutopilotLessonFacts,
   type AutopilotLessonKind,
-  type AutopilotLessonSummary,
   type AutopilotLimit,
 } from './schema.ts';
 
 export type AutopilotLessonsState = Pick<ShinsaState, 'autopilotLessons'>;
 
-const LESSON_GATES: readonly AutopilotGateKind[] = ['plan', 'question', 'review', 'merge'];
+const LESSON_GATES: readonly AutopilotGateKind[] = ['plan', 'question', 'review', 'merge', 'proposal'];
 
 const DECIDED_GATES: ReadonlySet<Gate['type']> = new Set<Gate['type']>(['plan', 'review', 'merge']);
 
@@ -35,6 +33,7 @@ const GATE_NOUN: Record<AutopilotGateKind, string> = {
   question: 'agents’ questions',
   review: 'reviews',
   merge: 'merges',
+  proposal: 'proposals from watchdog tasks',
 };
 
 const ACTED_TEXT: Record<AutopilotGateKind, string> = {
@@ -42,6 +41,7 @@ const ACTED_TEXT: Record<AutopilotGateKind, string> = {
   question: 'You answered an agent’s question for them',
   review: 'You approved a review for them',
   merge: 'You merged a change for them',
+  proposal: 'You gave your OK on a watchdog task’s proposal for them',
 };
 
 const FORWARDED_TEXT: Record<AutopilotGateKind, string> = {
@@ -49,6 +49,7 @@ const FORWARDED_TEXT: Record<AutopilotGateKind, string> = {
   question: 'You brought an agent’s question to them',
   review: 'You brought a review to them',
   merge: 'You brought a merge to them',
+  proposal: 'You brought a watchdog task’s proposal to them',
 };
 
 const ACTED_ANSWER_TEXT: Record<AutopilotLessonAnswer, string> = {
@@ -94,10 +95,6 @@ function resolveLessonFacts(
 
 function isCorrection(lesson: AutopilotLesson) {
   return lesson.kind === 'acted' && (lesson.answer === 'revised' || lesson.answer === 'rejected');
-}
-
-function isCouldHaveActed(lesson: AutopilotLesson) {
-  return lesson.kind === 'forwarded' && lesson.answer === 'approved';
 }
 
 interface LessonDraft {
@@ -210,26 +207,4 @@ export function listAutopilotLessonLines(state: AutopilotLessonsState, gate: Aut
   return listAutopilotLessons(state, gate)
     .slice(0, AUTOPILOT_LESSON_LIMITS.prompt)
     .map((lesson) => `- ${describeAutopilotLesson(lesson)}`);
-}
-
-function summariseGate(state: AutopilotLessonsState, gate: AutopilotGateKind): AutopilotGateLessons {
-  const lessons = listAutopilotLessons(state, gate);
-  const acted = lessons.filter((lesson) => lesson.kind === 'acted');
-  const corrected = acted.filter(isCorrection).length;
-  return {
-    gate,
-    acted: acted.length,
-    kept: acted.length - corrected,
-    corrected,
-    forwarded: lessons.length - acted.length,
-    couldHaveActed: lessons.filter(isCouldHaveActed).length,
-    paused: isPaused(lessons),
-  };
-}
-
-export function resolveAutopilotLessonSummary(state: AutopilotLessonsState): AutopilotLessonSummary {
-  return {
-    gates: LESSON_GATES.map((gate) => summariseGate(state, gate)),
-    recent: listAutopilotLessons(state).slice(0, AUTOPILOT_LESSON_LIMITS.recent),
-  };
 }

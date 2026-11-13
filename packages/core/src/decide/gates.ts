@@ -266,6 +266,7 @@ export function answerGateForYou(
   decider.emit({ type: 'gate.answered', gateId: gate.id, decision, response, autopilot: reason });
   decider.requestBriefing(gate.taskId);
   if (gate.type === 'question') answerQuestion(decider, gate);
+  else if (gate.type === 'proposal') answerProposal(decider, gate, decision);
   else answerDecision(decider, gate, decision, response, []);
 }
 
@@ -287,7 +288,7 @@ export function answerGate(
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
   const thenApprove = options.thenApprove ? { thenApprove: true } : {};
-  learnFromAnswer(decider, { gate, decision, response });
+  learnFromAnswer(decider, { gate, decision, response, verdicts: options.verdicts ?? [] });
   decider.emit({
     type: 'gate.answered',
     gateId,

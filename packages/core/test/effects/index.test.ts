@@ -26,8 +26,11 @@ describe('resolveEffectKey', () => {
     expect(resolveEffectKey({ kind: 'run.execute', runId: 'r' }, 9)).toBe('run.execute:r');
     expect(resolveEffectKey({ kind: 'run.cancel', runId: 'r' }, 9)).toBe('run.cancel:r');
     expect(resolveEffectKey({ kind: 'question.resolve', gateId: 'g' }, 9)).toBe('question.resolve:g');
-    expect(resolveEffectKey({ kind: 'autopilot.judge', taskId: 't', gateId: 'g' }, 9)).toBe(
+    expect(resolveEffectKey({ kind: 'autopilot.judge', taskId: 't', gateId: 'g', shadow: false }, 9)).toBe(
       'autopilot.judge:g:9'
+    );
+    expect(resolveEffectKey({ kind: 'autopilot.weigh', taskId: 't', suggestionId: 's' }, 9)).toBe(
+      'autopilot.weigh:t:s'
     );
   });
 
@@ -54,7 +57,12 @@ describe('resolveEffectLane', () => {
     expect(resolveEffectLane({ kind: 'run.cancel', runId: 'r' })).toBe('cancel:r');
     expect(resolveEffectLane({ kind: 'run.steer', runId: 'r', text: 'x' })).toBe('steer:r');
     expect(resolveEffectLane({ kind: 'question.resolve', gateId: 'g' })).toBe('gate:g');
-    expect(resolveEffectLane({ kind: 'autopilot.judge', taskId: 't', gateId: 'g' })).toBe('autopilot:t');
+    expect(resolveEffectLane({ kind: 'autopilot.judge', taskId: 't', gateId: 'g', shadow: false })).toBe(
+      'autopilot:t'
+    );
+    expect(resolveEffectLane({ kind: 'autopilot.weigh', taskId: 't', suggestionId: 's' })).toBe(
+      'autopilot:t'
+    );
     expect(resolveEffectLane({ kind: 'briefing.request', projectId: 'a' })).toBe('briefing');
     expect(resolveEffectLane({ kind: 'initiative.wake', initiativeId: 'i' })).toBe('initiative:i');
     expect(resolveEffectLane({ kind: 'watch.suggest', projectId: 'a', server: 'slack', data: 'Bugs' })).toBe(

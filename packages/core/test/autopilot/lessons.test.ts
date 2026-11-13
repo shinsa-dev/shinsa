@@ -7,7 +7,6 @@ import {
   describeAutopilotLesson,
   listAutopilotLessons,
   selectAutopilotJudgeRequest,
-  resolveAutopilotLessonSummary,
   resolveLessonLimit,
   MINUTE_MS,
   type ReviewRatings,
@@ -58,7 +57,15 @@ function judgedGate(harness: Harness, taskId: string) {
 function judge(harness: Harness, taskId: string, reason: string, verdict: 'act' | 'forward' = 'act') {
   const gate = judgedGate(harness, taskId);
   if (!gate) throw new Error('No gate waits for Autopilot.');
-  harness.send({ type: 'autopilot.judgment', taskId, gateId: gate.id, verdict, reason, reply: null });
+  harness.send({
+    type: 'autopilot.judgment',
+    taskId,
+    gateId: gate.id,
+    verdict,
+    reason,
+    reply: null,
+    shadow: false,
+  });
 }
 
 function reachMergeAfterAutopilot(harness: Harness) {
@@ -342,32 +349,5 @@ describe('describing a lesson', () => {
     answer(harness, reachReview(harness, MEDIUM), 'revise', 'x'.repeat(400));
     expect(lessons(harness)[0]?.note).toHaveLength(AUTOPILOT_LESSON_LIMITS.note);
     expect(lessons(harness)[0]?.note?.endsWith('…')).toBe(true);
-  });
-});
-
-describe('the summary of what it learned', () => {
-  test('counts what it did and you kept or changed, and what it brought you that it could have done', () => {
-    const state = {
-      autopilotLessons: [
-        lesson({ gate: 'review', answer: 'revised' }),
-        lesson({ gate: 'review' }),
-        lesson({ gate: 'review', kind: 'forwarded' }),
-        lesson({ gate: 'review', kind: 'forwarded', answer: 'revised' }),
-        lesson({ gate: 'plan', answer: 'rejected', id: 'p1' }),
-        lesson({ gate: 'plan', answer: 'revised', id: 'p2' }),
-      ],
-    };
-    const summary = resolveAutopilotLessonSummary(state);
-    expect(summary.gates).toEqual([
-      { gate: 'plan', acted: 2, kept: 0, corrected: 2, forwarded: 0, couldHaveActed: 0, paused: true },
-      { gate: 'question', acted: 0, kept: 0, corrected: 0, forwarded: 0, couldHaveActed: 0, paused: false },
-      { gate: 'review', acted: 2, kept: 1, corrected: 1, forwarded: 2, couldHaveActed: 1, paused: false },
-      { gate: 'merge', acted: 0, kept: 0, corrected: 0, forwarded: 0, couldHaveActed: 0, paused: false },
-    ]);
-    expect(summary.recent.map((found) => found.id)).toEqual(['p2', 'p1', 'l', 'l', 'l']);
-  });
-
-  test('is empty before you answered anything', () => {
-    expect(resolveAutopilotLessonSummary({ autopilotLessons: [] }).recent).toEqual([]);
   });
 });

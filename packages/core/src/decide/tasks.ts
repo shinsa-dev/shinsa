@@ -46,6 +46,7 @@ import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
 import { resolveCreatedMembership } from './initiatives.ts';
+import { isYours, learnFromCancel, learnFromPriority } from './lessons.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { finishMove } from './moves.ts';
@@ -76,6 +77,7 @@ interface TaskLineage {
   scheduleId?: string;
   sourceReport?: SourceReport;
   shape?: TaskShape;
+  learned?: true;
 }
 
 function resolveCreatedOwner(decider: Decider, lineage: TaskLineage) {
@@ -134,6 +136,10 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   if (command.backlog) addToBacklog(decider, taskId);
   decider.run({ kind: 'task.triage', taskId });
   return taskId;
+}
+
+export function createTaskAsYou(decider: Decider, command: CommandOf<'task.create'>) {
+  return createTask(decider, command, isYours(decider) ? { learned: true } : {});
 }
 
 function inferDependencies(decider: Decider, taskId: string, ids: string[], stacked: string[]) {
@@ -237,7 +243,9 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
 }
 
 export function prioritizeTask(decider: Decider, command: CommandOf<'task.prioritize'>) {
-  if (decider.task(command.taskId).priority === command.priority) return;
+  const before = decider.task(command.taskId).priority;
+  if (before === command.priority) return;
+  learnFromPriority(decider, command.taskId, before, command.priority);
   decider.emit({ type: 'task.prioritized', taskId: command.taskId, priority: command.priority, by: 'you' });
   decider.requestBriefing(command.taskId);
   syncAutopilotDeadlines(decider, command.taskId);
@@ -254,6 +262,7 @@ export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>
 export function cancelTask(decider: Decider, command: CommandOf<'task.cancel'>) {
   settleTask(decider, command.taskId, 'cancelled', 'cancelled by you', 'you');
   stopAllWatchdogs(decider, command.taskId);
+  learnFromCancel(decider, command.taskId);
 }
 
 function assertNothingOpen(task: Task) {

@@ -1,14 +1,22 @@
 import { Option } from 'effect';
 import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
 import { resolveLessonLimit } from '../autopilot/lessons.ts';
-import { isUrgentTask, resolveAutopilotFacts, resolveAutopilotLimits } from '../autopilot/limits.ts';
+import {
+  isUrgentTask,
+  isWatchdogTask,
+  resolveAutopilotFacts,
+  resolveAutopilotLimits,
+  resolveAutopilotSuggestionLimit,
+} from '../autopilot/limits.ts';
 import { selectJudgedGateKind } from '../autopilot/prompt.ts';
 import {
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LIMITS,
+  AUTOPILOT_SCORED_KINDS,
   type AutopilotFacts,
   type AutopilotGateKind,
   type AutopilotLimit,
+  type AutopilotVerdict,
 } from '../autopilot/schema.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -31,6 +39,7 @@ import type { Decider } from './decider.ts';
 import { answerGateForYou, approveReviewAhead } from './gates.ts';
 import { hasOpenPreMergeSteps } from './merge-steps.ts';
 import { startMerge } from './pull-requests.ts';
+import { settleSuggestionForYou } from './suggestions.ts';
 
 function resolveLimits(
   state: ShinsaState,
@@ -135,19 +144,35 @@ export function applyAutopilotMerge(decider: Decider, gate: Gate) {
 interface Refusal {
   reason: string;
   teaches: boolean;
+  guesses: boolean;
 }
 
 function forward(decider: Decider, gateId: string, { reason, teaches }: Refusal) {
   const gate = decider.state.gates[gateId];
-  if (!gate || (gate.autopilotHeld === reason && gate.autopilotJudging !== true)) return;
+  if (!gate || (gate.autopilotHeld === reason && gate.autopilotJudging !== true)) return false;
   decider.emit({ type: 'autopilot.forwarded', gateId, reason, teaches });
+  return true;
 }
 
 function requestJudgment(decider: Decider, gateId: string) {
   const gate = decider.state.gates[gateId];
   if (!gate || gate.autopilotJudging === true) return;
   decider.emit({ type: 'autopilot.judging', gateId });
-  decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId });
+  decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId, shadow: false });
+}
+
+function isScoredGate(kind: AutopilotGateKind) {
+  return (AUTOPILOT_SCORED_KINDS as readonly string[]).includes(kind);
+}
+
+function requestShadowJudgment(decider: Decider, gate: Gate, kind: AutopilotGateKind) {
+  if (!isScoredGate(kind) || gate.autopilotGuess !== undefined) return;
+  decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId: gate.id, shadow: true });
+}
+
+function recordGuess(decider: Decider, gate: Gate, kind: AutopilotGateKind, verdict: AutopilotVerdict) {
+  if (!isScoredGate(kind) || gate.autopilotGuess !== undefined) return;
+  decider.emit({ type: 'autopilot.guessed', gateId: gate.id, verdict });
 }
 
 function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): Refusal | null {
@@ -160,21 +185,27 @@ function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): 
     decider.context.now,
     gate.escalation !== undefined
   ).limits;
-  if (!act.allowed) return { reason: act.reason, teaches: !act.setting };
+  const block = kind === 'merge' ? resolveMergeRefusal(decider, task) : null;
+  const guesses = block === null;
+  if (!act.allowed) return { reason: act.reason, teaches: !act.setting, guesses };
   const lesson = resolveLessonLimit(decider.state, kind);
-  if (!lesson.allowed) return { reason: lesson.reason, teaches: true };
-  if (kind !== 'merge') return null;
-  const block = resolveMergeRefusal(decider, task);
-  return block === null ? null : { reason: MERGE_BLOCK_TEXT[block], teaches: false };
+  if (!lesson.allowed) return { reason: lesson.reason, teaches: true, guesses };
+  return block === null ? null : { reason: MERGE_BLOCK_TEXT[block], teaches: false, guesses };
 }
 
 export function askAutopilot(decider: Decider, gate: Gate) {
   if (!resolveAutopilotPolicy(decider.state.settings).enabled) return;
   const kind = Option.getOrNull(selectJudgedGateKind(gate));
   if (!kind) return;
+  if (kind === 'proposal' && !isWatchdogTask(decider.task(gate.taskId))) return;
   const refusal = resolveRefusal(decider, gate, kind);
-  if (refusal !== null) forward(decider, gate.id, refusal);
-  else requestJudgment(decider, gate.id);
+  if (refusal === null) {
+    requestJudgment(decider, gate.id);
+    return;
+  }
+  const firstTime = gate.autopilotHeld === undefined;
+  if (forward(decider, gate.id, refusal) && firstTime && refusal.guesses)
+    requestShadowJudgment(decider, gate, kind);
 }
 
 const NOT_SURE = 'Autopilot was not sure what to answer, so the question waits for you.';
@@ -185,7 +216,7 @@ function selectJudgedGate(decider: Decider, command: CommandOf<'autopilot.judgme
   const gate = decider.state.gates[command.gateId];
   const task = decider.state.tasks[command.taskId];
   if (!gate || !task || gate.taskId !== task.id || gate.status !== 'open') return null;
-  if (gate.autopilotJudging !== true || isTaskClosed(task)) return null;
+  if (command.shadow === (gate.autopilotJudging === true) || isTaskClosed(task)) return null;
   const kind = Option.getOrNull(selectJudgedGateKind(gate));
   return kind ? { gate, kind } : null;
 }
@@ -198,21 +229,32 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
   const found = selectJudgedGate(decider, command);
   if (!found) return;
   const { gate, kind } = found;
+  if (command.shadow) {
+    recordGuess(decider, gate, kind, command.verdict);
+    return;
+  }
   const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason);
   const refusal = resolveAutopilotPolicy(decider.state.settings).enabled
     ? resolveRefusal(decider, gate, kind)
-    : { reason: 'Autopilot is off.', teaches: false };
+    : { reason: 'Autopilot is off.', teaches: false, guesses: true };
   if (refusal !== null) {
     forward(decider, gate.id, refusal);
+    if (refusal.guesses) recordGuess(decider, gate, kind, command.verdict);
     return;
   }
   if (command.verdict === 'forward') {
-    forward(decider, gate.id, { reason: reason || 'Autopilot judged this needs you.', teaches: true });
+    recordGuess(decider, gate, kind, 'forward');
+    forward(decider, gate.id, {
+      reason: reason || 'Autopilot judged this needs you.',
+      teaches: true,
+      guesses: true,
+    });
     return;
   }
   const why = reason || NO_REASON;
   switch (kind) {
     case 'plan':
+    case 'proposal':
       answerGateForYou(decider, gate, 'approve', null, why);
       return;
     case 'review':
@@ -224,10 +266,39 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
     case 'question': {
       const reply = clip(command.reply, AUTOPILOT_JUDGMENT_LIMITS.reply);
       if (reply) answerGateForYou(decider, gate, 'reply', reply, why);
-      else forward(decider, gate.id, { reason: NOT_SURE, teaches: true });
+      else forward(decider, gate.id, { reason: NOT_SURE, teaches: true, guesses: true });
       return;
     }
   }
+}
+
+function selectSuggestion(decider: Decider, taskId: string, suggestionId: string) {
+  const task = decider.state.tasks[taskId];
+  const suggestion = task?.suggestions?.find((candidate) => candidate.id === suggestionId);
+  if (!task || !suggestion || suggestion.status !== 'open') return null;
+  return { task, suggestion };
+}
+
+export function weighSuggestion(decider: Decider, taskId: string, suggestionId: string) {
+  const found = selectSuggestion(decider, taskId, suggestionId);
+  if (!found) return;
+  const policy = resolveAutopilotPolicy(decider.state.settings);
+  if (!resolveAutopilotSuggestionLimit(policy, found.suggestion).allowed) return;
+  decider.run({ kind: 'autopilot.weigh', taskId, suggestionId });
+}
+
+const SUGGESTION_REASON: Record<'accept' | 'dismiss', string> = {
+  accept: 'Autopilot judged it clearly worth doing.',
+  dismiss: 'Autopilot judged it not worth doing.',
+};
+
+export function applyAutopilotWeighed(decider: Decider, command: CommandOf<'autopilot.weighed'>) {
+  const found = selectSuggestion(decider, command.taskId, command.suggestionId);
+  if (!found || command.verdict === 'forward') return;
+  const policy = resolveAutopilotPolicy(decider.state.settings);
+  if (!resolveAutopilotSuggestionLimit(policy, found.suggestion).allowed) return;
+  const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason) || SUGGESTION_REASON[command.verdict];
+  settleSuggestionForYou(decider, found.task, found.suggestion, command.verdict === 'accept', reason);
 }
 
 function resolveOwnerActiveAt(state: ShinsaState) {
