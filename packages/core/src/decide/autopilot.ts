@@ -173,9 +173,20 @@ function requestShadowJudgment(decider: Decider, gate: Gate, kind: AutopilotGate
   decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId: gate.id, shadow: true });
 }
 
-function recordGuess(decider: Decider, gate: Gate, kind: AutopilotGateKind, verdict: AutopilotVerdict) {
+function selectGateEstimate(decider: Decider, gate: Gate, kind: AutopilotGateKind) {
+  const task = decider.task(gate.taskId);
+  return Option.getOrNull(selectAutopilotEstimate(decider.state, task, gate, kind, decider.context.now));
+}
+
+function recordGuess(
+  decider: Decider,
+  gate: Gate,
+  kind: AutopilotGateKind,
+  verdict: AutopilotVerdict,
+  estimate: AutopilotModelGuess | null = selectGateEstimate(decider, gate, kind)
+) {
   if (!isScoredGate(kind) || gate.autopilotGuess !== undefined) return;
-  decider.emit({ type: 'autopilot.guessed', gateId: gate.id, verdict });
+  decider.emit({ type: 'autopilot.guessed', gateId: gate.id, verdict, estimate });
 }
 
 function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): Refusal | null {
@@ -228,13 +239,6 @@ function clip(text: string | null, limit: number) {
   return (text ?? '').trim().slice(0, limit);
 }
 
-function selectModelVeto(decider: Decider, gate: Gate, kind: AutopilotGateKind) {
-  const task = decider.task(gate.taskId);
-  const estimate = selectAutopilotEstimate(decider.state, task, gate, kind, decider.context.now);
-  const guess = Option.getOrNull(estimate);
-  return isAutopilotModelVeto(guess) ? guess : null;
-}
-
 function describeVeto(guess: AutopilotModelGuess) {
   const share = Math.round(guess.p * 100);
   const similar = Math.round(guess.similar);
@@ -267,10 +271,10 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
     });
     return;
   }
-  const veto = selectModelVeto(decider, gate, kind);
-  if (veto) {
-    recordGuess(decider, gate, kind, 'act');
-    forward(decider, gate.id, { reason: describeVeto(veto), teaches: true, guesses: true });
+  const estimate = selectGateEstimate(decider, gate, kind);
+  if (estimate && isAutopilotModelVeto(estimate)) {
+    recordGuess(decider, gate, kind, 'act', estimate);
+    forward(decider, gate.id, { reason: describeVeto(estimate), teaches: true, guesses: true });
     return;
   }
   const why = reason || NO_REASON;

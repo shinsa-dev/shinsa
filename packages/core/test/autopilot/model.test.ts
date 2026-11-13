@@ -51,6 +51,7 @@ function decision(overrides: Partial<AutopilotDecision> = {}): AutopilotDecision
     guess: null,
     note: null,
     facts: FACTS,
+    estimate: null,
     ...overrides,
   };
 }

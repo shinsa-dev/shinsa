@@ -29,6 +29,7 @@ function decision(answer: AutopilotDecisionAnswer, at: number): AutopilotDecisio
     guess: at % 2 === 0 ? 'act' : null,
     note: null,
     facts: null,
+    estimate: null,
   };
 }
 

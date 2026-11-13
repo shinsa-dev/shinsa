@@ -1,3 +1,4 @@
+import type { AutopilotModelGuess } from '../autopilot/model/schema.ts';
 import type { AutopilotDecision, AutopilotLesson, AutopilotVerdict } from '../autopilot/schema.ts';
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
@@ -296,7 +297,12 @@ type EventBody =
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'autopilot.scheduled'; gateId: string; due: AutopilotDue | null }
   | { type: 'autopilot.judging'; gateId: string }
-  | { type: 'autopilot.guessed'; gateId: string; verdict: AutopilotVerdict }
+  | {
+      type: 'autopilot.guessed';
+      gateId: string;
+      verdict: AutopilotVerdict;
+      estimate: AutopilotModelGuess | null;
+    }
   | { type: 'autopilot.forwarded'; gateId: string; reason: string; teaches: boolean }
   | { type: 'autopilot.learned'; lessons: AutopilotLesson[] }
   | { type: 'autopilot.decided'; decisions: AutopilotDecision[] }

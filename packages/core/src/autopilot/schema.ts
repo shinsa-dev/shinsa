@@ -1,6 +1,7 @@
 import type { AutopilotLevel } from '../domain/settings.ts';
 import type { TaskShape } from '../domain/shapes.ts';
 import type { ReviewRating } from '../report/types.ts';
+import type { AutopilotModelGuess } from './model/schema.ts';
 import type { AutopilotModelHead } from './model/schema.ts';
 
 export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal';
@@ -192,6 +193,13 @@ export interface AutopilotDecision {
   guess: AutopilotVerdict | null;
   note: string | null;
   facts: AutopilotDecisionFacts | null;
+  estimate: AutopilotModelGuess | null;
+}
+
+export interface AutopilotOpenedFacts {
+  active: boolean;
+  inHours: boolean | null;
+  hour: number;
 }
 
 export interface AutopilotTally {
@@ -336,6 +344,6 @@ export const AUTOPILOT_SCORE_LIMITS = {
 } as const;
 
 export const AUTOPILOT_COMBINE_LIMITS = {
-  act: 0.85,
+  veto: 0.5,
   confidence: 0.5,
 } as const;

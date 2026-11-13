@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  isAutopilotModelVeto,
   AUTOPILOT_SCORE_LIMITS,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
@@ -36,6 +37,7 @@ function decision(
     guess,
     note: null,
     facts: null,
+    estimate: null,
   };
 }
 
@@ -44,7 +46,7 @@ function guessed(
   answer: AutopilotDecisionAnswer,
   modelGuess: AutopilotModelGuess | null
 ): AutopilotScoredDecision {
-  return { ...decision(guess, answer), modelGuess };
+  return { ...decision(guess, answer), estimate: guess === null ? null : modelGuess, modelGuess };
 }
 
 function scoreOf(decisions: AutopilotScoredDecision[]) {
@@ -140,6 +142,20 @@ describe('the Autopilot score', () => {
       call: { agreed: 0 },
       combined: { agreed: 1 },
     });
+  });
+
+  test('the combined verdict reads the estimate Autopilot had when it judged, not the one learned at your answer', () => {
+    const judged = { ...guessed('act', 'revised', SURE), estimate: DOUBTFUL };
+    expect(scoreOf([judged]).tracks).toMatchObject({ model: { agreed: 0 }, combined: { agreed: 1 } });
+    const later = { ...guessed('act', 'revised', DOUBTFUL), estimate: SURE };
+    expect(scoreOf([later]).tracks).toMatchObject({ model: { agreed: 1 }, combined: { agreed: 0 } });
+  });
+
+  test('a sure model vetoes only when it thinks you would more likely not approve', () => {
+    expect(isAutopilotModelVeto({ ...DOUBTFUL, p: 0.8 })).toBe(false);
+    expect(isAutopilotModelVeto({ ...DOUBTFUL, p: 0.49 })).toBe(true);
+    expect(isAutopilotModelVeto({ ...DOUBTFUL, confidence: 0.1 })).toBe(false);
+    expect(isAutopilotModelVeto(null)).toBe(false);
   });
 
   test('compares each track with the base rate on the same decisions', () => {

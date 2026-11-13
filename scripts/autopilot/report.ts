@@ -58,6 +58,12 @@ function formatTable(rows: readonly AutopilotBenchmarkRow[]) {
   ];
 }
 
+function describeNothingScored(decisions: number) {
+  if (decisions === 0)
+    return 'The log holds no decisions Autopilot recorded. It records them from this version of Shinsa on, so decide a few plans, reviews or merges first.';
+  return `The log holds ${decisions} decisions, and none is a plan, a review, a merge, your OK, a finding or a suggested task, so there is nothing to score yet.`;
+}
+
 export function serializeBenchmark(replay: BenchmarkReplay) {
   const { benchmark } = replay;
   const lines = [
@@ -66,7 +72,7 @@ export function serializeBenchmark(replay: BenchmarkReplay) {
   ];
   if (replay.unreadable > 0) lines.push(`${replay.unreadable} events could not be read and were skipped.`);
   if (benchmark.judged === 0) {
-    lines.push('', 'There are no decisions to score yet. Decide a few plans, reviews or merges first.');
+    lines.push('', describeNothingScored(benchmark.decisions));
     return lines.join('\n');
   }
   lines.push(`${benchmark.judged} of your ${benchmark.decisions} decisions had a guess to check.`);

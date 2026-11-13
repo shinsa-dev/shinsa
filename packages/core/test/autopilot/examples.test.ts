@@ -44,6 +44,7 @@ function decision(overrides: Partial<AutopilotLearnedDecision> = {}): AutopilotL
     guess: null,
     note: null,
     facts: FACTS,
+    estimate: null,
     modelGuess: null,
     ...overrides,
   };

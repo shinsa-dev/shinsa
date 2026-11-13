@@ -2,10 +2,9 @@ import { Option } from 'effect';
 import { DAY_MS, MINUTE_MS, resolveTaskShape } from '../domain/index.ts';
 import type { FindingVerdict } from '../domain/schema.ts';
 import type { Gate, GateDecision, Task } from '../domain/types.ts';
-import { resolveLocalSlot } from '../presence/hours.ts';
 import type { ReviewFinding, ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { isHeldPlan, isUrgentTask, resolveAutopilotPresence } from './limits.ts';
+import { isHeldPlan, isUrgentTask, resolveAutopilotOpenedFacts } from './limits.ts';
 import { isAutopilotPositive } from './model/learn.ts';
 import { AUTOPILOT_HEAD_OF_KIND, type AutopilotModelGuess, type AutopilotModelHead } from './model/schema.ts';
 import {
@@ -125,7 +124,7 @@ function countFindings(findings: readonly ReviewFinding[]): AutopilotFindingCoun
 
 function resolveDecisionFacts(state: ShinsaState, draft: DecisionDraft, at: number): AutopilotDecisionFacts {
   const { task, gate } = draft;
-  const presence = resolveAutopilotPresence(state, at);
+  const opened = gate?.autopilotOpened ?? resolveAutopilotOpenedFacts(state, gate?.openedAt ?? at);
   return {
     confidence: task.reviewRatings?.confidence ?? null,
     shape: resolveTaskShape(task),
@@ -134,9 +133,7 @@ function resolveDecisionFacts(state: ShinsaState, draft: DecisionDraft, at: numb
     findings: countFindings(task.findings),
     heldPlan: isHeldPlan(task),
     waitedMinutes: gate ? Math.max(0, Math.floor((at - gate.openedAt) / MINUTE_MS)) : null,
-    active: presence.active,
-    inHours: presence.inHours,
-    hour: resolveLocalSlot(state.timeZone ?? 'UTC', at).hour,
+    ...opened,
   };
 }
 
@@ -161,6 +158,7 @@ export function createAutopilotDecision(
     guess: resolveDecisionGuess(draft),
     note: clipNote(draft.note),
     facts: resolveDecisionFacts(state, draft, at),
+    estimate: isScoredKind(draft.kind) ? (draft.gate?.autopilotEstimate ?? null) : null,
   };
 }
 
@@ -251,7 +249,7 @@ function listTrackJudgments(
   if (modelGuess) judgments.push(judgeChance('model', modelGuess.p, positive));
   if (decision.guess !== null) {
     judgments.push(judgeVerdict('call', decision.guess, decision));
-    const combined = resolveAutopilotCombinedVerdict(decision.guess, modelGuess);
+    const combined = resolveAutopilotCombinedVerdict(decision.guess, decision.estimate);
     judgments.push(judgeVerdict('combined', combined, decision));
   }
   return judgments;

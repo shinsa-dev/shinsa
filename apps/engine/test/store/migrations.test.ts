@@ -43,7 +43,7 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes, stamps what proposals recommend and marks old projects as chosen turns a focused project into a list and turns Slack thread updates on and gives old paces a reset pace and gives older reviews no ratings and older decisions no facts, eleven versions past the baseline', () => {
+  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes, stamps what proposals recommend and marks old projects as chosen turns a focused project into a list and turns Slack thread updates on and gives old paces a reset pace and gives older reviews no ratings and older decisions no facts or estimates, eleven versions past the baseline', () => {
     expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'stack-lists',
       'slack-channel-names',
@@ -730,21 +730,24 @@ describe('event log migrations', () => {
     expect(readVersion(path)).toBe(LOG_BASELINE + 11);
   });
 
-  test('decision-facts gives each older Autopilot decision null facts, and keeps the facts a decision has', () => {
+  test('decision-facts gives older Autopilot decisions null facts and estimates, older guesses a null estimate, and keeps what they have', () => {
     const path = createLogPath();
     writeLog(path, LOG_BASELINE + 10);
     const db = new Database(path);
     const facts = { hour: 9 };
+    const estimate = { head: 'gate', p: 0.4, confidence: 0.6, similar: 12 };
     const rows = [
       {
         type: 'autopilot.decided',
         decisions: [
           { kind: 'plan', at: 1 },
-          { kind: 'review', at: 2, facts },
+          { kind: 'review', at: 2, facts, estimate },
         ],
       },
       { type: 'autopilot.decided', decisions: [{ kind: 'merge', at: 3, facts: null }] },
       { type: 'autopilot.decided', decisions: [] },
+      { type: 'autopilot.guessed', gateId: 'g1', verdict: 'act' },
+      { type: 'autopilot.guessed', gateId: 'g2', verdict: 'act', estimate },
     ];
     for (const [index, row] of rows.entries()) {
       db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
@@ -761,14 +764,21 @@ describe('event log migrations', () => {
       {
         type: 'autopilot.decided',
         decisions: [
-          { kind: 'plan', at: 1, facts: null },
-          { kind: 'review', at: 2, facts },
+          { kind: 'plan', at: 1, facts: null, estimate: null },
+          { kind: 'review', at: 2, facts, estimate },
         ],
         seq: 2,
         at: 1,
       },
-      { type: 'autopilot.decided', decisions: [{ kind: 'merge', at: 3, facts: null }], seq: 3, at: 1 },
+      {
+        type: 'autopilot.decided',
+        decisions: [{ kind: 'merge', at: 3, facts: null, estimate: null }],
+        seq: 3,
+        at: 1,
+      },
       { type: 'autopilot.decided', decisions: [], seq: 4, at: 1 },
+      { type: 'autopilot.guessed', gateId: 'g1', verdict: 'act', estimate: null, seq: 5, at: 1 },
+      { type: 'autopilot.guessed', gateId: 'g2', verdict: 'act', estimate, seq: 6, at: 1 },
     ]);
     log.close();
     expect(readVersion(path)).toBe(LOG_BASELINE + 11);

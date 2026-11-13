@@ -912,6 +912,28 @@ describe('Autopilot weighs its model of you before it acts', () => {
       /^From \d+ decisions like this one, Autopilot puts the chance you would approve it at only \d+%, so it waits for you\.$/
     );
     expect(gate.autopilotTeaches).toBe(true);
+    expect(gate.autopilotEstimate?.p).toBeLessThan(0.5);
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    const decided = harness.state.autopilotProfile.decisions.at(-1);
+    expect(decided).toMatchObject({ gateId: gate.id, guess: 'act', estimate: gate.autopilotEstimate });
+  });
+
+  test('acts for someone who approves four plans in five', () => {
+    const { harness, taskId } = planGateHarness({});
+    const gate = harness.openGate(taskId);
+    const probe = createAutopilotProbe(harness.state, harness.task(taskId), gate, 'plan', 0);
+    const decisions = Array.from({ length: 40 }, (_, index) => ({
+      ...probe,
+      at: index,
+      gateId: `old${index}`,
+      answer: index % 5 === 2 ? ('revised' as const) : ('approved' as const),
+    }));
+    harness.replay({ type: 'autopilot.decided', decisions });
+    judge(harness, taskId, 'Two small phases with a clear goal.');
+    expect(Object.values(harness.state.gates).find((found) => found.type === 'plan')).toMatchObject({
+      status: 'answered',
+      decision: 'approve',
+    });
   });
 
   test('approves when a sure model agrees you would approve it', () => {

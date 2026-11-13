@@ -149,6 +149,7 @@ export function createAutopilotProfile(parts: {
     guess,
     note: null,
     facts: null,
+    estimate: guess === null ? null : modelGuess,
     modelGuess,
   });
   const decisions = [

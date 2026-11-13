@@ -206,6 +206,7 @@ describe('the judge request', () => {
           guess: null,
           note: 'Keep it smaller',
           facts: null,
+          estimate: null,
         },
         {
           at: 2,
@@ -222,6 +223,7 @@ describe('the judge request', () => {
           guess: null,
           note: null,
           facts: null,
+          estimate: null,
         },
       ],
     });

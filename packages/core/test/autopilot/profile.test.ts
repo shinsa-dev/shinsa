@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { createAutopilotDecision } from '../../src/autopilot/profile.ts';
 import {
   AUTOPILOT_PROFILE_LIMITS,
   type AutopilotDecision,
@@ -57,6 +58,7 @@ function decision(overrides: Partial<AutopilotDecision>): AutopilotDecision {
     guess: null,
     note: null,
     facts: null,
+    estimate: null,
     ...overrides,
   };
 }
@@ -94,7 +96,7 @@ describe('the decisions Autopilot learns from', () => {
     const gate = harness.openGate(taskId);
     harness.advance(90 * MINUTE_MS);
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
-    const tokyoHour = Math.floor(((harness.now + 9 * HOUR_MS) % DAY_MS) / HOUR_MS);
+    const tokyoHour = Math.floor(((gate.openedAt + 9 * HOUR_MS) % DAY_MS) / HOUR_MS);
     expect(decisions(harness)[0]?.facts).toEqual({
       confidence: 'high',
       shape: 'change',
@@ -103,11 +105,39 @@ describe('the decisions Autopilot learns from', () => {
       findings: { blocking: 0, shouldFix: 1, optional: 2 },
       heldPlan: false,
       waitedMinutes: Math.floor((harness.now - gate.openedAt) / MINUTE_MS),
-      active: expect.any(Boolean),
+      active: gate.autopilotOpened?.active ?? false,
       inHours: null,
       hour: tokyoHour,
     });
     expect(decisions(harness)[0]?.facts?.waitedMinutes).toBeGreaterThanOrEqual(90);
+  });
+
+  test('presence and the hour are read when the gate opened, as Autopilot sees them, not when you answered', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness, []);
+    const gate = harness.openGate(taskId);
+    expect(gate.autopilotOpened?.hour).toBe(Math.floor((gate.openedAt % DAY_MS) / HOUR_MS));
+    const later = gate.openedAt + 5 * HOUR_MS;
+    const draft = {
+      task: harness.task(taskId),
+      kind: 'review' as const,
+      answer: 'approved' as const,
+      note: null,
+    };
+    const answered = { ...harness.state, presence: { [Math.floor(later / HOUR_MS)]: 1 } };
+    const fallback = createAutopilotDecision(
+      answered,
+      { ...draft, gate: { ...gate, autopilotOpened: undefined } },
+      later
+    );
+    expect(fallback.facts).toMatchObject({ active: false, hour: gate.autopilotOpened?.hour });
+    const opened = { active: true, inHours: false, hour: 3 };
+    const stored = createAutopilotDecision(
+      answered,
+      { ...draft, gate: { ...gate, autopilotOpened: opened } },
+      later
+    );
+    expect(stored.facts).toMatchObject(opened);
   });
 
   test('a plan you revised counts its revisions, and a decision with no gate has no wait', () => {

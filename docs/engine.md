@@ -2406,7 +2406,11 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   (`AutopilotDecisionFacts`: the reviewer's confidence, the task's shape and repository, how many times its plan was
   revised, the latest review's findings by severity, whether the plan is one you always approve yourself, how long
   the gate waited, whether you were active and inside your usual hours, and the hour where you are; null for a
-  decision recorded before facts were kept, and no wait for one with no gate). Nothing an agent or a schedule does on your behalf counts, nor
+  decision recorded before facts were kept, and no wait for one with no gate). Presence and the hour are read when
+  the gate opened, as Autopilot sees them when it judges, not when you answered (answering makes you active):
+  the `gate.opened` fold stores them on the gate (`Gate.autopilotOpened`, `resolveAutopilotOpenedFacts`), and a gate
+  opened before that reads them at its `openedAt`, from your presence up to then. Its `estimate` is the model's
+  estimate Autopilot had when it guessed at the gate (`Gate.autopilotEstimate`, below), null where it made none. Nothing an agent or a schedule does on your behalf counts, nor
   a guest's answers on a handed-off task. Every decision counts, with no cap: the profile keeps a count per kind,
   per kind and project and per kind and risk (`AutopilotTally`), each with its all-time `answers` and a
   recency-weighted `recent` share, where a decision's weight halves every 30 days (`AUTOPILOT_PROFILE_LIMITS
@@ -2424,9 +2428,10 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   review, merge and your OK; approved is yes), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
   Messages, edits, filed tasks, priority changes and cancellations train no head. `listAutopilotFeatures` turns a
   decision into features: the kind, risk, reviewer's confidence, shape and hour band one-hot, the plan's scope and
-  the findings and wait log-scaled, the flags (urgent, watchdog, touched, active, in your hours, the plan you always
-  approve), the project and repository hashed into 16 buckets, and a few crosses (kind × risk, kind × confidence,
-  risk × scope, watchdog × away). Each decision is one gradient step with L2 (`AUTOPILOT_MODEL_LIMITS`: rate 0.05,
+  the findings log-scaled, the flags (urgent, watchdog, active, in your hours, the plan you always approve), the project and repository hashed into 16 buckets, and a few crosses (kind × risk, kind × confidence,
+  risk × scope, watchdog × away). The wait and `touched` are kept on the decision but are not features: at your
+  answer they say how long you took and whether Autopilot had brought it to you, which Autopilot cannot know when it
+  judges a gate that just opened, so learning them would teach the model a difference it never sees. Each decision is one gradient step with L2 (`AUTOPILOT_MODEL_LIMITS`: rate 0.05,
   L2 0.001); the constant step makes recent decisions count most while every decision ever made stays in the
   weights, with no cap and no refresh job. Its confidence is a decayed count per segment (the head, then its project
   and risk, backing off to coarser segments until one has 5 decisions; a decision halves after 100 newer ones), so
@@ -2446,14 +2451,18 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Combining the two** (`resolveAutopilotCombinedVerdict`, `isAutopilotModelVeto`, `AUTOPILOT_COMBINE_LIMITS`). The
   hard limits run first, as always. Then Autopilot acts only when the model call says act and the model does not
   veto it: a veto is a confident model (confidence at least 0.5, about 10 similar decisions and 20 of its head)
-  that puts the chance you would approve below 85%. A model still learning, or a question, which it does not score,
+  that puts the chance you would approve below 50% (`veto`), so it thinks you would more likely not approve. A
+  confident model above that, even one that expects you to push back now and then, never vetoes: someone who
+  approves four plans in five still gets them approved. A model still learning, or a question, which it does not score,
   leaves the model call to decide alone, so a new install or a new project still works. A veto brings the gate to
   you with the estimate as the reason ("From 40 decisions like this one, Autopilot puts the chance you would
   approve it at only 12%, so it waits for you."). With no model call, the gate comes to you, as before.
 - **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
   merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
   (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
-  stored on the gate (`autopilot.guessed`, `Gate.autopilotGuess`) and acts on nothing. A gate it judged and then
+  stored on the gate (`autopilot.guessed {verdict, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotEstimate`) and
+  acts on nothing. `estimate` is the model's estimate at that moment, the same one a live judgment reads for its
+  veto, so the combined track scores exactly what Autopilot did or would have done. A gate it judged and then
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
@@ -2463,7 +2472,8 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   each a running agreement in which an older decision counts half as much after 50 newer ones
   (`AUTOPILOT_SCORE_LIMITS.halfLife`): `model`, the local model's guess (`p` of at least 0.5 is a yes), on every
   plan, review, merge, your OK, finding and suggested task, Autopilot on or off; `call`, the model call's guess; `combined`, the verdict
-  the rule above makes from the two; and `base`, always your usual answer for that head lately (`AutopilotProfile
+  the rule above makes from the call's guess and the estimate stored with it (`AutopilotDecision.estimate`), never
+  from the fold's later `modelGuess`, which has newer weights; and `base`, always your usual answer for that head lately (`AutopilotProfile
   .rates`, the decayed share of yes, before this decision). Each track also counts how often `base` was right on the
   same decisions (`baseWeight`), so its `margin` over your usual answer compares like with like, and a log loss
   (a flat verdict counts as 99% sure, `clamp`), for the benchmark. `resolveAutopilotScore` reads `combined`, what

@@ -34,7 +34,7 @@ export function resolveAutopilotCombinedVerdict(
 
 export function isAutopilotModelVeto(guess: AutopilotModelGuess | null) {
   if (!guess || guess.confidence < AUTOPILOT_COMBINE_LIMITS.confidence) return false;
-  return guess.p < AUTOPILOT_COMBINE_LIMITS.act;
+  return guess.p < AUTOPILOT_COMBINE_LIMITS.veto;
 }
 
 export function resolveAutopilotBaseRate(rate: AutopilotRate) {

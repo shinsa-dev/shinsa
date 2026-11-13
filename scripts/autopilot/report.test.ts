@@ -55,7 +55,12 @@ describe('the benchmark report', () => {
       replay({ unreadable: 3, benchmark: { decisions: 2, judged: 0, rows: [] } })
     );
     expect(text).toContain('3 events could not be read and were skipped.');
-    expect(text).toContain('There are no decisions to score yet.');
+    expect(text).toContain('The log holds 2 decisions, and none is a plan');
     expect(text).not.toContain('Log loss');
+  });
+
+  test('says when the log holds no decisions Autopilot recorded at all', () => {
+    const text = serializeBenchmark(replay({ benchmark: { decisions: 0, judged: 0, rows: [] } }));
+    expect(text).toContain('The log holds no decisions Autopilot recorded.');
   });
 });

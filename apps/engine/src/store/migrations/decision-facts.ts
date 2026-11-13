@@ -12,9 +12,7 @@ export const DECISION_FACTS: LogMigration = {
         '$.decisions',
         (
           SELECT json_group_array(
-            CASE WHEN json_type(decision.value, '$.facts') IS NULL
-              THEN json_set(decision.value, '$.facts', json('null'))
-              ELSE json(decision.value) END
+            json_insert(decision.value, '$.facts', json('null'), '$.estimate', json('null'))
           )
           FROM (SELECT value FROM json_each(events.payload, '$.decisions') ORDER BY key) AS decision
         )
@@ -22,7 +20,10 @@ export const DECISION_FACTS: LogMigration = {
       WHERE type = 'autopilot.decided'
         AND EXISTS (
           SELECT 1 FROM json_each(events.payload, '$.decisions') AS entry
-          WHERE json_type(entry.value, '$.facts') IS NULL
+          WHERE json_type(entry.value, '$.facts') IS NULL OR json_type(entry.value, '$.estimate') IS NULL
         )`;
+    yield* sql`UPDATE events
+      SET payload = json_insert(payload, '$.estimate', json('null'))
+      WHERE type = 'autopilot.guessed' AND json_type(payload, '$.estimate') IS NULL`;
   }),
 };

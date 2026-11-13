@@ -34,6 +34,7 @@ function learned(
     guess,
     note: null,
     facts: null,
+    estimate: guess === null ? null : modelGuess,
     modelGuess,
   };
 }

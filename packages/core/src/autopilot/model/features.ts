@@ -11,9 +11,9 @@ const SHAPES: readonly TaskShape[] = [...TASK_SHAPES, 'lead'];
 
 const HOUR_BANDS = 4;
 
-const FLAGS = ['urgent', 'watchdog', 'touched', 'active', 'inHours', 'heldPlan', 'hasPlan'] as const;
+const FLAGS = ['urgent', 'watchdog', 'active', 'inHours', 'heldPlan', 'hasPlan'] as const;
 
-const NUMBERS = ['phases', 'files', 'waited', 'blocking', 'shouldFix', 'optional', 'revisions'] as const;
+const NUMBERS = ['phases', 'files', 'blocking', 'shouldFix', 'optional', 'revisions'] as const;
 
 type Flag = (typeof FLAGS)[number];
 
@@ -55,7 +55,6 @@ export const AUTOPILOT_FEATURE_COUNT = LAYOUT.size;
 const SCALE: Record<NumberFeature, number> = {
   phases: Math.log1p(12),
   files: Math.log1p(40),
-  waited: Math.log1p(24 * 60),
   blocking: Math.log1p(5),
   shouldFix: Math.log1p(5),
   optional: Math.log1p(5),
@@ -80,7 +79,6 @@ function resolveNumbers(decision: AutopilotDecision): Record<NumberFeature, numb
   return {
     phases: resolveScaled('phases', decision.scope?.phases ?? 0),
     files: resolveScaled('files', decision.scope?.files ?? 0),
-    waited: resolveScaled('waited', facts?.waitedMinutes ?? 0),
     blocking: resolveScaled('blocking', facts?.findings.blocking ?? 0),
     shouldFix: resolveScaled('shouldFix', facts?.findings.shouldFix ?? 0),
     optional: resolveScaled('optional', facts?.findings.optional ?? 0),
@@ -93,7 +91,6 @@ function resolveFlags(decision: AutopilotDecision): Record<Flag, boolean> {
   return {
     urgent: decision.urgent,
     watchdog: decision.watchdog,
-    touched: decision.touched,
     active: facts?.active ?? false,
     inHours: facts?.inHours === true,
     heldPlan: facts?.heldPlan ?? false,
