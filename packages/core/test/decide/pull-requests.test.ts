@@ -279,7 +279,9 @@ describe('reacting to the pull request', () => {
 
   test('a clean pull request clears a failure the loop left behind', () => {
     const { harness, taskId } = shipping();
+    spendRetries(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'gh' });
+    expect(harness.openGate(taskId).type).toBe('failure');
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['merge']);
   });
@@ -1029,6 +1031,15 @@ describe('getting the branch to GitHub', () => {
     expect(harness.task(taskId).stageReason).toBe(
       'pushing the changes (the repository’s pre-push hook is running)'
     );
+  });
+
+  test('a push step reported after the retries ran out and the failure gate opened changes nothing', () => {
+    const { harness, taskId } = approved();
+    spendRetries(harness, taskId);
+    harness.send({ type: 'effect.fail', taskId, title: 'Could not open the pull request', detail: 'auth' });
+    expect(harness.openGate(taskId).type).toBe('failure');
+    const late = { type: 'pull_request.record_step', taskId, step: { kind: 'opening' } } as const;
+    expect(harness.send(late).events).toEqual([]);
   });
 
   test('a retry names the step, when it runs, the attempt and the error, and logs one entry', () => {
