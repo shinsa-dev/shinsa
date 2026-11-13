@@ -1450,7 +1450,7 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   and a ready follower stays there on the lead once all are (`listBundleBlockers`, `resolveQueue`), its row naming
   what it waits on, "Waits on ‹A›". Two or more tasks of one bundle in the same section of Home or the queue (In
   progress, Waiting, Snoozed; never Needs you) sit under one thin header named after the first of them in bundle order,
-  with how many of the bundle's tasks are ready; clicking it folds the group; a single one stays a plain row
+  with how many of the bundle's tasks are ready; it opens the latest of them still being worked on; a single one stays a plain row
   (`listSectionEntries`, `lib/queue.ts`). The tree indents every level up to six
   (`resolveDepthIndent`, the task list, the popover and the pickers alike), so a long line never reads as tasks side
   by side; a row deeper than that sits at the sixth level with its depth beside the arrow, "‹n› steps down the chain"
@@ -1502,7 +1502,7 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   report and its sheet stays on the lead task, but it takes no new tasks (`initiative_finished`), its members' new
   tasks no longer inherit it, and Home and ⌘K leave it out. While it is open, two or more of its tasks in one section
   of Home or the queue (In progress, Waiting, Snoozed; never Needs you) sit under one thin header, the initiative's name
-  and its progress (`listInitiativeProgress`); the name opens the lead task and the rest of the header folds the group; a task in a bundle and an initiative groups
+  and its progress (`listInitiativeProgress`); the header opens the lead task; a task in a bundle and an initiative groups
   with the initiative, so a group never nests. Cancelling the lead task dissolves it (`syncCancelledLeads`):
   every member leaves, a focus on it is cleared and `initiative.removed` drops the record.
 - **Phases are labels, not gates.** A phase is `{ id, name }` in the initiative's order. A task carries

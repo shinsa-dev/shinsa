@@ -237,53 +237,42 @@ describe('groups of a bundle or an initiative', () => {
     );
   }
 
-  it('lists an open initiative under a thin header with its name, its tasks inside a guide line', () => {
+  function groupRow(name: string) {
+    return screen.getByRole('button', { name: new RegExp(`^${name}\\s*\\d+ tasks here`) });
+  }
+
+  it('lists an initiative under a small row with its name, its tasks inside a guide line', () => {
     renderQueue({ state: GROUPED, variant: 'wide' });
-    expect(titles().slice(0, 2)).toEqual(['Dock host', 'Side panel']);
-    expect(screen.getByText('2 tasks here · 0 of 2 shipped')).toBeTruthy();
-    const toggle = screen.getByRole('button', { name: 'Chat split', expanded: true });
-    expect(toggle.closest('[data-highlight-item]')).toBeNull();
+    expect(titles().slice(1, 3)).toEqual(['Dock host', 'Side panel']);
+    const row = groupRow('Chat split');
+    expect(row.textContent).toBe('Chat split2 tasks here · 0 of 2 shipped');
+    expect(row.hasAttribute('data-highlight-item')).toBe(true);
+    expect(row.hasAttribute('aria-expanded')).toBe(false);
+    expect(row.className).toContain('h-6');
     expect(screen.getByText('Dock host').closest('.border-s')).not.toBeNull();
     expect(sectionTitles()).toContain('In progress2');
   });
 
-  it('folds a group from its header into one counted line and remembers it per place', () => {
-    const view = renderQueue({ state: GROUPED, variant: 'wide' });
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Chat split', expanded: true })));
-    expect(screen.queryByText('Dock host')).toBeNull();
-    expect(sectionTitles()).toContain('In progress1');
-    expect(readDisclosure(createDisclosureId('home', 'group', 'working', 'initiative', 'split'))).toBe(false);
-    expect(location.pathname).not.toBe('/tasks/lead');
-    view.unmount();
-    renderQueue({ state: GROUPED });
+  it('opens the lead task from the initiative’s row, and keeps its tasks shown', () => {
+    renderQueue({ state: GROUPED, variant: 'wide' });
+    act(() => fireEvent.click(groupRow('Chat split')));
+    expect(location.pathname).toBe('/tasks/lead');
     expect(screen.getByText('Dock host')).toBeTruthy();
   });
 
-  it('opens the lead task from the initiative’s name', () => {
+  it('lists a bundle under a row named after its first task, which opens the task still being worked on', () => {
     renderQueue({ state: GROUPED, variant: 'wide' });
-    const name = screen
-      .getAllByRole('button', { name: 'Chat split' })
-      .find((button) => !button.hasAttribute('aria-expanded'));
-    if (!name) throw new Error('No link to the lead');
-    act(() => fireEvent.click(name));
-    expect(location.pathname).toBe('/tasks/lead');
-  });
-
-  it('folds a bundle under a header named after its first task while it waits, and opens it from there', () => {
-    renderQueue({ state: GROUPED, variant: 'wide' });
-    expect(screen.queryByText('Add the API')).toBeNull();
-    expect(screen.getByText('3 tasks here · 1 of 3 ready')).toBeTruthy();
-    expect(sectionTitles()).toContain('Waiting on another task1');
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'Add the schema', expanded: false })));
+    expect(groupRow('Add the schema').textContent).toContain('3 tasks here · 1 of 3 ready');
     expect(titles()).toEqual(expect.arrayContaining(['Add the schema', 'Add the API', 'Add the screen']));
     expect(sectionTitles()).toContain('Waiting on another task3');
-    expect(readDisclosure(createDisclosureId('home', 'group', 'waiting', 'bundle', 'root'))).toBe(true);
+    act(() => fireEvent.click(groupRow('Add the schema')));
+    expect(location.pathname).toBe('/tasks/screen');
   });
 
-  it('opens a folded group that holds the task on screen in the queue', () => {
-    writeDisclosure(createDisclosureId('queue', 'section', 'waiting'), true);
-    renderQueue({ state: GROUPED, activeTaskId: 'screen' });
-    expect(screen.getByRole('button', { name: /Add the screen/ }).getAttribute('aria-current')).toBe('true');
+  it('marks the group row of the task on screen', () => {
+    writeDisclosure(createDisclosureId('queue', 'section', 'working'), true);
+    renderQueue({ state: GROUPED, activeTaskId: 'lead' });
+    expect(groupRow('Chat split').getAttribute('aria-current')).toBe('true');
   });
 });
 

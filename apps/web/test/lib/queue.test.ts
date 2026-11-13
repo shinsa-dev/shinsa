@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveQueue } from '@shinsa/core';
-import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import {
   countGroupTasks,
-  countSectionEntries,
   describeNeedsCount,
   isQueueButtonShown,
   listQueueSections,
@@ -11,10 +9,6 @@ import {
   type QueueGroup,
   type QueueSection,
   describeGroupSummary,
-  resolveGroupDefault,
-  resolveGroupOpen,
-  resolveGroupPrefix,
-  resolveGroupId,
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
@@ -316,7 +310,7 @@ describe('groups of a bundle or an initiative', () => {
     const group = waiting.entries.flatMap((entry) =>
       entry.kind === 'group' && entry.group.kind === 'bundle' ? [entry.group] : []
     )[0];
-    expect(group?.opens?.id).toBe('root');
+    expect(group?.opens?.id).toBe('screen');
     expect(group?.progress).toBe('1 of 4 ready');
     expect(group && countGroupTasks(group)).toBe(3);
   });
@@ -333,28 +327,6 @@ describe('groups of a bundle or an initiative', () => {
     );
   });
 
-  it('counts a folded group once and an open one by its tasks', () => {
-    const { entries } = sectionNamed('working');
-    expect(countSectionEntries(entries, () => false)).toBe(2);
-    expect(countSectionEntries(entries, () => true)).toBe(3);
-  });
-
-  it('keeps each group open or folded per place and section, open in In progress or around the task on screen', () => {
-    const working = sectionNamed('working');
-    const waiting = sectionNamed('waiting');
-    const group = groupIn('working');
-    const bundle = groupIn('waiting');
-    expect(resolveGroupId('home', working, group)).toEqual(
-      createDisclosureId('home', 'group', 'working', 'initiative', 'split')
-    );
-    expect(resolveGroupId('queue', waiting, bundle)).toEqual(
-      createDisclosureId('queue', 'group', 'waiting', 'bundle', 'root')
-    );
-    expect(resolveGroupDefault(working, group, null)).toBe(true);
-    expect(resolveGroupDefault(waiting, bundle, null)).toBe(false);
-    expect(resolveGroupDefault(waiting, bundle, 'screen')).toBe(true);
-    expect(resolveGroupDefault(waiting, bundle, 'api')).toBe(true);
-  });
   it('says how many of a group’s tasks are here and how far it has come', () => {
     const initiative = groupIn('working');
     const bundle = groupIn('waiting');
@@ -362,16 +334,37 @@ describe('groups of a bundle or an initiative', () => {
     expect(describeGroupSummary(bundle)).toBe('3 tasks here · 1 of 4 ready');
   });
 
-  it('reads a group’s remembered choice under its section, and its default when it has none', () => {
-    const working = sectionNamed('working');
-    const group = groupIn('working');
-    expect(`${resolveGroupPrefix('home', working)}:initiative:split`).toBe(
-      resolveGroupId('home', working, group)
+  it('opens the bundle’s task still being worked on, the latest one first', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'base', title: 'Base', stage: 'shipping', bundleReady: { commit: 'abc' } }),
+        createTask({
+          id: 'mid',
+          title: 'Mid',
+          stage: 'building',
+          stacksOn: ['base'],
+          createdAt: NOW - 40_000,
+        }),
+        createTask({
+          id: 'top',
+          title: 'Top',
+          stage: 'waiting_on_tasks',
+          stacksOn: ['mid'],
+          createdAt: NOW - 30_000,
+        }),
+        createTask({
+          id: 'tip',
+          title: 'Tip',
+          stage: 'waiting_on_tasks',
+          stacksOn: ['top'],
+          createdAt: NOW - 20_000,
+        }),
+      ],
+    });
+    const waiting = listQueueSections(state, resolveQueue(state, NOW)).find(
+      (section) => section.key === 'waiting'
     );
-    const key = new Set(['initiative:split']);
-    const none = new Set<string>();
-    expect(resolveGroupOpen(group, key, none, false)).toBe(true);
-    expect(resolveGroupOpen(group, none, key, true)).toBe(false);
-    expect(resolveGroupOpen(group, none, none, true)).toBe(true);
+    const entry = waiting?.entries.find((candidate) => candidate.kind === 'group');
+    expect(entry?.kind === 'group' && entry.group.opens?.id).toBe('mid');
   });
 });

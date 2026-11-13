@@ -250,13 +250,13 @@ Only these, and they win over anything below:
    need: Needs you (every open decision in focus, in `resolveQueue` order, which `docs/engine.md` →
    Scheduling owns: priority, then what it unblocks, then the kind of decision, then age), In progress,
    and Waiting on another task (in chain order, collapsed). In In progress, Waiting and Snoozed, two or more tasks of
-   one initiative or one bundle sit under a thin 24px header, not a row: the group's icon (the initiative's target,
-   the bundle's layers), its name in medium `text-fg-3` and "‹n› tasks here · ‹progress›" in `text-fg-2` after it
-   (`QueueGroupHeader`). It has no chevron and no hover fill, so it never reads as a task; clicking anywhere on it folds
-   or opens the group, and an initiative's name opens its lead task. A bundle's header is named after its first task
-   in bundle order. Its tasks are ordinary `ListRow`s inside a 1px `border-border` guide line 16px in. A group in In progress, or one that holds the task on screen, starts open; one in Waiting or Snoozed
-   starts folded; each remembers its state per place and section (`lib/preferences/disclosure.ts`). A section's count
-   counts a folded group once. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
+   one initiative or one bundle sit under a small `ListRow` (`size='sm'`, 24px): the group's icon (the initiative's
+   target, the bundle's layers) centred in the 20px slot the task tiles use, its name in medium `text-fg-3` and
+   "‹n› tasks here · ‹progress›" in `text-fg-2` after it (`QueueGroupRows`). It hovers and highlights like a task row
+   and opens a task, never folds: an initiative's opens its lead task, a bundle's (named after its first task in bundle
+   order) the latest of its tasks still being worked on, else the latest still waiting. Its tasks are ordinary
+   `ListRow`s inside a 1px `border-border` guide line 16px in, always shown, and a section's count counts each of
+   them. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from All tasks' groups (`lib/tasks/groups.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a

@@ -15,8 +15,8 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
-import { createDisclosureId, type DisclosureScope } from '@/lib/preferences/disclosure.ts';
-import { describeBundleProgress, listBundleRows } from '@/lib/tasks/bundles.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { type BundleRow, describeBundleProgress, listBundleRows } from '@/lib/tasks/bundles.ts';
 import { orderChains, TASK_GROUP } from '@/lib/tasks/groups.ts';
 import type { Route } from '@/router.ts';
 
@@ -91,19 +91,26 @@ function createInitiativeGroup(state: ShinsaState, initiative: Initiative, items
   };
 }
 
+function resolveBundleFront(rows: BundleRow[], fallback: Task) {
+  const latest = (wanted: BundleRow['state']) =>
+    [...rows].reverse().find((row) => row.state === wanted)?.task;
+  return latest('working') ?? latest('waiting') ?? fallback;
+}
+
 function createBundleGroup(state: ShinsaState, items: QueueItem[], root: QueueItem): QueueGroup {
   const bundle = resolveBundle(state, root.task);
   const order = new Map(bundle.map((member, index) => [member.id, index]));
   const id = bundle[0]?.id ?? root.task.id;
   const rank = (item: QueueItem) => order.get(item.task.id) ?? order.size;
   const [first = root, ...members] = [...items].sort((a, b) => rank(a) - rank(b));
+  const rows = listBundleRows(state, first.task);
   return {
     kind: 'bundle',
     id,
     key: `bundle:${id}`,
     title: first.task.title,
-    progress: describeBundleProgress(listBundleRows(state, first.task)),
-    opens: first.task,
+    progress: describeBundleProgress(rows),
+    opens: resolveBundleFront(rows, first.task),
     root: first,
     members,
   };
@@ -136,47 +143,8 @@ export function countGroupTasks(group: QueueGroup) {
   return group.members.length + (group.root ? 1 : 0);
 }
 
-export function countSectionEntries(entries: QueueEntry[], isOpen: (group: QueueGroup) => boolean) {
-  return entries.reduce((count, entry) => {
-    if (entry.kind === 'item') return count + 1;
-    return count + (isOpen(entry.group) ? countGroupTasks(entry.group) : 1);
-  }, 0);
-}
-
 export function describeGroupSummary(group: QueueGroup) {
   return `${describeCount(countGroupTasks(group), 'task')} here · ${group.progress}`;
-}
-
-export function resolveGroupPrefix(scope: Extract<DisclosureScope, 'home' | 'queue'>, section: QueueSection) {
-  return createDisclosureId(scope, 'group', section.key);
-}
-
-export function resolveGroupOpen(
-  group: QueueGroup,
-  opened: ReadonlySet<string>,
-  folded: ReadonlySet<string>,
-  fallback: boolean
-) {
-  const key = `${group.kind}:${group.id}`;
-  if (opened.has(key)) return true;
-  if (folded.has(key)) return false;
-  return fallback;
-}
-
-export function resolveGroupId(
-  scope: Extract<DisclosureScope, 'home' | 'queue'>,
-  section: QueueSection,
-  group: QueueGroup
-) {
-  return createDisclosureId(scope, 'group', section.key, group.kind, group.id);
-}
-
-function holdsTask(group: QueueGroup, taskId: string | null) {
-  return [group.root, ...group.members].some((item) => item !== null && item.task.id === taskId);
-}
-
-export function resolveGroupDefault(section: QueueSection, group: QueueGroup, activeTaskId: string | null) {
-  return section.key === 'working' || holdsTask(group, activeTaskId);
 }
 
 function createGroupSection(

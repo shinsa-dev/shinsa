@@ -17,19 +17,14 @@ import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionId } from '@/lib/home.ts';
 import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
-import { type DisclosureId, useDisclosure, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
+import { type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
-  countSectionEntries,
   describeGroupSummary,
   listQueueSections,
   type QueueEntry,
   type QueueGroup,
   type QueueItem,
   type QueueSection,
-  resolveGroupDefault,
-  resolveGroupId,
-  resolveGroupOpen,
-  resolveGroupPrefix,
   resolveSectionDefault,
   resolveSectionId,
 } from '@/lib/queue.ts';
@@ -169,113 +164,37 @@ function QueueItemRow({ context, item }: { context: RowContext; item: QueueItem 
 
 const GROUP_ICON: Record<QueueGroup['kind'], IconName> = { initiative: INITIATIVE_ICON, bundle: BUNDLE_ICON };
 
-function QueueGroupHeader({
-  context,
-  group,
-  open,
-  onToggle,
-}: {
-  context: RowContext;
-  group: QueueGroup;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const lead = group.kind === 'initiative' ? group.opens : null;
-  return (
-    <div className='relative flex h-6 min-w-0 items-center gap-1.5 px-2.5 text-2xs text-fg-2'>
-      <button
-        type='button'
-        aria-expanded={open}
-        aria-label={group.title}
-        onClick={onToggle}
-        className='peer absolute inset-0 cursor-pointer rounded-control-sm outline-none'
-      />
-      <Icon name={GROUP_ICON[group.kind]} size='sm' className='shrink-0' />
-      {lead ? (
-        <button
-          type='button'
-          onClick={() => openTask(context, lead)}
-          className='relative min-w-0 shrink cursor-pointer truncate font-medium text-fg-3 outline-none hover:text-fg-4 hover:underline active:text-fg-4 active:underline'
-        >
-          {group.title}
-        </button>
-      ) : (
-        <span className='min-w-0 shrink truncate font-medium text-fg-3 peer-hover:text-fg-4'>
-          {group.title}
-        </span>
-      )}
-      <span className='pointer-events-none shrink-0 tabular-nums peer-hover:text-fg-3'>
-        {describeGroupSummary(group)}
-      </span>
-    </div>
-  );
-}
-
-function QueueGroupRows({
-  context,
-  scope,
-  section,
-  group,
-  open,
-}: {
-  context: RowContext;
-  scope: 'home' | 'queue';
-  section: QueueSection;
-  group: QueueGroup;
-  open: boolean;
-}) {
-  const disclosure = useDisclosure(resolveGroupId(scope, section, group), open);
+function QueueGroupRows({ context, group }: { context: RowContext; group: QueueGroup }) {
   const items = group.root ? [group.root, ...group.members] : group.members;
+  const { opens } = group;
   return (
     <>
-      <QueueGroupHeader
-        context={context}
-        group={group}
-        open={open}
-        onToggle={() => disclosure.replaceOpen(!open)}
+      <ListRow
+        size='sm'
+        leading={
+          <span className='grid size-5 shrink-0 place-items-center text-fg-2'>
+            <Icon name={GROUP_ICON[group.kind]} size='sm' />
+          </span>
+        }
+        title={group.title}
+        mark={<span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{describeGroupSummary(group)}</span>}
+        active={opens !== null && opens.id === context.activeTaskId}
+        onClick={() => {
+          if (opens) openTask(context, opens);
+        }}
       />
-      {open && (
-        <div className='ms-4 flex flex-col border-s border-border ps-1'>
-          {items.map((item) => (
-            <QueueItemRow key={item.key} context={context} item={item} />
-          ))}
-        </div>
-      )}
+      <div className='ms-4 flex flex-col border-s border-border ps-1'>
+        {items.map((item) => (
+          <QueueItemRow key={item.key} context={context} item={item} />
+        ))}
+      </div>
     </>
   );
 }
 
-function useGroupOpen(scope: 'home' | 'queue', section: QueueSection, activeTaskId: string | null) {
-  const prefix = resolveGroupPrefix(scope, section);
-  const [opened] = useDisclosureSet(prefix, true);
-  const [folded] = useDisclosureSet(prefix, false);
-  return (group: QueueGroup) =>
-    resolveGroupOpen(group, opened, folded, resolveGroupDefault(section, group, activeTaskId));
-}
-
-function QueueEntryRows({
-  context,
-  scope,
-  section,
-  entry,
-  isOpen,
-}: {
-  context: RowContext;
-  scope: 'home' | 'queue';
-  section: QueueSection;
-  entry: QueueEntry;
-  isOpen: (group: QueueGroup) => boolean;
-}) {
+function QueueEntryRows({ context, entry }: { context: RowContext; entry: QueueEntry }) {
   if (entry.kind === 'item') return <QueueItemRow context={context} item={entry.item} />;
-  return (
-    <QueueGroupRows
-      context={context}
-      scope={scope}
-      section={section}
-      group={entry.group}
-      open={isOpen(entry.group)}
-    />
-  );
+  return <QueueGroupRows context={context} group={entry.group} />;
 }
 
 function resolveEntryKey(entry: QueueEntry) {
@@ -295,24 +214,13 @@ function QueueSectionView({
   activeTaskId: string | null;
   onNavigate: () => void;
 }) {
-  const scope = variant === 'compact' ? 'queue' : 'home';
-  const isOpen = useGroupOpen(scope, section, activeTaskId);
   const shown = useProgressiveCount(section.entries.length, FIRST_ROWS);
   if (section.items.length === 0 && section.empty === null) return null;
   const context = { state, variant, activeTaskId, onNavigate };
-  const count = countSectionEntries(section.entries, isOpen);
+  const count = section.items.length;
   const rows = section.entries
     .slice(0, shown)
-    .map((entry) => (
-      <QueueEntryRows
-        key={resolveEntryKey(entry)}
-        context={context}
-        scope={scope}
-        section={section}
-        entry={entry}
-        isOpen={isOpen}
-      />
-    ));
+    .map((entry) => <QueueEntryRows key={resolveEntryKey(entry)} context={context} entry={entry} />);
   if (variant === 'compact') {
     return (
       <QueueCompactSection section={section} count={count} activeTaskId={activeTaskId}>
