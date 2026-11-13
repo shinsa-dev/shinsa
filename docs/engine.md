@@ -2088,7 +2088,8 @@ whether to act for you, bring it to you, or, as a last resort, send it to your t
 never a power Shinsa takes: the policy is the human-only setting `autopilot` (Settings → Agents → Autopilot,
 `AutopilotPolicy` in `domain/settings.ts`), off by default, and every action it takes is recorded with its reason.
 Two layers decide: core's hard limits, which a model can never cross, and inside them a short model call that
-judges the case. The rules are core's (`autopilot/` for the facts, limits, prompt, lessons and Handled by Autopilot;
+judges the case. The rules are core's (`autopilot/` for the facts, limits, prompt, lessons, your decision profile,
+the score and Handled by Autopilot;
 `decide/autopilot.ts` for the commands; the folds in `state/autopilot.ts`); the judge and the clock are the
 engine's (`autopilot/judge.ts`, `runtime/autopilot/`).
 
@@ -2100,6 +2101,8 @@ gate opens ──► askAutopilot
                                          ├─ limits checked again; forward ──► waits for you
                                          └─ act ──► approve / reply / merge, with the reason
 you answer it later ──► lesson (autopilot.learned) ──► next judgment's prompt
+you answer any gate ──► autopilot.decided ──► profile ──► every prompt
+gate left to you ──► shadow judge ──► autopilot.guessed ──► score
 ```
 
 - **The reviewer rates every change.** `report_review` requires `confidence` and `risk`, each `low`, `medium` or
@@ -2112,14 +2115,15 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   `urgency` on `file_report` (a `TaskPriority`), which becomes the filed task's priority instead of the watched task's.
 - **The policy.** `enabled` (false); `level`, how much it may do alone (`AutopilotLevel`: `ask_first`, `balanced` by
   default, or `most`); `gates`, which of your decisions it may act on (`AutopilotGate`: `plans`, `questions`,
-  `reviews`, all three by default); `autoMerge` (`AutoMerge`: `off`, `low_risk` by default, or `approved`, every
+  `reviews`, `suggestions` and `watchdogTasks`; all but `suggestions` by default); `autoMerge` (`AutoMerge`: `off`, `low_risk` by default, or `approved`, every
   change it approved); `escalate` (true), whether it may send an urgent change to your team; `ignoreUsageLimits`
   (true), whether an urgent task's runs skip the usage and cost limits; `contacts`, who in Slack also hears of an
   escalation (none by default, at most `MAX_AUTOPILOT_CONTACTS`, 5; each an `AutopilotContact`, a `slack_channel`
   or `slack_person` with its workspace `teamId`, Slack `id` and `name`, listed once, `isSameAutopilotContact`;
   Escalating in Slack, below). `settings.change` takes a partial `autopilot` and merges it into the current policy,
   `gates` and `contacts` replaced whole.
-- **The facts.** For a plan, question, review or merge gate (`selectJudgedGateKind`), `resolveAutopilotFacts`
+- **The facts.** For a plan, question, review, merge or your OK gate (`selectJudgedGateKind`; your OK only on a
+  task a watchdog filed, below), `resolveAutopilotFacts`
   gathers what a colleague would weigh: urgency (`isUrgentTask`: urgent and not set on your behalf), whether a
   watchdog filed it, the reviewer's confidence and risk, the plan's size (phases and files), whether the plan asks
   for you (it runs an operation, splits, is in the backlog, was created plan first or asks for `approval`), whether
@@ -2144,9 +2148,10 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   open pre-merge step of it or its bundle, or edits not pushed). Each refusal carries why ("The reviewer’s
   confidence is medium.") and whether a setting made it.
 - **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
-  and asks for `autopilot.judge {taskId, gateId}`, a replay-safe effect on lane `task:<id>`: the engine builds the
+  and asks for `autopilot.judge {taskId, gateId, shadow: false}`, a replay-safe effect on lane `task:<id>`: the engine builds the
   prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
-  task's request, plan goal or question, the facts and the last 8 lessons of that kind of gate in the user prompt)
+  task's request, plan goal or question, the facts, the last 8 lessons of that kind of gate and your decision profile
+  for it, below, in the user prompt)
   and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
   'forward', reason, reply}`. It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
   ("Autopilot could not reach a model, so this waits for you."). Core ignores a judgment for a gate no longer open
@@ -2170,6 +2175,40 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   Autopilot did at your last few reviews, so it brings them to you for now." A later approval of what it brought
   you ends the pause. `resolveAutopilotLessonSummary` counts, per gate, what it did, what you kept, changed or let
   through as it was, and Settings shows it as What it learned.
+- **Your decision profile** (`autopilot/profile.ts`, `state.autopilotProfile`). Every decision you make, whether
+  Autopilot touched the gate or not, is kept: each answer on a plan, question, review, merge or your OK gate, each
+  review finding you mark fix or dismiss, and each suggested task you accept or dismiss
+  (`listGateDecisionDrafts`, recorded from `decide/lessons.ts` as `autopilot.decided {decisions}`). An
+  `AutopilotDecision` keeps its kind (`AutopilotDecisionKind`), your answer (`AutopilotDecisionAnswer`: `approved`,
+  `revised`, `rejected`, `replied`, `fixed`, `dismissed` or `accepted`), the project, the reviewer's risk, the plan's
+  scope, whether the task was urgent or filed by a watchdog, whether Autopilot had brought it to you (`touched`),
+  its guess (below) and your words (280 characters). Nothing an agent or a schedule does on your behalf counts, nor
+  a guest's answers on a handed-off task. The profile keeps the last 200 decisions, their total and counts per kind,
+  per kind and project and per kind and risk (`AUTOPILOT_PROFILE_LIMITS`: 300 counts, the most recently used kept).
+  Each judgment's prompt carries `listAutopilotProfileLines`: how you answered that kind of point overall, in the
+  task's project and at its risk, then up to 3 of your recent notes on it, within 1,200 characters. This is a
+  summary the model reads, not a model trained on you.
+- **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
+  merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
+  (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
+  stored on the gate (`autopilot.guessed`, `Gate.autopilotGuess`) and acts on nothing. A gate it judged and then
+  brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
+  Your answer is kept with the guess (`AutopilotDecision.guess`), and `resolveAutopilotScore` reads the last 100
+  scored decisions (`AUTOPILOT_SCORE_LIMITS`): approving agrees with `act`, changing or rejecting with `forward`;
+  questions are not scored, since a reply has no yes or no. It suggests `most` once at least 50 are scored and 9 in
+  10 agree, `balanced` otherwise; it never changes your level, which moves only when you choose one.
+- **Suggested tasks** (`suggestions` gate, off by default). Each new suggested task is weighed when an agent
+  suggests it (`weighSuggestion`, `resolveAutopilotSuggestionLimit`: Autopilot on, the gate on, any level but Ask
+  me first, never one you split off yourself or one that would stack on this task) through `autopilot.weigh
+  {taskId, suggestionId}`, a replay-safe effect on the engine's quick call (`createAutopilotWeigher`,
+  `selectAutopilotSuggestionRequest`, with your profile for suggested tasks), answered as `autopilot.weighed
+  {verdict: 'accept' | 'dismiss' | 'forward', reason}`. Core checks the limits again, then accepts it as you would
+  (starting after this task merges when the agent asked for that) or dismisses it, with `autopilot: <reason>` on
+  `suggestion.settled`; `forward`, a settled suggestion or no model leaves it to you.
+- **Watchdog tasks** (`watchdogTasks` gate, on by default). On a task a watchdog filed (`isWatchdogTask`), your OK
+  gate on its proposal is judged like any other gate and Autopilot may give your OK, unless the plan asks for you
+  (`limitProposal`). Everything after still passes its own gates under the same policy. Your OK on any other task
+  is always yours.
 - **Handled by Autopilot on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
   that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Handled by Autopilot, first on Home above
   Needs you: what it did, the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
@@ -2237,15 +2276,16 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   `autopilot-slack`. The sandbox (`bun run sandbox`) stands in for Slack on Studio (`scripts/sandbox/slack.ts`): the
   directory, the posts and their edits, drawn as Slack draws them on `/sandbox/slack`, with a sample escalation and
   its merged reply, and #leads refusing posts to try a failure.
-- **What it never does.** It never closes an operation, proposal, result, secret, failure, setup or Sign in gate, an
-  escalated review, or a plan held for you, never ticks a step around the merge, never acts while the hard limits
+- **What it never does.** It never closes an operation, result, secret, failure, setup or Sign in gate, an
+  escalated review, a plan held for you, or your OK on a task no watchdog filed, never ticks a step around the merge, never acts while the hard limits
   refuse whatever the model says, and never gets past GitHub: a merge GitHub refuses opens the usual failure gate.
 - **Settings** (Settings → Agents → Autopilot, `AutopilotSettings`, `lib/autopilot.ts`). The header has Turn on while
   it is off, with one line on what it does, and the on and off choice once on. Acting for you: On its own (the
-  level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews:
-  Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
+  level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews,
+  Suggested tasks, Watchdog tasks: Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
   approved). Who it asks: Your team (Only as a last resort, or Never), your team in Shinsa and the Slack contacts.
-  Usage limits (Ignore them or Keep them). What it learned: the summary per gate, a paused gate with why, and its
+  Usage limits (Ignore them or Keep them). How well it knows you: your decisions learned, how often its guesses
+  agreed, and the suggested level with a Use button while it differs from yours. What it learned: the summary per gate, a paused gate with why, and its
   latest lessons, or "Nothing yet" before the first.
 - **Urgent work and usage limits.** With the policy on and `ignoreUsageLimits` set (`isUsageLimitExempt`), an urgent
   task's runs skip both holds before they start: `holdForBudget` (the task's usage and cost limits) and `holdForPace`

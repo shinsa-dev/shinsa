@@ -8,7 +8,11 @@ import {
   NO_PROJECT_KEY,
 } from '../../packages/core/src/index.ts';
 import { DAY, HOUR } from '../kit/time.ts';
-import { pushSeedAutopilotHandled, pushSeedAutopilotLessons } from './autopilot.ts';
+import {
+  pushSeedAutopilotDecisions,
+  pushSeedAutopilotHandled,
+  pushSeedAutopilotLessons,
+} from './autopilot.ts';
 import { listSeedEvidenceEvents } from './evidence.ts';
 import { pushSeedFeedback } from './feedback.ts';
 import { NOW, type SeedTask } from './kit.ts';
@@ -57,6 +61,7 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
   for (const task of tasks) pushTask(task, push);
   pushSeedFeedback(push);
   pushSeedAutopilotLessons(push);
+  pushSeedAutopilotDecisions(push);
   pushSeedAutopilotHandled(push);
   const runEnds = new Map(
     timeline.flatMap(({ at, event }) => (event.type === 'run.ended' ? [[event.runId, at] as const] : []))
