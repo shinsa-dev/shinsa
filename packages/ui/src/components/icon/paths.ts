@@ -34,7 +34,6 @@ export const ICON_NAMES = [
   'IconBranch',
   'IconBroom',
   'IconBrowserTabs',
-  'IconBubbleAnnotation2',
   'IconBubbleCheck',
   'IconBubbleQuestion',
   'IconBubbleText',
@@ -383,9 +382,6 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconBrowserTabs: {
     '3': '<g><path d="M18 5H6C4.34315 5 3 6.34315 3 8V16C3 17.6569 4.34315 19 6 19H18C19.6569 19 21 17.6569 21 16V8C21 6.34315 19.6569 5 18 5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 8.5L10.5 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 8.5H17.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.5 8.5H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
-  },
-  IconBubbleAnnotation2: {
-    '3': '<g><path d="M6.00195 4H18.002C19.6588 4 21.002 5.34315 21.002 7V15C21.002 16.6569 19.6588 18 18.002 18H12.002L7.00195 21V18H6.00195C4.3451 18 3.00195 16.6569 3.00195 15V7C3.00195 5.34315 4.3451 4 6.00195 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/><path d="M6.625 11C6.625 11.4832 7.01675 11.875 7.5 11.875C7.98325 11.875 8.375 11.4832 8.375 11C8.375 10.5168 7.98325 10.125 7.5 10.125C7.01675 10.125 6.625 10.5168 6.625 11ZM11.125 11C11.125 11.4832 11.5168 11.875 12 11.875C12.4832 11.875 12.875 11.4832 12.875 11C12.875 10.5168 12.4832 10.125 12 10.125C11.5168 10.125 11.125 10.5168 11.125 11ZM15.625 11C15.625 11.4832 16.0168 11.875 16.5 11.875C16.9832 11.875 17.375 11.4832 17.375 11C17.375 10.5168 16.9832 10.125 16.5 10.125C16.0168 10.125 15.625 10.5168 15.625 11Z" fill="currentColor" stroke="currentColor" stroke-width="0.75" stroke-linecap="square"/></g>',
   },
   IconBubbleCheck: {
     '3': '<g><path d="M9.74976 11.25L11.2498 12.75L14.7498 9.24999M11.9977 20.5358L14.7377 18.2657C14.9171 18.1171 15.1427 18.0358 15.3757 18.0358L17.002 18.0358C18.6588 18.0358 20.002 16.6926 20.002 15.0358V7C20.002 5.34314 18.6588 4 17.0019 4L7.00195 4.00002C5.3451 4.00002 4.00195 5.34317 4.00195 7.00002V15.0358C4.00195 16.6926 5.3451 18.0358 7.00195 18.0358H8.65157C8.8865 18.0358 9.11393 18.1185 9.29398 18.2694L11.9977 20.5358Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
