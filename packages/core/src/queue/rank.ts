@@ -60,8 +60,16 @@ const WORKING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_merge',
 ]);
 
-function isMoving(task: Task, running: ReadonlySet<string>) {
-  return WORKING_STAGES.has(task.stage) || hasArmedWait(task) || running.has(task.id);
+function isMoving(task: Task, running: ReadonlySet<string>, judging: ReadonlySet<string>) {
+  return WORKING_STAGES.has(task.stage) || hasArmedWait(task) || running.has(task.id) || judging.has(task.id);
+}
+
+function listJudgedTasks(state: ShinsaState) {
+  return new Set(
+    listOpenGates(state)
+      .filter((gate) => gate.autopilotJudging === true)
+      .map((gate) => gate.taskId)
+  );
 }
 
 function isFocusOver(state: ShinsaState, now: number) {
@@ -170,7 +178,11 @@ function countDependents(state: ShinsaState) {
 
 function listQueuedGates(state: ShinsaState): QueuedGate[] {
   const open = listOpenGates(state).filter(
-    (gate) => !isHeldInBacklog(state, gate) && !state.tasks[gate.taskId]?.snoozed && !isGateHeld(state, gate)
+    (gate) =>
+      !isHeldInBacklog(state, gate) &&
+      !state.tasks[gate.taskId]?.snoozed &&
+      !isGateHeld(state, gate) &&
+      gate.autopilotJudging !== true
   );
   const dependents = open.length > 0 ? countDependents(state) : new Map<string, number>();
   return open.flatMap((gate) => {
@@ -198,6 +210,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const tasksWithGates = new Set(entries.map((entry) => entry.task.id));
 
   const running = resolveActiveRunTasks(state);
+  const judging = listJudgedTasks(state);
   const working: Task[] = [];
   const waiting: Task[] = [];
   const backlog: Task[] = [];
@@ -208,7 +221,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
     else if (task.backlog && !isTaskSettled(task)) backlog.push(task);
     else if (listWaitsOn(state, task).length > 0 || listBundleBlockers(state, task).length > 0) {
       waiting.push(task);
-    } else if (isMoving(task, running)) working.push(task);
+    } else if (isMoving(task, running, judging)) working.push(task);
   }
 
   const ready = entries.filter((entry) => isInFocus(state, entry.task, now)).sort(compareGates);

@@ -1,3 +1,4 @@
+import type { AutopilotDecision, AutopilotLesson, AutopilotVerdict } from '../autopilot/schema.ts';
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
   AutopilotDue,
@@ -97,6 +98,8 @@ type EventBody =
   | { type: 'project.removed'; projectId: string }
   | { type: 'focus.changed'; focus: Focus }
   | { type: 'away.recorded'; from: number; to: number }
+  | { type: 'clock.recorded'; timeZone: string }
+  | { type: 'mac.used'; usedAt: number }
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
   | {
       type: 'usage.pace_recorded';
@@ -128,6 +131,7 @@ type EventBody =
       scheduleId?: string | null;
       sourceReport?: SourceReport | null;
       watchHome?: boolean;
+      learned?: true;
       forkOf?: string | null;
       teammateFork?: TeammateFork | null;
       initiativeId?: string | null;
@@ -242,7 +246,7 @@ type EventBody =
   | { type: 'worktree.removed'; taskId: string }
   | { type: 'task.moving'; taskId: string; repoId: string; runId: string; reason: string }
   | { type: 'task.moved'; taskId: string; repoId: string }
-  | { type: 'task.edited'; taskId: string; path: string; changed: boolean }
+  | { type: 'task.edited'; taskId: string; path: string; changed: boolean; learned?: true }
   | { type: 'task.edits_told'; taskId: string }
   | { type: 'task.overlapped'; taskId: string; otherTaskId: string; paths: string[] }
   | { type: 'task.overlaps_told'; taskId: string }
@@ -291,6 +295,12 @@ type EventBody =
     }
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'autopilot.scheduled'; gateId: string; due: AutopilotDue | null }
+  | { type: 'autopilot.judging'; gateId: string }
+  | { type: 'autopilot.guessed'; gateId: string; verdict: AutopilotVerdict }
+  | { type: 'autopilot.forwarded'; gateId: string; reason: string; teaches: boolean }
+  | { type: 'autopilot.learned'; lessons: AutopilotLesson[] }
+  | { type: 'autopilot.decided'; decisions: AutopilotDecision[] }
+  | { type: 'autopilot.seen'; gateIds: string[] }
   | { type: 'task.escalated'; taskId: string; reason: string; handoff: EscalationHandoff }
   | { type: 'task.escalation_revised'; taskId: string; reason: string; handoff: EscalationHandoff }
   | { type: 'gate.noted'; gateId: string; notes: string | null }
@@ -378,6 +388,7 @@ type EventBody =
       status: 'accepted' | 'dismissed';
       createdTaskId: string | null;
       keptRound?: number;
+      autopilot?: string;
     }
   | { type: 'config.verified'; taskId: string; problems: ConfigProblem[] }
   | { type: 'task.repo_bound'; taskId: string; repoId: string; projectId?: string | null; handle?: string }

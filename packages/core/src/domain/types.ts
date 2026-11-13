@@ -1,3 +1,4 @@
+import type { AutopilotVerdict } from '../autopilot/schema.ts';
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   AgentReply,
@@ -473,11 +474,8 @@ export interface Autopiloted {
   reason: string;
 }
 
-export type AutopilotAction = 'escalate' | 'merge';
-
 export interface AutopilotDue {
   at: number;
-  action: AutopilotAction;
 }
 
 export interface EscalationFinder {
@@ -837,6 +835,12 @@ export interface Gate {
   cause?: GateCause;
   escalation?: ReviewEscalation;
   autopilotHeld?: string;
+  autopilotJudging?: boolean;
+  autopilotGuess?: AutopilotVerdict;
+  autopilotAnswer?: string;
+  autopilotTeaches?: boolean;
+  autopilotLearned?: boolean;
+  autopilotSeen?: boolean;
   autopilotDue?: AutopilotDue | null;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;

@@ -1,5 +1,9 @@
-import type { ShinsaEffect } from '@shinsa/core';
-import { Context, Effect, Layer } from 'effect';
+import {
+  selectAutopilotJudgeRequest,
+  selectAutopilotSuggestionRequest,
+  type ShinsaEffect,
+} from '@shinsa/core';
+import { Clock, Context, Effect, Layer, Option } from 'effect';
 import { provideTaskGitHub } from '../../../github/identity/resolve.ts';
 import { MachineGitHub } from '../../../github/identity/schema.ts';
 import type { Slack, SlackRefusal, SlackRelayFailure } from '../../../slack/index.ts';
@@ -67,6 +71,56 @@ export class EffectHandlers extends Context.Service<
         yield* world.dispatch(
           { type: 'share.describe', taskId, description },
           { id: `${attempt.key}:share.describe` }
+        );
+      });
+
+      const judgeAutopilot = Effect.fn('EffectHandlers.judgeAutopilot')(function* (
+        effect: EffectOf<'autopilot.judge'>,
+        attempt: EffectAttempt
+      ) {
+        const now = yield* Clock.currentTimeMillis;
+        const selected = selectAutopilotJudgeRequest(yield* world.state, effect.gateId, now, effect.shadow);
+        if (Option.isNone(selected)) return;
+        const request = selected.value;
+        const answer = yield* world.judgeAutopilot(request.system, request.prompt);
+        if (!answer && effect.shadow) return;
+        const judgment = answer ?? {
+          verdict: 'forward' as const,
+          reason: 'Autopilot could not reach a model, so this waits for you.',
+          reply: null,
+        };
+        yield* world.dispatch(
+          {
+            type: 'autopilot.judgment',
+            taskId: effect.taskId,
+            gateId: effect.gateId,
+            shadow: effect.shadow,
+            ...judgment,
+          },
+          { id: `${attempt.key}:autopilot.judgment` }
+        );
+      });
+
+      const weighSuggestion = Effect.fn('EffectHandlers.weighSuggestion')(function* (
+        effect: EffectOf<'autopilot.weigh'>,
+        attempt: EffectAttempt
+      ) {
+        const selected = selectAutopilotSuggestionRequest(
+          yield* world.state,
+          effect.taskId,
+          effect.suggestionId
+        );
+        if (Option.isNone(selected)) return;
+        const answer = yield* world.weighSuggestion(selected.value.system, selected.value.prompt);
+        if (!answer) return;
+        yield* world.dispatch(
+          {
+            type: 'autopilot.weighed',
+            taskId: effect.taskId,
+            suggestionId: effect.suggestionId,
+            ...answer,
+          },
+          { id: `${attempt.key}:autopilot.weighed` }
         );
       });
 
@@ -153,6 +207,10 @@ export class EffectHandlers extends Context.Service<
             return yield* withSlack((slack) => slack.react(effect));
           case 'slack.escalate':
             return yield* withSlack((slack) => slack.escalate(effect, attempt.key));
+          case 'autopilot.judge':
+            return yield* judgeAutopilot(effect, attempt);
+          case 'autopilot.weigh':
+            return yield* weighSuggestion(effect, attempt);
           case 'feedback.draft':
             return yield* Effect.mapError(
               world.feedback.draft(effect.feedbackId, attempt.key),

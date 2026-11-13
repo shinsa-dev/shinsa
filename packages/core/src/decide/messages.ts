@@ -37,6 +37,7 @@ import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { requestIteration } from './iterations.ts';
 import { startLeadTurn } from './leads.ts';
+import { learnFromMessage, recordDecisions } from './lessons.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
 import { retryArmedTask } from './retry.ts';
 import { assertTakesMessages, findWaitingRound, isHeldByYourDecision, queueRound } from './rounds.ts';
@@ -355,40 +356,41 @@ export function isHeldForYou(state: ShinsaState, task: Task) {
   return listOpenGates(state, task.id).some((gate) => gate.type !== 'result');
 }
 
-function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
+function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null): boolean {
   const task = decider.task(send.taskId);
   const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
   const teammate = send.fromTeammateTask ? { fromTeammateTask: send.fromTeammateTask } : {};
   const sent: Sent = { texts, comments: send.comments ?? [], ...teammate };
   const text = resolveCommentedMessage(texts.join('\n\n'), sent.comments);
   const delivery = assertMessageAccepted(decider.state, task, text);
-  if (isRepeatedMessage(task, text, decider.context.now)) return;
+  if (isRepeatedMessage(task, text, decider.context.now)) return false;
   const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
   const scheduled = scheduleId ? { scheduleId } : {};
   const kind = resolveMessageKind(send, task, delivery, scheduleId !== null);
   if (sentForYou && isHeldForYou(decider.state, task)) {
     recordMessages(decider, task.id, sent, { ...scheduled, kept: true });
-    return;
+    return true;
   }
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
     const suggestionId = decider.context.newId();
     recordMessages(decider, task.id, sent, { kind, suggestionId });
     suggestSplitOff(decider, task.id, suggestionId, text, send.title ?? null, send.why ?? null);
-    return;
+    return true;
   }
   if (
     isNewWork(kind) &&
     !isHeldByYourDecision(decider.state, task, SHAPE_PIPELINES[send.shape ?? 'change'])
   ) {
     startNewWork(decider, task, send, sent, text);
-    return;
+    return true;
   }
   if (isOnlyRecorded(kind, delivery)) {
     recordMessages(decider, task.id, sent, { kind });
-    return;
+    return true;
   }
   recordMessages(decider, task.id, sent, scheduled);
   deliverMessage(decider, decider.task(task.id), delivery, sent);
+  return true;
 }
 
 function describeGuest(decider: Decider, taskId: string, guest: ScopedActor) {
@@ -409,7 +411,11 @@ export function messageTask(
   scheduleId: string | null = null
 ) {
   const { type: _type, text, ...route } = command;
-  sendMessages(decider, { ...route, texts: [text] }, scheduleId);
+  return sendMessages(decider, { ...route, texts: [text] }, scheduleId);
+}
+
+export function messageTaskAsYou(decider: Decider, command: CommandOf<'task.message'>) {
+  if (messageTask(decider, command)) learnFromMessage(decider, command.taskId, command.text);
 }
 
 export function sendQueuedRound(decider: Decider, command: CommandOf<'round.send'>) {
@@ -423,6 +429,9 @@ export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.
   const task = decider.task(command.taskId);
   assertTakesMessages(task);
   const resting = isTaskResting(task) || task.stage === 'answered';
+  recordDecisions(decider, [
+    { task, gate: null, kind: 'suggestion', answer: 'kept', note: suggestion.title },
+  ]);
   decider.emit({
     type: 'suggestion.settled',
     taskId: task.id,

@@ -8,7 +8,9 @@ import {
   type Task,
   type TaskSuggestion,
 } from '../domain/index.ts';
+import { weighSuggestion } from './autopilot.ts';
 import type { Decider } from './decider.ts';
+import { recordDecisions } from './lessons.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
@@ -92,11 +94,12 @@ export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest
     });
   }
   for (const suggestion of fresh) {
+    const suggestionId = decider.context.newId();
     decider.emit({
       type: 'task.suggested',
       taskId: task.id,
       suggestion: {
-        id: decider.context.newId(),
+        id: suggestionId,
         runId: run.id,
         title: suggestion.title.trim(),
         request: suggestion.request.trim(),
@@ -109,6 +112,7 @@ export function suggestTasks(decider: Decider, command: CommandOf<'agent.suggest
         ...(suggestion.splitOff ? { splitOff: true } : {}),
       },
     });
+    weighSuggestion(decider, task.id, suggestionId);
   }
 }
 
@@ -130,36 +134,85 @@ function assertOneStart(command: CommandOf<'suggestion.accept'>) {
   });
 }
 
-export function acceptSuggestion(decider: Decider, command: CommandOf<'suggestion.accept'>) {
-  const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
-  assertOneStart(command);
-  const parent = decider.task(command.taskId);
-  const createdTaskId = createTask(decider, {
+interface SuggestionStart {
+  waitsOnThis: boolean;
+  stackOnThis?: boolean;
+  backlog?: boolean;
+}
+
+function addSuggestedTask(
+  decider: Decider,
+  parent: Task,
+  suggestion: TaskSuggestion,
+  start: SuggestionStart
+) {
+  return createTask(decider, {
     type: 'task.create',
     request: suggestion.request,
     repoId: parent.repoId,
     priority: parent.priority,
     origin: parent.origin,
-    waitsOn: command.waitsOnThis ? [parent.id] : [],
-    ...(command.stackOnThis ? { stacksOn: [parent.id] } : {}),
-    ...(command.backlog ? { backlog: true } : {}),
+    waitsOn: start.waitsOnThis ? [parent.id] : [],
+    ...(start.stackOnThis ? { stacksOn: [parent.id] } : {}),
+    ...(start.backlog ? { backlog: true } : {}),
   });
+}
+
+function settle(
+  decider: Decider,
+  taskId: string,
+  suggestionId: string,
+  createdTaskId: string | null,
+  autopilot: string | null
+) {
   decider.emit({
     type: 'suggestion.settled',
-    taskId: parent.id,
-    suggestionId: suggestion.id,
-    status: 'accepted',
+    taskId,
+    suggestionId,
+    status: createdTaskId === null ? 'dismissed' : 'accepted',
     createdTaskId,
+    ...(autopilot === null ? {} : { autopilot }),
   });
+}
+
+export function acceptSuggestion(decider: Decider, command: CommandOf<'suggestion.accept'>) {
+  const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
+  assertOneStart(command);
+  const parent = decider.task(command.taskId);
+  const createdTaskId = addSuggestedTask(decider, parent, suggestion, {
+    waitsOnThis: command.waitsOnThis,
+    stackOnThis: command.stackOnThis,
+    backlog: command.backlog,
+  });
+  recordDecisions(decider, [
+    { task: parent, gate: null, kind: 'suggestion', answer: 'accepted', note: suggestion.title },
+  ]);
+  settle(decider, parent.id, suggestion.id, createdTaskId, null);
 }
 
 export function dismissSuggestion(decider: Decider, command: CommandOf<'suggestion.dismiss'>) {
   const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
-  decider.emit({
-    type: 'suggestion.settled',
-    taskId: command.taskId,
-    suggestionId: suggestion.id,
-    status: 'dismissed',
-    createdTaskId: null,
-  });
+  recordDecisions(decider, [
+    {
+      task: decider.task(command.taskId),
+      gate: null,
+      kind: 'suggestion',
+      answer: 'dismissed',
+      note: suggestion.title,
+    },
+  ]);
+  settle(decider, command.taskId, suggestion.id, null, null);
+}
+
+export function settleSuggestionForYou(
+  decider: Decider,
+  parent: Task,
+  suggestion: TaskSuggestion,
+  accept: boolean,
+  reason: string
+) {
+  const createdTaskId = accept
+    ? addSuggestedTask(decider, parent, suggestion, { waitsOnThis: suggestion.waitsOnThis })
+    : null;
+  settle(decider, parent.id, suggestion.id, createdTaskId, reason);
 }

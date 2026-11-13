@@ -159,6 +159,7 @@ const FEATURE_ROUTES = {
     'POST /api/browser/projects/([^/]+)/sites/remove',
     'POST /api/browser/projects/([^/]+)/sign-out',
   ],
+  'active-hours': [],
   initiatives: ['GET /api/initiatives', 'GET /api/initiatives/([^/]+)'],
   'slack-channel-triggers': ['GET /api/slack/channels'],
   'models.routing': [],

@@ -4,7 +4,9 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
 import {
+  AUTO_MERGE_DESCRIPTION,
   AUTOPILOT_BLOCKS,
+  AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_OFF,
   AUTOPILOT_ROWS,
   AUTOPILOT_TURN_ON,
@@ -23,7 +25,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createProject, createShinsaState } from '../../support/state.ts';
+import { createAutopilotProfile, createProject, createShinsaState } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -53,7 +55,7 @@ function renderAgents(settings: Settings = createSettings(), automatic = false) 
   );
 }
 
-async function choose(label: string, option: string) {
+async function choose(label: string, option: string | RegExp) {
   fireEvent.click(screen.getByRole('combobox', { name: label }));
   await settle();
   const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
@@ -262,7 +264,7 @@ describe('Settings → Agents → Engine', () => {
 describe('Settings → Agents → Autopilot', () => {
   const ESCALATING: Settings = {
     ...createSettings(),
-    autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, urgent: 'escalate' },
+    autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },
   };
 
   it('shows only on an engine that has Autopilot', () => {
@@ -277,7 +279,7 @@ describe('Settings → Agents → Autopilot', () => {
     const { unmount } = renderAgents();
     await settle();
     expect(screen.getByText(AUTOPILOT_OFF)).toBeTruthy();
-    expect(screen.queryByText(AUTOPILOT_BLOCKS.approving.title)).toBeNull();
+    expect(screen.queryByText(AUTOPILOT_BLOCKS.acting.title)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: AUTOPILOT_TURN_ON }));
     expect(listSentCommands()).toEqual([
       { type: 'settings.change', patch: { autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true } } },
@@ -289,27 +291,71 @@ describe('Settings → Agents → Autopilot', () => {
     expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.usage })).toBeTruthy();
   });
 
-  it('shows how long it waits only when it merges after the wait', async () => {
-    spyOnEngine();
-    const { unmount } = renderAgents(ESCALATING);
-    await settle();
-    expect(screen.queryByRole('combobox', { name: AUTOPILOT_ROWS.wait })).toBeNull();
-    unmount();
-    renderAgents({ ...ESCALATING, autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, urgent: 'merge' } });
-    await settle();
-    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.wait })).toBeTruthy();
-  });
-
-  it('cannot ask for a review while no one can be asked, and says so', async () => {
+  it('sets how much it does on its own, which gates it decides and Auto merge', async () => {
     spyOnEngine();
     renderAgents(ESCALATING);
     await settle();
-    expect(screen.getByText(TEAM_CONTACT.alone)).toBeTruthy();
-    fireEvent.click(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.urgent }));
+    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.level }).textContent).toBe('Balanced');
+    expect(screen.getByText(AUTOPILOT_LEVEL_DESCRIPTION.balanced)).toBeTruthy();
+    expect(screen.getByText(AUTO_MERGE_DESCRIPTION.low_risk)).toBeTruthy();
+    await choose(AUTOPILOT_ROWS.level, /^Most things/);
+    await choose('Agent questions', 'Always ask me');
+    await choose(AUTOPILOT_ROWS.autoMerge, 'Off, I merge');
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
+      {
+        type: 'settings.change',
+        patch: { autopilot: { ...ESCALATING.autopilot, gates: ['plans', 'reviews', 'watchdogTasks'] } },
+      },
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, autoMerge: 'off' } } },
+    ]);
+  });
+
+  it('shows how well it knows you and uses the level it suggests only when you click', async () => {
+    spyOnEngine();
+    pushState(
+      createShinsaState({
+        patch: { autopilotProfile: createAutopilotProfile({ agreed: 46, disagreed: 4 }) },
+      })
+    );
+    renderAgents(ESCALATING);
     await settle();
-    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
-    const ask = within(list).getByRole('option', { name: /Ask for a review, then merge/ });
-    expect(ask.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
+    const percent = screen.getByText(/^\d+%$/).textContent ?? '';
+    expect(Number.parseInt(percent, 10)).toBeGreaterThanOrEqual(90);
+    expect(screen.queryByRole('meter')).toBeNull();
+    expect(screen.queryByText('Ready')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    expect(screen.queryByText('Agrees with you')).toBeNull();
+    expect(screen.queryByText('50')).toBeNull();
+    expect(screen.queryByText('What it learned')).toBeNull();
+    expect(listSentCommands()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
+    ]);
+  });
+
+  it('says the suggested level is in use once you already chose it', async () => {
+    spyOnEngine();
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText('0%')).toBeTruthy();
+    expect(screen.queryByText('Learning')).toBeNull();
+    expect(screen.getByText('In use')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();
+  });
+
+  it('warns when nobody can be asked, and stops warning once your team is never contacted', async () => {
+    spyOnEngine();
+    const { unmount } = renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(TEAM_CONTACT.alone)).toBeTruthy();
+    expect(document.querySelector('.text-warning')).toBeTruthy();
+    unmount();
+    renderAgents({ ...ESCALATING, autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, escalate: false } });
+    await settle();
+    expect(document.querySelector('.text-warning')).toBeNull();
   });
 
   it('asks your team once a project is shared with one', async () => {
@@ -318,12 +364,9 @@ describe('Settings → Agents → Autopilot', () => {
     renderAgents(ESCALATING);
     await settle();
     expect(screen.getByText(TEAM_CONTACT.shared)).toBeTruthy();
-    await choose(AUTOPILOT_ROWS.urgent, 'Ask for a review, then merge');
+    await choose(AUTOPILOT_ROWS.escalate, /^Never/);
     expect(listSentCommands()).toEqual([
-      {
-        type: 'settings.change',
-        patch: { autopilot: { ...ESCALATING.autopilot, urgent: 'escalate_then_merge' } },
-      },
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, escalate: false } } },
     ]);
   });
 

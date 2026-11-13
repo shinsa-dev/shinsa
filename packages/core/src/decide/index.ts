@@ -33,7 +33,12 @@ import {
   removeEvidence,
   reportReview,
 } from './agents.ts';
-import { fireAutopilot } from './autopilot.ts';
+import {
+  applyAutopilotJudgment,
+  applyAutopilotWeighed,
+  fireAutopilot,
+  markAutopilotSeen,
+} from './autopilot.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
 import { requestBrowserSignIn } from './browser-sign-in.ts';
 import { reviewBundles } from './bundles.ts';
@@ -89,7 +94,7 @@ import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
 import {
   dropMessage,
   keepSuggestion,
-  messageTask,
+  messageTaskAsYou,
   receiveMessage,
   redeliverMessage,
   routeMessage,
@@ -102,7 +107,7 @@ import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import { pauseTask } from './pause.ts';
-import { recordAway } from './presence.ts';
+import { recordAway, recordClock, recordIdle } from './presence.ts';
 import {
   recordBundleCheck,
   recordBundleMergeConflict,
@@ -183,7 +188,7 @@ import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions
 import {
   cancelTask,
   completeTask,
-  createTask,
+  createTaskAsYou,
   failEffect,
   prioritizeTask,
   readyWorktree,
@@ -239,10 +244,16 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return changeFocus(decider, command);
     case 'away.record':
       return recordAway(decider, command);
+    case 'autopilot.seen':
+      return markAutopilotSeen(decider, command);
+    case 'clock.record':
+      return recordClock(decider, command);
+    case 'idle.record':
+      return recordIdle(decider, command);
     case 'settings.change':
       return changeSettings(decider, command);
     case 'task.create':
-      return command.initiative ? createInitiativeTask(decider, command) : createTask(decider, command);
+      return command.initiative ? createInitiativeTask(decider, command) : createTaskAsYou(decider, command);
     case 'task.triage':
       return triageTask(decider, command);
     case 'task.prioritize':
@@ -272,7 +283,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
     case 'task.retry':
       return retryTaskCommand(decider, command);
     case 'task.message':
-      return messageTask(decider, command);
+      return messageTaskAsYou(decider, command);
     case 'message.deliver':
       return redeliverMessage(decider, command);
     case 'message.receive':
@@ -549,6 +560,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return fireWatchdog(decider, command);
     case 'autopilot.fire':
       return fireAutopilot(decider, command);
+    case 'autopilot.judgment':
+      return applyAutopilotJudgment(decider, command);
+    case 'autopilot.weighed':
+      return applyAutopilotWeighed(decider, command);
     case 'watch_source.write':
       return writeWatchSource(decider, command);
     case 'watch_source.remove':

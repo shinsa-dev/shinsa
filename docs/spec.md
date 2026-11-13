@@ -207,11 +207,21 @@ not chat text.
   defaults. When no server has the data, it asks you for one with what the code sends where and the servers worth
   connecting (`docs/engine.md` → Watchdogs).
 - **Autopilot, when you turn it on.** The reviewer rates every change for confidence and risk. Settings → Agents →
-  Autopilot (off by default, yours alone) approves a high-confidence review within the risk you allow, so its pull
-  request opens without you, and can merge it for you. An urgent change, such as a fix a watchdog filed as urgent,
-  whose merge waits too long is sent to your team's Needs you, merged for you, or both; it can also post that to
-  Slack channels and send it to on-call teammates in Slack, up to five at once, with the task's link and why. It never closes any other
-  gate, and the activity says why it acted (`docs/engine.md` → Autopilot).
+  Autopilot (off by default, yours alone) makes Autopilot your delegate: at each plan, agent question, review and
+  merge it weighs the scope, the ratings, urgency, whether a watchdog filed it and whether you are around, and acts
+  for you only within hard limits you set (Ask me first, Balanced or Most things, the gates it may act on, Auto
+  merge, Suggested tasks, Watchdog tasks); everything else comes to you. It learns from every decision you make, kept
+  as a profile of how you answer each kind of point by project and risk, guesses in the background at what it leaves
+  to you, and shows How well it knows you: a score out of 100 in a ring gauge, with Most things suggested at 90, how often it agrees with you, and a suggested
+  level you can take with one click. Every decision counts, the recent ones the most, and so do your messages to
+  agents, your code edits, the tasks you file, priority changes and cancellations. It pauses a kind of gate you keep correcting. It can also accept
+  or dismiss suggested tasks and give your OK on a watchdog task's fix. Everything it did is in Handled by Autopilot on Home and notifies
+  until you mark it seen. Only an urgent, high-risk change, after you have been away an hour, goes to your team's
+  Needs you, and to Slack channels and on-call teammates you choose, up to five; never while you are active. The
+  activity says why it acted (`docs/engine.md` → Autopilot).
+- **Your hours.** Shinsa learns when you are usually active, per weekday on your own clock, from when you are away,
+  when you use your Mac and what you do in Shinsa, and shows it in Settings → Agents → Your hours as a week
+  timeline, where you can set it by hand. Autopilot and Auto pace read it (`docs/engine.md` → Your hours).
 - **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
   agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
   `docs/engine.md` → Forking a task).

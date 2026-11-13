@@ -1,5 +1,5 @@
+import type { AwaySpan } from '@shinsa/core';
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron';
-import type { AwaySpan } from '../away/schema.ts';
 import {
   CHANNELS,
   type DesktopBridge,

@@ -1,4 +1,4 @@
-import type { AwaySpan } from '../away/schema.ts';
+import type { AwaySpan } from '@shinsa/core';
 import type { DesktopNotice } from '../notifications/schema.ts';
 import type { UpdateChannel } from '../updates/schema.ts';
 

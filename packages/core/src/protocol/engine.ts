@@ -28,6 +28,7 @@ export const ENGINE_FEATURES = [
   'shared-machine',
   'focus.projects',
   'browser',
+  'active-hours',
   'initiatives',
   'slack-channel-triggers',
   'models.routing',

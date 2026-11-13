@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { UsageWait } from '@shinsa/core';
-import { resolveAwayHours } from '@shinsa/core';
+import { createSettings, resolveActiveHours, type UsageWait } from '@shinsa/core';
 import {
   BUILD_NOW,
   describeUsageWaitAction,
@@ -124,7 +123,10 @@ describe('usage waits', () => {
       stageReason: 'building',
       need: 6,
     };
-    const away = resolveAwayHours({ away: createNights(), presence: {} }, NOW);
+    const away = resolveActiveHours(
+      { away: createNights(), presence: {}, settings: createSettings(), timeZone: null },
+      NOW
+    );
     const night = Math.floor(NOW / 86_400_000) * 86_400_000 + 86_400_000 + 3 * 3_600_000;
     const tonight = wait({ cause: 'pace', pace, resetAt: night });
     expect(isAdmissionWait(tonight)).toBe(true);

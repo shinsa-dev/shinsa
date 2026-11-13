@@ -335,6 +335,8 @@ type SystemCommand =
       endingPace: number | null;
       resetEndsAt: number | null;
     }
+  | { type: 'clock.record'; timeZone: string }
+  | { type: 'idle.record'; inputAt: number; away: { from: number; to: number } | null }
   | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
