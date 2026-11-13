@@ -1461,7 +1461,9 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   push makes that task ready again, which reads the lead again, so the bundle is brought up to date one branch at a
   time, each pull request's diff staying its own work. When no branch is behind, the lead pauses with a failure gate,
   "The bundle conflicts with main". The engine runs the same check again right before the merge and merges nothing
-  when it fails.
+  when it fails: it records the conflict (`bundle.record_merge_conflict`), which moves the lead and its followers back
+  to ready and starts the same update, so the bundle is brought up to date without a Retry and the gate opens again
+  for the new heads.
 - **Leaving and losing a bundle.** When a task with nothing stacked on it is cancelled or turns out to ship no pull
   request, the bundle is one task smaller; a lead with no followers left gets its own merge gate. A task below merged
   outside Shinsa drops out of the bundle: it leaves the bases of each task above, a task whose first base it was
