@@ -285,7 +285,7 @@ export function answerGate(
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
   const thenApprove = options.thenApprove ? { thenApprove: true } : {};
-  learnFromAnswer(decider, { gate, decision, response });
+  learnFromAnswer(decider, { gate, decision, response, verdicts: options.verdicts ?? [] });
   decider.emit({
     type: 'gate.answered',
     gateId,

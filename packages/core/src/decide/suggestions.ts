@@ -9,6 +9,7 @@ import {
   type TaskSuggestion,
 } from '../domain/index.ts';
 import type { Decider } from './decider.ts';
+import { recordDecisions } from './lessons.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
@@ -144,6 +145,9 @@ export function acceptSuggestion(decider: Decider, command: CommandOf<'suggestio
     ...(command.stackOnThis ? { stacksOn: [parent.id] } : {}),
     ...(command.backlog ? { backlog: true } : {}),
   });
+  recordDecisions(decider, [
+    { task: parent, gate: null, kind: 'suggestion', answer: 'accepted', note: suggestion.title },
+  ]);
   decider.emit({
     type: 'suggestion.settled',
     taskId: parent.id,
@@ -155,6 +159,15 @@ export function acceptSuggestion(decider: Decider, command: CommandOf<'suggestio
 
 export function dismissSuggestion(decider: Decider, command: CommandOf<'suggestion.dismiss'>) {
   const suggestion = findOpenSuggestion(decider, command.taskId, command.suggestionId);
+  recordDecisions(decider, [
+    {
+      task: decider.task(command.taskId),
+      gate: null,
+      kind: 'suggestion',
+      answer: 'dismissed',
+      note: suggestion.title,
+    },
+  ]);
   decider.emit({
     type: 'suggestion.settled',
     taskId: command.taskId,

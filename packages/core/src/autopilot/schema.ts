@@ -131,3 +131,65 @@ export const AUTOPILOT_LESSON_LIMITS = {
   window: 4,
   corrections: 2,
 } as const;
+
+export const AUTOPILOT_DECISION_KINDS = [
+  'plan',
+  'question',
+  'review',
+  'merge',
+  'proposal',
+  'finding',
+  'suggestion',
+] as const;
+
+export type AutopilotDecisionKind = (typeof AUTOPILOT_DECISION_KINDS)[number];
+
+export const AUTOPILOT_DECISION_ANSWERS = [
+  'approved',
+  'revised',
+  'rejected',
+  'replied',
+  'fixed',
+  'dismissed',
+  'accepted',
+] as const;
+
+export type AutopilotDecisionAnswer = (typeof AUTOPILOT_DECISION_ANSWERS)[number];
+
+export interface AutopilotDecision {
+  at: number;
+  taskId: string;
+  gateId: string | null;
+  kind: AutopilotDecisionKind;
+  answer: AutopilotDecisionAnswer;
+  projectId: string | null;
+  risk: ReviewRating | null;
+  scope: AutopilotScope | null;
+  urgent: boolean;
+  watchdog: boolean;
+  touched: boolean;
+  note: string | null;
+}
+
+export interface AutopilotTally {
+  key: string;
+  kind: AutopilotDecisionKind;
+  projectId: string | null;
+  risk: ReviewRating | null;
+  total: number;
+  answers: Partial<Record<AutopilotDecisionAnswer, number>>;
+}
+
+export interface AutopilotProfile {
+  total: number;
+  decisions: AutopilotDecision[];
+  tallies: AutopilotTally[];
+}
+
+export const AUTOPILOT_PROFILE_LIMITS = {
+  kept: 200,
+  tallies: 300,
+  note: 280,
+} as const;
+
+export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = { total: 0, decisions: [], tallies: [] };

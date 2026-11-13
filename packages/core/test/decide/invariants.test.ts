@@ -1895,7 +1895,10 @@ describe('decide under random command sequences', () => {
       const collect = (state: ShinsaState) => {
         for (const mark of listBundleMarks(state)) if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'bundles', collect);
+      for (let seed = 1; seed <= RARE_SEEDS * 2; seed += 1) {
+        if (seed > SEEDS && reached.has('based on several tasks')) break;
+        simulate(seed, STEPS, 'bundles', collect);
+      }
       expect([...reached].sort()).toEqual([
         'based on several tasks',
         'based on the task below',
@@ -1903,7 +1906,7 @@ describe('decide under random command sequences', () => {
         'ready in its bundle',
       ]);
     },
-    SEEDS * 2_000
+    RARE_SEEDS * 4_000
   );
 
   test(

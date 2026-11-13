@@ -5,6 +5,7 @@ export {
   resolveAutopilotLessonSummary,
   resolveLessonLimit,
 } from './lessons.ts';
+export { listAutopilotTallies, recordAutopilotDecisions } from './profile.ts';
 export {
   isUrgentTask,
   resolveAutopilotFacts,
@@ -13,6 +14,15 @@ export {
 } from './limits.ts';
 export {
   AUTOPILOT_CEILINGS,
+  AUTOPILOT_DECISION_ANSWERS,
+  AUTOPILOT_DECISION_KINDS,
+  AUTOPILOT_PROFILE_LIMITS,
+  EMPTY_AUTOPILOT_PROFILE,
+  type AutopilotDecision,
+  type AutopilotDecisionAnswer,
+  type AutopilotDecisionKind,
+  type AutopilotProfile,
+  type AutopilotTally,
   AUTOPILOT_DONE_LIMIT,
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LESSON_ANSWERS,

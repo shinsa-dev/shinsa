@@ -1,5 +1,5 @@
 import { Result, Option } from 'effect';
-import type { AutopilotLesson } from '../autopilot/schema.ts';
+import { type AutopilotLesson, type AutopilotProfile, EMPTY_AUTOPILOT_PROFILE } from '../autopilot/schema.ts';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type AccountPlan,
@@ -65,6 +65,7 @@ import {
 } from './activity.ts';
 import {
   applyAutopilotForwarded,
+  applyAutopilotDecided,
   applyAutopilotLearned,
   applyAutopilotSeen,
   applyAutopilotJudging,
@@ -124,6 +125,7 @@ export interface ShinsaState {
   onBehalfActions: OnBehalfAction[];
   timeZone: string | null;
   autopilotLessons: AutopilotLesson[];
+  autopilotProfile: AutopilotProfile;
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
 }
@@ -158,6 +160,7 @@ export function createState(): ShinsaState {
     onBehalfActions: [],
     timeZone: null,
     autopilotLessons: [],
+    autopilotProfile: EMPTY_AUTOPILOT_PROFILE,
   };
 }
 
@@ -1060,6 +1063,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'autopilot.forwarded':
       applyAutopilotForwarded(state, event);
+      break;
+    case 'autopilot.decided':
+      applyAutopilotDecided(state, event);
       break;
     case 'autopilot.learned':
       applyAutopilotLearned(state, event);

@@ -23,7 +23,14 @@ export const STATE_RECORDS = [
 
 export type StateRecordKey = (typeof STATE_RECORDS)[number];
 
-export const STATE_FIELDS = ['focus', 'settings', 'onBehalfActions', 'timeZone', 'autopilotLessons'] as const;
+export const STATE_FIELDS = [
+  'focus',
+  'settings',
+  'onBehalfActions',
+  'timeZone',
+  'autopilotLessons',
+  'autopilotProfile',
+] as const;
 
 export type StateFieldKey = (typeof STATE_FIELDS)[number];
 

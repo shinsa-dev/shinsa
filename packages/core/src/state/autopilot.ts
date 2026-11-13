@@ -1,3 +1,4 @@
+import { recordAutopilotDecisions } from '../autopilot/profile.ts';
 import { AUTOPILOT_LESSON_LIMITS } from '../autopilot/schema.ts';
 import type { EventOf } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
@@ -35,6 +36,10 @@ export function applyAutopilotLearned(state: ShinsaState, event: EventOf<'autopi
   );
   for (const lesson of event.lessons)
     if (lesson.kind === 'acted') updateGate(state, lesson.gateId, { autopilotLearned: true });
+}
+
+export function applyAutopilotDecided(state: ShinsaState, event: EventOf<'autopilot.decided'>) {
+  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, event.decisions);
 }
 
 export function applyAutopilotSeen(state: ShinsaState, event: EventOf<'autopilot.seen'>) {
