@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   ACTIVE_HOURS_LIMITS,
   type ActiveHours,
@@ -53,7 +54,8 @@ function at(daysAgo: number, hour: number) {
   return TODAY - daysAgo * DAY_MS + hour * HOUR_MS;
 }
 
-function findHours(hours: ActiveHours | null, weekday: number) {
+function findHours(found: Option.Option<ActiveHours>, weekday: number) {
+  const hours = Option.getOrNull(found);
   return Array.from({ length: DAY_HOURS }, (_, hour) => hour).filter(
     (hour) => hours?.week[weekday * DAY_HOURS + hour] === true
   );
@@ -61,16 +63,16 @@ function findHours(hours: ActiveHours | null, weekday: number) {
 
 describe('learning when you are usually active', () => {
   test('knows nothing until you were around on three days', () => {
-    expect(resolveLearnedHours(createState(), NOW)).toBeNull();
+    expect(Option.isNone(resolveLearnedHours(createState(), NOW))).toBe(true);
     const state = createActivity({ presence: writePresence(listDays(2), WORK_HOURS) });
-    expect(resolveActiveHours(state, NOW)).toBeNull();
+    expect(Option.isNone(resolveActiveHours(state, NOW))).toBe(true);
   });
 
   test('from what you did: the hours you are around on are active, the rest are not', () => {
     const state = createActivity({ presence: writePresence(listDays(10), WORK_HOURS) });
     const hours = resolveLearnedHours(state, NOW);
-    expect(hours).toMatchObject({ source: 'activity', timeZone: 'UTC', observedDays: 11 });
-    expect(hours?.week).toHaveLength(WEEK_SLOTS);
+    expect(Option.getOrNull(hours)).toMatchObject({ source: 'activity', timeZone: 'UTC', observedDays: 11 });
+    expect(Option.getOrNull(hours)?.week).toHaveLength(WEEK_SLOTS);
     expect(findHours(hours, 3)).toEqual(WORK_HOURS);
     expect(isActiveAt(hours, at(1, 10))).toBe(true);
     expect(isActiveAt(hours, at(1, 3))).toBe(false);
@@ -79,14 +81,14 @@ describe('learning when you are usually active', () => {
   test('reads the hours on your own clock', () => {
     const presence = writePresence(listDays(10), WORK_HOURS);
     const hours = resolveLearnedHours(createActivity({ presence, timeZone: 'Asia/Tokyo' }), NOW);
-    expect(hours?.timeZone).toBe('Asia/Tokyo');
+    expect(Option.getOrNull(hours)?.timeZone).toBe('Asia/Tokyo');
     expect(findHours(hours, 3)).toEqual([0, 1, 18, 19, 20, 21, 22, 23]);
   });
 
   test('from time away: the hours you are usually away for are not active', () => {
     const state = createActivity({ away: writeNights(listDays(6), 22, 8) });
     const hours = resolveLearnedHours(state, NOW);
-    expect(hours?.source).toBe('away');
+    expect(Option.getOrNull(hours)?.source).toBe('away');
     expect(findHours(hours, 2)).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
   });
 
@@ -98,7 +100,7 @@ describe('learning when you are usually active', () => {
     }
     const state = createActivity({ away, presence: writePresence(listDays(10), [3]) });
     const hours = resolveLearnedHours(state, NOW);
-    expect(hours?.source).toBe('away');
+    expect(Option.getOrNull(hours)?.source).toBe('away');
     expect(isActiveAt(hours, at(1, 12))).toBe(true);
   });
 
@@ -138,7 +140,9 @@ describe('learning when you are usually active', () => {
 
   test('gives the same answer again without learning twice', () => {
     const state = createActivity({ presence: writePresence(listDays(10), WORK_HOURS) });
-    expect(resolveLearnedHours(state, NOW)).toBe(resolveLearnedHours(state, NOW + 1));
+    expect(Option.getOrNull(resolveLearnedHours(state, NOW))).toBe(
+      Option.getOrNull(resolveLearnedHours(state, NOW + 1))
+    );
   });
 });
 
@@ -147,7 +151,7 @@ describe('the hours you set yourself', () => {
     const settings = { ...createSettings(), activeHours: [{ weekday: 1, from: 8, to: 12 }] };
     const state = createActivity({ settings, presence: writePresence(listDays(10), WORK_HOURS) });
     const hours = resolveActiveHours(state, NOW);
-    expect(hours).toMatchObject({ source: 'override', timeZone: 'UTC', observedDays: 0 });
+    expect(Option.getOrNull(hours)).toMatchObject({ source: 'override', timeZone: 'UTC', observedDays: 0 });
     expect(findHours(hours, 1)).toEqual([8, 9, 10, 11]);
     expect(findHours(hours, 2)).toEqual([]);
   });
@@ -160,20 +164,20 @@ describe('when your hours change next', () => {
   );
 
   test('is when your active hours end, or begin', () => {
-    expect(resolveNextActiveChange(hours, at(0, 12))).toBe(at(0, 17));
-    expect(resolveNextActiveChange(hours, at(0, 20))).toBe(at(-1, 9));
+    expect(resolveNextActiveChange(hours, at(0, 12))).toEqual(Option.some(at(0, 17)));
+    expect(resolveNextActiveChange(hours, at(0, 20))).toEqual(Option.some(at(-1, 9)));
   });
 
   test('is never when nothing is known or nothing changes', () => {
-    expect(isActiveAt(null, NOW)).toBe(true);
-    expect(resolveNextActiveChange(null, NOW)).toBeNull();
+    expect(isActiveAt(Option.none(), NOW)).toBe(true);
+    expect(resolveNextActiveChange(Option.none(), NOW)).toEqual(Option.none());
     const always: ActiveHours = {
       source: 'override',
       timeZone: 'UTC',
       week: Array(WEEK_SLOTS).fill(true),
       observedDays: 0,
     };
-    expect(resolveNextActiveChange(always, NOW)).toBeNull();
+    expect(resolveNextActiveChange(Option.some(always), NOW)).toEqual(Option.none());
   });
 
   test('comes round even for a single active hour a week', () => {
@@ -183,7 +187,7 @@ describe('when your hours change next', () => {
       week: Array.from({ length: WEEK_SLOTS }, (_, slot) => slot === 0),
       observedDays: 0,
     };
-    expect(resolveNextActiveChange(odd, NOW)).not.toBeNull();
+    expect(Option.isSome(resolveNextActiveChange(Option.some(odd), NOW))).toBe(true);
   });
 });
 

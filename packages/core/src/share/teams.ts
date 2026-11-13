@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isTaskSettled } from '../domain/stages.ts';
 import type { ActivityPerson, Gate, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -33,7 +34,7 @@ export function listTeamProjectIds(state: ShinsaState, teamId: string) {
 
 export function isTeamTask(state: ShinsaState, task: Task, teamId: string) {
   if (task.watchHome) return false;
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const project = projectId ? state.projects[projectId] : undefined;
   return (project?.teamIds ?? []).includes(teamId);
 }

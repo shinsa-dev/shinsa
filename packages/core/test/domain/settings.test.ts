@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   AUTOPILOT_DEFAULTS,
   createSettings,
@@ -10,6 +11,7 @@ import {
   resolveAgentFastMode,
   resolveAttentionLimit,
   resolveAutoPace,
+  resolveAutoPaceResets,
   resolveAutopilotPolicy,
   resolveCompaction,
   resolveDelegationLimit,
@@ -71,6 +73,7 @@ describe('the settings a command may change', () => {
       sharePreset: 'standard',
       autopilot: AUTOPILOT_DEFAULTS,
       autoPace: false,
+      autoPaceResets: false,
       sharedTeams: [],
       activeHours: null,
     };
@@ -105,6 +108,13 @@ describe('resolveAutoPace', () => {
   });
 });
 
+describe('resolveAutoPaceResets', () => {
+  test('Auto pace counts on usage resets only once you allow it', () => {
+    expect(resolveAutoPaceResets({ ...createSettings(), autoPaceResets: undefined })).toBe(false);
+    expect(resolveAutoPaceResets({ ...createSettings(), autoPaceResets: true })).toBe(true);
+  });
+});
+
 describe('resolveWatchdogDefaults', () => {
   test('watches for 72 hours, first after 30 minutes, gaps up to 6 hours, unless the settings say otherwise', () => {
     expect(resolveWatchdogDefaults(createSettings())).toEqual({
@@ -126,9 +136,11 @@ describe('resolveWatchdogDefaults', () => {
 describe('resolveDelegationLimit', () => {
   test('sets no limit on delegations at once unless one is chosen', () => {
     expect(createSettings().delegationLimit).toBeNull();
-    expect(resolveDelegationLimit(createSettings())).toBeNull();
-    expect(resolveDelegationLimit({ ...createSettings(), delegationLimit: undefined })).toBeNull();
-    expect(resolveDelegationLimit({ ...createSettings(), delegationLimit: 4 })).toBe(4);
+    expect(Option.getOrNull(resolveDelegationLimit(createSettings()))).toBeNull();
+    expect(
+      Option.getOrNull(resolveDelegationLimit({ ...createSettings(), delegationLimit: undefined }))
+    ).toBeNull();
+    expect(Option.getOrNull(resolveDelegationLimit({ ...createSettings(), delegationLimit: 4 }))).toBe(4);
   });
 });
 

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isText, parseJsonRecord } from '../domain/records.ts';
 import { type Bytes, parseBase64Url, serializeBase64Url } from './bytes.ts';
 
@@ -71,9 +72,8 @@ function readTerminalMessage(id: string, fields: Record<string, unknown>): Chann
   }
 }
 
-export function parseChannelMessage(text: string): ChannelMessage | null {
-  const fields = parseJsonRecord(text);
-  return fields ? readMessage(fields) : null;
+export function parseChannelMessage(text: string): Option.Option<ChannelMessage> {
+  return Option.flatMapNullishOr(parseJsonRecord(text), readMessage);
 }
 
 export function serializeChannelMessage(message: ChannelMessage) {

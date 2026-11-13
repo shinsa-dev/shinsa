@@ -16,6 +16,7 @@ import {
   type TaskStage,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { connection, selectEngineCommands } from '@/lib/connection/socket.ts';
 import type { Tone } from '@/lib/format/tone.ts';
@@ -133,7 +134,7 @@ export function listStackChoices(state: ShinsaState, task: Task | null, repoId =
   if (task && !canChangeStack(task)) return [];
   return Object.values(state.tasks)
     .filter((candidate) => candidate.id !== task?.id && !isWatchHome(candidate))
-    .filter((candidate) => selectStackRefusal(state, task, candidate, repoId) === null)
+    .filter((candidate) => Option.isNone(selectStackRefusal(state, task, candidate, repoId)))
     .filter((candidate) => isStackSpoken(candidate))
     .sort((a, b) => Number(!isStackedOn(task, a)) - Number(!isStackedOn(task, b)) || compareTasks(a, b));
 }

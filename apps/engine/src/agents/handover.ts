@@ -1,5 +1,13 @@
-import { listHeldSourceRequests, type Run, type Task, type WatchdogSpec } from '@shinsa/core';
+import {
+  listHeldSourceRequests,
+  type Run,
+  type Task,
+  type Validation,
+  type WatchdogSpec,
+} from '@shinsa/core';
+import { Result } from 'effect';
 import { resolveCommitType, serializeConventionalSubject } from '../git/index.ts';
+import { HandOverRejected } from './tools/schema.ts';
 
 export const HANDED_OVER =
   'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.';
@@ -19,16 +27,23 @@ export function readString(input: Record<string, unknown>, key: string) {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-export function assertProtocol<T>(result: { ok: true; value: T } | { ok: false; errors: string[] }): T {
-  if (result.ok) return result.value;
-  throw new Error(
-    `Shinsa rejected this hand-over. Fix these and call the tool again:\n${result.errors.map((error) => `- ${error}`).join('\n')}`
+export function resolveHandOver<T>(validation: Validation<T>): Result.Result<T, HandOverRejected> {
+  if (validation.ok) return Result.succeed(validation.value);
+  const list = validation.errors.map((error) => `- ${error}`).join('\n');
+  return Result.fail(
+    new HandOverRejected({
+      errors: validation.errors,
+      message: `Shinsa rejected this hand-over. Fix these and call the tool again:\n${list}`,
+    })
   );
 }
 
-export function assertHeldSourcesUsed(watchdogs: readonly WatchdogSpec[], serverNames: readonly string[]) {
+export function assertHeldSourcesUsed(
+  watchdogs: readonly WatchdogSpec[],
+  serverNames: readonly string[]
+): Result.Result<void, HandOverRejected> {
   const errors = listHeldSourceRequests(watchdogs, serverNames);
-  if (errors.length > 0) assertProtocol({ ok: false, errors });
+  return resolveHandOver<void>(errors.length > 0 ? { ok: false, errors } : { ok: true, value: undefined });
 }
 
 export function resolveCommitMessage(task: Task, run: Run) {

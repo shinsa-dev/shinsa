@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { STAGE_WORDS } from '../chat/references.ts';
 import { capitalise, describeCount } from '../chat/text.ts';
 import { isTaskClosed, isTaskResting, resolveCurrentRound } from '../domain/rounds.ts';
@@ -242,8 +243,8 @@ function selectKeptResult(task: Task) {
 
 export function serializeSlackCard(task: Task, gates: readonly Gate[], taskUrl: string): SlackMessage {
   const gate = resolveCardGate(gates);
-  const view = gate ? serializeSlackGate(task, gate, taskUrl) : null;
-  if (view) return view;
+  const view = gate ? serializeSlackGate(task, gate, taskUrl) : Option.none();
+  if (Option.isSome(view)) return view.value;
   const ref = resolveTaskRef(task, taskUrl);
   const kept = selectKeptResult(task);
   if (kept) return serializeSlackKeptResultView(ref, kept, task.slack?.decided);
@@ -486,41 +487,47 @@ function resolvePlanBody(task: Task) {
   return document ? serializeSlackMrkdwn(serializePlanMarkdown(document)) : serializeQuote(task.title);
 }
 
-export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): SlackMessage | null {
+export function serializeSlackGate(task: Task, gate: Gate, taskUrl: string): Option.Option<SlackMessage> {
   const ref = resolveTaskRef(task, taskUrl);
   switch (gate.type) {
     case 'question':
-      return serializeSlackQuestionView(ref, gate, {
-        question: gate.title,
-        context: gate.body.trim() || null,
-        choices: gate.choices ?? [],
-        recommendation: gate.recommendation ?? null,
-      });
+      return Option.some(
+        serializeSlackQuestionView(ref, gate, {
+          question: gate.title,
+          context: gate.body.trim() || null,
+          choices: gate.choices ?? [],
+          recommendation: gate.recommendation ?? null,
+        })
+      );
     case 'secret':
-      return serializeSlackSecretView(ref, gate.secret?.label ?? gate.title);
+      return Option.some(serializeSlackSecretView(ref, gate.secret?.label ?? gate.title));
     case 'browser_sign_in':
-      return serializeSlackBrowserSignInView(ref, gate.browserSignIn?.site ?? gate.title);
+      return Option.some(serializeSlackBrowserSignInView(ref, gate.browserSignIn?.site ?? gate.title));
     case 'plan':
-      return serializeSlackPlanView(ref, gate, {
-        body: resolvePlanBody(task),
-        version: gate.planVersion ?? task.plan?.version ?? null,
-      });
+      return Option.some(
+        serializeSlackPlanView(ref, gate, {
+          body: resolvePlanBody(task),
+          version: gate.planVersion ?? task.plan?.version ?? null,
+        })
+      );
     case 'review':
-      return serializeSlackReviewView(ref, gate, resolveReviewView(task));
+      return Option.some(serializeSlackReviewView(ref, gate, resolveReviewView(task)));
     case 'merge':
-      return serializeSlackMergeView(ref, gate, resolveReviewView(task));
+      return Option.some(serializeSlackMergeView(ref, gate, resolveReviewView(task)));
     case 'proposal':
-      return serializeSlackProposalView(ref, gate, task.proposal?.request ?? '', task.result ?? null);
+      return Option.some(
+        serializeSlackProposalView(ref, gate, task.proposal?.request ?? '', task.result ?? null)
+      );
     case 'failure':
     case 'sign_in':
-      return serializeSlackFailureView(ref, gate);
+      return Option.some(serializeSlackFailureView(ref, gate));
     case 'operation':
-      return serializeSlackOperationView(ref, gate);
+      return Option.some(serializeSlackOperationView(ref, gate));
     case 'result':
-      return task.result ? serializeSlackResultView(ref, gate, task.result) : null;
+      return task.result ? Option.some(serializeSlackResultView(ref, gate, task.result)) : Option.none();
     case 'configuration':
     case 'post_merge':
-      return null;
+      return Option.none();
   }
 }
 
@@ -762,24 +769,28 @@ export function resolveSlackEscalationMessage(
   taskId: string,
   escalatedAt: number,
   taskUrl: string
-): SlackMessage | null {
+): Option.Option<SlackMessage> {
   const task = state.tasks[taskId];
-  if (!task) return null;
+  if (!task) return Option.none();
   const escalation = task.escalation;
-  if (escalation?.at === escalatedAt) return serializeSlackEscalation(task, escalation, taskUrl);
-  return serializeSlackEscalationCleared(task, taskUrl);
+  if (escalation?.at === escalatedAt) return Option.some(serializeSlackEscalation(task, escalation, taskUrl));
+  return Option.some(serializeSlackEscalationCleared(task, taskUrl));
 }
 
-export function resolveSlackEscalationFollowUp(state: ShinsaState, taskId: string, taskUrl: string) {
+export function resolveSlackEscalationFollowUp(
+  state: ShinsaState,
+  taskId: string,
+  taskUrl: string
+): Option.Option<SlackMessage> {
   const task = state.tasks[taskId];
-  if (task?.pullRequest?.state !== 'merged') return null;
+  if (task?.pullRequest?.state !== 'merged') return Option.none();
   const round = resolveCurrentRound(task).number;
   const merged = serializeSlackMerged(task, round, taskUrl);
   const watched = (task.watchdogs ?? []).some((watchdog) => watchdog.round === round);
   const lead = watched
     ? '*Merged*\nShinsa keeps watching it after the merge. Keep an eye on it too.'
     : '*Merged*\nNothing watches it after the merge, so keep an eye on it.';
-  return { ...merged, blocks: [createSlackSection(lead), ...merged.blocks.slice(1)] };
+  return Option.some({ ...merged, blocks: [createSlackSection(lead), ...merged.blocks.slice(1)] });
 }
 
 export function serializeSlackDeclined() {
@@ -833,9 +844,11 @@ export function resolveSlackPostMessage(
   post: SlackPost,
   taskId: string,
   resolveTaskUrl: (taskId: string) => string
-): SlackMessage | null {
+): Option.Option<SlackMessage> {
   const task = state.tasks[taskId];
-  return task ? serializeSlackTripped(state, task, post.watchdogId, resolveTaskUrl) : null;
+  return task
+    ? Option.fromNullishOr(serializeSlackTripped(state, task, post.watchdogId, resolveTaskUrl))
+    : Option.none();
 }
 
 export function resolveSlackMergeMessage(
@@ -843,9 +856,9 @@ export function resolveSlackMergeMessage(
   taskId: string,
   round: number,
   taskUrl: string
-): SlackMessage | null {
+): Option.Option<SlackMessage> {
   const task = state.tasks[taskId];
-  return task ? serializeSlackMerged(task, round, taskUrl) : null;
+  return task ? Option.some(serializeSlackMerged(task, round, taskUrl)) : Option.none();
 }
 
 export function listSlackStatusGates(state: ShinsaState, taskId: string): Gate[] {

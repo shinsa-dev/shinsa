@@ -3,12 +3,17 @@ import {
   type AccountsSnapshot,
   type AccountUsage,
   CLAUDE_PROVIDER,
+  DAY_MS,
+  describeCount,
+  isResetEnding,
   listRelevantWindows,
   MINUTE_MS,
   type ProviderLogin,
   resolveAgentModel,
   resolveAgentProvider,
   resolveCandidateSpentUntil,
+  selectCandidateSpentModel,
+  resolveModelFamilyLabel,
   resolvePlanLabel,
   resolveSpentUntil,
   type Settings,
@@ -17,6 +22,7 @@ import {
   type UsageResetGrant,
   type UsageWindow,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { type AccountProvider, resolveAccountProvider } from '@/lib/accounts/account.ts';
 import { formatDuration, formatMoment, formatSince, formatUntil, isSameDay } from '@/lib/format/time.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
@@ -36,12 +42,15 @@ const USAGE_EXTRA_LABEL = {
   noLimit: 'On, no monthly limit',
   credit: 'Credit left',
   reset: 'Usage reset',
+  weeklyReset: 'Weekly reset',
+  fableReset: 'Fable reset',
   notUsable: 'Not usable yet',
 };
 
 const CLEARED_LIMITS: Record<string, string> = {
   five_hour: '5-hour',
   seven_day: 'weekly',
+  seven_day_overage_included: 'weekly Fable',
   seven_day_opus: 'weekly Opus',
   seven_day_sonnet: 'weekly Sonnet',
 };
@@ -51,6 +60,12 @@ export interface UsageNoteRow {
   label: string;
   value: string;
   detail: string | null;
+  ending: boolean;
+}
+
+export interface UsageResetsNote {
+  text: string;
+  ending: boolean;
 }
 
 export interface UsageRow {
@@ -148,8 +163,14 @@ const LOGIN_STATUS: Partial<Record<ProviderLogin['status'], AccountStatus>> = {
 export function resolveProviderStatus(login: ProviderLogin, now: number): AccountStatus | null {
   const status = LOGIN_STATUS[login.status];
   if (status) return status;
-  const until = login.usage ? resolveSpentUntil(login.usage, null, now) : null;
-  return until === null ? null : { label: 'Out of usage', tone: 'red', until };
+  if (!login.usage) return null;
+  return Option.getOrNull(
+    Option.map(resolveSpentUntil(login.usage, null, now), (until) => ({
+      label: 'Out of usage',
+      tone: 'red' as const,
+      until,
+    }))
+  );
 }
 
 export function listProviderGlances(snapshot: AccountsSnapshot | null, now: number): ProviderGlance[] {
@@ -183,7 +204,7 @@ export function resolveUsageGlance(
   const own = providers.find((glance) => glance.login.provider === preferred);
   if (own) return createProviderGlance(own);
   const model = resolveUsageModel(settings);
-  const account = selectNextAccount(snapshot.accounts, settings, model, now);
+  const account = Option.getOrNull(selectNextAccount(snapshot.accounts, settings, model, now));
   if (account) {
     return {
       provider: CLAUDE_PROVIDER,
@@ -218,6 +239,13 @@ export function describeResetsIn(resetsAt: number, now: number) {
   return resetsAt <= now ? 'Resets now' : formatUntil('Resets', resetsAt, now);
 }
 
+function describeSpentLabel(account: AccountSummary, model: string | null, now: number) {
+  return Option.match(selectCandidateSpentModel(account, model, now), {
+    onNone: () => 'Out of usage',
+    onSome: (spent) => `Out of ${resolveModelFamilyLabel(spent)} usage`,
+  });
+}
+
 export function resolveAccountStatus(
   account: AccountSummary,
   model: string | null,
@@ -225,8 +253,13 @@ export function resolveAccountStatus(
 ): AccountStatus | null {
   if (account.signIn === 'signed_out') return { label: 'Needs sign-in', tone: 'orange', until: null };
   if (account.paused) return { label: 'Paused', tone: 'neutral', until: null };
-  const until = resolveCandidateSpentUntil(account, model, now);
-  return until === null ? null : { label: 'Out of usage', tone: 'red', until };
+  return Option.getOrNull(
+    Option.map(resolveCandidateSpentUntil(account, model, now), (until) => ({
+      label: describeSpentLabel(account, model, now),
+      tone: 'red' as const,
+      until,
+    }))
+  );
 }
 
 export function describeAccountStatus(status: AccountStatus, now: number) {
@@ -245,7 +278,7 @@ export function resolveAccountHeader(
 ): UsageAccountHeader {
   return {
     name: resolveAccountProvider(CLAUDE_PROVIDER, account.email),
-    detail: resolvePlanLabel(account.plan),
+    detail: Option.getOrNull(resolvePlanLabel(account.plan)),
     isDefault: account.isDefault,
     status: resolveAccountStatus(account, model, now),
     checkedAt: account.usage.checkedAt,
@@ -275,19 +308,38 @@ function describeCleared(clears: string[]) {
   return `Clears the ${LIST_FORMAT.format(limits)} ${limits.length === 1 ? 'limit' : 'limits'}`;
 }
 
+function isGrantEnding(grant: UsageResetGrant, now: number) {
+  return grant.usableNow && grant.left > 0 && isResetEnding(grant.endsAt, now);
+}
+
+export function describeEndsIn(endsAt: number, now: number) {
+  const days = Math.floor((endsAt - now) / DAY_MS);
+  if (days >= 1) return `in ${describeCount(days, 'day')}`;
+  return `in ${formatDuration(Math.max(MINUTE_MS, endsAt - now))}`;
+}
+
 function describeGrantDetail(grant: UsageResetGrant, now: number) {
   const reach = grant.usableNow ? describeCleared(grant.clears) : USAGE_EXTRA_LABEL.notUsable;
   if (grant.endsAt === null) return reach;
-  const ends = formatMoment(grant.endsAt, now);
+  const ends = isGrantEnding(grant, now)
+    ? describeEndsIn(grant.endsAt, now)
+    : formatMoment(grant.endsAt, now);
   return reach === null ? `Ends ${ends}` : `${reach} · ends ${ends}`;
+}
+
+function resolveGrantLabel(grant: UsageResetGrant) {
+  if (grant.clears.includes('seven_day')) return USAGE_EXTRA_LABEL.weeklyReset;
+  if (grant.clears.includes('seven_day_overage_included')) return USAGE_EXTRA_LABEL.fableReset;
+  return grant.label ?? USAGE_EXTRA_LABEL.reset;
 }
 
 function createGrantRow(grant: UsageResetGrant, now: number): UsageNoteRow {
   return {
     id: `reset:${grant.id}`,
-    label: grant.label ?? USAGE_EXTRA_LABEL.reset,
+    label: resolveGrantLabel(grant),
     value: `${grant.left} of ${grant.total} left`,
     detail: describeGrantDetail(grant, now),
+    ending: isGrantEnding(grant, now),
   };
 }
 
@@ -311,20 +363,38 @@ export function listUsageNotes(usage: AccountUsage, now: number): UsageNoteRow[]
             label: USAGE_EXTRA_LABEL.extraUsage,
             value: describeExtraUsageValue(extra.enabled, extra.noLimit),
             detail: null,
+            ending: false,
           },
         ]
       : []),
     ...(credit && hasWholeCredit(credit)
-      ? [{ id: 'credit', label: USAGE_EXTRA_LABEL.credit, value: formatUsageMoney(credit), detail: null }]
+      ? [
+          {
+            id: 'credit',
+            label: USAGE_EXTRA_LABEL.credit,
+            value: formatUsageMoney(credit),
+            detail: null,
+            ending: false,
+          },
+        ]
       : []),
     ...listLiveGrants(usage, now).map((grant) => createGrantRow(grant, now)),
   ];
 }
 
-export function describeResetsAvailable(usage: AccountUsage, now: number) {
-  const count = listLiveGrants(usage, now)
-    .filter((grant) => grant.usableNow)
-    .reduce((total, grant) => total + grant.left, 0);
+export function describeResetsAvailable(usage: AccountUsage, now: number): UsageResetsNote | null {
+  const usable = listLiveGrants(usage, now).filter((grant) => grant.usableNow);
+  const ending = usable.filter((grant) => isGrantEnding(grant, now));
+  if (ending.length > 0) {
+    const soonest = Math.min(...ending.map((grant) => grant.endsAt ?? Number.POSITIVE_INFINITY));
+    const count = ending.reduce((total, grant) => total + grant.left, 0);
+    const verb = count === 1 ? 'ends' : 'end';
+    return {
+      text: `${describeCount(count, 'usage reset')} ${verb} ${describeEndsIn(soonest, now)}`,
+      ending: true,
+    };
+  }
+  const count = usable.reduce((total, grant) => total + grant.left, 0);
   if (count === 0) return null;
-  return `${count} usage ${count === 1 ? 'reset' : 'resets'} available`;
+  return { text: `${describeCount(count, 'usage reset')} available`, ending: false };
 }

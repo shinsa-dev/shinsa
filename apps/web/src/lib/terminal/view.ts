@@ -5,7 +5,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { type IDisposable, Terminal } from '@xterm/xterm';
-import { Effect, type Fiber, Result } from 'effect';
+import { Effect, type Fiber, Result, Option } from 'effect';
 import type { SearchOptions } from '@/lib/code/search.ts';
 import {
   changeTerminalFontSize,
@@ -192,7 +192,7 @@ export class TerminalView {
       this.terminal.write(data);
       return;
     }
-    const frame = parseTerminalServerFrame(data);
+    const frame = Option.getOrNull(parseTerminalServerFrame(data));
     if (frame?.type === 'reset') {
       this.terminal.reset();
       this.terminal.resize(frame.cols, frame.rows);

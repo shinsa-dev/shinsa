@@ -127,13 +127,6 @@ export class Extensions extends Context.Service<
 
         const fail = (code: string, message: string) => new DomainError({ code, message });
 
-        const parseInput = <A>(parse: () => A) =>
-          Effect.try({
-            try: parse,
-            catch: (error) =>
-              error instanceof DomainError ? error : fail('server_invalid', describeError(error)),
-          });
-
         const readUsage = Effect.all({ view: usage.view, now: Clock.currentTimeMillis, file: store.read });
 
         const syncSnapshot: Effect.Effect<void> = Effect.gen(function* () {
@@ -408,7 +401,7 @@ export class Extensions extends Context.Service<
           keepId: string | null
         ) {
           const { servers } = yield* store.read;
-          return yield* parseInput(() =>
+          return yield* Effect.fromResult(
             parseServerName(value, (name) =>
               servers.some((server) => server.name === name && server.id !== keepId)
             )
@@ -417,7 +410,7 @@ export class Extensions extends Context.Service<
 
         const parseScope = Effect.fn('Extensions.parseScope')(function* (value: unknown) {
           const state = yield* engine.state;
-          return yield* parseInput(() => parseServerScope(Option.getOrNull(decodeScope(value)), state));
+          return yield* Effect.fromResult(parseServerScope(Option.getOrNull(decodeScope(value)), state));
         });
 
         const writeServer = Effect.fn('Extensions.writeServer')(function* (server: StoredServer) {
@@ -430,7 +423,7 @@ export class Extensions extends Context.Service<
         const createServer = Effect.fn('Extensions.createServer')(function* (fields: unknown) {
           if (!isFields(fields)) return yield* fail('server_invalid', 'Describe the MCP to add.');
           const name = yield* parseName(fields.name, null);
-          const parsed = yield* parseInput(() => parseServerDefinition(fields, null));
+          const parsed = yield* Effect.fromResult(parseServerDefinition(fields, null));
           return yield* writeServer({
             id: `shinsa:${name}`,
             name,
@@ -449,7 +442,7 @@ export class Extensions extends Context.Service<
           const server: StoredServer = {
             id: stored && stored.name === name ? stored.id : `shinsa:${name}`,
             name,
-            definition: yield* parseInput(() => parseServerDefinition(fields, lead.definition)),
+            definition: yield* Effect.fromResult(parseServerDefinition(fields, lead.definition)),
             enabled:
               typeof fields.enabled === 'boolean'
                 ? fields.enabled

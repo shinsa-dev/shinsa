@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeCount } from '../chat/text.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -201,8 +202,13 @@ export function fireWatchdog(decider: Decider, command: CommandOf<'watchdog.fire
   startCheck(decider, task, watchdog, null);
 }
 
+function countWindowChecks(watchdog: Watchdog) {
+  const startedAt = watchdog.startedAt ?? 0;
+  return watchdog.checks.filter((check) => check.at >= startedAt).length;
+}
+
 function resolveNextGapMinutes(watchdog: Watchdog) {
-  const doubled = watchdog.firstCheckMinutes * 2 ** (watchdog.checks.length + 1);
+  const doubled = watchdog.firstCheckMinutes * 2 ** (countWindowChecks(watchdog) + 1);
   return Math.min(doubled, watchdog.maxGapMinutes);
 }
 
@@ -256,6 +262,26 @@ function awaitProduction(decider: Decider, task: Task, runId: string) {
   settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'waiting for production');
 }
 
+function listWatching(task: Task) {
+  return (task.watchdogs ?? []).filter((watchdog) => watchdog.status === 'watching');
+}
+
+function leaveProduction(decider: Decider, task: Task, run: Run, checked: Watchdog, summary: string) {
+  const now = decider.context.now;
+  for (const watching of listWatching(task)) {
+    decider.emit({
+      type: 'watchdog.not_live',
+      taskId: task.id,
+      watchdogId: watching.id,
+      check: watching.id === checked.id ? { at: now, healthy: true, summary } : null,
+      nextCheckAt: resolveProductionPollAt(now, now),
+    });
+  }
+  decider.endRun(run, 'completed', 'The change is not live in production.');
+  decider.progressed(task.id);
+  settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'waiting for production');
+}
+
 function startLiveWindow(decider: Decider, task: Task, watchdog: Watchdog) {
   const now = decider.context.now;
   for (const waiting of listAwaitingProduction(task)) {
@@ -281,13 +307,16 @@ function hasFoundReports(filed: readonly string[], watchdog: Watchdog) {
   return filed.length > 0 || watchdog.linkedTaskIds.length > 0;
 }
 
+function assertLiveWhenFiled(read: ReadReport, found: boolean) {
+  if (!found || read.live !== false) return;
+  throw new DomainError({
+    code: 'live_filed',
+    message: 'You filed a report on the change, so it is live in production. Set `live` true.',
+  });
+}
+
 function resolveLive(read: ReadReport, found: boolean) {
-  if (found && read.live === false) {
-    throw new DomainError({
-      code: 'live_filed',
-      message: 'You filed a report on the change, so it is live in production. Set `live` true.',
-    });
-  }
+  assertLiveWhenFiled(read, found);
   const live = read.live ?? (found ? true : null);
   if (live === null && read.reached) {
     throw new DomainError({
@@ -363,12 +392,20 @@ function resolveCheckedWatchdog(decider: Decider, task: Task, found: Watchdog, r
 
 export function endWatchCheck(decider: Decider, task: Task, run: Run, read: ReadReport) {
   const found = selectWatchingRun(task, run.id);
-  if (!found)
+  if (Option.isNone(found))
     throw new DomainError({
       code: 'watchdog_not_found',
       message: 'No watchdog waits on this check. End your turn.',
     });
-  const watchdog = resolveCheckedWatchdog(decider, task, found, read);
+  const checked = found.value;
+  if (checked.status === 'watching') {
+    assertLiveWhenFiled(read, hasFoundReports(listFiledTaskIds(decider, checked), checked));
+    if (read.live === false) {
+      leaveProduction(decider, task, run, checked, read.summary);
+      return;
+    }
+  }
+  const watchdog = resolveCheckedWatchdog(decider, task, checked, read);
   if (!watchdog) {
     awaitProduction(decider, task, run.id);
     return;
@@ -381,13 +418,13 @@ export function endWatchCheck(decider: Decider, task: Task, run: Run, read: Read
 export function moveWatchCheck(decider: Decider, from: string, to: string) {
   const task = decider.task(decider.state.runs[to]?.taskId ?? '');
   const watchdog = selectWatchingRun(task, from);
-  if (!watchdog) return;
-  decider.emit({ type: 'watchdog.checking', taskId: task.id, watchdogId: watchdog.id, runId: to });
+  if (Option.isNone(watchdog)) return;
+  decider.emit({ type: 'watchdog.checking', taskId: task.id, watchdogId: watchdog.value.id, runId: to });
 }
 
 export function missWatchCheck(decider: Decider, runId: string, reason: string) {
   const task = decider.task(decider.state.runs[runId]?.taskId ?? '');
-  const watchdog = selectWatchingRun(task, runId);
+  const watchdog = Option.getOrNull(selectWatchingRun(task, runId));
   if (!watchdog) return false;
   const filed = listFiledTaskIds(decider, watchdog);
   if (hasFoundReports(filed, watchdog)) recordTrip(decider, task, watchdog, reason, filed);

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import { DAY_MS, HOUR_MS } from './time.ts';
 import type { AgentRole } from './types.ts';
@@ -47,9 +48,9 @@ export function resolveSharePreset(settings: Settings): SharePreset {
   return settings.sharePreset ?? DEFAULT_SHARE_PRESET;
 }
 
-export function resolveShareEnd(limit: ShareLimit, now: number) {
+export function resolveShareEnd(limit: ShareLimit, now: number): Option.Option<number> {
   const span = SHARE_LIMIT_MS[limit];
-  return span === undefined ? null : now + span;
+  return span === undefined ? Option.none() : Option.some(now + span);
 }
 
 export type AutopilotLevel = 'ask_first' | 'balanced' | 'most';
@@ -145,6 +146,7 @@ export interface Settings {
   sharePreset?: SharePreset;
   autopilot?: AutopilotPolicy;
   autoPace?: boolean;
+  autoPaceResets?: boolean;
   sharedTeams?: string[];
   activeHours?: ActiveDay[] | null;
 }
@@ -180,6 +182,7 @@ export const SETTINGS_KEYS = [
   'sharePreset',
   'autopilot',
   'autoPace',
+  'autoPaceResets',
   'sharedTeams',
   'activeHours',
 ] as const satisfies readonly (keyof Settings)[];
@@ -201,6 +204,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'autopilot',
   'watchdogsIgnoreUsageLimits',
   'autoPace',
+  'autoPaceResets',
   'sharedTeams',
   'activeHours',
 ] as const satisfies readonly (keyof Settings)[];
@@ -252,6 +256,10 @@ export function resolveAutoPace(settings: Settings) {
   return settings.autoPace ?? false;
 }
 
+export function resolveAutoPaceResets(settings: Settings) {
+  return settings.autoPaceResets ?? false;
+}
+
 const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
@@ -282,6 +290,7 @@ const DEFAULT_SETTINGS: Settings = {
   sharePreset: DEFAULT_SHARE_PRESET,
   autopilot: AUTOPILOT_DEFAULTS,
   autoPace: false,
+  autoPaceResets: false,
   sharedTeams: [],
   activeHours: null,
 };
@@ -294,8 +303,8 @@ export function resolveAttentionLimit(settings: Settings) {
   return Math.max(1, settings.attentionLimit ?? DEFAULT_ATTENTION_LIMIT);
 }
 
-export function resolveDelegationLimit(settings: Settings) {
-  return settings.delegationLimit ?? null;
+export function resolveDelegationLimit(settings: Settings): Option.Option<number> {
+  return Option.fromNullishOr(settings.delegationLimit);
 }
 
 export function resolveAccountSwitchAt(settings: Settings) {

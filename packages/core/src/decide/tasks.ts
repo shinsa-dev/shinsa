@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
   copyUnreachedTeammate,
@@ -159,7 +160,7 @@ function resolveTriageStack(
     return (
       parent !== undefined &&
       parent.repoId === repoId &&
-      selectStackRefusal(decider.state, task, parent, repoId) === null
+      Option.isNone(selectStackRefusal(decider.state, task, parent, repoId))
     );
   });
 }
@@ -195,7 +196,8 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   const stacked = resolveTriageStack(decider, task, command, shape);
   const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn, stacked) : [];
   const decisions = resolveDecisions(task, command, { inferred, stacked }, command.reasons ?? {});
-  const projectId = resolveRepoMove(task, decider.repoOf(command)) ?? task.projectId ?? null;
+  const projectId =
+    Option.getOrNull(resolveRepoMove(task, decider.repoOf(command))) ?? task.projectId ?? null;
   decider.emit({
     type: 'task.triaged',
     taskId: task.id,
@@ -217,8 +219,8 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   }
   const why = command.reasons?.duplicate ?? null;
   const original = selectTriageDuplicate(decider, task, command.repoId, command.duplicateOf);
-  if (original) {
-    closeTriageDuplicate(decider, decider.task(task.id), original, why);
+  if (Option.isSome(original)) {
+    closeTriageDuplicate(decider, decider.task(task.id), original.value, why);
     return;
   }
   if (command.duplicateOfTeammate) {

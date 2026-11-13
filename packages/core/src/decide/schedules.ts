@@ -1,7 +1,9 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import type { ScheduleTargetInput } from '../commands/schedules.ts';
 import {
   DomainError,
+  isEventTrigger,
   isScheduleLive,
   isTaskClosed,
   isTaskSettled,
@@ -16,6 +18,7 @@ import {
   type ScheduleTrigger,
   type Task,
 } from '../domain/index.ts';
+import type { SlackMessageRef } from '../domain/slack.ts';
 import { isTimeZone, parseTimeOfDay, resolveFirstRun, resolveNextRun } from '../schedules/time.ts';
 import { findRepo, listActiveRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -30,6 +33,7 @@ import {
 import { assertNotWatchHome, messageTask } from './messages.ts';
 import { isReadBusy } from './reads.ts';
 import { findCurrentRun } from './runs.ts';
+import { linkSlackMessageThread } from './slack.ts';
 import { createTask } from './tasks.ts';
 import { findOpenWatchSuggestion, suggestWatch, type WatchSuggestionInput } from './watch-suggestions.ts';
 
@@ -39,12 +43,15 @@ const HEADER_NAME = /^[A-Za-z0-9-]+$/;
 
 const PLACEHOLDER = /\{\{[^{}]+\}\}/;
 
+const SLACK_OBJECT_ID = /^[A-Z0-9]{1,64}$/;
+
 const STILL_LIVE = 'The last run was still going, so this one was skipped.';
 
 const INTAKE_BUSY = 'The task was at work, so this read was skipped.';
 
 interface Delivery {
   text: string;
+  slackMessage: SlackMessageRef | null;
   deliveryId: string | null;
   replayKey: string | null;
   skipWhenLive: boolean;
@@ -77,6 +84,22 @@ function assertWebhook(trigger: Extract<ScheduleTrigger, { kind: 'webhook' }>) {
   }
 }
 
+function assertSlackChannel(trigger: Extract<ScheduleTrigger, { kind: 'slack' }>) {
+  if (!SLACK_OBJECT_ID.test(trigger.teamId) || !SLACK_OBJECT_ID.test(trigger.channelId)) {
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message: 'Name the Slack workspace and channel by their Slack ids, such as T0123 and C0123.',
+    });
+  }
+  const names = [trigger.teamName, trigger.channelName];
+  if (names.some((name) => name.trim() !== name || name.length > SCHEDULE_LIMITS.slackName)) {
+    throw new DomainError({
+      code: 'schedule_invalid',
+      message: `The Slack workspace and channel names are at most ${SCHEDULE_LIMITS.slackName} characters, with no space around them.`,
+    });
+  }
+}
+
 function assertTrigger(trigger: ScheduleTrigger, now: number) {
   switch (trigger.kind) {
     case 'once':
@@ -96,7 +119,7 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
       );
       return;
     case 'daily':
-      if (!parseTimeOfDay(trigger.time)) {
+      if (Option.isNone(parseTimeOfDay(trigger.time))) {
         throw new DomainError({ code: 'schedule_invalid', message: 'Use 24-hour HH:MM, such as 09:00.' });
       }
       if (
@@ -108,6 +131,9 @@ function assertTrigger(trigger: ScheduleTrigger, now: number) {
       return;
     case 'webhook':
       assertWebhook(trigger);
+      return;
+    case 'slack':
+      assertSlackChannel(trigger);
       return;
   }
 }
@@ -209,7 +235,7 @@ function resolveTrigger(command: ScheduleWrite, existing: Schedule | null, now: 
   if (existing) return existing.trigger;
   throw new DomainError({
     code: 'schedule_invalid',
-    message: 'Say when it runs: in_minutes, run_at, every_minutes, daily_at or webhook.',
+    message: 'Say when it runs: in_minutes, run_at, every_minutes, daily_at, webhook or slack_channel.',
   });
 }
 
@@ -322,8 +348,10 @@ function isRestart(existing: Schedule | null, body: ScheduleBody) {
 }
 
 function resolveRestart(existing: Schedule | null, body: ScheduleBody, now: number) {
-  if (isNewTrigger(existing, body)) return resolveFirstRun(body.trigger, now, body.timeZone);
-  return resolveNextRun(body.trigger, now, body.timeZone);
+  const next = isNewTrigger(existing, body)
+    ? resolveFirstRun(body.trigger, now, body.timeZone)
+    : resolveNextRun(body.trigger, now, body.timeZone);
+  return Option.getOrNull(next);
 }
 
 function createScheduleRecord(
@@ -350,7 +378,7 @@ function createScheduleRecord(
 
 function assertRunnable(schedule: Schedule) {
   if (!schedule.enabled) return;
-  if (schedule.trigger.kind !== 'webhook' && schedule.nextRunAt === null) {
+  if (!isEventTrigger(schedule.trigger) && schedule.nextRunAt === null) {
     throw new DomainError({ code: 'schedule_past', message: 'That time has already passed.' });
   }
   if (schedule.maxRuns !== null && schedule.runCount >= schedule.maxRuns) {
@@ -530,8 +558,8 @@ export function enableSchedule(decider: Decider, command: CommandOf<'schedule.en
   }
   if (schedule.stopped !== null)
     throw new DomainError({ code: 'schedule_finished', message: describeStopped(schedule) });
-  const nextRunAt = resolveNextRun(schedule.trigger, now, schedule.timeZone);
-  if (schedule.trigger.kind !== 'webhook' && nextRunAt === null) {
+  const nextRunAt = Option.getOrNull(resolveNextRun(schedule.trigger, now, schedule.timeZone));
+  if (!isEventTrigger(schedule.trigger) && nextRunAt === null) {
     throw new DomainError({ code: 'schedule_past', message: 'Its time has passed. Delete it.' });
   }
   decider.emit({
@@ -548,7 +576,7 @@ export function removeSchedule(decider: Decider, command: CommandOf<'schedule.re
 }
 
 function selectGoneReason(decider: Decider, schedule: Schedule) {
-  if (schedule.source && !selectProjectSource(decider, schedule.source)) {
+  if (schedule.source && Option.isNone(selectProjectSource(decider, schedule.source))) {
     return 'Its data source was removed from the project.';
   }
   const target = schedule.target;
@@ -603,11 +631,12 @@ function isScheduleBusy(decider: Decider, schedule: Schedule) {
 }
 
 function resolveFollowing(schedule: Schedule, now: number) {
-  return resolveNextRun(schedule.trigger, now, schedule.timeZone);
+  return Option.getOrNull(resolveNextRun(schedule.trigger, now, schedule.timeZone));
 }
 
-function send(decider: Decider, schedule: Schedule, text: string) {
-  const target = schedule.target;
+function send(decider: Decider, schedule: Schedule, delivery: Delivery) {
+  const { target, trigger } = schedule;
+  const { text, slackMessage } = delivery;
   if (target.kind === 'new_task') {
     const taskId = createTask(
       decider,
@@ -620,12 +649,14 @@ function send(decider: Decider, schedule: Schedule, text: string) {
       },
       { scheduleId: schedule.id }
     );
+    if (slackMessage && trigger.kind === 'slack' && trigger.threadUpdates)
+      linkSlackMessageThread(decider, taskId, slackMessage);
     return { taskId, runId: null };
   }
   if (schedule.source) {
     return {
       taskId: target.taskId,
-      runId: startIntake(decider, schedule, decider.task(target.taskId), text),
+      runId: Option.getOrNull(startIntake(decider, schedule, decider.task(target.taskId), text)),
     };
   }
   messageTask(decider, { type: 'task.message', taskId: target.taskId, text }, schedule.id);
@@ -654,7 +685,7 @@ function runSchedule(decider: Decider, schedule: Schedule, delivery: Delivery) {
     });
     return;
   }
-  const sent = send(decider, schedule, delivery.text);
+  const sent = send(decider, schedule, delivery);
   const runCount = schedule.runCount + 1;
   const exhausted =
     schedule.trigger.kind === 'once' || (schedule.maxRuns !== null && runCount >= schedule.maxRuns);
@@ -669,10 +700,11 @@ function runSchedule(decider: Decider, schedule: Schedule, delivery: Delivery) {
 
 export function fireSchedule(decider: Decider, command: CommandOf<'schedule.fire'>) {
   const schedule = decider.state.schedules[command.scheduleId];
-  if (!schedule?.enabled || schedule.trigger.kind === 'webhook') return;
+  if (!schedule?.enabled || isEventTrigger(schedule.trigger)) return;
   if (schedule.nextRunAt !== command.dueAt || command.dueAt > decider.context.now) return;
   runSchedule(decider, schedule, {
     text: schedule.text,
+    slackMessage: null,
     deliveryId: null,
     replayKey: null,
     skipWhenLive: true,
@@ -681,17 +713,32 @@ export function fireSchedule(decider: Decider, command: CommandOf<'schedule.fire
 
 export function deliverSchedule(decider: Decider, command: CommandOf<'schedule.deliver'>) {
   const schedule = decider.state.schedules[command.scheduleId];
-  if (!schedule?.enabled || schedule.trigger.kind !== 'webhook') return;
+  if (!schedule?.enabled || !isEventTrigger(schedule.trigger)) return;
   const key = command.replayKey;
   if (key !== null && (schedule.replayKeys[key] ?? 0) > decider.context.now) return;
   const text = command.text.trim();
   if (!text) throw new DomainError({ code: 'schedule_invalid', message: 'The filled-in prompt is empty.' });
   runSchedule(decider, schedule, {
     text,
+    slackMessage: command.slackMessage ?? null,
     deliveryId: command.deliveryId,
     replayKey: key,
     skipWhenLive: false,
   });
+}
+
+export function skipSchedule(decider: Decider, command: CommandOf<'schedule.skip'>) {
+  const schedule = decider.state.schedules[command.scheduleId];
+  if (!schedule?.enabled || !isEventTrigger(schedule.trigger)) return;
+  const key = command.replayKey;
+  if (key !== null && (schedule.replayKeys[key] ?? 0) > decider.context.now) return;
+  recordRun(
+    decider,
+    schedule,
+    { outcome: 'skipped', taskId: null, detail: command.detail.slice(0, SCHEDULE_LIMITS.detail) },
+    { deliveryId: command.deliveryId, replayKey: key },
+    {}
+  );
 }
 
 export function failSchedule(decider: Decider, command: CommandOf<'schedule.fail'>) {
@@ -699,7 +746,7 @@ export function failSchedule(decider: Decider, command: CommandOf<'schedule.fail
   if (!schedule) return;
   const timed = command.dueAt !== null;
   if (timed && (!schedule.enabled || schedule.nextRunAt !== command.dueAt)) return;
-  if (!timed && schedule.trigger.kind !== 'webhook') return;
+  if (!timed && !isEventTrigger(schedule.trigger)) return;
   const nextRunAt = timed ? resolveFollowing(schedule, decider.context.now) : schedule.nextRunAt;
   const finished = timed && nextRunAt === null;
   recordRun(

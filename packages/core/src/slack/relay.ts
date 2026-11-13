@@ -19,6 +19,8 @@ export const SLACK_RELAY_PATHS = {
   react: '/__remote/slack/react',
   directory: '/__remote/slack/directory',
   notify: '/__remote/slack/notify',
+  channels: '/__remote/slack/channels',
+  watches: '/__remote/slack/watches',
 } as const;
 
 export const SLACK_RELAY_MESSAGE_LIMITS = {
@@ -152,7 +154,7 @@ export interface SlackSnapshot {
 export function resolveSlackLastUsedAt(state: ShinsaState, link: Pick<SlackLink, 'teamId' | 'userId'>) {
   let lastUsedAt: number | null = null;
   for (const task of Object.values(state.tasks)) {
-    if (task.slack?.teamId !== link.teamId || task.slack.userId !== link.userId) continue;
+    if (task.scheduleId || task.slack?.teamId !== link.teamId || task.slack.userId !== link.userId) continue;
     lastUsedAt = Math.max(lastUsedAt ?? task.createdAt, task.createdAt);
   }
   return lastUsedAt;

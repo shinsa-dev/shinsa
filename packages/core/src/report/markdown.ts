@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { parseTestFile, serializeTestFile } from './testing.ts';
 import type {
   Attention,
@@ -132,8 +133,8 @@ const STEP_INDENT = '   ';
 const TEST_TARGET_MARKDOWN: Record<ManualTestTargetKind, (value: string) => string> = {
   url: (value) => `<${value}>`,
   file: (value) => {
-    const file = parseTestFile(value);
-    return `\`${file ? serializeTestFile(file) : value}\``;
+    const file = Option.match(parseTestFile(value), { onNone: () => value, onSome: serializeTestFile });
+    return `\`${file}\``;
   },
   command: (value) => `\`${value}\``,
   screen: (value) => `*${value}*`,

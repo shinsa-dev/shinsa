@@ -8,7 +8,6 @@ import {
   parseUsageWindows,
   readRetryAfter,
   resolveClaudeFastMode,
-  USAGE_URL,
   type UsageRequester,
 } from '../../src/accounts/usage.ts';
 import { type AccountsHarness, buildUnitAccounts } from './harness.ts';
@@ -200,15 +199,55 @@ describe('resolveClaudeFastMode', () => {
   });
 });
 
-const GRANT = {
-  id: 'opus55-launch-20260921',
-  label: 'Opus 5.5 launch reset',
+const WEEKLY_GRANT = {
+  id: 'full-reset-2611',
+  label: 'One full limit reset (November 2026)',
+  resets_total: 1,
   resets_left: 1,
-  resets_total: 2,
-  clears: ['five_hour', 'seven_day', 3],
-  usable_now: true,
+  starts_at: '2026-11-10T21:30:00+00:00',
+  ends_at: '2026-12-10T22:00:00+00:00',
+  clears: ['seven_day', 'seven_day_overage_included', 3],
   paused: false,
-  ends_at: '2026-12-21T00:00:00Z',
+  usable_now: true,
+  use_requires_limit: false,
+  percent_used: { seven_day: 8, seven_day_overage_included: 2 },
+  blocking: [],
+  arm: null,
+  type: 'weekly',
+  unavailable_reason: null,
+  gives_back_weekly: false,
+};
+
+const FABLE_GRANT = {
+  ...WEEKLY_GRANT,
+  id: 'launch-2610-fable-6mo',
+  label: "New model launch: one more Fable reset at 6 months' tenure",
+  starts_at: '2026-11-09T18:00:00+00:00',
+  ends_at: '2027-03-09T07:59:00+00:00',
+  clears: ['seven_day_overage_included'],
+  type: 'full',
+  gives_back_weekly: true,
+};
+
+const SPENT_FABLE_GRANT = {
+  ...FABLE_GRANT,
+  id: 'launch-2610-fable',
+  resets_left: 0,
+  usable_now: false,
+  unavailable_reason: 'unavailable',
+};
+
+const SCOPED_SHARES = [{ limit_index: 1, used_percent_of_weekly: 12, allowance_percent_of_weekly: 50 }];
+
+const RESET_STATUS = {
+  eligible: true,
+  ineligible_reason: null,
+  at_limit: false,
+  exhausted: [],
+  grants: [WEEKLY_GRANT, SPENT_FABLE_GRANT, FABLE_GRANT],
+  next_grant_id: 'full-reset-2611',
+  weekly_resets_at: '2026-11-16T05:00:00+00:00',
+  cooldown_until: null,
 };
 
 describe('parseExtraUsage', () => {
@@ -305,30 +344,80 @@ describe('parseExtraUsage', () => {
 });
 
 describe('parseResetGrants', () => {
-  test('reads each grant under cedar_ember, then juniper_tide', () => {
-    expect(
-      parseResetGrants({
-        cedar_ember: { grants: [GRANT] },
-        juniper_tide: { grants: [{ id: 'older', resets_left: 1 }] },
-      })
-    ).toEqual([
+  test('reads the weekly and the Fable reset under cedar_ember and drops the spent one', () => {
+    expect(parseResetGrants({ cedar_ember: RESET_STATUS, weekly_scoped_shares: SCOPED_SHARES })).toEqual([
       {
-        id: 'opus55-launch-20260921',
-        label: 'Opus 5.5 launch reset',
+        id: 'full-reset-2611',
+        label: 'One full limit reset (November 2026)',
         left: 1,
-        total: 2,
-        clears: ['five_hour', 'seven_day'],
+        total: 1,
+        clears: ['seven_day', 'seven_day_overage_included'],
         usableNow: true,
-        endsAt: Date.parse('2026-12-21T00:00:00Z'),
+        endsAt: Date.parse('2026-12-10T22:00:00+00:00'),
+        givesBackWeekly: false,
+        weeklyShare: null,
       },
-      { id: 'older', label: null, left: 1, total: 1, clears: [], usableNow: false, endsAt: null },
+      {
+        id: 'launch-2610-fable-6mo',
+        label: "New model launch: one more Fable reset at 6 months' tenure",
+        left: 1,
+        total: 1,
+        clears: ['seven_day_overage_included'],
+        usableNow: true,
+        endsAt: Date.parse('2027-03-09T07:59:00+00:00'),
+        givesBackWeekly: true,
+        weeklyShare: 12,
+      },
     ]);
   });
 
+  test('an account Claude finds ineligible has no grants', () => {
+    expect(
+      parseResetGrants({
+        cedar_ember: { eligible: false, ineligible_reason: 'surface', grants: [], next_grant_id: null },
+      })
+    ).toEqual([]);
+  });
+
+  test('a grant with only the required fields reads with defaults', () => {
+    expect(parseResetGrants({ cedar_ember: { grants: [{ id: 'bare', resets_left: 1 }] } })).toEqual([
+      {
+        id: 'bare',
+        label: null,
+        left: 1,
+        total: 1,
+        clears: [],
+        usableNow: false,
+        endsAt: null,
+        givesBackWeekly: false,
+        weeklyShare: null,
+      },
+    ]);
+  });
+
+  test('a Fable reset gives back the sum of the scoped shares of the weekly limit', () => {
+    const fable = (shares: unknown) =>
+      parseResetGrants({ cedar_ember: { grants: [FABLE_GRANT] }, weekly_scoped_shares: shares })[0];
+    expect(
+      fable([{ limit_index: 1, used_percent_of_weekly: 4 }, { used_percent_of_weekly: 3 }])
+    ).toMatchObject({
+      givesBackWeekly: true,
+      weeklyShare: 7,
+    });
+    expect(fable([{ limit_index: 1 }, 'share'])?.weeklyShare).toBeNull();
+    expect(fable(undefined)?.weeklyShare).toBeNull();
+  });
+
+  test('a reset that gives nothing back keeps no share, whatever the answer holds', () => {
+    expect(
+      parseResetGrants({ cedar_ember: { grants: [WEEKLY_GRANT] }, weekly_scoped_shares: SCOPED_SHARES })[0]
+    ).toMatchObject({ givesBackWeekly: false, weeklyShare: null });
+  });
+
   test('a paused grant is not usable now, whatever usable_now says', () => {
-    expect(parseResetGrants({ cedar_ember: { grants: [{ ...GRANT, paused: true }] } })[0]?.usableNow).toBe(
-      false
-    );
+    expect(
+      parseResetGrants({ cedar_ember: { grants: [{ ...WEEKLY_GRANT, paused: true }] } })[0]?.usableNow
+    ).toBe(false);
   });
 
   test('spent, id-less, repeated and malformed grants are dropped', () => {
@@ -336,21 +425,27 @@ describe('parseResetGrants', () => {
       parseResetGrants({
         cedar_ember: {
           grants: [
-            { ...GRANT, resets_left: 0 },
-            { ...GRANT, id: '' },
-            { ...GRANT, id: undefined },
-            { ...GRANT, resets_left: 'one' },
+            { ...WEEKLY_GRANT, resets_left: 0 },
+            { ...WEEKLY_GRANT, id: '' },
+            { ...WEEKLY_GRANT, id: undefined },
+            { ...WEEKLY_GRANT, resets_left: 'one' },
             'grant',
+            WEEKLY_GRANT,
+            WEEKLY_GRANT,
           ],
         },
-        juniper_tide: { grants: [GRANT, GRANT] },
       }).map((grant) => grant.id)
-    ).toEqual(['opus55-launch-20260921']);
+    ).toEqual(['full-reset-2611']);
   });
 
-  test('no programs, empty programs and a body that is not an object have no grants', () => {
-    expect(parseResetGrants({ cedar_ember: null, juniper_tide: null })).toEqual([]);
-    expect(parseResetGrants({ cedar_ember: { grants: 'none' }, juniper_tide: {} })).toEqual([]);
+  test('grants under any other program are not read', () => {
+    expect(parseResetGrants({ cedar_ember: null, juniper_tide: { grants: [WEEKLY_GRANT] } })).toEqual([]);
+  });
+
+  test('no program, an empty program and a body that is not an object have no grants', () => {
+    expect(parseResetGrants({ cedar_ember: null })).toEqual([]);
+    expect(parseResetGrants({ cedar_ember: { grants: 'none' } })).toEqual([]);
+    expect(parseResetGrants({ cedar_ember: {} })).toEqual([]);
     expect(parseResetGrants(null)).toEqual([]);
   });
 });
@@ -366,21 +461,32 @@ describe('reading an account’s usage from Claude', () => {
       extraUsage: { enabled: false, noLimit: false, credit: null },
       resetGrants: [],
     });
-    expect(calls[0]?.[0]).toBe(USAGE_URL);
+    expect(calls[0]?.[0]).toBe('https://api.anthropic.com/api/oauth/usage?cedar_ember=1');
     expect(Object.fromEntries(new Headers(calls[0]?.[1].headers))).toEqual({
       authorization: 'Bearer token-1',
       'anthropic-beta': 'oauth-2025-04-20',
-      'user-agent': 'shinsa',
+      'user-agent': 'shinsa claude-cli/2.1.321',
     });
     expect(calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
   });
 
-  test('an expired login says it refreshes on the next run', async () => {
+  test('an answer with reset status carries the account’s live resets', async () => {
+    const body = { ...BODY, cedar_ember: RESET_STATUS };
+    const read = await requestUsage('token-1', respondWith(Response.json(body)).requestHttp);
+    expect(read).toMatchObject({ ok: true, resetGrants: parseResetGrants(body) });
+    expect(read.ok && read.resetGrants?.map((grant) => grant.id)).toEqual([
+      'full-reset-2611',
+      'launch-2610-fable-6mo',
+    ]);
+  });
+
+  test('an expired login says Shinsa refreshes it', async () => {
     const { requestHttp } = respondWith(new Response('', { status: 401 }));
     expect(await requestUsage('t', requestHttp)).toEqual({
       ok: false,
       reason: 'expired',
-      detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
+      detail:
+        'This login expired. Shinsa refreshes it at its next check. Sign in again if this message stays.',
       retryAfterMs: null,
     });
   });

@@ -14,6 +14,8 @@ import {
   type RemoteUserId,
   type SlackDirectory,
   type SlackDirectoryQuery,
+  type SlackChannels,
+  type SlackChannelWatches,
   type SlackLinks,
   type SlackRelayNotified,
   type SlackRelayNotify,
@@ -167,4 +169,6 @@ export interface SlackRelayCalls {
     token: Token,
     notify: SlackRelayNotify
   ): MachineCall<SlackRelayNotified, WorkspaceFailure | PostNotYours | SlackFailed | SlackBlocksRefused>;
+  channels(token: Token): MachineCall<SlackChannels, SlackFailed>;
+  watches(token: Token, watches: SlackChannelWatches): MachineCall<void, SlackFailed>;
 }

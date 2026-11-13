@@ -1587,7 +1587,8 @@ Only these, and they win over anything below:
       named with its provider (`AccountName`, medium: "Claude · a@b.com"), the plan (`fg-2`), a `Badge` "Default", and only when something is wrong a status in its tone
       ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage, resets in 1h 20m" red through `TimeAgo` as soon as a
       window is at 100%: a reset later today says how long, one on a later day its moment, "Out of usage until Sat
-      2:00 AM"), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up; an agent's pushed
+      2:00 AM"; "Out of Fable usage until …" when only the agent model's own limit is spent, which shows only while
+      the agent runs on that model), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up; an agent's pushed
       reading counts, and while Claude rate limits the reads it adds when the next one happens: "Updated 3h ago · next
       read in 12m"; its tooltip adds the server's reason under the time, "Rate limited by Claude." or a login that
       needs refreshing) and a
@@ -1841,7 +1842,8 @@ Only these, and they win over anything below:
     `lib/notifications/`, `lib/preferences/notifications.ts`, `hooks/use-attention.ts`):
     - **Settings → Automations → Schedules**: one 40px row per schedule, oldest first: the name as `Truncate` over one `text-2xs`
       `fg-2` `Truncate` line of what it does and when ("Starts a new task · every hour", "Asks a new question ·
-      …", "Messages “‹task›” · weekdays at 9:00 AM", "… · when its webhook is called"; a daily time on the app's
+      …", "Messages “‹task›” · weekdays at 9:00 AM", "… · when its webhook is called", "… · when a message is posted in
+      #alerts", whose tile is Slack's mark in the trigger's orange; a daily time on the app's
       clock), then its state: "Next at 4:03 PM"
       through `TimeAgo` (a weekday this week, else the date), "Paused" and "Finished" in `fg-2`, "Last run failed"
       red. A `•••` click menu: Pause / Resume, Copy webhook URL, Open the task (the one it messages, else the last it
@@ -1858,7 +1860,7 @@ Only these, and they win over anything below:
       product is "Eunoe" with a capital E in every string on screen; `eunoe` stays for code, commands and paths.
     - **⌘K**: a Schedules group, only while there is a schedule, with Schedules (scrolls to the section); each
       schedule matches while typing, by name with when it runs as the hint ("Every hour") and its icon (hourglass
-      once, repeat interval, clock daily, globe webhook), and
+      once, repeat interval, clock daily, globe webhook, Slack's mark for a channel), and
       opens a page of the same actions, Delete behind a confirm page. Change a setting adds Play a sound, Sound, Show
       a notification, Compaction, the speed choices and, with Claude Code’s compaction, Compact idle sessions; Jump to
       has Context.

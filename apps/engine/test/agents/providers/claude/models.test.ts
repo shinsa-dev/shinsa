@@ -2,14 +2,18 @@ import { describe, expect, test } from 'bun:test';
 import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk';
 import { KNOWN_AGENT_MODELS } from '@shinsa/core';
 import { Duration, Effect } from 'effect';
+import { TestClock } from 'effect/testing';
 import { resolveModels } from '../../../../src/agents/providers/claude/models/families.ts';
 import { CATALOG_TIMEOUT_MS } from '../../../../src/agents/providers/claude/models/schema.ts';
 import { makeModelCatalog } from '../../../../src/agents/providers/claude/models/service.ts';
 import type { ClaudeRuntime } from '../../../../src/agents/providers/claude/sdk/schema.ts';
+import { MODEL_CATALOG_TTL } from '../../../../src/agents/providers/schema.ts';
 import { createFakeQuery, createFakeRuntime } from '../../../helpers/query.ts';
 
 function createCatalog(runtime: ClaudeRuntime, timeoutMs = CATALOG_TIMEOUT_MS) {
-  const catalog = Effect.runSync(makeModelCatalog({ runtime, timeout: Duration.millis(timeoutMs) }));
+  const catalog = Effect.runSync(
+    makeModelCatalog({ runtime, timeout: Duration.millis(timeoutMs), timeToLive: MODEL_CATALOG_TTL })
+  );
   return { list: () => Effect.runPromise(catalog.list) };
 }
 
@@ -37,7 +41,7 @@ describe('resolveModels', () => {
 });
 
 describe('the model catalog', () => {
-  test('asks the SDK once and keeps the answer', async () => {
+  test('asks the SDK once and keeps the answer while it is fresh', async () => {
     let asked = 0;
     const fake = createCatalogQuery(() => {
       asked += 1;
@@ -47,6 +51,68 @@ describe('the model catalog', () => {
     expect((await catalog.list()).map((model) => model.id)).toEqual(['opus', 'haiku']);
     await catalog.list();
     expect(asked).toBe(1);
+  });
+
+  test('asks again once the answer is older than its time to live', async () => {
+    let asked = 0;
+    const fake = createCatalogQuery(() => {
+      asked += 1;
+      return Promise.resolve(ROWS);
+    });
+    await Effect.gen(function* () {
+      const catalog = yield* makeModelCatalog({
+        runtime: createFakeRuntime(fake.query),
+        timeout: Duration.millis(CATALOG_TIMEOUT_MS),
+        timeToLive: MODEL_CATALOG_TTL,
+      });
+      yield* catalog.list;
+      yield* TestClock.adjust(Duration.subtract(MODEL_CATALOG_TTL, Duration.seconds(1)));
+      yield* catalog.list;
+      expect(asked).toBe(1);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* catalog.list;
+      expect(asked).toBe(2);
+    }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
+  });
+
+  test('keeps the last list it had when a later ask fails', async () => {
+    let asked = 0;
+    const fake = createCatalogQuery(() => {
+      asked += 1;
+      return asked === 1 ? Promise.resolve(ROWS) : Promise.reject(new Error('no claude'));
+    });
+    await Effect.gen(function* () {
+      const catalog = yield* makeModelCatalog({
+        runtime: createFakeRuntime(fake.query),
+        timeout: Duration.millis(CATALOG_TIMEOUT_MS),
+        timeToLive: MODEL_CATALOG_TTL,
+      });
+      const first = yield* catalog.list;
+      yield* TestClock.adjust(MODEL_CATALOG_TTL);
+      expect(yield* catalog.list).toEqual(first);
+      expect(yield* catalog.list).toEqual(first);
+      expect(asked).toBe(3);
+    }).pipe(Effect.provide(TestClock.layer()), Effect.runPromise);
+  });
+
+  test('asks again as soon as Claude Code changes version', async () => {
+    let asked = 0;
+    const fake = createCatalogQuery(() => {
+      asked += 1;
+      return Promise.resolve(ROWS);
+    });
+    let version = '2.1.318';
+    const catalog = createCatalog({
+      runQuery: fake.query,
+      resolveExecutable: Effect.sync(() => ({ ok: true as const, path: '/bin/claude', version })),
+    });
+    await catalog.list();
+    await catalog.list();
+    expect(asked).toBe(1);
+    version = '2.1.321';
+    await catalog.list();
+    await catalog.list();
+    expect(asked).toBe(2);
   });
 
   test('falls back to the built-in list, and asks again next time', async () => {

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   type FixReason,
   isCurrentEvidence,
@@ -140,9 +141,11 @@ function listAgentEvidence(decider: Decider, task: Task) {
 
 export function resolveReviewInput(decider: Decider, task: Task) {
   const evidence = listAgentEvidence(decider, task).filter(isCurrentEvidence);
-  return resolveReviewInputFingerprint(
-    task,
-    evidence.map((piece) => piece.id)
+  return Option.getOrNull(
+    resolveReviewInputFingerprint(
+      task,
+      evidence.map((piece) => piece.id)
+    )
   );
 }
 

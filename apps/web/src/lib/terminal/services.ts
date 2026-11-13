@@ -23,6 +23,7 @@ import {
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option, Result } from 'effect';
 import { selectRelayedAppOrigin } from '@/lib/connection/socket.ts';
 import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
@@ -110,23 +111,25 @@ export function listTaskPreviews(
   return listTaskServices(state, snapshot, task, now).filter((view) => selectServicePreview(view) !== null);
 }
 
-function resolveOrigin(url: string) {
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
+function selectOrigin(url: string) {
+  return Result.getSuccess(Result.try(() => new URL(url).origin));
+}
+
+function selectPreviewOrigin(view: ServiceView) {
+  return Option.flatMap(Option.fromNullishOr(selectServicePreview(view)), selectOrigin);
 }
 
 export function listUnattachedPreviews(views: ServiceView[], attached: readonly string[]) {
-  const origins = new Set(attached.map(resolveOrigin));
-  return views.filter((view) => !origins.has(resolveOrigin(selectServicePreview(view) ?? '')));
+  const origins = new Set(attached.flatMap((url) => Option.toArray(selectOrigin(url))));
+  return views.filter((view) => !Option.exists(selectPreviewOrigin(view), (origin) => origins.has(origin)));
 }
 
 export function selectPreviewView(views: ServiceView[], url: string) {
-  const origin = resolveOrigin(url);
-  if (!origin) return null;
-  return views.find((view) => resolveOrigin(selectServicePreview(view) ?? '') === origin) ?? null;
+  const origin = selectOrigin(url);
+  if (Option.isNone(origin)) return null;
+  return (
+    views.find((view) => Option.exists(selectPreviewOrigin(view), (own) => own === origin.value)) ?? null
+  );
 }
 
 export function describeServicePreview(view: ServiceView, label: string | null = null) {

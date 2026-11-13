@@ -1,4 +1,4 @@
-import type { DomainError, ShinsaCommand, ShinsaEvent, ShinsaState } from '@shinsa/core';
+import type { DomainError, ShinsaCommand, ShinsaEvent, ShinsaState, SlackChannel } from '@shinsa/core';
 import { Schema } from 'effect';
 import type { Effect } from 'effect';
 
@@ -14,9 +14,10 @@ export class ScheduleSecretFailed extends Schema.TaggedError<
 
 export type ScheduleToolFailure = DomainError | ScheduleToolRefused;
 
-export interface ScheduleUrls {
+export interface ScheduleToolsInput {
   readonly baseUrl: Effect.Effect<string>;
   readonly hookUrl: (scheduleId: string, token: string) => Effect.Effect<string | null>;
+  readonly slackChannels: Effect.Effect<readonly SlackChannel[], DomainError>;
 }
 
 export interface ScheduleToolRun {

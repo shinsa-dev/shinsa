@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { resolveFallbackBriefing, selectBriefingGate, serializeBriefing } from '../../src/index.ts';
 import { chat, docs, dup, NOW, queueOf, ready, stateOf, tools } from './fixtures.ts';
 
@@ -40,7 +41,7 @@ describe('serializeBriefing without decisions', () => {
 describe('selectBriefingGate', () => {
   test('finds the open decision of a task the guide names', () => {
     const queue = queueOf(ready);
-    expect(selectBriefingGate(queue, 't-dup')?.type).toBe('merge');
-    expect(selectBriefingGate(queue, 't-gone')).toBeNull();
+    expect(Option.getOrNull(selectBriefingGate(queue, 't-dup'))?.type).toBe('merge');
+    expect(Option.getOrNull(selectBriefingGate(queue, 't-gone'))).toBeNull();
   });
 });

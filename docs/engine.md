@@ -110,8 +110,14 @@ another provider drops the model it had, unless the same change names one (switc
 `defaultModel` the same way). Model names come from `KNOWN_AGENT_PROVIDERS` (Claude's `KNOWN_AGENT_MODELS`, "opus"
 is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the right names from the first paint;
 `GET /api/providers` then replaces them with each provider's live catalog (`listModels`: the Claude SDK's
-`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
-serves the default provider's list, the one setup's Model step offers.
+`supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). Each provider keeps its
+catalog in an Effect `Cache` keyed by the program's path and version, for `MODEL_CATALOG_TTL` (5 minutes): an
+update to Claude Code or Codex is a new key, so the next read asks the new program straight away, and a failed or
+empty answer is not kept, so the next read asks again; meanwhile the read serves the last list the provider gave
+(the built-in list until it gave one), so a failed ask never swaps a live list for older built-in names. The web asks
+`GET /api/providers` on every mount of `useAgentProviders()` (Settings and its Agents section), showing the last
+list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
+default provider's list, the one setup's Model step offers.
 
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
@@ -625,7 +631,7 @@ every commit.
 - **Where they go.** `POST /api/tasks/<id>/file` (`writeFile` in the `tasks` group, `apps/engine/src/http/routes/tasks/`) takes `{ path, content, base }`
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
   task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
-  checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
+  checkout. The path passes `parseRepoPath` and must stay inside the checkout with its nearest existing
   folder's real path (`selectWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
   refused (`file_too_large`), and so is a task core will not let you edit (`edit_refused`, `resolveEditRefusal`: merged,
   cancelled or done, or no checkout). Inspect mode refuses it with every other write.
@@ -1626,7 +1632,7 @@ suggestion too, queues its round, which starts once you close the answer): core 
 Agent, an answerer, an investigator or a researcher; never the reviewer, a watchdog's check or a watch's read,
 which can only report) is told it once, at the tail of its prompt
 after your own words ("While this task waited for the human, these messages were left for you…", each "Sent by an
-agent on the human’s behalf: …" or "Sent by a schedule: …"; `Decider.startRun`, `task.messages_told`). The tail
+agent on the human’s behalf: …", "Sent by a schedule: …" or a Slack mention's own "<name> in Slack: …"; `Decider.startRun`, `task.messages_told`). The tail
 comes after the house rules, so a resumed session that already holds them gets it too: the fix your reply at a
 review or merge gate starts, a retry at a failure gate, the next phase. Until it is told, `resolveLaterMessages`
 leaves it out, so no brief repeats it; after, the round's brief lists it with the rest. The on-your-behalf record
@@ -1862,7 +1868,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   to the project's sources for the repository and starts its window then (`watchdog.started`).
 - **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
   doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
-  so far), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
+  of the current window, `countWindowChecks`, so a window that starts again backs off from the start), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
   leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
   default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
   read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
@@ -1879,6 +1885,16 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   connected it) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves out `live` is refused
   (`live_required`), unless it filed a report, which says the change is live; one that filed a report with `live:
   false` is refused (`live_filed`). An unreached read (`reached: false`) leaves it waiting.
+- **The status follows production, both ways.** Every watching check is told to make sure the change is live in
+  production first (with the watchdog's `production_check` when it has one). `report_read {live: false}` from a
+  watching check that filed nothing moves every watching watchdog of the task to `awaiting_production`
+  (`watchdog.not_live`, `leaveProduction`): a merge that never deployed, or a release that was rolled back. The window
+  ends (`startedAt` and `endsAt` cleared), `awaitingSince` is that moment, so the week of `productionWaitHours` counts
+  from it, and the production polls start over at 30 minutes. The check that found it is kept in `checks` with its
+  summary, which is what the page shows and what the waiting prompt points at when the watchdog has no
+  `production_check`. Once a later check reports `live: true`, `watchdog.live` gives each one a full new window, as
+  above; a watchdog can swap as often as production does. `live` left out on a watching check counts as live, and
+  `live: false` after a filed report is refused (`live_filed`) there too.
 - **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
   `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
   slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the
@@ -2434,10 +2450,16 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   meter's window, else the best learned rate, and stays in dollars with none. The task's cost popover shows it
   under Build estimate, and the task's facts "About 16% to build" while a build waits for admission.
 - **The safe pace, recorded** (`usage.pace_recorded`, `state.usagePaces`). The forecast below runs where the account
-  readings are, so the engine's account roster works out each provider's safe pace (`listProviderPaces`, the forecast
-  with every usable reset grant that clears the weekly limit counted as a full refill) on every accounts refresh and
-  records it when it moved by a whole point (`isPaceMoved`, `FORECAST_LIMITS.paceStep`) or appeared or went away. Settings'
-  own forecast still leaves grants out, since you claim them in the Claude app, so it can read lower.
+  readings are, so the engine's account roster works out two safe paces for each provider on every accounts refresh
+  (`listProviderPaces`; for Claude it runs for the agent model, so an account's weekly budget is the tighter of its
+  all-models weekly window and that model's own weekly window, and Settings' forecast does the same): `pace`, the
+  forecast without usage resets, and `resetPace`, the forecast with each usable
+  reset as a budget of its own (The usage forecast, below), `endingPace`, the same with only the resets that end within
+  3 days (`isResetEnding`, `FORECAST_LIMITS.resetEndingMs`), and `resetEndsAt`, when the soonest of those resets ends.
+  It records them when any pace moved by a whole point (`isProviderPaceMoved`, `isPaceMoved`,
+  `FORECAST_LIMITS.paceStep`), `resetEndsAt` changed, or the pace appeared or went away. A log migration
+  (`reset-paces.ts`) gave older records `resetPace` and `endingPace` equal to their pace and `resetEndsAt` null. Settings' own forecast
+  still leaves resets out, since you use them in the Claude app.
 - **Auto pace** (`autoPace`, off by default, only yours, in
   `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace`). With it off everything starts at once,
   as above. With it on, a task's first build run in a round waits for admission (`holdForAdmission` in
@@ -2447,7 +2469,14 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   with no recorded pace or no estimate does not wait either.
   - **The budget** is the recorded safe pace for the next 24 hours, less 10% kept for urgent tasks
     (`ADMISSION_LIMITS.reserve`; an urgent build may use all of it), minus the provider's last 24 hours and the
-    estimated rest of every build already started (`resolveAdmission`). A build fits when its estimate does; one
+    estimated rest of every build already started (`resolveAdmission`). The safe pace is `pace`, without resets,
+    unless you switched on **Count on usage resets** (`autoPaceResets`, off by default, only yours, in
+    `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace_resets`): then an urgent or high build
+    uses `resetPace`, and while a usable reset ends within 3 days a normal or low build uses `endingPace`, which counts
+    only those ending resets, so none is left to end unused (`resolveAdmissionPace`). Normal and low builds never count
+    on a reset that ends later. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Agent usage → Auto pace
+    says so under the provider's budget ("Urgent and high-priority builds may use up to 160%, counting on you using a
+    reset in Claude", or "A usage reset ends in 2 days, so every build may use up to 130%, counting on you using it in Claude"). A build fits when its estimate does; one
     larger than the whole budget counts as the budget, so it starts once nothing else is using it.
   - **The queue** (`sortAdmissionQueue`), with nothing to set: task priority (urgent first), then the focus project,
     then the projects you act on most, learned as the median time from a gate opening to your answer over the last 14
@@ -2469,8 +2498,8 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
     3:40 PM" or "next", `listWaitingBuilds`), the first two by name and the rest in a popover; once you are back it
     adds how many tasks built overnight are ready for your review (`describeOvernightReviews`).
 - **Your hours** (`presence/hours.ts`, `presence/schema.ts`; pure, one model for Autopilot, Auto pace and Home).
-  `resolveActiveHours(state, now)` gives `ActiveHours {source, timeZone, week, observedDays}`, `week` 168 booleans,
-  one per hour of the week from Sunday 0:00 on your clock, or null when it has too little to go on.
+  `resolveActiveHours(state, now)` gives an `Option` of `ActiveHours {source, timeZone, week, observedDays}`, `week` 168 booleans,
+  one per hour of the week from Sunday 0:00 on your clock, none when it has too little to go on.
   - **Your clock.** The engine sends `clock.record {timeZone}` on every start with the Mac's time zone, kept as
     `state.timeZone` (`clock.recorded` only when it changed); every hour is read on it (`resolveLocalSlot`), so 9:00
     is your 9:00 through daylight saving. Before the first record it is UTC.
@@ -2491,8 +2520,8 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   - **Set by hand.** `activeHours`, a human-only setting (null by default), is a list of `ActiveDay {weekday, from,
     to}` (weekday 0 for Sunday, whole hours 0 to 24, no overlaps, at most 14), which wins over what was learned
     (`source: 'override'`) until you clear it with null.
-  - **Reading it.** `isActiveAt(hours, at)` (true with null: unknown counts as here) and
-    `resolveNextActiveChange(hours, at)`, the next 15-minute step where you go from here to away or back, or null
+  - **Reading it.** `isActiveAt(hours, at)` (true with none: unknown counts as here) and
+    `resolveNextActiveChange(hours, at)`, the next 15-minute step where you go from here to away or back, or none
     when the week never changes. Settings → Agents → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) is laid
     out like the Forecast card: a header with your hours a week, a line on whether you are usually active now and
     until when (on your hours' time zone), a week timeline (a row per weekday from Monday on a 24-hour track, your
@@ -2510,7 +2539,12 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   It answers how fast you can go without every account running out, not how fast you went. Each unpaused,
   signed-in account is a budget that expires: what is left of its weekly window now lasts until its reset, and
   every reset gives 100% for another week (an account with no known reset keeps what it has for the whole
-  horizon). For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
+  horizon). With resets counted (`ForecastOptions.grants`, for `resetPace`), each usable reset with some left is one
+  more budget that ends at its `endsAt` and never refills (`ForecastAccount.refills` false), worth what it gives
+  back to the weekly limit (`resolveGrantRefill`): 100% for each left if it clears `seven_day`, Fable's share of the
+  weekly limit (`weeklyShare`) if it only clears the Fable limit and gives that back (`givesBackWeekly`), else
+  nothing. Spending the soonest to end first means the reset that ends soonest is the first planned on.
+  For a steady pace (percent of one weekly limit per day) it simulates 7 days, spending each moment
   from the account that resets soonest, which is the best order for budgets that expire. A binary search finds
   the highest pace that never runs every account dry, rounded down to a tenth (`FORECAST_LIMITS`). That pace is
   the recommendation, which Auto pace builds within; the forecast also names the tightest reset (the one
@@ -2750,7 +2784,8 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   `schedule.remove`). A task keeps at most 20, Shinsa 100 live.
 - **Kinds** (`packages/core/src/schedules/time.ts`): once (`in_minutes` or `run_at`, at most a year out; a `run_at`
   more than a minute in the past is refused), every N minutes (1 minute to a week), daily at `HH:MM` on chosen
-  weekdays, and webhook. Daily runs follow the wall clock in the schedule's time zone (IANA, checked; `time_zone`, else the
+  weekdays, webhook, and Slack channel (`slack_channel`, below; like a webhook it has no next run and is never
+  fired by the clock, `isEventTrigger`). Daily runs follow the wall clock in the schedule's time zone (IANA, checked; `time_zone`, else the
   server's for a new schedule and the schedule's own for a change),
   so a daylight-saving change keeps 09:00 at 09:00; a time the clocks skip moves on by the gap (02:30 runs
   at 03:30), and a time that occurs twice runs once, at the first.
@@ -2788,11 +2823,88 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   headers and query values (authorization, cookies, anything naming a token, secret, key, signature or password)
   are redacted whether the template names one or takes them all. An optional `replay_key` template, which reads
   the values as they are because only its hash is kept, dedupes deliveries for a week (500 keys per schedule): a
-  repeat answers 202 `duplicate` and starts nothing. A delivery is `schedule.deliver` with command id
-  `webhook:<id>:<delivery>`; the answer is 202 with the delivery id.
+  repeat answers 202 `duplicate` and starts nothing. Every other request that passes those checks is answered
+  202 `accepted` with the delivery id at once, before the filter (below) is asked, so a sender with a short
+  timeout never retries a request that is still being judged; the filter and the delivery then run in a fiber
+  of their own (`WebhookReceiver.settle` waits for them). The answer therefore says the request was taken, not
+  what came of it: the schedule's run says that, as a sent run, or a skipped one for a request its text does not
+  cover. A delivery is `schedule.deliver` with command id `webhook:<id>:<delivery>`; one core refuses after
+  the answer (a `DomainError`, such as a task to message that has closed) is logged ("[Webhooks] A delivery could not be recorded") and written as a failed run with core's
+  reason (`schedule.fail`, command id `webhook:<id>:<delivery>:fail`), as a Slack channel message's is; one the log itself cannot take is only logged, and one still waiting on the filter when
+  the engine stops is lost.
+- **The automation decides whether to act: the filter** (`packages/core/src/schedules/filter.ts`,
+  `apps/engine/src/schedules/filter/`: `ScheduleFilter`). It is a rule of every automation that reacts to
+  something arriving, not of one trigger: before a webhook request or a Slack channel message runs a schedule,
+  the engine asks the classifier quick call whether the schedule's text applies to what arrived
+  (`SCHEDULE_FILTER_SYSTEM`, a fixed system prompt; in the user prompt the text, then what arrived fenced in a
+  nonce-tagged element as data, `serializeScheduleFilterPrompt`: a Slack message under "From <author>:", a bot's
+  name with "(bot)", so a text limited to one author can be judged (`resolveSlackFilterSubject`), or the webhook
+  request with credentials redacted (`resolveWebhookFilterSubject`), cut to 8,000 characters; the answer `file`
+  or `skip`, `parseScheduleFilter`). `skip` only when the text plainly limits itself to a kind this one is not
+  ("only bugs", "only failed deploys", "only the web app") or what arrived is plainly nothing to act on, a
+  report that all is well included; `file` when it sets no limit or the model is unsure. A skip is
+  `schedule.skip`, which records a skipped run ("The automation did not apply to this, so nothing was
+  started.") with the delivery's replay key and does nothing else: no task, no message, no run count, nothing in
+  Slack. A classifier that does not answer within 8 seconds (`FILTER_TIMEOUT`), or answers anything else, files, so an outage never drops an alert. The call is a few hundred
+  tokens a delivery. A watch is never asked: its read is what decides which reports become tasks (below), which
+  is also how an automation on a clock files nothing when all is well. A schedule on a clock with no `source`
+  has nothing to judge before it runs, so it runs each time.
+- **Slack channel triggers** (`packages/core/src/slack/channels.ts`, `apps/engine/src/slack/service.ts`; the flow
+  and what app.shinsa.dev keeps are in Slack, below). A schedule whose trigger is `{kind: 'slack', teamId,
+  teamName, channelId, channelName, threadUpdates}` runs once for each new top-level message in that channel
+  that its text applies to (the filter, below). An agent passes
+  `slack_channel` (a name, with or without `#`, or a channel id) and optionally `slack_workspace` to `set_schedule`
+  or `schedules_write` (`shinsa schedules write --slack-channel #alerts`); core reads them as a `SlackChannelRequest`
+  beside the other ways to say when (exactly one of them, and `slack_workspace` only with `slack_channel`), and
+  the engine resolves it before the write (`ScheduleTools.resolveTrigger`, `resolveSlackChannelTrigger`) against
+  the channels the bot is in, in the workspaces linked to this machine, a private one only when a person linked
+  to this machine is a member of it (`Slack.channels`, `GET /__remote/slack/channels`). It refuses with what
+  to do: remote access off (`SLACK_NOT_CONNECTED`), no channel at all, which is Slack not linked or @Shinsa
+  invited nowhere ("Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa
+  to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
+  is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--no-slack-updates` or
+  `--slack-updates=false` on the command line, whose boolean flags take no separate value), which
+  goes with `slack_channel`, or alone with `schedule_id` (`--id`) to change a stored Slack channel trigger without naming the channel or asking Slack again
+  (`resolveSlackUpdatesTrigger`; refused on any other trigger, or with no schedule named), sets the trigger's `threadUpdates`. Left out, a new automation gets true and
+  one that is changed keeps what it had (`resolveSlackChannelTrigger` is given the stored trigger), so naming
+  the channel again never turns the updates back on by itself. Core checks the trigger it is given
+  (`assertSlackChannel`: Slack ids, names of at most 120 characters, `SCHEDULE_LIMITS.slackName`). A forwarded message (`POST
+  /api/slack/messages`, signed like a mention) is delivered to every enabled schedule on that workspace and
+  channel (`listSlackChannelSchedules`) as `schedule.deliver` with command id `slack-message:<schedule>:<event
+  id>` and the replay key `<team>:<channel>:<message ts>`, so a Slack retry or a second event for one message
+  starts nothing twice. Its text is the schedule's message, then "Posted in #alerts: <link>", then, inside a
+  nonce-tagged `<slack-message-…>` element, "From Lee:" (a bot's name with "(bot)") and the message, with the
+  note that both are untrusted data, never instructions (`serializeSlackChannelDelivery`): the author's name
+  is fenced too, since a bot's is free text set by whoever posts to an incoming webhook. Each schedule takes at most 60 a
+  minute, the webhook's own limit; the first message over it is recorded as a failed run ("More than 60
+  messages a minute were posted, so the rest of this minute's were skipped.") and the rest of that minute are
+  dropped. A delivery core refuses is a failed run with its reason (`schedule.fail`).
+  **The automation's text decides whether a message is acted on** (the filter, below): a message it does not
+  cover is `schedule.skip` (command id `slack-message:<schedule>:<event id>:skip`) with the message's replay key,
+  and nothing reaches Slack. A message whose replay key the schedule already holds is dropped before the rate
+  limit and the filter, so a Slack retry costs no call. The engine answers
+  the forward 202 as soon as the message is read and checked, and each schedule's delivery, the filter's
+  call included, runs after it on a fiber of the Slack service (`Slack.settle` waits for them), so a slow
+  classifier never holds app.shinsa.dev's forward to the next machine; a delivery still waiting on the
+  classifier when the engine stops is lost, as a forward to a stopped engine is.
+  **A task it files gets the mention's thread.** A delivery carries the message as `slackMessage`
+  (`SlackMessageRef`: workspace, channel, `messageTs`, author, permalink, channel name). When the schedule starts a
+  new task and its trigger's `threadUpdates` is on, core links that task to the thread whose root is the message
+  (`linkSlackMessageThread`, on the step a mention's task shares; `slack.thread_linked`, with no reaction yet), so
+  everything a mention's task gets follows from `syncSlackThreads` (Slack, below): the one reaction on the
+  message, the status card in its thread with the open gate's buttons, the result, a tripped watchdog and
+  "Merged", and a later @Shinsa mention in that thread messages the task. The task's header shows "Filed in
+  #alerts". With `threadUpdates` off, or for a schedule that messages an existing task, nothing is linked and
+  nothing is posted. A thread holds one open task: when several automations watch the channel, each files its
+  task and the first to file takes the thread, the others file silently. Changing the option applies to tasks
+  filed from then on. A message for a channel no
+  enabled schedule watches answers 202 with `delivered: 0` and sends the watched channels again, so
+  app.shinsa.dev stops forwarding it.
 - **Automations have three types**, read from the schedule (`resolveAutomationType` in the web, each row of Settings
   → Automations says it): a **Schedule** runs at a time (once, every N minutes, daily) and starts or messages a
-  task; a **Trigger** runs when its webhook is called; a **Watch** reads one of its project's integrations
+  task; a **Trigger** runs when its webhook is called or a message is posted in its Slack channel (its tile and
+  its when fact carry Slack's mark then, `resolveAutomationLook`, with the workspace as the fact's hint); a
+  **Watch** reads one of its project's integrations
   (`source`) and files a task for each new report in it, on a clock or a webhook.
 - **A watch reads in a home of its own** (`decide/intake.ts`, `prompts/intake.ts`; what it shares with a watchdog check in `decide/reads.ts` and `prompts/reads.ts`). `Schedule.source`
   (`ScheduleSource`: `projectId`, `server`) names an integration the project uses (Watchdogs, above), and one the
@@ -2834,8 +2946,9 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   type's colour (`AUTOMATION_TYPE_LOOK`: a schedule blue, a trigger orange, a watch purple), and shows a watch as
   "Watch · <server> · <when> · N tasks filed", and Open the watch in its menu opens the watch's own page (`/automations/<schedule id>`,
   `routes/automation.tsx`), laid out like a task page: its text as the description, a facts row (its type, on or
-  paused, the integration, the project in its own colour, when it runs, the next and last run and how many tasks it
-  filed, `listAutomationFacts`), the tasks it filed in All tasks' own rows, and an Activity log of every run, newest
+  paused, the integration, the project in its own colour, when it runs, for a Slack channel trigger that starts
+  tasks whether it posts updates in Slack ("Posts updates in Slack" or "No updates in Slack"), the next and last
+  run and how many tasks it filed, `listAutomationFacts`), the tasks it filed in All tasks' own rows, and an Activity log of every run, newest
   first, drawn by the task page's own entry (`ActivityEntry`): a title for the outcome ("Filed 1 task", "No new
   reports", "The read did not finish", "Skipped a read"), the agent's summary under it, who ran it and when; above them any question, sign-in or secret its read waits on, or its cost limit's pause, answered there
   (`listAutomationGates`); Continue at that pause starts the held read again (`restartIntakeRead`), never a watchdog
@@ -2983,8 +3096,10 @@ and the run supervisor.
   repository instead (`stacksOn` set to this task, Scheduling → Bundles), and is refused next to either of them; `stack_on` stacks it on other tasks of the bundle too, by id or handle (a task that joins several parallel pieces). `backlog` files it for the backlog (Scheduling → The
   backlog), and its description tells agents to set it only when you asked to keep the work for later. It is
   exactly-once per `client_request_id`.
-  `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
-  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. With `stacked` the
+  `split_task` (the Agent) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per round
+  and plan version, recorded on the task (`splits`, `round` and `planVersion`: a new round's plan starts again at
+  version 1, so the round tells its split from an earlier round's, which the task keeps); a second call in the same
+  round returns the same tasks. With `stacked` the
   parts are a bundle chained on this task (the first stacks on this task, each next one on the one before, all
   merging together, Scheduling → Bundles), the usual choice whenever the parts serve one goal; it is refused next to
   `this_task_waits`. Without it each part starts at once and ships on its own, only for parts with different goals. These are the only
@@ -3469,7 +3584,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   tunnel, and the only place that decides it. A request with `cf-connecting-ip`, which Cloudflare stamps on
   everything the tunnel forwards, or with the tunnel host as its Host, is a tunnel request (`isTunnel`) and is decided
   before the local guard. Its route table (`TUNNEL_ROUTES`, `remote/gate/schema.ts`) names every path with its
-  methods: `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks), Slack's two `POST`s, and
+  methods: `GET /health`, a webhook (`/api/hooks/<schedule>/<token>`, with its own checks), Slack's three `POST`s, and
   the sockets `GET /remote`, `/share`, `/team` and `/__preview/<id>/…`; anything else, and everything while remote
   access is off, is 404 before any handler runs. Sockets open only as an upgrade in `http/server/service.ts`, which asks
   `admitUpgrade` and opens what it answers; a plain request to a socket path is 404 (`admitRequest`). `/remote`,
@@ -3481,7 +3596,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   upgrade (404, the token kept), then spends the nonce (`Remote.spendConnect`, held until the token expires), so a
   token seen in a log or on the wire opens nothing (401). The token only keeps random traffic off the endpoint; trust
   rests on the handshake. Every engine names what it speaks in each heartbeat and pairing start (`features`:
-  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
+  `bound-connect-tokens`, `sealed-pairing`, `slack-linked-threads`, `slack-task-owner`, `slack-channel-triggers`, `MACHINE_FEATURES` in core), and app.shinsa.dev mints these tokens and
   seals pairing credentials only for a machine that named them; an engine that predates them, which names nothing,
   still gets the old unlabelled token over the instance, user and expiry and its credentials in the clear, so the
   Worker can deploy before every machine has updated. This engine only accepts the new token and refuses clear
@@ -3791,7 +3906,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
-  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `focus.projects` for `focus.change`'s `projectIds`
+  `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `usage.auto_pace_resets` for `autoPaceResets`, `focus.projects` for `focus.change`'s `projectIds`
   and `except`, `autopilot` for the `autopilot` setting and `autopilot-slack` for its Slack `contacts`,
   `GET /api/slack/directory` and `POST /api/slack/test`, today; Settings → Teams, Settings → Agents → Autopilot,
   the review's Fix and approve choice and
@@ -4690,7 +4805,7 @@ browser ──https──► <label>.shinsa.page   (apps/cloud, previews.ts)
   `preview.unshared` with `reason: 'done'`): its worktree and its service runs go with it.
 - **Team access** waits for teams; a preview is shared only by link for now.
 - **To try it without a deploy**, `bun run sandbox` (`scripts/sandbox/`) shares the seeded `web` service of one of
-  Studio's tasks (`scripts/sandbox/service.ts`, a small dev server with live updates) on
+  Studio's tasks (`scripts/sandbox/dev-server.ts`, a small dev server with live updates) on
   `http://<label>.localhost:5195` with the Worker's own code. Its start page, `/sandbox`, links the task in Studio's
   own app, with no sign-in, where the Services popover shows the run, Share preview and Stop sharing; then the
   preview, stopping and starting the service (`/sandbox/service/stop`, `/sandbox/service/start`), and a link that no
@@ -4774,7 +4889,8 @@ Slack ──event──► app.shinsa.dev /slack/events
                                              /api/slack/events
                                                └─ slack.mention
    thread holds an open task ──► task.message, 👀 on the mention
-                  └─ a gate open ──► kept in its chat, 📥 on the mention
+                  └─ a gate open but the result ──► kept for its next
+                     agent, 📥 on the mention
    otherwise ──► slack.evaluate: ⏳ on the mention at once,
                   the model reads the thread
                   ├─ not work ──► ⏳ off, "Not a task", once per thread
@@ -4804,6 +4920,26 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
                                  └─ slack.decide ──► gate.answer
                                     └─ the buttons become
                                        "@you approved the plan"
+
+Slack ──a message in a channel──► app.shinsa.dev /slack/events
+       ├─ a reply in a thread, an edit, a deletion, a join ─► nothing
+       ├─ no online machine watches the channel ───────────► nothing
+       ├─ Shinsa's own post, or one that mentions @Shinsa ─► nothing
+       └─ the message, signed, to each watching machine
+              ──► t-<id>.shinsa.dev /api/slack/messages
+                    └─ each enabled schedule on the channel
+                       ├─ over 60 a minute ──► one failed run
+                       ├─ its text does not apply (the
+                       │  classifier) ──► schedule.skip:
+                       │                  a skipped run, nothing in Slack
+                       └─ schedule.deliver ──► a new task, or a
+                                               message to its task
+                             └─ a new task, updates on
+                                ──► slack.thread_linked: the card,
+                                    result and "Merged" in the
+                                    message's thread, as for a mention
+engine ──its watched channels, on every change──►
+         app.shinsa.dev /__remote/slack/watches
 ```
 
 - **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
@@ -4840,14 +4976,55 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   you connect again. Each row leads with when that
   account last started work here ("Last used 2h ago · Connected 3d ago", or "Not used yet"): the engine
   adds `lastUsedAt` to each link from its own state (`resolveSlackLastUsedAt`, the newest task whose Slack thread
-  that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread and
-  decisions from a card's buttons do not count. A page reaching an older engine, whose links lack the field, shows
+  that user in that workspace started), so app.shinsa.dev stores nothing for it. Replies in a task's thread,
+  decisions from a card's buttons and a task an automation filed from that user's channel message
+  (`Task.scheduleId`) do not count. A page reaching an older engine, whose links lack the field, shows
   "Connected 3d ago". A task started from Slack has a fact beside "Filed by" in its header, "Filed in #support"
   (`resolveSlackFact`, `components/task/facts.tsx`), or "Filed in Slack" when the channel's name is unknown, which
   opens the thread it came from in a new tab: the mention's permalink, or
   `https://app.slack.com/client/<team>/<channel>/thread/<channel>-<ts>` when Slack gave none (`resolveSlackThreadUrl`);
   a read-only shared page leaves it out. The hosted dashboard on
   app.shinsa.dev shows the same section, below Machines, read from and sent to the first machine of the dashboard.
+- **A watched channel's messages run automations** (Schedules and webhooks → Slack channel triggers, above). The
+  engine tells app.shinsa.dev which channels its enabled Slack triggers name (`listSlackChannelWatches`, at most
+  100, `POST /__remote/slack/watches`, which replaces the machine's whole list and keeps only channels it may set a trigger
+  on, checked again on each call: the bot is in it, and a private channel also has a Slack user linked to this
+  machine as a member, asked with that person's own token, never the bot's): once when remote access starts, after every state change that alters the list, and again after it lists the
+  channels. app.shinsa.dev keeps them as rows of workspace, channel and machine (`slack_channel_watches`), never
+  a message: they go with the workspace or the machine, and unlinking Slack empties them. The app subscribes to
+  `message.channels`, `message.groups` and `member_left_channel`. An event with a subtype it does not read (an edit, a deletion, a
+  join), a reply in a thread, Shinsa's own post and a message that mentions @Shinsa (already a mention) are
+  dropped, and so is everything in a channel no machine watches, before any Slack call. For the rest the Worker
+  takes the machines watching that channel that are online and name `slack-channel-triggers`, so an older engine
+  is never sent one, reads the author's name, the channel's name and the message's permalink with the bot token,
+  and forwards a `SlackChannelMessage` (the event id, workspace, channel, `messageTs`, author, `bot`, the text
+  with Slack's markup made readable, at most 12,000 characters, the permalink and the channel name) to `POST
+  /api/slack/messages` on each, signed as a mention is. A bot's message counts, so an alert posted by an
+  integration runs the automation. A machine that refuses one is logged as `[Cloud] A machine refused a Slack
+  channel message`, and a failure on the way as `[Cloud] A Slack channel message could not be forwarded`, the
+  lines a watch on the Worker counts. The message text passes through app.shinsa.dev in the clear, as a
+  mention's thread does, and is stored nowhere there.
+- **A private channel stays its members'.** Whether a person linked to the machine is in a private channel has
+  three answers (`apps/cloud/src/slack/membership.ts`): a member, not a member (the channel is not in their list,
+  `channel_not_found`, or their token is gone, revoked, expired or lacks the scope, `MEMBERSHIP_DENIED_CODES`), or
+  unknown, when Slack fails any other way, such as `ratelimited`. Unknown is never read as not a member. Listing
+  the channels, or sending the watches with a private channel Slack would not vouch for, answers 502 `SlackFailed`
+  ("Slack did not say who is in the private channels (<code>).") and leaves the rows as they were, so the engine,
+  which marks its list sent only on a 200, sends it again on its next state change. Each private watch keeps when
+  its membership was last confirmed (`slack_channel_watches.member_checked_at`, set when the watches are sent).
+  A message in a private channel (any `channel_type` but `channel`) is forwarded to a machine only while that is
+  under five minutes old (`MEMBERSHIP_WINDOW`); past it the Worker asks `conversations.info` as each linked person
+  first: a member confirms it again, not a member removes that machine's watch (`[Cloud] A private Slack channel
+  is no longer watched`, a warning) and unknown holds that one message back with the watch kept (`[Cloud] A
+  private Slack channel message was held back`, an error). The app also subscribes to `member_left_channel`,
+  which clears the confirmation for that channel's watches, so the first message after anyone leaves is checked
+  whatever its age. A machine whose watch was removed is told nothing: its trigger stays listed and gets no
+  messages until a linked person is in the channel again and the watches are sent.
+  A machine may post, react and set the status in any thread of a channel it watches now
+  (`SlackStore.hasWatch`: the watch row, with a link to that workspace still on the machine), since a channel
+  message is forwarded without a thread row; its first call there records the thread (`slack_threads`), so a task
+  filed from a channel message keeps its thread once the automation is paused or deleted. A thread in a channel
+  it neither watches nor was sent is still refused (`ThreadNotForwarded`).
 - **A mention reaches the machine** as `SlackMention` (`slack/schema.ts`): the event id, the workspace, channel and
   thread (`threadTs`, the mention's own `ts` for a mention outside a thread: the bot always answers in a thread), the
   author with their Slack name, the text with Slack's markup turned into words and the bot's own mention dropped
@@ -4894,10 +5071,13 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   write (`task.message`, the author and the permalink in front, `serializeSlackMessage`): it is classified and routed
   as messages are (Messages, above), so an acknowledgement stays an acknowledgement, a correction is feedback and new
   work a new round. The bot posts nothing: it puts 👀 `eyes` on that mention (`slack.react`,
-  `SLACK_MENTION_REACTIONS.forwarded`). While the task has a gate open (a question, a plan, a review, a failure), the
-  mention is only recorded in its chat for its next agent (`recordHeldMessage`) and closes nothing, so it never
-  answers a question, revises a plan or sends a review back; it gets 📥 `inbox_tray` instead (`held`). Decide the
-  gate with the card's buttons, or in Shinsa.
+  `SLACK_MENTION_REACTIONS.forwarded`). A task resting at its result (Read the answer, Read the diagnosis, Read the
+  report) takes the mention as a follow-up, as it takes yours. While the task has any other gate open (a question, a
+  plan, a review, a merge, a failure; `isHeldForYou`, the rule a message sent on your behalf follows), the mention
+  closes nothing, so it never answers a question, revises a plan or sends a review back: it is recorded in its chat
+  and kept for its next agent (`recordHeldMessage`, `task.messaged` with `kept` and `sender: 'slack'`), which is told
+  it once, as its author wrote it ("<name> in Slack: …", Messages, above), and it gets 📥 `inbox_tray` instead
+  (`held`). Decide the gate with the card's buttons, or in Shinsa.
 - **Any other mention is read first** (`receiveSlackMention` → `slack.evaluate`, `Slack.evaluate`): the mention gets
   ⏳ at once (`hourglass_flowing_sand`, Reactions below), so you see it was picked up, and the machine asks
   the classifier model, under a fixed system prompt with the thread as data (`SLACK_EVALUATION_SYSTEM`,
@@ -5079,8 +5259,8 @@ Slack ──a card's button──► app.shinsa.dev /slack/interactions
   in the thread from app.shinsa.dev, and the mention is not kept: mention it again once Shinsa runs there.
 - **What app.shinsa.dev sees.** Slack's messages and the posts back pass through the Worker on their way and are never
   stored, linked threads included: D1 keeps the workspaces with their bot tokens sealed (AES-GCM, `SLACK_TOKEN_KEY`), the links (Slack user to
-  account and machine, with that person's read-only user token sealed the same way), which threads were sent to which machine and which messages each machine posted (so a machine
-  posts only in its own threads and edits only its own messages), and Slack's event ids for a day. The sealed channel
+  account and machine, with that person's read-only user token sealed the same way), which threads were sent to which machine, a watched channel's thread from the machine's first post in it, and which messages each machine posted (so a machine
+  posts only in its own threads and those of a channel it watches, and edits only its own messages), and Slack's event ids for a day. The sealed channel
   of remote access is not involved; this is the one path where the Worker reads what goes by.
 
 ## Who can change Shinsa
@@ -5405,7 +5585,7 @@ truth, and a snapshot only saves replaying it.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
   `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
   one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`; the first, `stack-lists`, turns the single `stacksOn` of
-  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
+  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null; `slack-thread-updates` gives every stored Slack channel trigger from before the option `threadUpdates: true`; `reset-paces` gives every `usage.pace_recorded` from before resets a `resetPace` and `endingPace` equal to its pace and `resetEndsAt` null; the last, `review-ratings`, gives every `review.reported` from before the reviewer's ratings `ratings: null`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
   in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it
@@ -6554,8 +6734,8 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
-- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the built-in list
-  when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
+- **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the last list it gave, or
+  the built-in one, when it fails), and `codex login status` for the sign-in (`login.ts`, like Kanna's provider check).
 
 **Resume fallback** (`agents/turns/plan.ts`). Before resuming, the supervisor checks the session: a session owned by another
 provider is handed over; one marked lost (`run.session_lost`, recorded for every run that used it, so no retry or
@@ -6965,24 +7145,46 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the kept account, and the
   kept account is the default when the duplicate is. Shinsa never signs a duplicate out, which could revoke the
   login it shares. Once the logins differ again, both are accounts as before, with their own settings.
-- **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage` with the
+- **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage?cedar_ember=1` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
-  `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
+  `.credentials.json`), `anthropic-beta: oauth-2025-04-20` and `User-Agent: shinsa claude-cli/2.1.321`. Claude fills
+  `cedar_ember`, an account's reset status, only when the query asks for it and the client name holds a
+  `claude-cli/<version>` token (any version; with `shinsa` alone it answers `ineligible_reason: "surface"` and no
+  grants), so the name keeps `shinsa` and adds that token. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
   window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
   codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
   malformed one drops only itself: `extraUsage` (`extra_usage.is_enabled`, else `spend.enabled`; `noLimit` when it is
   on with no monthly limit; `credit`, the money left, from `spend.balance`, else `monthly_limit` minus `used_credits`)
-  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember`, then
-  `juniper_tide` (each with its resets left and total, the windows it clears, whether it is usable now and when it
-  ends; a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember` (each with its resets left and total, the windows it clears, whether it is usable now and when it
+  ends, and `givesBackWeekly` from `gives_back_weekly` with `weeklyShare`, the percent of the weekly limit the
+  scoped limits used, summed from `weekly_scoped_shares[].used_percent_of_weekly`, only on a grant that gives back;
+  a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
   credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
+  A usable reset that ends within 3 days (`ADMISSION_LIMITS.resetEndingMs`) is said in amber, on its row ("Clears the
+  weekly Fable limit · ends in 2 days") and in the usage menu ("1 usage reset ends in 2 days"), so none ends unused.
   Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
   the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
   one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
-  token keeps the last reading and says the login refreshes on the next run, and a stored token whose `expiresAt`
-  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Readings are cached for 60 s and kept
+  token keeps the last reading and says the login refreshes at the next check, and a stored token whose `expiresAt`
+  has passed is not sent to Claude at all (Claude answers it with a 429 as often as a 401). Only a Claude Code
+  request refreshes a login (`claude auth status` does not), and an account that is out of usage or idle gets no
+  run, so Shinsa keeps each login alive (`accounts/keepalive/`, `LoginKeepalive.keep`): at start, on the 5-minute
+  tick and on both refreshes, before the usage read, every distinct own-login account that is not signed out and
+  has no active run, and whose stored token expires within 10 minutes or whose last read came
+  back expired, gets one Claude Code turn in its folder with `resolveAccountEnv`: `claude -p` on Haiku, with no
+  tools, MCP servers, settings, slash commands or saved session, 60 s at most. Claude Code
+  refreshes the token before it sends the request, so the turn works on an account that is out of usage too, where
+  it costs nothing; otherwise it costs a few tokens (about $0.0002), about three times a day per idle account,
+  since a token lasts about 8 hours. The read after it is forced. An attempt that leaves the login expired (offline, a timeout) is tried again after 30
+  minutes, at once on Refresh usage, and one turn runs per account at a time. A turn Claude
+  refuses for the login (a 401, or text `isLoginText` knows) marks the account signed out with why ("Claude could
+  not refresh this account’s login. Sign in again to keep its usage current."), so Settings shows Needs sign-in;
+  signing in or removing the account clears the back-off. A reading that goes stale anyway stops counting: `resolveSpentUntil` (core) ignores
+  a reading whose `checkedAt` is over 6 hours old (`STALE_USAGE_MS`, `isStaleUsage`), so the picker, the
+  snapshot's `spentUntil` and the forecast no longer treat a frozen 100% window as out of usage; a rejection a run
+  hit still holds the account until its reset. Readings are cached for 60 s and kept
   in `data/usage-limits.json` (read back marked `source: 'cache'`); a failed read never erases a reading, only
   replaces its detail; a 429 backs off at least 5 minutes, or as long as its `retry-after` asks, even when forced:
   the reading carries the end of the back-off as `retryAt` (kept on disk, so a restart honours it, and cleared by
@@ -7013,7 +7215,17 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   (`run.attempted` `account`), and an attempt on another account than the task's last one writes an
   `account_switched` notice.
 - **Rotation on a rejection** (`accounts/rotation/service.ts`). A usage limit marks the account spent until its reset (15
-  minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too); a
+  minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too). A mark
+  is for the whole account or for one model family: Claude reports a cap on one model (Fable's weekly limit) with the
+  same `seven_day` type as the all-models one, so on a usage rejection the rotation reads the account's usage again
+  at once and asks core's `resolveLimitScope` with the last reading a read returned (`UsageTable.measured`, never
+  a pushed notice, which puts the weekly window at 100% on any rejection; kept in `data/usage-reads.json` and
+  `data/provider-usage-reads.json` so a restart keeps it): with a fresh reading where neither the 5-hour nor the all-models weekly
+  window is at 100% and the run's model has a window of its own at least as full as both, it is a model limit
+  (`limitScope: 'model'` with the run's `model` on the `RunFailure`); Claude's own `seven_day_opus` and
+  `seven_day_sonnet` types are model limits without the read. A model mark only counts for runs on that family
+  (`isModelMarkFor`): `pickAccount`, the pool's reset and the snapshot's `spentUntil` (with `spentModel`, for the agent
+  model) still offer the account to other models. An account keeps one mark per family and one for the whole account; a
   signed-out account is marked signed out (a dead token is read again first: A login Claude could not refresh,
   below). The spent marks are kept in `data/account-marks.json` (written on every
   mark and every sign-in that clears one; read at start without the marks that have run out, and an unreadable file
@@ -7069,7 +7281,11 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   limit, with `settings.snoozeLimited` on) opens a failure gate at the reset instead; with both off the limit opens
   the failure gate at once. A usage limit never fails a task on its own: a reset that is unknown or already past
   waits 15 minutes (`ESTIMATED_RESET_MS`), and a resumed step that hits a window no later than the one it waited for
-  waits at least 15 minutes more instead of looping at once. The web titles the wait "Waiting for usage: continues at
+  waits at least 15 minutes more instead of looping at once. The wait keeps the failure's `model` and `limitScope`:
+  a wait on a model limit is resumed at once by a settings change that moves its role to another model family or
+  provider (`releaseModelWaits` in `changeSettings`, auto-resume or not), on the new model, and its copy names the
+  model ("The agent stopped at the Fable limit on a@b.com"); a wait on an all-models limit waits for its reset
+  whatever the model. The web titles the wait "Waiting for usage: continues at
   3:40 PM on a@b.com" (`docs/design.md` → Waiting for the usage limit). `usage_wait.change` (auto-resume on or off) replaces the
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
   cancelling or any new step end the wait. A daily or project limit arms the same wait with `cause: pace` before
@@ -7178,8 +7394,8 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   `PORT_RELEASE_SCHEDULE` (5 s), else a free one with `PORT_RETRY` (20 tries), `PortUnavailable` when none is free. Every
   `package.json` and `deno.json` a check, the coverage detection or the service detection reads goes through one
   lenient schema (`files/schema.ts`: `PackageManifest`), which keeps the fields it can read and drops the rest.
-- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `provider-usage.json` and
-  `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
+- **Accounts and secrets.** `AccountRegistry` keeps `accounts.json`, `usage-limits.json`, `usage-reads.json`, `provider-usage.json`,
+  `provider-usage-reads.json` and `account-marks.json` on `JsonFile`, each decoded by a lenient schema (`accounts/schema.ts`): an account or a mark
   that breaks it is dropped, a broken `accounts.json` is kept aside, and a cache or a mark that cannot be written is
   logged. `AccountFolders` makes and removes each account's `CLAUDE_CONFIG_DIR`: the folder, its seeded `.claude.json`,
   the links to the shared entries and the `.credentials.json` read back. `UsageApi` reads Claude's usage over Effect's
@@ -7313,7 +7529,9 @@ update channel: a canary or a beta is the same app with the same identity (`APP_
     ├── terminals/     Your terminals (`terminals.json`), each one's last screen (`<id>.screen`), so a restarted
     │                  engine shows how each ended, and your services (`services.json`, mode 600; Terminals, above)
     ├── usage-limits.json  The last usage reading per account
+    ├── usage-reads.json   The last reading a usage read returned per account, without pushed notices
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
+    ├── provider-usage-reads.json  The last reading a usage read returned per provider, without pushed notices
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
     ├── extension-usage.json  When agents last used each MCP server and skill, and how far each session was read
     ├── eunoe/         eunoe's folder (`EUNOE_DIR`): the request log (requests.jsonl) and thread state (threads/)
@@ -7373,7 +7591,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. Every seeded project has services to start
   (`scripts/seed/services.ts`, written to `data/terminals/services.json`): `web` in each, `api` for Superwall, each
-  running `scripts/sandbox/service.ts` in the project's seeded repository with a preview URL; the command names the
+  running `scripts/sandbox/dev-server.ts` in the project's seeded repository with a preview URL; the command names the
   script by its path in the checkout that seeded it. Superwall's and Basket's shared browsers have a few signed-in sites
   (`scripts/seed/browser.ts`, a cookie file under `data/browser/`) and Personal's has none. The evidence (`scripts/seed/evidence.ts`) is real files in
   `scripts/seed-media/`, taken at a device scale factor of 2 like an agent's: before and after screenshots of a

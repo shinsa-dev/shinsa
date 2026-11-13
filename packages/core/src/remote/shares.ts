@@ -1,3 +1,4 @@
+import { Result, Option } from 'effect';
 import type { SharedTask } from '../share/index.ts';
 import {
   concatBytes,
@@ -60,42 +61,39 @@ export function serializeShareUrl(origin: string, link: ShareLink) {
 }
 
 function serializeShareToken(instanceId: string, shareId: string) {
-  const id = parseBase64Url(shareId) ?? new Uint8Array();
+  const id = Option.getOrElse(parseBase64Url(shareId), () => new Uint8Array());
   return serializeBase64Url(concatBytes(id, encodeText(instanceId)));
 }
 
 function parseShareToken(token: string) {
-  const bytes = parseBase64Url(token);
-  if (!bytes || bytes.length <= SHARE_ID_BYTES) return null;
-  try {
-    const instanceId = decodeText(bytes.slice(SHARE_ID_BYTES));
-    if (!URL_SAFE_SEGMENT.test(instanceId)) return null;
-    return { instanceId, shareId: serializeBase64Url(bytes.slice(0, SHARE_ID_BYTES)) };
-  } catch {
-    return null;
-  }
+  return Option.flatMap(
+    Option.filter(parseBase64Url(token), (bytes) => bytes.length > SHARE_ID_BYTES),
+    (bytes) =>
+      Option.map(
+        Option.filter(
+          Result.getSuccess(Result.try(() => decodeText(bytes.slice(SHARE_ID_BYTES)))),
+          (instanceId) => URL_SAFE_SEGMENT.test(instanceId)
+        ),
+        (instanceId) => ({ instanceId, shareId: serializeBase64Url(bytes.slice(0, SHARE_ID_BYTES)) })
+      )
+  );
 }
 
 export function resolveSharePagePath(instanceId: string, shareId: string) {
   return `${REMOTE_PATHS.sharePage}/${serializeShareToken(instanceId, shareId)}`;
 }
 
-export function parseShareLocation(pathname: string, hash: string): ShareLink | null {
+export function parseShareLocation(pathname: string, hash: string): Option.Option<ShareLink> {
   const token = SHARE_PAGE.exec(pathname)?.[1];
   const key = hash.replace(/^#/, '');
-  const parsed = token ? parseShareToken(token) : null;
-  if (!parsed || !hasBytes(key, SHARE_KEY_BYTES)) return null;
-  return { ...parsed, key };
+  if (!(token && hasBytes(key, SHARE_KEY_BYTES))) return Option.none();
+  return Option.map(parseShareToken(token), (parsed) => ({ ...parsed, key }));
 }
 
-export function parseShareUrl(url: string | null): ShareLink | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    return parseShareLocation(parsed.pathname, parsed.hash);
-  } catch {
-    return null;
-  }
+export function parseShareUrl(url: string | null): Option.Option<ShareLink> {
+  if (!url) return Option.none();
+  const parsed = URL.parse(url);
+  return parsed ? parseShareLocation(parsed.pathname, parsed.hash) : Option.none();
 }
 
 export function isShareId(value: string) {

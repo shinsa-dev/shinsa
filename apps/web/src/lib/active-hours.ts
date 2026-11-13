@@ -8,6 +8,8 @@ import {
   resolveLocalSlot,
   resolveNextActiveChange,
 } from '@shinsa/core';
+import { Option } from 'effect';
+
 import type { SettingItem } from '@/lib/settings.ts';
 
 export const ACTIVE_HOURS_LABEL = {
@@ -182,9 +184,15 @@ function formatChange(hours: ActiveHours, now: number, at: number) {
 }
 
 export function describeNow(hours: ActiveHours, now: number) {
-  const active = isActiveAt(hours, now);
-  const change = resolveNextActiveChange(hours, now);
-  if (change === null) return active ? 'You are usually active at any hour.' : 'You are not usually active.';
-  const until = formatChange(hours, now, change);
-  return active ? `You are usually active now, until ${until}.` : `You are usually away now, until ${until}.`;
+  const known = Option.some(hours);
+  const active = isActiveAt(known, now);
+  return Option.match(resolveNextActiveChange(known, now), {
+    onNone: () => (active ? 'You are usually active at any hour.' : 'You are not usually active.'),
+    onSome: (change) => {
+      const until = formatChange(hours, now, change);
+      return active
+        ? `You are usually active now, until ${until}.`
+        : `You are usually away now, until ${until}.`;
+    },
+  });
 }

@@ -184,6 +184,27 @@ describe('API failures', () => {
     expect(verdict.failure).toMatchObject({ class: 'usage_limit', resetAt: 5_000_000, retryable: true });
   });
 
+  test('a limit Claude names for a model is that model’s limit, and the generic ones leave it open', () => {
+    const named = createTurnEvidence();
+    recordRateLimit(named, limit({ rateLimitType: 'seven_day_opus', resetsAt: 5_000 }));
+    const result = success({ is_error: true, terminal_reason: 'api_error', result: 'limit' });
+    expect(classify(result, named).failure).toMatchObject({ class: 'usage_limit', limitScope: 'model' });
+    const generic = createTurnEvidence();
+    recordRateLimit(generic, limit({ rateLimitType: 'seven_day', resetsAt: 5_000 }));
+    expect(classify(result, generic).failure?.limitScope).toBeUndefined();
+    const mixed = createTurnEvidence();
+    recordRateLimit(mixed, limit({ rateLimitType: 'seven_day_sonnet', resetsAt: 5_000 }));
+    recordAssistantError(
+      mixed,
+      assistant('rate_limit', {
+        api_error_params: {
+          rate_limit_info: { status: 'rejected', rateLimitType: 'five_hour', resetsAt: 6_000 },
+        },
+      })
+    );
+    expect(classify(result, mixed).failure?.limitScope).toBeUndefined();
+  });
+
   test('an unknown reset time leaves the reset unknown, and a window that frees up is forgotten', () => {
     const evidence = createTurnEvidence();
     recordRateLimit(evidence, limit({ resetsAt: undefined }));

@@ -67,6 +67,7 @@ async function openLimits(read: UsageReader, path: string, ttlMs?: number) {
   await run(TestClock.setTime(clock.now));
   const limits = {
     snapshot: (id: string) => sync(usage.snapshot(id)),
+    measured: (id: string) => sync(usage.measured(id)),
     isFresh: (id: string) => sync(usage.isFresh(id)),
     refresh: (ids: string[], force = false) => run(usage.refresh(ids, force)),
     remove: (id: string) => run(usage.remove(id)),
@@ -114,6 +115,8 @@ const GRANT: UsageResetGrant = {
   clears: ['five_hour', 'seven_day'],
   usableNow: true,
   endsAt: 90_000,
+  givesBackWeekly: false,
+  weeklyShare: null,
 };
 
 async function createLimits(reads: UsageRead[], options: { path?: string; ttlMs?: number } = {}) {
@@ -432,6 +435,24 @@ describe('usage limits', () => {
       checkedAt: 1_000,
       source: 'cache',
     });
+  });
+
+  test('the last measured reading survives a restart even when a push came after it', async () => {
+    const first = await createLimits([{ ok: true, windows: [SESSION] }]);
+    await first.limits.refresh(['a']);
+    await first.limits.recordPush(
+      'a',
+      createNotice({ status: 'rejected', limit: 'seven_day', resetsAt: 70_000 })
+    );
+    const second = await createLimits([], { path: first.path });
+    expect(second.limits.snapshot('a').windows.map((window) => window.id)).toEqual([
+      'five_hour',
+      'seven_day',
+    ]);
+    expect(second.limits.measured('a')).toMatchObject({ windows: [SESSION], checkedAt: 1_000 });
+    await second.limits.remove('a');
+    const third = await createLimits([], { path: first.path });
+    expect(third.limits.measured('a')).toEqual(createUnknownUsage());
   });
 
   test('cached entries without windows are dropped and a broken cache is logged and ignored', async () => {

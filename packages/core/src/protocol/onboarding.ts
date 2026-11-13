@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ProjectSuggestion } from '../domain/project-suggestions.ts';
 import type { Settings } from '../domain/settings.ts';
 
@@ -135,8 +136,8 @@ export function serializeChoiceValue(group: OnboardingChoiceGroupId, value: stri
 
 export function parseChoiceValue(text: string) {
   const at = text.indexOf('=');
-  if (at <= 0) return null;
-  return { group: text.slice(0, at), value: text.slice(at + 1) };
+  if (at <= 0) return Option.none<{ group: string; value: string }>();
+  return Option.some({ group: text.slice(0, at), value: text.slice(at + 1) });
 }
 
 export function resolveDisplayPath(path: string, userHome: string) {

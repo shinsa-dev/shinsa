@@ -97,7 +97,14 @@ type EventBody =
   | { type: 'clock.recorded'; timeZone: string }
   | { type: 'mac.used'; usedAt: number }
   | { type: 'account.plan_recorded'; accountId: string; provider: string; plan: string | null }
-  | { type: 'usage.pace_recorded'; provider: string; pace: number | null }
+  | {
+      type: 'usage.pace_recorded';
+      provider: string;
+      pace: number | null;
+      resetPace: number | null;
+      endingPace: number | null;
+      resetEndsAt: number | null;
+    }
   | { type: 'settings.changed'; settings: Settings }
   | {
       type: 'task.created';
@@ -177,6 +184,7 @@ type EventBody =
       round?: number;
       suggestionId?: string;
       kept?: true;
+      sender?: 'slack';
       comments?: ReviewComment[];
     }
   | {

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { type AutopilotContact, isSameAutopilotContact } from './settings.ts';
 
 export interface SlackEscalationPost {
@@ -15,10 +16,8 @@ export function selectSlackEscalationPost(
   escalatedAt: number,
   contact: AutopilotContact
 ) {
-  return (
-    posts?.find(
-      (post) => post.escalatedAt === escalatedAt && isSameAutopilotContact(post.contact, contact)
-    ) ?? null
+  return Option.fromNullishOr(
+    posts?.find((post) => post.escalatedAt === escalatedAt && isSameAutopilotContact(post.contact, contact))
   );
 }
 
@@ -30,6 +29,15 @@ export interface SlackThreadRef {
   teamId: string;
   channelId: string;
   threadTs: string;
+}
+
+export interface SlackMessageRef {
+  teamId: string;
+  channelId: string;
+  messageTs: string;
+  userId: string;
+  permalink: string | null;
+  channelName: string | null;
 }
 
 export interface SlackDecided {

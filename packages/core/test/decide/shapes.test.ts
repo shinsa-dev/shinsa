@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { acceptsFollowUp, resolveNextStep } from '../../src/decide/shapes.ts';
 import {
   listActiveRuns,
@@ -396,7 +397,7 @@ describe('find and fix', () => {
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(harness.task(taskId)).toMatchObject({ stage: 'triage', stageReason: 'setting up the worktree' });
     expect(harness.effectsOf('worktree.create')).toHaveLength(2);
-    expect(resolveNextStep(harness.task(taskId))).toBe('plan');
+    expect(Option.getOrNull(resolveNextStep(harness.task(taskId)))).toBe('plan');
     expect(
       resolveTaskProgress(harness.task(taskId))
         .phases.slice(0, 3)
@@ -894,7 +895,7 @@ describe('the agent composes the steps', () => {
       reply: REPLY,
     });
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_proposal', proposal: { status: 'open' } });
-    expect(resolveNextStep(harness.task(taskId))).toBe('your_ok');
+    expect(Option.getOrNull(resolveNextStep(harness.task(taskId)))).toBe('your_ok');
   });
 
   test('refuses steps that break the rules, names every problem and keeps the agent running', () => {

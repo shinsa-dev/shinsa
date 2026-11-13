@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { describeList } from '../chat/text.ts';
 import {
   type Activity,
@@ -243,15 +244,17 @@ export function describeEarlierWork(task: Task) {
   return lines.join('\n');
 }
 
-export function describeWhatFollows(task: Task) {
+export function describeWhatFollows(task: Task): Option.Option<string> {
   const pipeline = resolveTaskPipeline(task);
-  if (!pipeline.includes('your_ok')) return null;
-  const work = resolveWorkStep(pipeline) === 'operate' ? 'operation' : 'change';
-  return [
-    `After your hand-over the human decides whether this task goes on to the ${work}. If they agree, the ${work} is planned and carried out from what you hand over, usually by you in this same conversation.`,
-    `End with what the ${work} should do.`,
-    `Set \`recommend\` on your hand-over: \`go_on\` when the ${work} is worth doing, \`close\` when you found nothing worth changing. With \`close\`, the human sees Close as the main choice and can still go on.`,
-  ].join('\n');
+  if (!pipeline.includes('your_ok')) return Option.none();
+  const work = Option.contains(resolveWorkStep(pipeline), 'operate') ? 'operation' : 'change';
+  return Option.some(
+    [
+      `After your hand-over the human decides whether this task goes on to the ${work}. If they agree, the ${work} is planned and carried out from what you hand over, usually by you in this same conversation.`,
+      `End with what the ${work} should do.`,
+      `Set \`recommend\` on your hand-over: \`go_on\` when the ${work} is worth doing, \`close\` when you found nothing worth changing. With \`close\`, the human sees Close as the main choice and can still go on.`,
+    ].join('\n')
+  );
 }
 
 export const PROPOSAL_RULE = [
@@ -308,6 +311,7 @@ export function describeRounds(task: Task) {
 const SENT_BY = {
   agent: 'Sent by an agent on the human’s behalf: ',
   schedule: 'Sent by a schedule: ',
+  slack: '',
 } as const;
 
 function describeSender(entry: Activity) {

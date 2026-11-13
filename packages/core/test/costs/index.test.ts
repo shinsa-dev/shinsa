@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  createPercent,
+  createUsd,
   describeBudgetAmount,
   describeUsd,
   describeWeeklyPercent,
@@ -36,13 +38,13 @@ describe('resolveTaskCost', () => {
       cacheReadTokens: 15,
       cacheWriteTokens: 3,
       tokens: 348,
-      knownUsd: 1.1,
+      knownUsd: createUsd(1.1),
       unpricedRuns: 1,
-      weeklyPercent: 0,
+      weeklyPercent: createPercent(0),
       weeklyRuns: 0,
       weeklyTasks: 0,
       learningRuns: 0,
-      estimatedPercent: 0,
+      estimatedPercent: createPercent(0),
     });
     expect(cost.byRole.map((line) => [line.role, line.cost.runs])).toEqual([['agent', 3]]);
     expect(cost.byPhase.map((line) => [line.index, line.title, line.cost.knownUsd])).toEqual([
@@ -124,13 +126,20 @@ describe('listTaskBudgets', () => {
     expect(listTaskBudgets(harness.state, harness.task(taskId))).toEqual([
       {
         unit: 'percent',
-        cap: 8,
-        limit: 8,
+        cap: createPercent(8),
+        limit: createPercent(8),
         spent: expect.closeTo(2, 9),
         share: expect.closeTo(0.25, 9),
         estimated: false,
       },
-      { unit: 'usd', cap: 12.5, limit: 12.5, spent: 10, share: 0.8, estimated: false },
+      {
+        unit: 'usd',
+        cap: createUsd(12.5),
+        limit: createUsd(12.5),
+        spent: createUsd(10),
+        share: 0.8,
+        estimated: false,
+      },
     ]);
     harness.send({ type: 'settings.change', patch: { taskBudgetUsd: null } });
     expect(listTaskBudgets(harness.state, harness.task(taskId)).map((budget) => budget.unit)).toEqual([
@@ -158,22 +167,39 @@ describe('listTaskBudgets', () => {
 
 describe('describeUsd', () => {
   test('shows cents, and tiny amounts as under a cent', () => {
-    expect(describeUsd(0)).toBe('$0.00');
-    expect(describeUsd(0.004)).toBe('<$0.01');
-    expect(describeUsd(12.345)).toBe('$12.35');
+    expect(describeUsd(createUsd(0))).toBe('$0.00');
+    expect(describeUsd(createUsd(0.004))).toBe('<$0.01');
+    expect(describeUsd(createUsd(12.345))).toBe('$12.35');
   });
 });
 
 describe('describeWeeklyPercent', () => {
   test('shows a tenth below ten percent, whole percentages above, and a sliver as under a tenth', () => {
-    expect(describeWeeklyPercent(0)).toBe('0%');
-    expect(describeWeeklyPercent(0.04)).toBe('<0.1%');
-    expect(describeWeeklyPercent(0.44)).toBe('0.4%');
-    expect(describeWeeklyPercent(2)).toBe('2%');
-    expect(describeWeeklyPercent(9.96)).toBe('10%');
-    expect(describeWeeklyPercent(12.6)).toBe('13%');
-    expect(describeBudgetAmount({ unit: 'percent' }, 10)).toBe('10%');
-    expect(describeBudgetAmount({ unit: 'usd' }, 10)).toBe('$10.00');
+    expect(describeWeeklyPercent(createPercent(0))).toBe('0%');
+    expect(describeWeeklyPercent(createPercent(0.04))).toBe('<0.1%');
+    expect(describeWeeklyPercent(createPercent(0.44))).toBe('0.4%');
+    expect(describeWeeklyPercent(createPercent(2))).toBe('2%');
+    expect(describeWeeklyPercent(createPercent(9.96))).toBe('10%');
+    expect(describeWeeklyPercent(createPercent(12.6))).toBe('13%');
+    const budget = { share: 0.5, estimated: false };
+    const percent = {
+      ...budget,
+      unit: 'percent',
+      cap: createPercent(10),
+      limit: createPercent(20),
+      spent: createPercent(4),
+    } as const;
+    const usd = {
+      ...budget,
+      unit: 'usd',
+      cap: createUsd(10),
+      limit: createUsd(20),
+      spent: createUsd(4),
+    } as const;
+    expect(describeBudgetAmount(percent, 'cap')).toBe('10%');
+    expect(describeBudgetAmount(percent, 'limit')).toBe('20%');
+    expect(describeBudgetAmount(usd, 'spent')).toBe('$4.00');
+    expect(describeBudgetAmount(usd, 'limit')).toBe('$20.00');
   });
 });
 

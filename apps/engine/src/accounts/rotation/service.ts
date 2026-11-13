@@ -7,9 +7,11 @@ import {
   pickAccount,
   type RunFailure,
   resolveAccountSwitchAt,
+  resolveLimitScope,
   resolvePoolResetAt,
+  type UsageLimitScope,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Ref } from 'effect';
+import { Clock, Context, Effect, Layer, Option, Ref } from 'effect';
 import type {
   AccountLease,
   AccountLeaseRequest,
@@ -24,16 +26,21 @@ import { UsageLimits } from '../limits/service.ts';
 import { AccountRegistry } from '../registry/service.ts';
 import { describeExpiredLogin, isTokenFailure } from '../renewal/failures.ts';
 import { LoginRenewal } from '../renewal/service.ts';
-import { type SpentMark, type StoredAccount, UNKNOWN_RESET_MS } from '../schema.ts';
+import type { SpentMark, StoredAccount } from '../schema.ts';
 import { AccountSignIns } from '../sign-ins/service.ts';
 import { isSharedLogin } from '../store/identity.ts';
 import { AccountStore } from '../store/service.ts';
+import { replaceMark, resolveSpentReading, type SpentReading } from './marks.ts';
 import { MARKS_FILE, MAX_ACCOUNTS_PER_EXECUTION } from './schema.ts';
 
 export class AccountRotation extends Context.Service<
   AccountRotation,
   {
-    resolveSpentUntil(accountId: string, knownResets: boolean): Effect.Effect<number | null>;
+    resolveSpent(
+      accountId: string,
+      knownResets: boolean,
+      model: string | null
+    ): Effect.Effect<SpentReading | null>;
     clear(accountId: string): Effect.Effect<void>;
     lease(request: AccountLeaseRequest): Effect.Effect<AccountLease | null, DomainError>;
     recordRejection(rejection: RunRejection): Effect.Effect<RejectionVerdict>;
@@ -50,7 +57,7 @@ export class AccountRotation extends Context.Service<
       const changes = yield* AccountChanges;
       const engine = yield* EngineCore;
       const marksPath = join((yield* EngineConfig).dataDir, MARKS_FILE);
-      const spent = yield* Ref.make<ReadonlyMap<string, SpentMark>>(
+      const spent = yield* Ref.make<ReadonlyMap<string, readonly SpentMark[]>>(
         yield* registry.readMarks(marksPath, yield* Clock.currentTimeMillis)
       );
 
@@ -59,14 +66,12 @@ export class AccountRotation extends Context.Service<
 
       const persist = Effect.flatMap(Ref.get(spent), (marks) => registry.keepMarks(marksPath, marks));
 
-      const resolveSpentUntil = Effect.fn('AccountRotation.resolveSpentUntil')(function* (
+      const resolveSpent = Effect.fn('AccountRotation.resolveSpent')(function* (
         accountId: string,
-        knownResets: boolean
+        knownResets: boolean,
+        model: string | null
       ) {
-        const mark = (yield* Ref.get(spent)).get(accountId);
-        if (!mark) return null;
-        if (mark.until === null) return knownResets ? null : mark.at + UNKNOWN_RESET_MS;
-        return mark.until;
+        return resolveSpentReading((yield* Ref.get(spent)).get(accountId) ?? [], model, knownResets);
       });
 
       const clear = Effect.fn('AccountRotation.clear')(function* (accountId: string) {
@@ -80,13 +85,16 @@ export class AccountRotation extends Context.Service<
       });
 
       const mark = Effect.fn('AccountRotation.mark')(function* (accountId: string, marked: SpentMark) {
-        yield* Ref.update(spent, (marks) => new Map(marks).set(accountId, marked));
+        yield* Ref.update(spent, (marks) =>
+          new Map(marks).set(accountId, replaceMark(marks.get(accountId) ?? [], marked))
+        );
         yield* persist;
       });
 
       const listCandidates = Effect.fn('AccountRotation.listCandidates')(function* (
         knownResets: boolean,
-        ownership: AccountOwnership | null
+        ownership: AccountOwnership | null,
+        model: string | null
       ) {
         const threshold = resolveAccountSwitchAt((yield* engine.state).settings);
         const duplicates = yield* store.resolveDuplicates;
@@ -94,13 +102,15 @@ export class AccountRotation extends Context.Service<
         for (const account of yield* store.listDistinct) {
           if (isSharedLogin(account)) continue;
           if (ownership && account.owner !== ownership.owner) continue;
+          const reading = yield* resolveSpent(account.id, knownResets, model);
           candidates.push({
             id: account.id,
             isDefault: yield* store.isDefault(account.id, duplicates),
             paused: account.paused,
             signIn: (yield* selectSignIn(account.id)) ?? 'unknown',
             usage: yield* limits.snapshot(account.id),
-            spentUntil: yield* resolveSpentUntil(account.id, knownResets),
+            spentUntil: reading?.until ?? null,
+            spentModel: reading?.model ?? null,
             switchAt: account.switchAt ?? threshold,
           });
         }
@@ -119,9 +129,9 @@ export class AccountRotation extends Context.Service<
         for (const id of ids) if (!(yield* limits.isFresh(id))) stale.push(id);
         if (stale.length > 0) yield* Effect.forkDetach(limits.refresh(stale, false));
         const ownership = request.ownership ?? null;
-        const accounts = yield* listCandidates(false, ownership);
+        const accounts = yield* listCandidates(false, ownership, request.model);
         const bound = yield* resolveKept(request.bound?.id ?? null);
-        const picked = pickAccount({
+        const chosen = pickAccount({
           accounts,
           bound: ownership && !accounts.some((account) => account.id === bound) ? null : bound,
           previous: yield* resolveKept(request.previous?.id ?? null),
@@ -129,18 +139,19 @@ export class AccountRotation extends Context.Service<
           exclude: new Set(request.exclude),
           now: yield* Clock.currentTimeMillis,
         });
-        if (!picked && ownership) {
+        if (Option.isNone(chosen) && ownership) {
           return yield* new DomainError({
             code: OWNER_SIGNED_OUT_CODE,
             message: 'The task’s owner has no Claude account it can use on this shared machine.',
           });
         }
-        if (!picked) {
+        if (Option.isNone(chosen)) {
           yield* Effect.logWarning(
             '[Accounts] The account a task is bound to is gone; using the default login'
           ).pipe(Effect.annotateLogs({ taskId: request.taskId, accountId: request.bound?.id }));
           return null;
         }
+        const picked = chosen.value;
         const account = yield* store.find(picked.account.id);
         if (account.configDir) yield* store.linkSharedEntries(account.configDir);
         const leased: AccountLease = {
@@ -152,37 +163,67 @@ export class AccountRotation extends Context.Service<
         return leased;
       });
 
+      const resolveScope = Effect.fn('AccountRotation.resolveScope')(function* (
+        failure: RunFailure,
+        accountId: string,
+        model: string | null
+      ) {
+        if (failure.limitScope) return failure.limitScope;
+        if (model === null) return 'account' satisfies UsageLimitScope;
+        yield* limits.refresh([accountId], true);
+        return resolveLimitScope(yield* limits.measured(accountId), model, yield* Clock.currentTimeMillis);
+      });
+
+      const recordFailureMark = Effect.fn('AccountRotation.recordFailureMark')(function* (
+        failure: RunFailure,
+        accountId: string,
+        model: string | null
+      ) {
+        if (failure.class !== 'usage_limit') {
+          yield* signIns.record(accountId, { signIn: 'signed_out', detail: failure.message });
+          yield* changes.notify;
+          return null;
+        }
+        const scope = yield* resolveScope(failure, accountId, model);
+        const own = scope === 'model' && model !== null ? { model } : {};
+        yield* mark(accountId, { until: failure.resetAt, at: yield* Clock.currentTimeMillis, ...own });
+        yield* changes.notify;
+        return scope;
+      });
+
       const recordAccountFailure = Effect.fn('AccountRotation.recordAccountFailure')(function* (
         rejection: RunRejection,
         account: StoredAccount
       ) {
         const { failure } = rejection;
-        const now = yield* Clock.currentTimeMillis;
-        if (failure.class === 'usage_limit') yield* mark(account.id, { until: failure.resetAt, at: now });
-        else yield* signIns.record(account.id, { signIn: 'signed_out', detail: failure.message });
-        yield* changes.notify;
-        const refined: RunFailure = { ...failure, account: { id: account.id, email: account.email } };
         const state = yield* engine.state;
+        const model = state.runs[rejection.runId]?.model ?? null;
+        const scope = yield* recordFailureMark(failure, account.id, model);
+        const now = yield* Clock.currentTimeMillis;
+        const refined: RunFailure = {
+          ...failure,
+          account: { id: account.id, email: account.email },
+          ...(scope === null ? {} : { model, limitScope: scope }),
+        };
         const ownership: AccountOwnership | null = isSharedMachine(state.settings)
           ? { owner: account.owner }
           : null;
-        const model = state.runs[rejection.runId]?.model ?? null;
         const bound = state.runs[rejection.runId]?.account ?? state.tasks[rejection.taskId]?.account ?? null;
         if (!bound && rejection.tried.length < MAX_ACCOUNTS_PER_EXECUTION) {
           const next = pickAccount({
-            accounts: yield* listCandidates(false, ownership),
+            accounts: yield* listCandidates(false, ownership, model),
             bound: null,
             previous: account.id,
             model,
             exclude: new Set(rejection.tried),
             now,
           });
-          if (next?.usable) {
+          if (Option.isSome(next) && next.value.usable) {
             yield* Effect.logInfo('[Accounts] Moving a run to another account').pipe(
               Effect.annotateLogs({
                 runId: rejection.runId,
                 from: account.id,
-                to: next.account.id,
+                to: next.value.account.id,
                 reason: failure.class,
               })
             );
@@ -195,10 +236,10 @@ export class AccountRotation extends Context.Service<
           return refused;
         }
         const kept = bound ? yield* resolveKept(bound.id) : null;
-        const candidates = (yield* listCandidates(true, ownership)).filter(
+        const candidates = (yield* listCandidates(true, ownership, model)).filter(
           (candidate) => !bound || candidate.id === kept
         );
-        const resetAt = resolvePoolResetAt(candidates, model, now) ?? failure.resetAt;
+        const resetAt = Option.getOrUndefined(resolvePoolResetAt(candidates, model, now)) ?? failure.resetAt;
         const spentVerdict: RejectionVerdict = { retry: false, failure: { ...refined, resetAt } };
         return spentVerdict;
       });
@@ -242,7 +283,7 @@ export class AccountRotation extends Context.Service<
         return yield* recordAccountFailure(rejection, account);
       });
 
-      return AccountRotation.of({ resolveSpentUntil, clear, lease, recordRejection });
+      return AccountRotation.of({ resolveSpent, clear, lease, recordRejection });
     })
   );
 }

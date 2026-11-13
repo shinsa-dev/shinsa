@@ -35,7 +35,7 @@ export class PlacementAsker extends Context.Service<
             message: 'Claude did not answer. Try again.',
           });
         if (Option.isSome(decodeNoMachine(said))) return null;
-        const answer = parsePlacementAnswer(question, said);
+        const answer = Option.getOrNull(parsePlacementAnswer(question, said));
         if (!answer)
           return yield* new DomainError({
             code: 'placement_unreadable',

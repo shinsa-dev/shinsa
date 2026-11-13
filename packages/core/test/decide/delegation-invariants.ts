@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import { Option } from 'effect';
 import {
   DELEGATE_ROLES,
   DELEGATION_LIMITS,
@@ -140,7 +141,7 @@ export function listDelegationCommands(state: ShinsaState, random: Random): Shin
 }
 
 function assertItem(state: ShinsaState, parent: Run, raw: string, context: string) {
-  const item = parseDeliveryItem(raw);
+  const item = Option.getOrNull(parseDeliveryItem(raw));
   expect(item, `${context}: unreadable item ${raw}`).not.toBeNull();
   if (item?.kind === 'message') {
     expect(
@@ -184,7 +185,7 @@ function assertChild(
   expect(run.delegation.depth, context).toBeLessThanOrEqual(DELEGATION_LIMITS.depth);
   if (parent && isReadOnlyRole(parent.role))
     expect(isReadOnlyRole(run.role), `${context}: ceiling`).toBe(true);
-  expect(selectRootRun(state, run), context).not.toBeNull();
+  expect(Option.getOrNull(selectRootRun(state, run)), context).not.toBeNull();
 }
 
 export function assertDelegationInvariants(state: ShinsaState, task: Task, context: string) {
@@ -213,8 +214,10 @@ export function assertDelegationProgress(before: ShinsaState, after: ShinsaState
     );
   }
   for (const task of Object.values(after.tasks)) {
-    const versions = (task.splits ?? []).map((split) => split.planVersion);
-    expect(new Set(versions).size, `${context}: a plan version split twice`).toBe(versions.length);
+    const versions = (task.splits ?? []).map((split) => `${split.round ?? 1}:${split.planVersion}`);
+    expect(new Set(versions).size, `${context}: a plan version split twice in one round`).toBe(
+      versions.length
+    );
   }
 }
 

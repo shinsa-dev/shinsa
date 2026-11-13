@@ -1,6 +1,14 @@
+import { Option } from 'effect';
+import { isModelMarkFor, listWeeklyWindows } from '../accounts/usage.ts';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
 import { DAY_MS } from '../domain/time.ts';
-import type { AccountSummary, AccountsSnapshot, AccountUsage } from '../protocol/accounts.ts';
+import type { RecordedPace } from '../domain/types.ts';
+import type {
+  AccountSummary,
+  AccountsSnapshot,
+  AccountUsage,
+  UsageResetGrant,
+} from '../protocol/accounts.ts';
 import type {
   ForecastAccount,
   ForecastOutage,
@@ -27,22 +35,64 @@ export const FORECAST_LIMITS = {
   paceScale: 10,
   weeklyClear: 'seven_day',
   paceStep: 1,
+  resetEndingMs: 3 * DAY_MS,
 } as const;
 
 export interface ForecastOptions {
   grants?: boolean;
+  endingOnly?: boolean;
+  model?: string | null;
 }
 
-export function resolveGrantRefill(usage: AccountUsage, now: number) {
-  const resets = (usage.resetGrants ?? [])
-    .filter(
-      (grant) =>
-        grant.usableNow &&
-        grant.clears.includes(FORECAST_LIMITS.weeklyClear) &&
-        (grant.endsAt === null || grant.endsAt > now)
-    )
-    .reduce((total, grant) => total + Math.max(0, grant.left), 0);
-  return resets * FORECAST_LIMITS.fullPercent;
+export function isResetEnding(endsAt: number | null, now: number) {
+  return endsAt !== null && endsAt > now && endsAt - now <= FORECAST_LIMITS.resetEndingMs;
+}
+
+export function resolveGrantRefill(grant: UsageResetGrant) {
+  if (grant.clears.includes(FORECAST_LIMITS.weeklyClear)) return FORECAST_LIMITS.fullPercent;
+  if (!grant.givesBackWeekly) return 0;
+  return Math.min(FORECAST_LIMITS.fullPercent, Math.max(0, grant.weeklyShare ?? 0));
+}
+
+function listUsableGrants(usage: AccountUsage, now: number, options: ForecastOptions) {
+  return (usage.resetGrants ?? []).filter(
+    (grant) =>
+      grant.usableNow &&
+      grant.left > 0 &&
+      resolveGrantRefill(grant) > 0 &&
+      (options.endingOnly ? isResetEnding(grant.endsAt, now) : grant.endsAt === null || grant.endsAt > now)
+  );
+}
+
+function listGrantAccounts(
+  id: string,
+  label: string,
+  usage: AccountUsage,
+  now: number,
+  options: ForecastOptions
+): ForecastAccount[] {
+  return listUsableGrants(usage, now, options).map((grant) => ({
+    id: `${id}:${grant.id}`,
+    label,
+    left: grant.left * resolveGrantRefill(grant),
+    resetsAt: grant.endsAt,
+    refills: false,
+  }));
+}
+
+function listAccountBudgets(
+  id: string,
+  label: string,
+  usage: AccountUsage,
+  spentUntil: number | null,
+  now: number,
+  options: ForecastOptions
+) {
+  const weekly = resolveForecastAccount(id, label, usage, spentUntil, now, options);
+  if (Option.isNone(weekly)) return [];
+  return options.grants
+    ? [weekly.value, ...listGrantAccounts(id, label, usage, now, options)]
+    : [weekly.value];
 }
 
 interface Simulation {
@@ -54,6 +104,7 @@ interface Simulation {
 
 interface Budget {
   id: string;
+  refills: boolean;
   left: number;
   resetsAt: number | null;
   start: number;
@@ -68,9 +119,12 @@ export function resolveForecastAccount(
   spentUntil: number | null,
   now: number,
   options: ForecastOptions = {}
-): ForecastAccount | null {
-  const weekly = usage.windows.find((window) => window.kind === 'weekly');
-  if (!weekly) return null;
+): Option.Option<ForecastAccount> {
+  const windows = listWeeklyWindows(usage, options.model ?? null);
+  if (windows.length === 0) return Option.none();
+  const weekly = windows.reduce((tightest, window) =>
+    window.usedPercent > tightest.usedPercent ? window : tightest
+  );
   const spent =
     spentUntil !== null && spentUntil > now && (weekly.resetsAt === null || spentUntil >= weekly.resetsAt);
   let left = spent ? 0 : Math.max(0, FORECAST_LIMITS.fullPercent - weekly.usedPercent);
@@ -79,8 +133,7 @@ export function resolveForecastAccount(
     resetsAt += FORECAST_LIMITS.weekMs;
     left = FORECAST_LIMITS.fullPercent;
   }
-  const refill = options.grants ? resolveGrantRefill(usage, now) : 0;
-  return { id, label, left: left + refill, resetsAt };
+  return Option.some({ id, label, left, resetsAt });
 }
 
 export function listForecastAccounts(
@@ -90,17 +143,16 @@ export function listForecastAccounts(
 ): ForecastAccount[] {
   return accounts
     .filter((account) => !account.paused && account.signIn !== 'signed_out')
-    .map((account) =>
-      resolveForecastAccount(
+    .flatMap((account) =>
+      listAccountBudgets(
         account.id,
         account.email ?? account.id,
         account.usage,
-        account.spentUntil,
+        isModelMarkFor(account.spentModel, options.model ?? null) ? account.spentUntil : null,
         now,
         options
       )
-    )
-    .filter((account) => account !== null);
+    );
 }
 
 export function listForecastProviders(snapshot: AccountsSnapshot) {
@@ -119,36 +171,74 @@ export function listProviderForecastAccounts(
   if (provider === CLAUDE_PROVIDER) return listForecastAccounts(snapshot.accounts, now, options);
   const login = snapshot.providers?.find((entry) => entry.provider === provider);
   if (!login?.usage || login.status === 'signed_out') return [];
-  const account = resolveForecastAccount(
-    provider,
-    login.email ?? login.label,
-    login.usage,
-    null,
-    now,
-    options
-  );
-  return account ? [account] : [];
+  return listAccountBudgets(provider, login.email ?? login.label, login.usage, null, now, options);
 }
 
 export function resolveRecordablePace(pace: number | null) {
-  return pace !== null && Number.isFinite(pace) ? Math.max(0, pace) : null;
+  return Option.map(
+    Option.filter(Option.fromNullOr(pace), (value) => Number.isFinite(value)),
+    (value) => Math.max(0, value)
+  );
 }
 
 export function isPaceMoved(known: number | null, pace: number | null) {
   const next = resolveRecordablePace(pace);
-  if (next === null || known === null) return next !== known;
-  return Math.abs(known - next) >= FORECAST_LIMITS.paceStep;
+  if (Option.isNone(next)) return known !== null;
+  if (known === null) return true;
+  return Math.abs(known - next.value) >= FORECAST_LIMITS.paceStep;
+}
+
+export function isProviderPaceMoved(known: RecordedPace | undefined, next: Omit<ProviderPace, 'provider'>) {
+  if (isPaceMoved(known?.pace ?? null, next.pace)) return true;
+  if (!known || Option.isNone(resolveRecordablePace(next.pace))) return false;
+  return (
+    isPaceMoved(known.resetPace, next.resetPace ?? next.pace) ||
+    isPaceMoved(known.endingPace, next.endingPace ?? next.pace) ||
+    known.resetEndsAt !== next.resetEndsAt
+  );
 }
 
 export interface ProviderPace {
   provider: string;
   pace: number | null;
+  resetPace: number | null;
+  endingPace: number | null;
+  resetEndsAt: number | null;
 }
 
-export function listProviderPaces(snapshot: AccountsSnapshot, now: number): ProviderPace[] {
+function resolveProviderSafePace(accounts: readonly ForecastAccount[], now: number) {
+  return Option.getOrNull(Option.map(resolveUsageForecast(accounts, now), (forecast) => forecast.safePace));
+}
+
+function resolveResetEndsAt(accounts: readonly ForecastAccount[]) {
+  const ends = accounts.flatMap((account) =>
+    account.refills === false && account.resetsAt !== null ? [account.resetsAt] : []
+  );
+  return ends.length === 0 ? null : Math.min(...ends);
+}
+
+export function listProviderPaces(
+  snapshot: AccountsSnapshot,
+  now: number,
+  claudeModel: string | null
+): ProviderPace[] {
   return listForecastProviders(snapshot).map((provider) => {
-    const accounts = listProviderForecastAccounts(snapshot, provider, now, { grants: true });
-    return { provider, pace: resolveUsageForecast(accounts, now)?.safePace ?? null };
+    const model = provider === CLAUDE_PROVIDER ? claudeModel : null;
+    const plain = listProviderForecastAccounts(snapshot, provider, now, { model });
+    const withResets = listProviderForecastAccounts(snapshot, provider, now, { grants: true, model });
+    const withEnding = listProviderForecastAccounts(snapshot, provider, now, {
+      grants: true,
+      endingOnly: true,
+      model,
+    });
+    const pace = resolveProviderSafePace(plain, now);
+    return {
+      provider,
+      pace,
+      resetPace: withResets.length > plain.length ? resolveProviderSafePace(withResets, now) : pace,
+      endingPace: withEnding.length > plain.length ? resolveProviderSafePace(withEnding, now) : pace,
+      resetEndsAt: resolveResetEndsAt(withResets),
+    };
   });
 }
 
@@ -183,6 +273,7 @@ function closeSegment(budget: Budget, to: number): ForecastSegment {
 function simulate(accounts: readonly ForecastAccount[], pace: number, from: number, to: number): Simulation {
   const budgets: Budget[] = accounts.map((account) => ({
     id: account.id,
+    refills: account.refills ?? true,
     left: account.left,
     resetsAt: account.resetsAt,
     start: from,
@@ -203,6 +294,11 @@ function simulate(accounts: readonly ForecastAccount[], pace: number, from: numb
     const leftBefore = sumLeft(budgets);
     for (const budget of budgets) {
       if (budget.resetsAt !== next) continue;
+      if (!budget.refills) {
+        budget.left = 0;
+        budget.resetsAt = null;
+        continue;
+      }
       resets.push({ accountId: budget.id, at: next, leftBefore });
       segments.push(closeSegment(budget, next));
       budget.left = FORECAST_LIMITS.fullPercent;
@@ -259,15 +355,15 @@ export function resolveUsageForecast(
   accounts: readonly ForecastAccount[],
   now: number,
   currentPace: number | null = null
-): UsageForecast | null {
-  if (accounts.length === 0) return null;
+): Option.Option<UsageForecast> {
+  if (accounts.length === 0) return Option.none();
   const to = now + FORECAST_LIMITS.horizonMs;
   const ordered = [...accounts].sort(byDeadline);
   const safePace = resolveSafePace(ordered, now, to);
   const safe = simulate(ordered, safePace, now, to);
   const pace = currentPace ?? 0;
   const current = pace > 0 ? simulate(ordered, pace, now, to) : null;
-  return {
+  return Option.some({
     from: now,
     to,
     accounts: ordered,
@@ -276,5 +372,5 @@ export function resolveUsageForecast(
     tightest: selectTightest(safe.resets),
     currentPace,
     runsOutAt: current?.dryAt ?? null,
-  };
+  });
 }

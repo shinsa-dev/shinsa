@@ -96,6 +96,7 @@ interface FakeLink {
   closed: boolean;
   emit(data: string): void;
   drop(error: DeviceChannelError): void;
+  isWatched(): boolean;
 }
 
 type Answer = (
@@ -104,18 +105,21 @@ type Answer = (
 
 function createLink(answer?: Answer): FakeLink {
   const socketListeners = new Set<(data: string) => void>();
+  const unheard: string[] = [];
   const closeListeners = new Set<(error: DeviceChannelError) => void>();
   const fake: FakeLink = {
     requests: [],
     sent: [],
     closed: false,
     emit: (data) => {
+      if (socketListeners.size === 0) unheard.push(data);
       for (const listener of socketListeners) listener(data);
     },
     drop: (error) => {
       fake.closed = true;
       for (const listener of closeListeners) listener(error);
     },
+    isWatched: () => closeListeners.size > 0,
     link: {
       isOpen: Effect.sync(() => !fake.closed),
       request: (input) => {
@@ -128,6 +132,7 @@ function createLink(answer?: Answer): FakeLink {
           : Effect.sync(() => void fake.sent.push(data)),
       subscribeSocket: (listener) => {
         socketListeners.add(listener);
+        for (const data of unheard.splice(0)) listener(data);
         return () => socketListeners.delete(listener);
       },
       subscribeClose: (listener) => {
@@ -527,6 +532,7 @@ describe('a page socket to a teammate’s machine', () => {
     await Effect.runPromise(socket.receive('{"t":"hello"}'));
     await Effect.runPromise(socket.receive(new TextEncoder().encode('{"t":"command"}')));
     await until('both messages reach the machine', () => link.sent.length === 2);
+    await until('the machine’s message reaches the page', () => peer.sent.length === 1);
     expect(peer.sent).toEqual(['{"t":"state"}']);
     expect(link.sent).toEqual(['{"t":"hello"}', '{"t":"command"}']);
     await Effect.runPromise(socket.close);
@@ -539,7 +545,7 @@ describe('a page socket to a teammate’s machine', () => {
     const relay = await startRelay(world);
     const dropped = createPeer();
     await Effect.runPromise(relay.relay.openSocket('kai-mac', dropped as ChannelPeer));
-    await until('the channel opens', () => world.links.length === 1);
+    await until('the relay watches the channel', () => world.links[0]?.isWatched() === true);
     world.links[0]?.drop(new DeviceChannelError({ message: 'Broke.', refused: false }));
     await until('the page is told', () => dropped.closes.length === 1);
     expect(dropped.closes).toEqual([[RELAY_CLOSE.broke, 'Broke.']]);

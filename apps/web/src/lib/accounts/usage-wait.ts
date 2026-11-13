@@ -3,11 +3,13 @@ import {
   CLAUDE_PROVIDER,
   isActiveAt,
   type Project,
+  resolveModelFamilyLabel,
   resolveProviderLabel,
   type Task,
   type UsagePace,
   type UsageWait,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { describeResetsIn } from '@/lib/accounts/usage.ts';
 import { formatMoment, formatUntil } from '@/lib/format/time.ts';
@@ -18,6 +20,10 @@ export function isUsageWaitArmed(task: Task): task is Task & { usageWait: UsageW
 
 export function isPaceWait(wait: UsageWait): wait is UsageWait & { pace: UsagePace } {
   return wait.cause === 'pace' && wait.pace !== undefined;
+}
+
+function selectLimitModel(wait: UsageWait) {
+  return wait.limitScope === 'model' && wait.model ? Option.some(wait.model) : Option.none();
 }
 
 export function isAdmissionWait(wait: UsageWait): wait is UsageWait & { pace: UsagePace } {
@@ -41,12 +47,16 @@ export function describeUsageWaitCountdown(wait: UsageWait, now: number) {
   return wait.resetAt <= now ? 'Starts now' : formatUntil('Starts', wait.resetAt, now);
 }
 
-function describeAdmissionTitle(wait: UsageWait, now: number, hours: ActiveHours | null) {
+function describeAdmissionTitle(wait: UsageWait, now: number, hours: Option.Option<ActiveHours>) {
   if (!isActiveAt(hours, wait.resetAt) && isActiveAt(hours, now)) return 'Builds tonight';
   return `Builds after ${formatMoment(wait.resetAt, now)}`;
 }
 
-export function describeUsageWaitTitle(wait: UsageWait, now = Date.now(), hours: ActiveHours | null = null) {
+export function describeUsageWaitTitle(
+  wait: UsageWait,
+  now = Date.now(),
+  hours: Option.Option<ActiveHours> = Option.none()
+) {
   if (isAdmissionWait(wait)) return describeAdmissionTitle(wait, now, hours);
   if (isPaceWait(wait)) return `Held at a usage limit: starts at ${formatMoment(wait.resetAt, now)}`;
   const next = wait.autoResume ? 'continues' : 'pauses for you';
@@ -66,8 +76,11 @@ export function describeUsageWaitBody(wait: UsageWait, project: Project | null =
     return `The last 24 hours used ${formatLimit(wait.pace.percent)}, which reached ${describePaceLimit(wait.pace, project)}, so the next step did not start.`;
   }
   const account = wait.account?.email ? ` on ${wait.account.email}` : '';
-  const provider = resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER);
-  return `The agent stopped at the ${provider} usage limit${account}.`;
+  const limit = Option.match(selectLimitModel(wait), {
+    onNone: () => `${resolveProviderLabel(wait.provider ?? CLAUDE_PROVIDER)} usage limit`,
+    onSome: (model) => `${resolveModelFamilyLabel(model)} limit`,
+  });
+  return `The agent stopped at the ${limit}${account}.`;
 }
 
 export function describeUsageWaitNote(wait: UsageWait) {
@@ -77,9 +90,13 @@ export function describeUsageWaitNote(wait: UsageWait) {
   if (isPaceWait(wait)) {
     return 'Starts by itself as older usage drops out. Resume now ignores the limits for this task.';
   }
-  return wait.autoResume
+  const reset = wait.autoResume
     ? 'Shinsa resumes it by itself when the limit resets.'
     : 'When the limit resets it pauses for you to retry.';
+  if (Option.isNone(selectLimitModel(wait))) return reset;
+  return wait.autoResume
+    ? 'Resumes at the reset, or at once if you switch models.'
+    : 'Pauses at the reset. Switch models to start it at once.';
 }
 
 export function describeUsageWaitToggle(wait: UsageWait) {

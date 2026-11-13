@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { Option } from 'effect';
 import {
   type AccountUsage,
   type ChatNotice,
@@ -6,10 +7,12 @@ import {
   resolveNextRun,
   type Schedule,
   type ScheduleRun,
+  SCHEDULE_FILTER_SKIPPED,
   type UsageWindow,
 } from '../../../packages/core/src/index.ts';
 import { HOUR, MINUTE } from '../../kit/time.ts';
 import { NOW, type SeedTask } from '../kit.ts';
+import { insertNotices } from '../notices.ts';
 
 const OPS = { id: 'acct-ops', email: 'ops@superwall.dev' };
 
@@ -66,6 +69,19 @@ export function listAccountFiles(data: string): Record<string, string> {
             clears: ['five_hour', 'seven_day'],
             usableNow: true,
             endsAt: NOW + 14 * 24 * HOUR,
+            givesBackWeekly: false,
+            weeklyShare: null,
+          },
+          {
+            id: 'seed-fable-grant',
+            label: null,
+            left: 1,
+            total: 1,
+            clears: ['seven_day_overage_included'],
+            usableNow: true,
+            endsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
+            givesBackWeekly: true,
+            weeklyShare: 27,
           },
         ],
       },
@@ -87,7 +103,12 @@ export function listAccountFiles(data: string): Record<string, string> {
       },
     },
   };
+  const marks = {
+    version: 2,
+    marks: { [PERSONAL.id]: [{ until: NOW + 3 * 24 * HOUR, at: NOW - 4 * MINUTE, model: 'fable' }] },
+  };
   return {
+    'account-marks.json': `${JSON.stringify(marks, null, 2)}\n`,
     'accounts.json': `${JSON.stringify(registry, null, 2)}\n`,
     'usage-limits.json': `${JSON.stringify(limits, null, 2)}\n`,
   };
@@ -119,7 +140,10 @@ function schedule(fields: Partial<Schedule> & Pick<Schedule, 'id' | 'name' | 'te
     stopped: null,
     replayKeys: {},
     ...fields,
-    nextRunAt: fields.enabled === false ? null : resolveNextRun(fields.trigger, NOW, 'Europe/Berlin'),
+    nextRunAt:
+      fields.enabled === false
+        ? null
+        : Option.getOrNull(resolveNextRun(fields.trigger, NOW, 'Europe/Berlin')),
   };
 }
 
@@ -157,6 +181,46 @@ function listSchedules(): Schedule[] {
       },
       runCount: 2,
       runs: [scheduleRun('sent', 26 * HOUR)],
+      createdBy: { kind: 'you' },
+    }),
+    schedule({
+      id: 'schedule-alerts',
+      name: 'Triage production alerts',
+      text: 'An alert was posted in #alerts. Find what broke, and fix it when the cause is in this repository.',
+      trigger: {
+        kind: 'slack',
+        teamId: 'T04SUPERWALL',
+        teamName: 'Superwall',
+        channelId: 'C07ALERTS',
+        channelName: 'alerts',
+        threadUpdates: true,
+      },
+      runCount: 3,
+      runs: [
+        scheduleRun('sent', 30 * HOUR),
+        scheduleRun('skipped', 9 * HOUR, SCHEDULE_FILTER_SKIPPED),
+        scheduleRun('sent', 2 * HOUR),
+      ],
+      createdBy: { kind: 'you' },
+    }),
+    schedule({
+      id: 'schedule-feedback',
+      name: 'Front-end feedback',
+      text: 'Feedback was posted in #feedback. File a task only when it is about the web app’s interface; leave billing and API feedback alone.',
+      trigger: {
+        kind: 'slack',
+        teamId: 'T04SUPERWALL',
+        teamName: 'Superwall',
+        channelId: 'C07FEEDBACK',
+        channelName: 'feedback',
+        threadUpdates: false,
+      },
+      runCount: 1,
+      runs: [
+        scheduleRun('sent', 20 * HOUR),
+        scheduleRun('skipped', 6 * HOUR, SCHEDULE_FILTER_SKIPPED),
+        scheduleRun('skipped', 90 * MINUTE, SCHEDULE_FILTER_SKIPPED),
+      ],
       createdBy: { kind: 'you' },
     }),
     schedule({
@@ -210,28 +274,7 @@ const MOVED_NOTICES: ChatNotice[] = [
 export const ACCOUNT_MOVE_TRANSCRIPT = 'task-account-move-run-1.jsonl';
 
 export function insertAccountNotices(transcript: string) {
-  const entries = transcript
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as { id: string; at: number });
-  const brief = entries[1] ?? entries[0];
-  const at = brief?.at ?? NOW;
-  const notices = MOVED_NOTICES.map((notice, index) => ({
-    ...(brief ?? {}),
-    id: `task-account-move-run-1-notice-${index}`,
-    at: at + index + 1,
-    type: 'notice',
-    notice,
-  }));
-  const context = {
-    ...(brief ?? {}),
-    id: 'task-account-move-run-1-context',
-    at: NOW - MINUTE,
-    type: 'notice',
-    notice: { kind: 'context', usedTokens: 132_000, maxTokens: 200_000, totalProcessedTokens: 910_000 },
-  };
-  const lines = [...entries.slice(0, 2), ...notices, ...entries.slice(2), context];
-  return `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`;
+  return insertNotices(transcript, MOVED_NOTICES, NOW);
 }
 
 export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Repo }): SeedTask[] {
@@ -322,6 +365,37 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
           },
         },
         ...listSchedules().map((written) => ({ type: 'schedule.written' as const, schedule: written })),
+      ],
+    },
+    {
+      id: 'task-model-wait',
+      request: 'Retry the webhook deliveries that failed during the outage',
+      title: 'Retry failed webhook deliveries',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'waiting for the usage limit to reset',
+      branch: 'fix/retry-webhook-deliveries',
+      ageHours: 0.5,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 6, summary: 'Hit the Fable limit.', failed: true }],
+      extra: [
+        {
+          type: 'usage_wait.armed',
+          taskId: 'task-model-wait',
+          wait: {
+            id: 'wait-model',
+            runId: 'task-model-wait-run-0',
+            role: 'agent',
+            phaseIndex: null,
+            account: PERSONAL,
+            resetAt: NOW + 13 * HOUR,
+            armedAt: NOW - 4 * MINUTE,
+            autoResume: true,
+            status: 'armed',
+            model: 'fable',
+            limitScope: 'model',
+          },
+        },
       ],
     },
     {

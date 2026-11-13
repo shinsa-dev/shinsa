@@ -7,7 +7,7 @@ import {
   selectFolderProject,
   type Task,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { type LocalRepo, listLocalRepos } from '../repos/index.ts';
 import { type CandidatePool, NO_REPOSITORY } from './schema.ts';
 
@@ -46,7 +46,7 @@ export const resolveCandidatePool = Effect.fn('Triage.resolveCandidatePool')(fun
   local: LocalRepo[],
   text = task.request
 ) {
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const project = projectId ? (state.projects[projectId] ?? null) : null;
   const everywhere = listCandidates(state, local);
   if (!project) {

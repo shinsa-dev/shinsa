@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   isSlackDecidable,
   isSlackWriteDecision,
@@ -35,8 +36,12 @@ const DECISION: SlackDecision = {
 
 describe('the value a decision button carries', () => {
   test('reads back what was written, with nulls filled in, and nothing that is not one', () => {
-    expect(parseSlackDecisionValue(serializeSlackDecisionValue(VALUE))).toEqual(VALUE);
-    expect(parseSlackDecisionValue(JSON.stringify({ gateId: 'g1', decision: 'reply', choice: 2 }))).toEqual({
+    expect(Option.getOrNull(parseSlackDecisionValue(serializeSlackDecisionValue(VALUE)))).toEqual(VALUE);
+    expect(
+      Option.getOrNull(
+        parseSlackDecisionValue(JSON.stringify({ gateId: 'g1', decision: 'reply', choice: 2 }))
+      )
+    ).toEqual({
       gateId: 'g1',
       decision: 'reply',
       choice: 2,
@@ -52,30 +57,32 @@ describe('the value a decision button carries', () => {
       JSON.stringify({ ...VALUE, choice: 100 }),
       JSON.stringify({ ...VALUE, planVersion: 0 }),
     ])
-      expect(parseSlackDecisionValue(bad)).toBeNull();
+      expect(Option.getOrNull(parseSlackDecisionValue(bad))).toBeNull();
   });
 });
 
 describe('a decision forwarded to the machine', () => {
   test('is checked field by field, and a long answer is cut', () => {
-    expect(parseSlackDecision(DECISION)).toEqual(DECISION);
-    expect(parseSlackDecision({ ...DECISION, response: 'x'.repeat(5000) })?.response).toHaveLength(3000);
-    expect(parseSlackDecision({ ...DECISION, userId: '' })).toBeNull();
-    expect(parseSlackDecision({ ...DECISION, gateId: 'x'.repeat(65) })).toBeNull();
-    expect(parseSlackDecision(null)).toBeNull();
+    expect(Option.getOrNull(parseSlackDecision(DECISION))).toEqual(DECISION);
+    expect(
+      Option.getOrNull(parseSlackDecision({ ...DECISION, response: 'x'.repeat(5000) }))?.response
+    ).toHaveLength(3000);
+    expect(Option.getOrNull(parseSlackDecision({ ...DECISION, userId: '' }))).toBeNull();
+    expect(Option.getOrNull(parseSlackDecision({ ...DECISION, gateId: 'x'.repeat(65) }))).toBeNull();
+    expect(Option.getOrNull(parseSlackDecision(null))).toBeNull();
   });
 
   test('its reply is decided with what to show, or refused with why', () => {
-    expect(parseSlackDecisionReply({ decided: true, text: 'approved the plan' })).toEqual({
+    expect(Option.getOrNull(parseSlackDecisionReply({ decided: true, text: 'approved the plan' }))).toEqual({
       decided: true,
       text: 'approved the plan',
     });
-    expect(parseSlackDecisionReply({ decided: false, reason: 'x'.repeat(600) })).toEqual({
+    expect(Option.getOrNull(parseSlackDecisionReply({ decided: false, reason: 'x'.repeat(600) }))).toEqual({
       decided: false,
       reason: 'x'.repeat(500),
     });
-    expect(parseSlackDecisionReply({ decided: true })).toBeNull();
-    expect(parseSlackDecisionReply('yes')).toBeNull();
+    expect(Option.getOrNull(parseSlackDecisionReply({ decided: true }))).toBeNull();
+    expect(Option.getOrNull(parseSlackDecisionReply('yes'))).toBeNull();
   });
 });
 
@@ -129,7 +136,7 @@ describe('the card once someone decided', () => {
 describe('the form for written words', () => {
   test('asks for changes or an answer, and carries the decision and where it was made', () => {
     const metadata = { ...VALUE, decision: 'revise' as const, ...PLACE };
-    const modal = serializeSlackDecisionModal(metadata) ?? never();
+    const modal = Option.getOrNull(serializeSlackDecisionModal(metadata)) ?? never();
     expect(modal).toMatchObject({
       type: 'modal',
       callback_id: SLACK_MODAL_CALLBACK,
@@ -142,10 +149,12 @@ describe('the form for written words', () => {
       label: { text: 'What should change?' },
       element: { action_id: SLACK_RESPONSE_INPUT.action, multiline: true, max_length: 3000 },
     });
-    expect(parseSlackDecisionModal(modal.private_metadata)).toEqual(metadata);
-    expect(serializeSlackDecisionModal({ ...metadata, decision: 'reply' })?.title.text).toBe('Answer');
-    expect(serializeSlackDecisionModal({ ...metadata, decision: 'approve' })).toBeNull();
-    expect(parseSlackDecisionModal(JSON.stringify(VALUE))).toBeNull();
+    expect(Option.getOrNull(parseSlackDecisionModal(modal.private_metadata))).toEqual(metadata);
+    expect(
+      Option.getOrNull(serializeSlackDecisionModal({ ...metadata, decision: 'reply' }))?.title.text
+    ).toBe('Answer');
+    expect(Option.getOrNull(serializeSlackDecisionModal({ ...metadata, decision: 'approve' }))).toBeNull();
+    expect(Option.getOrNull(parseSlackDecisionModal(JSON.stringify(VALUE)))).toBeNull();
   });
 });
 
@@ -161,12 +170,12 @@ describe('the form keeps to what Slack lets views.open take', () => {
   };
 
   test.each(['reply', 'revise'] as const)('the %s form, with the longest ids it can carry', (decision) => {
-    const modal = serializeSlackDecisionModal({ ...LONGEST, decision }) ?? never();
+    const modal = Option.getOrNull(serializeSlackDecisionModal({ ...LONGEST, decision })) ?? never();
     expect(listViewProblems(modal)).toEqual([]);
   });
 
   test('a text box asking for more than Slack allows is caught', () => {
-    const modal = serializeSlackDecisionModal({ ...LONGEST, decision: 'reply' }) ?? never();
+    const modal = Option.getOrNull(serializeSlackDecisionModal({ ...LONGEST, decision: 'reply' })) ?? never();
     const blocks = modal.blocks.map((block) => ({
       ...block,
       element: { ...block.element, max_length: 4000 },

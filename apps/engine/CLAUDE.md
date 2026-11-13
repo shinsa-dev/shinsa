@@ -62,7 +62,7 @@ src/
 │                        which symbols: TTY, NO_COLOR, FORCE_COLOR, TERM; the 16-colour tones; code in backticks),
 │                        text.ts (visible width, wrapping, truncation, ~ for home, splitHint for an error's hint),
 │                        layout.ts (Display, aligned lists, tables that fit the width, usage lines, fields),
-│                        closest.ts (did you mean), spinner.ts (progress on a terminal's stderr), index.ts
+│                        closest.ts (did you mean), spinner.ts (progress on a terminal's stderr, a scoped fiber on SPINNER_FRAMES), index.ts
 │                        (resolveTerminal: the process's Terminal). The surface's formatters take a Display too; an
 │                        agent's tool gets PLAIN_DISPLAY
 ├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
@@ -345,15 +345,22 @@ src/
 ├── schedules/           Schedules: the clock (clock/: ScheduleClock on makeEngineClock, ScheduleClockTimings), the
 │                        agent tools (tools/: ScheduleTools, its layer taking the base and hook URLs only the
 │                        composition root knows), the webhook receiver (webhook/: WebhookReceiver, the rate windows in
-│                        a Ref, WebhookDeliveryId; path.ts isWebhookPath), signature checks (verify.ts), the prompt
+│                        a Ref, WebhookDeliveryId, a taken request answered 202 before the filter and delivered in a
+│                        FiberSet its settle waits for; path.ts isWebhookPath), the filter (filter/: ScheduleFilter on
+│                        QuickCalls' classifier, whether a schedule's text applies to a webhook request or a Slack
+│                        channel message, asked before either delivers, a watch never asked, no answer in
+│                        FILTER_TIMEOUT delivering; a skip is schedule.skip), signature checks (verify.ts), the prompt
 │                        template and redaction (template.ts: a JSON body decoded by WebhookBodyText), the writer's
 │                        wording of a suggested watch (suggest.ts: createWatchWriter, an Effect over a QuickJson, its
 │                        answer decoded by WatchAnswer in answer.ts), the Schedules service (service.ts: start, stop,
 │                        the webhook, the hook URL, the agent tools and the surface's hook secrets, the hooks kept in
-│                        step with the schedules on each change; layers.ts SchedulesLayer(urls), built in
-│                        serve/layers.ts on EngineCore and SecretStore; its routes are http/routes/secrets and
+│                        step with the schedules on each change; layers.ts SchedulesLayer(options), built in
+│                        serve/layers.ts on EngineCore and SecretStore, its options (ScheduleToolsInput) the base
+│                        and hook URLs and `slackChannels`, the channels a `slack_channel` is resolved against,
+│                        which is Slack's `channels` there; its routes are http/routes/secrets and
 │                        webhooks), schema.ts (the shapes, ScheduleTimeZone, WebhookOutcome, the limits and
-│                        RATE_WINDOW)
+│                        RATE_WINDOW), prompt.ts (resolvePromptProblem, shared
+│                        by the webhook and a Slack channel message)
 ├── remote/              Remote access (docs/engine.md → Remote access), every module a Context.Service in its folder's
 │                        service.ts, composed by layers.ts (RemoteClientLayer: RemoteClient and Pairings on
 │                        FetchHttpClient; RemoteEdgeLayer: RemoteUrlOpener and TunnelHealth; RemoteMachineLayer(input):
@@ -441,7 +448,12 @@ src/
 │                        slack.post, a new message only for the result, the finished task and a watchdog that
 │                        found a problem; slack.merge, the round's Merged message posted once with its ts
 │                        recorded (slack.record_merge), then edited in place and only when it changes; GET
-│                        /api/slack and POST /api/slack/disconnect); posts, reactions, the thread's status, links and
+│                        /api/slack and POST /api/slack/disconnect); a watched channel's message
+│                        (handleMessages, POST /api/slack/messages) as schedule.deliver for each enabled schedule
+│                        on it, 60 a minute a schedule, after ScheduleFilter says its text applies (else
+│                        schedule.skip; no answer delivers), with the message's thread so a filed task is linked, answered 202 at
+│                        once with the deliveries on fibers `settle` waits for; channels, what the bot is in, for `slack_channel`; the
+│                        watched channels sent to app.shinsa.dev on start and on each change (start, stop); posts, reactions, the thread's status, links and
 │                        unlink go through RemoteClient's slackRelay group with the machine token, retried only
 │                        on SlackFailed or a retryable RemoteUnreachable (the relay down, busy or unreachable)
 ├── secrets/             secrets.json: webhook tokens and signing secrets, one-use secret refs, MCP sign-ins. schema.ts
@@ -494,7 +506,7 @@ src/
 │                        selectOnPath, the PATH lookup in place of Bun.which; a failed read answers false, none or
 │                        no entries), inside.ts (the one containment check that reads the disk:
 │                        selectInside and selectWritableInside, on real paths, so a symlink cannot leave), paths.ts
-│                        (the pure halves: isInside, assertRepoPath); every module asking whether a path stays in a
+│                        (the pure halves: isInside, parseRepoPath, a Result); every module asking whether a path stays in a
 │                        folder calls them
 ├── git/                 service.ts (Git: attempt answers a CommandResult, run fails with GitFailed and retries a held
 │                        index.lock on LOCK_RETRY, read answers a command's raw bytes with its byte or line cap, a
@@ -521,7 +533,7 @@ src/
 │                        failure CodeReadFailed with its code; entries.ts the pure parsers), leftovers/
 │                        (LeftoverProcesses: the processes still working in a folder, stopped with a grace period
 │                        polled on STOP_POLL_SCHEDULE). conventional.ts (COMMIT_TYPES, BRANCH_PATTERN,
-│                        resolveCommitType, serializeConventionalSubject) and refs.ts (assertRefName, slugify) are
+│                        resolveCommitType, serializeConventionalSubject) and refs.ts (slugify) are
 │                        pure; index.ts re-exports them. blobs/ (CatFiles: one long-lived
 │                        `git cat-file --batch-command` per repository, the process, its waiting reads, each a
 │                        Deferred, and its idle and answer timers as fibers, every reader closed with the layer's
@@ -838,7 +850,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   repository's check commands, workspace or coverage;
   which decisions those are is `docs/engine.md` → Who can change Shinsa. Core refuses them on your behalf as well. There are no keys, codes or cookies and no per-caller routes;
   never add one, since an agent's shell reads whatever the user can.
-- **Nothing reaches git or gh as an option.** Branch names pass `assertRefName` (no leading `-`, no `..`), fetches put
+- **Nothing reaches git or gh as an option.** Branch names pass `decodeRefName` (no leading `-`, no `..`), fetches put
   `--` before the ref, `gh api` gets strings with `-f`, and the merge method is checked against core's
   `MERGE_METHODS`.
 - **Agent runs are unattended**: `bypassPermissions`, the user's `claude` binary, user/project/local settings, the
@@ -901,7 +913,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the effects, once no `claude` can still talk to it, then HTTP, then the services' own scopes, `EngineCore`, the log
   and the lock last. Your terminals' shells are hung up before the clocks stop, and their screens saved. Anything new
   that starts a process or a timer is stopped there too.
-- **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
+- **Hand-overs are validated here** (`agents/handover.ts`, `resolveHandOver`, a Result): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
   log. Evidence is checked by core's `validateEvidence` (`storeEvidence`): exactly one of a path (absolute or relative
   to the worktree, at most 200 MB), an http or https URL, or text; a test or check takes only a check id and is

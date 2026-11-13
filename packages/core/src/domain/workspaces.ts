@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { hasStep } from './shapes.ts';
 import type { Repo, Task } from './types.ts';
 
@@ -26,12 +27,14 @@ export function isSharedWorkspace(mode: WorkspaceMode) {
   return mode !== 'worktrees';
 }
 
-export function resolveEditRefusal(task: Pick<Task, 'stage' | 'closedAt' | 'worktreePath'>): string | null {
-  if (task.stage === 'merged') return 'This task is merged, so its code is read-only.';
+export function resolveEditRefusal(
+  task: Pick<Task, 'stage' | 'closedAt' | 'worktreePath'>
+): Option.Option<string> {
+  if (task.stage === 'merged') return Option.some('This task is merged, so its code is read-only.');
   if (task.stage === 'cancelled' || (task.closedAt ?? null) !== null)
-    return 'This task is finished, so its code is read-only.';
-  if (!task.worktreePath) return 'This task has no checkout to edit, so its code is read-only.';
-  return null;
+    return Option.some('This task is finished, so its code is read-only.');
+  if (!task.worktreePath) return Option.some('This task has no checkout to edit, so its code is read-only.');
+  return Option.none();
 }
 
 export function describeHumanEdits(paths: readonly string[]) {

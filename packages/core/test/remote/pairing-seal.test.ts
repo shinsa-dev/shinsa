@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import {
   type MachineCredentials,
   openPairingCredentials,
@@ -49,7 +49,7 @@ describe('pairing seal', () => {
 
   test('a changed, cut or malformed seal opens to nothing', async () => {
     const machine = await createMachine();
-    const bytes = parseBase64Url(await seal(machine.publicKey)) ?? new Uint8Array();
+    const bytes = Option.getOrNull(parseBase64Url(await seal(machine.publicKey))) ?? new Uint8Array();
     const flipped = bytes.slice();
     flipped[flipped.length - 1] = (flipped.at(-1) ?? 0) ^ 1;
     const badPoint = bytes.slice();

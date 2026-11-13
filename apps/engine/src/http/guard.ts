@@ -1,11 +1,7 @@
 const CROSS_SITE = 'Requests from other sites are not allowed.';
 
 function readHostname(url: string) {
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
+  return URL.parse(url)?.hostname.toLowerCase() ?? null;
 }
 
 export function resolveAllowedHosts(hosts: string[]): ReadonlySet<string> {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { type PlanDocument, resolvePhaseChange, resolvePlanChanges } from '../../src/report/index.ts';
 import { PLAN } from '../harness.ts';
 
@@ -56,9 +57,9 @@ describe('resolvePhaseChange', () => {
       { kind: 'phase_removed', title: 'Find it' } as const,
       { kind: 'goal' } as const,
     ];
-    expect(resolvePhaseChange(changes, ' add a  TEST ')).toBe('added');
-    expect(resolvePhaseChange(changes, 'Fix it')).toBe('changed');
-    expect(resolvePhaseChange(changes, 'Find it')).toBeNull();
-    expect(resolvePhaseChange(undefined, 'Fix it')).toBeNull();
+    expect(Option.getOrNull(resolvePhaseChange(changes, ' add a  TEST '))).toBe('added');
+    expect(Option.getOrNull(resolvePhaseChange(changes, 'Fix it'))).toBe('changed');
+    expect(Option.getOrNull(resolvePhaseChange(changes, 'Find it'))).toBeNull();
+    expect(Option.getOrNull(resolvePhaseChange(undefined, 'Fix it'))).toBeNull();
   });
 });

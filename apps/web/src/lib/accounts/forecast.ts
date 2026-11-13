@@ -1,5 +1,6 @@
 import {
   type AccountsSnapshot,
+  CLAUDE_PROVIDER,
   DAY_MS,
   FORECAST_LIMITS,
   type ForecastAccount,
@@ -8,12 +9,14 @@ import {
   type ForecastTimeline,
   listForecastProviders,
   listProviderForecastAccounts,
+  resolveAgentModel,
   resolveProviderLabel,
   resolveRecentUsage,
   resolveUsageForecast,
   type ShinsaState,
   type UsageForecast,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { formatDaysAndHours } from '@/lib/format/time.ts';
 
 export interface ProviderForecast {
@@ -69,9 +72,16 @@ export function listProviderForecasts(
 ): ProviderForecast[] {
   if (!snapshot) return [];
   return listForecastProviders(snapshot).flatMap((provider) => {
-    const accounts = listProviderForecastAccounts(snapshot, provider, now);
+    const model = provider === CLAUDE_PROVIDER ? resolveAgentModel(state.settings, 'agent', provider) : null;
+    const accounts = listProviderForecastAccounts(snapshot, provider, now, { model });
     const forecast = resolveUsageForecast(accounts, now, resolveRecentPace(state, provider, now));
-    return forecast ? [{ provider, title: resolveProviderLabel(provider), forecast }] : [];
+    return Option.toArray(
+      Option.map(forecast, (resolved) => ({
+        provider,
+        title: resolveProviderLabel(provider),
+        forecast: resolved,
+      }))
+    );
   });
 }
 

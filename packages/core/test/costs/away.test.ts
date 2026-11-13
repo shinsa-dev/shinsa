@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { DAY_MS, HOUR_MS, resolveNightShift, type TimingSpan } from '../../src/index.ts';
 import { resolveNightShiftTold } from '../../src/prompts/night.ts';
 import { createHarness, createTask, type Harness } from '../harness.ts';
@@ -23,7 +24,14 @@ function nightHarness(options: { autoPace?: boolean; pace?: number | null } = {}
   harness.advance(NOW - harness.now);
   harness.send({ type: 'settings.change', patch: { autoPace: options.autoPace ?? true } });
   if (options.pace !== null) {
-    harness.send({ type: 'usage.pace_recorded', provider: 'claude', pace: options.pace ?? 50 });
+    harness.send({
+      type: 'usage.pace_recorded',
+      provider: 'claude',
+      pace: options.pace ?? 50,
+      resetPace: options.pace ?? 50,
+      endingPace: options.pace ?? 50,
+      resetEndsAt: null,
+    });
   }
   return harness;
 }
@@ -35,7 +43,7 @@ function awayNow(harness: Harness) {
 
 function shiftOf(harness: Harness, purpose: 'plan' | 'build' | 'fix' | 'operate', role = 'agent' as const) {
   const taskId = createTask(harness);
-  return resolveNightShift(harness.state, harness.task(taskId), role, purpose, harness.now);
+  return Option.getOrNull(resolveNightShift(harness.state, harness.task(taskId), role, purpose, harness.now));
 }
 
 describe('the night shift', () => {
@@ -46,7 +54,9 @@ describe('the night shift', () => {
     const on = nightHarness();
     awayNow(on);
     const taskId = createTask(on);
-    expect(resolveNightShift(on.state, on.task(taskId), 'reviewer', 'build', on.now)).toBeNull();
+    expect(
+      Option.getOrNull(resolveNightShift(on.state, on.task(taskId), 'reviewer', 'build', on.now))
+    ).toBeNull();
     expect(shiftOf(on, 'operate')).toBeNull();
   });
 

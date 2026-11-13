@@ -1,14 +1,11 @@
+import { listStoredStrings } from '@/lib/preferences/stored-list.ts';
+
 const STORAGE_KEY = 'shinsa.recent-tasks';
 
 const LIMIT = 8;
 
 export function listRecentTaskIds(): string[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
-    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : [];
-  } catch {
-    return [];
-  }
+  return listStoredStrings(STORAGE_KEY);
 }
 
 export function recordRecentTask(taskId: string) {

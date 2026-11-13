@@ -75,6 +75,7 @@ interface WorldOptions {
   now?: number;
   providerUsage?: AccountsHarnessOptions['providerUsage'];
   providerLogins?: () => Promise<ProviderLogin[]>;
+  resolveClaude?: () => Promise<string>;
 }
 
 async function openAccounts(stub: StubEngine, options: AccountsHarnessOptions) {
@@ -154,6 +155,7 @@ async function createWorld(options: WorldOptions = {}) {
   let cswapList: unknown = { accounts: [] };
   const clock = { now: options.now ?? 1_000_000 };
   let keychainBroken = false;
+  let answerKeepalive: (configDir: string) => CommandResult = () => result('');
   const stub: StubEngine = createStubEngine();
   const run: FakeRunner = (command, _cwd, commandOptions) => {
     const env = commandOptions.env ?? {};
@@ -165,6 +167,7 @@ async function createWorld(options: WorldOptions = {}) {
       const status = statuses.get(env.CLAUDE_CONFIG_DIR ?? 'default') ?? { loggedIn: false };
       return Promise.resolve(result(JSON.stringify(status), status.loggedIn));
     }
+    if (command[1] === '-p') return Promise.resolve(answerKeepalive(env.CLAUDE_CONFIG_DIR ?? ''));
     return Promise.resolve(result(''));
   };
   const spawnLogin: FakeLoginSpawner = (command, spawnOptions) => {
@@ -194,10 +197,11 @@ async function createWorld(options: WorldOptions = {}) {
     requestHttp: (_url, init) => {
       const token = new Headers(init.headers).get('authorization')?.replace('Bearer ', '') ?? '';
       const body = usage.get(token);
+      if (body === LIMITED) return Promise.resolve(new Response('slow down', { status: 429 }));
       return Promise.resolve(body ? Response.json(body) : new Response('no', { status: 401 }));
     },
     spawnLogin,
-    resolveClaude: () => Promise.resolve('claude'),
+    resolveClaude: options.resolveClaude ?? (() => Promise.resolve('claude')),
     now: clock.now,
     refreshIntervalMs: 60 * 60_000,
     loginTimers: { menuFallbackMs: 60_000, urlTimeoutMs: 60_000, watchdogMs: 60_000 },
@@ -230,6 +234,10 @@ async function createWorld(options: WorldOptions = {}) {
     setCswap: (list: unknown) => {
       cswapList = list;
     },
+    setKeepalive: (answer: (configDir: string) => CommandResult) => {
+      answerKeepalive = answer;
+    },
+    keepalives: () => calls.filter((call) => call.command[1] === '-p'),
     login: (dir: string | null, token: string, plan = 'max') => {
       secrets.set(
         resolveKeychainService(dir ?? shared),
@@ -242,6 +250,8 @@ async function createWorld(options: WorldOptions = {}) {
 }
 
 type World = Awaited<ReturnType<typeof createWorld>>;
+
+const LIMITED = 'limited';
 
 function windows(session: number, weekly: number, fable = 0, resetsAt = '2030-01-01T00:00:00Z') {
   return {
@@ -639,7 +649,14 @@ describe('recording the safe usage pace', () => {
     const pace = recorded?.type === 'usage.pace_recorded' ? recorded.pace : null;
     expect(pace).toBeGreaterThan(0);
     world.stub.update((state) => {
-      state.usagePaces.claude = { provider: 'claude', pace: pace ?? 0, at: 1 };
+      state.usagePaces.claude = {
+        provider: 'claude',
+        pace: pace ?? 0,
+        resetPace: recorded?.type === 'usage.pace_recorded' ? (recorded.resetPace ?? 0) : 0,
+        endingPace: recorded?.type === 'usage.pace_recorded' ? (recorded.endingPace ?? 0) : 0,
+        resetEndsAt: null,
+        at: 1,
+      };
     });
     const before = paceCommands(world).length;
     await world.accounts.store.update(world.accounts.store.list()[0]?.id ?? '', { switchAt: 80 });
@@ -899,6 +916,100 @@ describe('moving a rejected attempt to another account', () => {
     });
   });
 
+  test('a limit only the run’s model hit marks the account spent for that model alone', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+      state.settings = { ...state.settings, agentModels: { agent: 'fable' } };
+    });
+    world.usage.set('token-a@example.com', windows(10, 40, 100));
+    const verdict = await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(verdict).toMatchObject({
+      retry: false,
+      failure: { limitScope: 'model', model: 'fable', account: { id: a.id } },
+    });
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: 'fable' });
+    expect(
+      (await lease(world, { model: 'opus', previous: { id: a.id, email: a.email } }))?.reason
+    ).toBeNull();
+    const restarted = await createWorld({ root: world.root, now: world.now + 1 });
+    const marks = JSON.parse(readFileSync(join(world.config.dataDir, 'account-marks.json'), 'utf8'));
+    expect(marks.marks[a.id]).toEqual([{ until: world.now + HOUR, at: world.now, model: 'fable' }]);
+    restarted.stub.update((state) => {
+      state.settings = { ...state.settings, agentModels: { agent: 'fable' } };
+    });
+    expect(restarted.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: 'fable' });
+    restarted.stub.update((state) => {
+      state.settings = { ...state.settings, agentModels: { agent: 'opus' } };
+    });
+    expect(restarted.accounts.snapshot().accounts[0]).toMatchObject({ spentUntil: null, spentModel: null });
+  });
+
+  test('a model limit is still told apart while Claude holds back usage reads', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    world.usage.set('token-a@example.com', windows(10, 40, 96));
+    await world.accounts.limits.refresh([a.id], true);
+    world.usage.set('token-a@example.com', LIMITED);
+    await world.accounts.limits.refresh([a.id], true);
+    await world.accounts.limits.recordPush(a.id, {
+      kind: 'rate_limit',
+      status: 'rejected',
+      limit: 'seven_day',
+      utilization: null,
+      resetsAt: world.now + HOUR,
+    });
+    const verdict = await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(verdict.failure).toMatchObject({ limitScope: 'model', model: 'fable' });
+  });
+
+  test('a model limit leaves the account to runs on other models, and each model keeps its own mark', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const b = await addAccount(world, 'b@example.com', 30);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    expect(await reject(world, a.id, { resetAt: world.now + HOUR, limitScope: 'model' })).toEqual({
+      retry: true,
+    });
+    expect((await lease(world, { model: 'fable' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(a.id);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ model: 'opus' });
+    });
+    await reject(world, a.id, { resetAt: world.now + 2 * HOUR, limitScope: 'model' });
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'fable' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'sonnet' }))?.id).toBe(a.id);
+  });
+
+  test('a limit the shared windows show, or one on a run without a model, spends the account for every model', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const b = await addAccount(world, 'b@example.com', 30);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    world.usage.set('token-a@example.com', windows(10, 100, 100));
+    await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: null });
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(b.id);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ model: null });
+    });
+    const verdict = await reject(world, b.id, { resetAt: world.now + 2 * HOUR }, [a.id, b.id]);
+    expect(verdict.failure).toMatchObject({ limitScope: 'account', model: null });
+  });
+
   test('the accounts a run already tried come with the rejection, so nothing is remembered between runs', async () => {
     const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
@@ -928,6 +1039,8 @@ describe('moving a rejected attempt to another account', () => {
       failure: failure({
         resetAt: world.now + 4 * HOUR,
         account: { id: bound.id, email: 'bound@example.com' },
+        model: null,
+        limitScope: 'account',
       }),
     });
   });
@@ -1462,7 +1575,7 @@ describe('what runs report back', () => {
     expect(await world.accounts.limits.refresh([account.id], true)).toBeUndefined();
   });
 
-  test('a login whose token has expired is not sent to Claude, and says it refreshes on the next run', async () => {
+  test('a login whose token has expired is not sent to Claude, and says Shinsa refreshes it', async () => {
     const world = await createWorld({ registry: true });
     const account = await addAccount(world, 'a@example.com', 25);
     world.usage.set('token-a@example.com', windows(70, 25));
@@ -1470,7 +1583,8 @@ describe('what runs report back', () => {
     await world.advance(HOUR);
     await read.refresh([account.id], true);
     expect(world.accounts.snapshot().accounts[0]?.usage).toMatchObject({
-      detail: 'The login needs refreshing. It refreshes the next time an agent runs on this account.',
+      detail:
+        'This login expired. Shinsa refreshes it at its next check. Sign in again if this message stays.',
     });
     expect(world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent).toBe(25);
     world.login(account.configDir, 'token-a@example.com');
@@ -1504,6 +1618,159 @@ describe('what runs report back', () => {
       'the new reading',
       () => world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent === 70
     );
+  });
+});
+
+describe('keeping idle logins alive', () => {
+  const SIGNED_OUT_DETAIL =
+    'Claude could not refresh this account’s login. Sign in again to keep its usage current.';
+
+  const usedPercent = (world: World) => world.accounts.snapshot().accounts[0]?.usage.windows[0]?.usedPercent;
+
+  function refreshOnKeepalive(world: World, token: string, used: number) {
+    world.usage.set(token, windows(used, used));
+    world.setKeepalive((configDir) => {
+      world.login(configDir, token);
+      return result(JSON.stringify({ is_error: false, result: 'ok' }));
+    });
+  }
+
+  test('a login about to expire gets one turn on its own folder, then a fresh usage reading', async () => {
+    const world = await createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 100);
+    refreshOnKeepalive(world, 'token-fresh', 25);
+    await world.accounts.refreshUsage();
+    expect(world.keepalives()).toEqual([]);
+    await world.advance(55 * 60_000);
+    const snapshot = await world.accounts.refreshUsage();
+    expect(snapshot.accounts[0]?.usage).toMatchObject({ detail: null });
+    expect(usedPercent(world)).toBe(25);
+    expect(world.keepalives()).toHaveLength(1);
+    expect(world.keepalives()[0]?.command.slice(0, 5)).toEqual([
+      'claude',
+      '-p',
+      expect.any(String),
+      '--model',
+      'haiku',
+    ]);
+    expect(world.keepalives()[0]?.env.CLAUDE_CONFIG_DIR).toBe(account.configDir ?? undefined);
+    await world.accounts.refreshUsage();
+    expect(world.keepalives()).toHaveLength(1);
+  });
+
+  test('the refresh timer keeps an expired login alive without an agent run', async () => {
+    const world = await createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 100);
+    await world.accounts.start();
+    refreshOnKeepalive(world, 'token-fresh', 25);
+    await world.advance(HOUR);
+    await until('the reading after the keepalive', () => usedPercent(world) === 25);
+    expect(world.keepalives()).toHaveLength(1);
+    await world.accounts.stop();
+  });
+
+  test('an engine that starts with an expired login refreshes it before the first reading', async () => {
+    const world = await createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 100);
+    await world.advance(2 * HOUR);
+    refreshOnKeepalive(world, 'token-fresh', 25);
+    await world.accounts.start();
+    expect(usedPercent(world)).toBe(25);
+    await world.accounts.stop();
+  });
+
+  test('a login Claude refuses when it is read is kept alive too, and an account with a run is left alone', async () => {
+    const world = await createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 100);
+    world.usage.delete('token-a@example.com');
+    await world.accounts.limits.refresh([account.id], true);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ account: { id: account.id, email: account.email } });
+      state.runs['run-1'].attempts = [
+        {
+          attemptId: 'a1',
+          provider: 'claude',
+          model: null,
+          resumed: false,
+          handoff: null,
+          startedAt: 1,
+          account: { id: account.id, email: 'a@example.com' },
+        },
+      ];
+    });
+    await world.accounts.refreshUsage();
+    expect(world.keepalives()).toEqual([]);
+    world.stub.update((state) => {
+      delete state.runs['run-1'];
+    });
+    refreshOnKeepalive(world, 'token-fresh', 25);
+    await world.accounts.refreshUsage();
+    expect(world.keepalives()).toHaveLength(1);
+    expect(usedPercent(world)).toBe(25);
+  });
+
+  test('a turn that does not refresh the login is tried again after half an hour, or at once when you refresh', async () => {
+    const world = await createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 100);
+    await world.advance(2 * HOUR);
+    await world.accounts.refreshUsage();
+    await world.accounts.refreshUsage();
+    expect(world.keepalives()).toHaveLength(1);
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ signIn: 'signed_in' });
+    expect(usedPercent(world)).toBe(100);
+    await world.advance(31 * 60_000);
+    await world.accounts.refreshUsage();
+    expect(world.keepalives()).toHaveLength(2);
+    await world.accounts.refresh();
+    expect(world.keepalives()).toHaveLength(3);
+  });
+
+  test('a login Claude cannot refresh shows as needing sign-in, is left alone, and comes back once it changes', async () => {
+    const world = await createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 100);
+    await world.advance(2 * HOUR);
+    world.setKeepalive(() => result(JSON.stringify({ is_error: true, api_error_status: 401 }), false));
+    const logs = captureLogs();
+    try {
+      await world.accounts.refreshUsage();
+    } finally {
+      logs.restore();
+    }
+    expect(logs.fieldsOf('[Accounts] Claude could not refresh an idle login')).toEqual([
+      { accountId: account.id, email: 'a@example.com' },
+    ]);
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({
+      signIn: 'signed_out',
+      signInDetail: SIGNED_OUT_DETAIL,
+    });
+    await world.advance(HOUR);
+    await world.accounts.refreshUsage();
+    expect(world.keepalives()).toHaveLength(1);
+    await world.accounts.start();
+    world.login(account.configDir, 'token-again');
+    world.usage.set('token-again', windows(40, 40));
+    await world.advance(HOUR);
+    await until(
+      'the login to work again',
+      () => world.accounts.snapshot().accounts[0]?.signIn === 'signed_in'
+    );
+    await world.accounts.stop();
+  });
+
+  test('without Claude Code nothing is kept alive, and removing an account forgets its last try', async () => {
+    const missing = await createWorld({
+      registry: true,
+      resolveClaude: () => Promise.reject(new Error('Claude Code is not installed.')),
+    });
+    await missing.accounts.store.create({ email: 'a@example.com', owner: null });
+    expect((await missing.accounts.refreshUsage()).accounts).toHaveLength(1);
+    expect(missing.keepalives()).toEqual([]);
+    const world = await createWorld({ registry: true });
+    const account = await addAccount(world, 'a@example.com', 100);
+    await world.advance(2 * HOUR);
+    await world.accounts.refreshUsage();
+    await world.accounts.remove(account.id);
+    expect(world.accounts.snapshot().accounts).toEqual([]);
   });
 });
 

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
@@ -151,7 +152,7 @@ function findOwnItems(decider: Decider, task: Task, run: Run, references: readon
   const items = listEvidenceItems(listOwnEvidence(decider, task, run));
   return references.map((reference) => {
     const item = selectEvidenceItem(items, reference);
-    if (item) return item;
+    if (Option.isSome(item)) return item.value;
     throw new DomainError({
       code: 'evidence_unknown',
       message: `${field} names ${reference}, which is not current evidence you attached this round. Name an item by its key or its id.`,

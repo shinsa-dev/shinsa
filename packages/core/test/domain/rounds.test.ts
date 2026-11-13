@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   formatRoundLabel,
   isTaskClosed,
@@ -63,10 +64,10 @@ describe('rounds', () => {
 
   test('a stacked round targets the branch below it only while that pull request is open', () => {
     const stacked = round(3, { status: 'active', base: 'b-2', pullRequest: null });
-    expect(resolveRoundBase(taskOf([round(1), round(2), stacked]))).toBe('b-2');
+    expect(Option.getOrNull(resolveRoundBase(taskOf([round(1), round(2), stacked])))).toBe('b-2');
     const merged = round(2, { pullRequest: { number: 12, url: 'u', state: 'merged', base: null } });
-    expect(resolveRoundBase(taskOf([round(1), merged, stacked]))).toBeNull();
-    expect(resolveRoundBase(taskOf([round(1), round(2, { status: 'active' })]))).toBeNull();
+    expect(Option.getOrNull(resolveRoundBase(taskOf([round(1), merged, stacked])))).toBeNull();
+    expect(Option.getOrNull(resolveRoundBase(taskOf([round(1), round(2, { status: 'active' })])))).toBeNull();
   });
 
   test('the stack lists each open pull request under the task’s own once, newest first', () => {
@@ -102,19 +103,33 @@ describe('rounds', () => {
       mergeable: true,
       updatedAt: 0,
     };
-    expect(selectShippingTarget(taskOf([round(1)], open), { number: 2, status: 'waiting' })?.number).toBe(20);
     expect(
-      selectShippingTarget(taskOf([round(1)], { ...open, state: 'merged' }), { number: 2, status: 'waiting' })
+      Option.getOrNull(selectShippingTarget(taskOf([round(1)], open), { number: 2, status: 'waiting' }))
+        ?.number
+    ).toBe(20);
+    expect(
+      Option.getOrNull(
+        selectShippingTarget(taskOf([round(1)], { ...open, state: 'merged' }), {
+          number: 2,
+          status: 'waiting',
+        })
+      )
     ).toBeNull();
-    expect(selectShippingTarget(taskOf([round(1)]), { number: 2, status: 'waiting' })).toBeNull();
     expect(
-      selectShippingTarget(taskOf([round(1), round(2), round(3, { status: 'active' })]), {
-        number: 3,
-        status: 'active',
-      })?.number
+      Option.getOrNull(selectShippingTarget(taskOf([round(1)]), { number: 2, status: 'waiting' }))
+    ).toBeNull();
+    expect(
+      Option.getOrNull(
+        selectShippingTarget(taskOf([round(1), round(2), round(3, { status: 'active' })]), {
+          number: 3,
+          status: 'active',
+        })
+      )?.number
     ).toBe(12);
     expect(
-      selectShippingTarget(taskOf([round(1, { status: 'merged' })]), { number: 2, status: 'active' })
+      Option.getOrNull(
+        selectShippingTarget(taskOf([round(1, { status: 'merged' })]), { number: 2, status: 'active' })
+      )
     ).toBeNull();
   });
 

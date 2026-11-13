@@ -18,6 +18,7 @@ import { EngineCore } from '../runtime/engine/service.ts';
 import { MonitorClock } from '../runtime/monitors/service.ts';
 import { WatchdogClock } from '../runtime/watchdogs/service.ts';
 import { Schedules } from '../schedules/service.ts';
+import { Slack } from '../slack/service.ts';
 import { Terminals } from '../terminals/service.ts';
 import { MessageInbox } from '../triage/index.ts';
 import { Versions } from '../versions/service.ts';
@@ -36,6 +37,7 @@ export const WorkLayer = Layer.effectDiscard(
     const briefings = yield* BriefingWriter;
     const inbox = yield* MessageInbox;
     const schedules = yield* Schedules;
+    const slack = yield* Slack;
     const versions = yield* Versions;
     const remote = yield* Remote;
     const teamFeeds = yield* TeamFeeds;
@@ -57,6 +59,7 @@ export const WorkLayer = Layer.effectDiscard(
       yield* briefings.stop;
       yield* inbox.stop;
       yield* schedules.stop;
+      yield* slack.stop;
       yield* accounts.stop;
       yield* usageResume.stop;
       yield* versions.stop;
@@ -110,6 +113,7 @@ export const WorkLayer = Layer.effectDiscard(
     yield* effects.recover.pipe(Effect.orDie);
     yield* inbox.start;
     yield* remote.start;
+    yield* Effect.forkDetach(slack.start);
     yield* teamFeeds.start;
     yield* briefings.schedule;
     yield* extensions.syncSnapshot;

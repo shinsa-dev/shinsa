@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { isRecord, parseJsonRecord } from '../domain/records.ts';
 import { DAY_MS } from '../domain/time.ts';
 import { ACCESS_PRESETS } from '../scopes/index.ts';
@@ -218,17 +218,17 @@ export function serializeTeamJoinFragment(fragment: TeamJoinFragment) {
   return [fragment.teamId, fragment.invite, fragment.key].join('.');
 }
 
-export function parseTeamJoinFragment(fragment: string): TeamJoinFragment | null {
+export function parseTeamJoinFragment(fragment: string): Option.Option<TeamJoinFragment> {
   const parts = fragment.replace(/^#/, '').split('.');
-  if (parts.length !== 3 || parts.some((part) => !URL_SAFE_SEGMENT.test(part))) return null;
+  if (parts.length !== 3 || parts.some((part) => !URL_SAFE_SEGMENT.test(part))) return Option.none();
   const [teamId, invite, key] = parts as [string, string, string];
-  return isTeamKey(key) ? { teamId, invite, key } : null;
+  return isTeamKey(key) ? Option.some({ teamId, invite, key }) : Option.none();
 }
 
-export function parseTeamJoinUrl(url: string): TeamJoinFragment | null {
-  if (!URL.canParse(url.trim())) return null;
+export function parseTeamJoinUrl(url: string): Option.Option<TeamJoinFragment> {
+  if (!URL.canParse(url.trim())) return Option.none();
   const parsed = new URL(url.trim());
-  if (parsed.pathname !== REMOTE_PATHS.teamJoinPage) return null;
+  if (parsed.pathname !== REMOTE_PATHS.teamJoinPage) return Option.none();
   return parseTeamJoinFragment(parsed.hash);
 }
 
@@ -261,13 +261,13 @@ export function resolveTeamViewPath(target: TeamViewTarget) {
   return `${TEAM_VIEW_PATH}?${query.toString()}`;
 }
 
-export function parseTeamViewTarget(url: URL): TeamViewTarget | null {
+export function parseTeamViewTarget(url: URL): Option.Option<TeamViewTarget> {
   const teamId = url.searchParams.get('team');
   const instanceId = url.searchParams.get('machine');
   const taskId = url.searchParams.get('task');
-  if (!(teamId && instanceId && taskId)) return null;
-  if (![teamId, instanceId, taskId].every((part) => URL_SAFE_SEGMENT.test(part))) return null;
-  return { teamId, instanceId, taskId };
+  if (!(teamId && instanceId && taskId)) return Option.none();
+  if (![teamId, instanceId, taskId].every((part) => URL_SAFE_SEGMENT.test(part))) return Option.none();
+  return Option.some({ teamId, instanceId, taskId });
 }
 
 export function resolveTeamRelayPath(instanceId: string) {
@@ -278,15 +278,15 @@ export function resolveTeamRelaySocketPath(instanceId: string) {
   return `${TEAM_RELAY_SOCKET_PATH}/${encodeURIComponent(instanceId)}`;
 }
 
-export function parseTeamRelayPath(pathname: string): TeamRelayTarget | null {
+export function parseTeamRelayPath(pathname: string): Option.Option<TeamRelayTarget> {
   const match = TEAM_RELAY_PATTERN.exec(pathname);
-  if (!(match?.[1] && match[2] && URL_SAFE_SEGMENT.test(match[1]))) return null;
-  return { instanceId: match[1], path: match[2] };
+  if (!(match?.[1] && match[2] && URL_SAFE_SEGMENT.test(match[1]))) return Option.none();
+  return Option.some({ instanceId: match[1], path: match[2] });
 }
 
 export function parseTeamRelaySocketPath(pathname: string) {
   const instanceId = TEAM_RELAY_SOCKET_PATTERN.exec(pathname)?.[1];
-  return instanceId && URL_SAFE_SEGMENT.test(instanceId) ? instanceId : null;
+  return instanceId && URL_SAFE_SEGMENT.test(instanceId) ? Option.some(instanceId) : Option.none<string>();
 }
 
 function serializeTeamView(view: TeamView) {
@@ -335,13 +335,13 @@ export const createTeamHello = Effect.fn('createTeamHello')(function* (
   return hello;
 });
 
-export function parseTeamHello(text: string): TeamHello | null {
-  const fields = parseJsonRecord(text);
-  if (fields?.type !== 'team-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return null;
+export function parseTeamHello(text: string): Option.Option<TeamHello> {
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
+  if (fields?.type !== 'team-hello' || fields.version !== REMOTE_PROTOCOL_VERSION) return Option.none();
   const view = readTeamView(fields.view);
   const { team, ephemeral, proof } = fields;
   if (!(view && typeof team === 'string' && typeof ephemeral === 'string' && typeof proof === 'string'))
-    return null;
+    return Option.none();
   const hello: TeamHello = {
     type: 'team-hello',
     version: REMOTE_PROTOCOL_VERSION,
@@ -350,7 +350,7 @@ export function parseTeamHello(text: string): TeamHello | null {
     ephemeral,
     proof,
   };
-  return fields.watcher === 'machine' ? { ...hello, watcher: 'machine' } : hello;
+  return Option.some(fields.watcher === 'machine' ? { ...hello, watcher: 'machine' } : hello);
 }
 
 export function verifyTeamHello(key: string, hello: TeamHello) {
@@ -399,14 +399,16 @@ export function isTeamSnapshotExpired(updatedAt: number, now: number) {
   return now - updatedAt > TEAM_SNAPSHOT_TTL_MS;
 }
 
-export function readTeamSnapshot(value: unknown): TeamSnapshot | null {
-  if (!isRecord(value)) return null;
+export function readTeamSnapshot(value: unknown): Option.Option<TeamSnapshot> {
+  if (!isRecord(value)) return Option.none();
   const { body, signature } = value;
-  return typeof body === 'string' && typeof signature === 'string' ? { body, signature } : null;
+  return typeof body === 'string' && typeof signature === 'string'
+    ? Option.some({ body, signature })
+    : Option.none();
 }
 
 function readSnapshotBody(text: string): TeamSnapshotBody | null {
-  const fields = parseJsonRecord(text);
+  const fields = Option.getOrUndefined(parseJsonRecord(text));
   if (!fields) return null;
   const { teamId, instanceId, tasks, updatedAt } = fields;
   if (!(typeof teamId === 'string' && typeof instanceId === 'string' && typeof updatedAt === 'number'))
@@ -415,8 +417,9 @@ function readSnapshotBody(text: string): TeamSnapshotBody | null {
 }
 
 export function selectTeamSnapshotSigner(snapshot: TeamSnapshot) {
-  const instanceId = parseJsonRecord(snapshot.body)?.instanceId;
-  return typeof instanceId === 'string' ? instanceId : null;
+  return Option.flatMap(parseJsonRecord(snapshot.body), ({ instanceId }) =>
+    typeof instanceId === 'string' ? Option.some(instanceId) : Option.none()
+  );
 }
 
 export const verifyTeamSnapshot = Effect.fn('verifyTeamSnapshot')(function* (
@@ -424,7 +427,7 @@ export const verifyTeamSnapshot = Effect.fn('verifyTeamSnapshot')(function* (
   snapshot: TeamSnapshot
 ) {
   const key = yield* parseSigningPublicKey(signingKey);
-  const signature = parseBase64Url(snapshot.signature);
+  const signature = Option.getOrNull(parseBase64Url(snapshot.signature));
   if (!(key && signature)) return null;
   const valid = yield* Effect.promise(() =>
     crypto.subtle.verify(SNAPSHOT_SIGNATURE, key, signature, listSnapshotBytes(snapshot.body))

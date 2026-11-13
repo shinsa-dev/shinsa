@@ -1,27 +1,13 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, mock, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, jest, mock } from 'bun:test';
 import { resolveSecond, subscribeToMinutes, subscribeToSeconds } from '@/lib/format/clock.ts';
 
 describe('subscribeToMinutes', () => {
-  const intervals: { tick: () => void; ms: number }[] = [];
-  let clearSpy: ReturnType<typeof spyOn<typeof globalThis, 'clearInterval'>>;
-  let setSpy: ReturnType<typeof spyOn<typeof globalThis, 'setInterval'>>;
-
-  beforeAll(() => {
-    setSpy = spyOn(globalThis, 'setInterval').mockImplementation(((tick: () => void, ms: number) => {
-      intervals.push({ tick, ms });
-      return intervals.length as unknown as ReturnType<typeof setInterval>;
-    }) as typeof setInterval);
-    clearSpy = spyOn(globalThis, 'clearInterval').mockImplementation(() => undefined);
+  beforeEach(() => {
+    jest.useFakeTimers();
   });
 
   afterEach(() => {
-    intervals.length = 0;
-    clearSpy.mockClear();
-  });
-
-  afterAll(() => {
-    setSpy.mockRestore();
-    clearSpy.mockRestore();
+    jest.useRealTimers();
   });
 
   it('shares one minute timer between listeners and notifies each of them', () => {
@@ -29,11 +15,12 @@ describe('subscribeToMinutes', () => {
     const second = mock(() => undefined);
     const stopFirst = subscribeToMinutes(first);
     const stopSecond = subscribeToMinutes(second);
-    expect(intervals).toHaveLength(1);
-    expect(intervals[0]?.ms).toBe(60_000);
-    intervals[0]?.tick();
+    jest.advanceTimersByTime(59_999);
+    expect(first).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(1);
     stopFirst();
     stopSecond();
   });
@@ -44,25 +31,32 @@ describe('subscribeToMinutes', () => {
     const stopFirst = subscribeToMinutes(first);
     const stopSecond = subscribeToMinutes(second);
     stopFirst();
-    expect(clearSpy).not.toHaveBeenCalled();
-    intervals[0]?.tick();
+    jest.advanceTimersByTime(60_000);
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
     stopSecond();
-    expect(clearSpy).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(120_000);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   it('starts a fresh timer for a listener that arrives after the clock stopped', () => {
     subscribeToMinutes(() => undefined)();
-    const stop = subscribeToMinutes(() => undefined);
-    expect(intervals).toHaveLength(2);
+    const listener = mock(() => undefined);
+    const stop = subscribeToMinutes(listener);
+    jest.advanceTimersByTime(60_000);
+    expect(listener).toHaveBeenCalledTimes(1);
     stop();
   });
 
   it('ticks the second clock once a second, on its own timer', () => {
-    const stopMinutes = subscribeToMinutes(() => undefined);
-    const stopSeconds = subscribeToSeconds(() => undefined);
-    expect(intervals.map((interval) => interval.ms)).toEqual([60_000, 1000]);
+    const minutes = mock(() => undefined);
+    const seconds = mock(() => undefined);
+    const stopMinutes = subscribeToMinutes(minutes);
+    const stopSeconds = subscribeToSeconds(seconds);
+    jest.advanceTimersByTime(3000);
+    expect(seconds).toHaveBeenCalledTimes(3);
+    expect(minutes).not.toHaveBeenCalled();
     stopMinutes();
     stopSeconds();
   });

@@ -7,14 +7,20 @@ export {
   pickAccount,
   resolveAccountCandidate,
   resolveCandidateSpentUntil,
+  selectCandidateSpentModel,
   resolvePoolResetAt,
   selectNextAccount,
 } from './pick.ts';
 export { resolvePlanKey, resolvePlanLabel } from './plan.ts';
 export {
+  isModelMarkFor,
   listRelevantWindows,
+  listWeeklyWindows,
+  resolveLimitScope,
   resolveHeadroom,
   resolveSpentUntil,
+  STALE_USAGE_MS,
+  isStaleUsage,
   resolveUsedPercent,
   resolveWeeklyPercent,
   resolveWeeklyReading,

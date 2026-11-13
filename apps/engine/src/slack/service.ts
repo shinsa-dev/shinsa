@@ -1,6 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import {
   DomainError,
+  listSlackChannelSchedules,
+  listSlackChannelWatches,
   listSlackStatusGates,
+  parseSlackChannelMessage,
   parseSlackDecision,
   parseSlackEvaluation,
   parseSlackMention,
@@ -14,15 +18,22 @@ import {
   resolveSlackSessionStatus,
   resolveSlackLastUsedAt,
   resolveSlackMergeMessage,
+  resolveSlackMessageKey,
   resolveSlackTaskUrl,
   resolveSlackThreadKey,
   selectSlackEscalationPost,
   SLACK_ENGINE_INTERACTIONS_PATH,
+  SLACK_ENGINE_MESSAGES_PATH,
   SLACK_EVALUATION_SCHEMA,
   SLACK_EVALUATION_SYSTEM,
   SLACK_FORWARD_HEADERS,
+  SLACK_LIMITS,
+  SLACK_NOT_CONNECTED,
   SLACK_REACTIONS,
   type AutopilotContact,
+  type Schedule,
+  type SlackChannel,
+  type SlackChannelMessage,
   type SlackDecisionReply,
   type SlackEscalationPost,
   type SlackRelayNotify,
@@ -34,22 +45,41 @@ import {
   type TaskOwner,
   type SlackThreadRef,
   serializeSlackCard,
+  serializeSlackChannelDelivery,
   serializeSlackDeclined,
   serializeSlackEvaluationPrompt,
   serializeSlackNoAccess,
   verifySlackForwardSignature,
   type SlackLink,
+  resolveSlackFilterSubject,
+  SCHEDULE_FILTER_SKIPPED,
 } from '@shinsa/core';
 import type { SlackTestOutcome } from '@shinsa/core/engine-api/schema';
 import { serializeRemoteFailure } from '@shinsa/core/remote/errors';
-import { Clock, Context, Duration, Effect, Layer, Option, Redacted, Ref, Schema } from 'effect';
+import {
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  FiberSet,
+  Layer,
+  Option,
+  Redacted,
+  Ref,
+  Schema,
+  Semaphore,
+} from 'effect';
 import { QuickCalls } from '../agents/quick/service.ts';
 import { describeError } from '../log/redact.ts';
 import { RELAY_FAILED_CODE } from '../remote/client/schema.ts';
 import { RemoteClient } from '../remote/client/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
+import { ScheduleFilter } from '../schedules/filter/service.ts';
+import { resolvePromptProblem } from '../schedules/prompt.ts';
+import { FRAME_ID_BYTES, RATE_WINDOW_MS, WEBHOOK_RATE_LIMIT_PER_MINUTE } from '../schedules/schema.ts';
 import {
   SLACK_EVENT_BODY_LIMIT_BYTES,
+  SLACK_MESSAGE_RATE_LIMITED,
   SlackBodyText,
   type SlackEffect,
   type SlackInput,
@@ -70,6 +100,9 @@ export class Slack extends Context.Service<
       request: Request
     ) => Effect.Effect<Response, SlackRequestUnreadable | SlackRefusal>;
     readonly handleInteractions: (
+      request: Request
+    ) => Effect.Effect<Response, SlackRequestUnreadable | SlackRefusal>;
+    readonly handleMessages: (
       request: Request
     ) => Effect.Effect<Response, SlackRequestUnreadable | SlackRefusal>;
     readonly handleTunnel: (
@@ -98,6 +131,10 @@ export class Slack extends Context.Service<
     ) => Effect.Effect<void, SlackRefusal | SlackRelayFailure>;
     readonly snapshot: (viewer: string | null) => Effect.Effect<SlackSnapshot>;
     readonly disconnect: Effect.Effect<SlackSnapshot, SlackLinksFailure>;
+    readonly channels: Effect.Effect<readonly SlackChannel[], DomainError>;
+    readonly start: Effect.Effect<void>;
+    readonly stop: Effect.Effect<void>;
+    readonly settle: Effect.Effect<void>;
   }
 >()('shinsa/engine/slack/Slack') {
   static readonly layer = (input: SlackInput) =>
@@ -106,6 +143,7 @@ export class Slack extends Context.Service<
       Effect.gen(function* () {
         const engine = yield* EngineCore;
         const quick = yield* QuickCalls;
+        const filter = yield* ScheduleFilter;
         const relay = (yield* RemoteClient).slack;
         const statusInterval = yield* SlackStatusInterval;
         const token = (machineToken: string) => Redacted.make(machineToken);
@@ -118,6 +156,11 @@ export class Slack extends Context.Service<
         const declined = yield* Ref.make<ReadonlySet<string>>(new Set());
         const sessionRefused = yield* Ref.make<ReadonlySet<string>>(new Set());
         const decodeBody = Schema.decodeUnknownOption(SlackBodyText);
+        const active = yield* Ref.make(false);
+        const watched = yield* Ref.make('[]');
+        const syncing = yield* Semaphore.make(1);
+        const windows = yield* Ref.make<ReadonlyMap<string, readonly number[]>>(new Map());
+        const limited = yield* Ref.make<ReadonlySet<string>>(new Set());
 
         const respondJsonError = (code: string, message: string, status: number) =>
           Response.json({ error: { code, message } }, { status });
@@ -156,8 +199,10 @@ export class Slack extends Context.Service<
         const handleEvents = Effect.fn('Slack.handleEvents')(function* (request: Request) {
           const read = yield* readSigned(request);
           if (read instanceof Response) return read;
-          const mention = parseSlackMention(read.value);
-          if (!mention) return respondJsonError('body_invalid', 'The mention is missing a part.', 400);
+          const parsed = parseSlackMention(read.value);
+          if (Option.isNone(parsed))
+            return respondJsonError('body_invalid', 'The mention is missing a part.', 400);
+          const mention = parsed.value;
           yield* dispatch({ type: 'slack.mention', mention }, `slack:${mention.eventId}`);
           return Response.json({ ok: true }, { status: 202 });
         });
@@ -165,8 +210,10 @@ export class Slack extends Context.Service<
         const handleInteractions = Effect.fn('Slack.handleInteractions')(function* (request: Request) {
           const read = yield* readSigned(request);
           if (read instanceof Response) return read;
-          const decision = parseSlackDecision(read.value);
-          if (!decision) return respondJsonError('body_invalid', 'The decision is missing a part.', 400);
+          const parsed = parseSlackDecision(read.value);
+          if (Option.isNone(parsed))
+            return respondJsonError('body_invalid', 'The decision is missing a part.', 400);
+          const decision = parsed.value;
           return yield* dispatch(
             { type: 'slack.decide', decision },
             `slack-decide:${decision.interactionId}`
@@ -187,10 +234,149 @@ export class Slack extends Context.Service<
           );
         });
 
-        const handleTunnel = (request: Request, url: URL) =>
-          url.pathname === SLACK_ENGINE_INTERACTIONS_PATH
-            ? handleInteractions(request)
+        const syncWatches = (force: boolean) =>
+          Semaphore.withPermit(
+            syncing,
+            Effect.gen(function* () {
+              const credentials = yield* input.credentials;
+              if (!credentials) return;
+              const watches = listSlackChannelWatches(yield* engine.state).slice(0, SLACK_LIMITS.watches);
+              const key = JSON.stringify(watches);
+              const known = yield* Ref.get(watched);
+              if (key === known && !(force && watches.length > 0)) return;
+              yield* relay.watches(token(credentials.machineToken), { watches }).pipe(
+                Effect.andThen(Ref.set(watched, key)),
+                Effect.catch((failure) =>
+                  Effect.logWarning('[Slack] The watched channels could not be sent to app.shinsa.dev').pipe(
+                    Effect.annotateLogs({ channels: watches.length, error: describeError(failure) })
+                  )
+                )
+              );
+            })
+          );
+
+        const deliveries = yield* FiberSet.make<void>();
+        const runFork = Effect.runForkWith(yield* Effect.context<never>());
+        yield* engine.observe(() => {
+          runFork(Effect.when(syncWatches(false), Ref.get(active)));
+        });
+
+        const start = Effect.andThen(Ref.set(active, true), syncWatches(true));
+
+        const stop = Ref.set(active, false);
+
+        const takeSlot = Effect.fn('Slack.takeSlot')(function* (scheduleId: string) {
+          const now = yield* Clock.currentTimeMillis;
+          const taken = yield* Ref.modify(windows, (open) => {
+            const recent = (open.get(scheduleId) ?? []).filter((at) => now - at < RATE_WINDOW_MS);
+            const full = recent.length >= WEBHOOK_RATE_LIMIT_PER_MINUTE;
+            return [!full, new Map(open).set(scheduleId, full ? recent : [...recent, now])];
+          });
+          const told = yield* Ref.modify(limited, (ids) => {
+            const next = new Set(ids);
+            if (taken) next.delete(scheduleId);
+            else next.add(scheduleId);
+            return [ids.has(scheduleId), next];
+          });
+          if (taken) return 'taken' as const;
+          return told ? ('skipped' as const) : ('limited' as const);
+        });
+
+        const deliverMessage = Effect.fn('Slack.deliverMessage')(function* (
+          schedule: Schedule,
+          message: SlackChannelMessage
+        ) {
+          const id = `slack-message:${schedule.id}:${message.eventId}`;
+          const fail = (detail: string) =>
+            dispatch(
+              {
+                type: 'schedule.fail',
+                scheduleId: schedule.id,
+                dueAt: null,
+                deliveryId: message.eventId,
+                detail,
+              },
+              `${id}:fail`
+            );
+          const replayKey = resolveSlackMessageKey(message);
+          const now = yield* Clock.currentTimeMillis;
+          if ((schedule.replayKeys[replayKey] ?? 0) > now) return;
+          const slot = yield* takeSlot(schedule.id);
+          if (slot === 'skipped') return;
+          if (slot === 'limited') return yield* fail(SLACK_MESSAGE_RATE_LIMITED);
+          const prompt = serializeSlackChannelDelivery(
+            schedule.text,
+            message,
+            randomBytes(FRAME_ID_BYTES).toString('hex')
+          );
+          const problem = resolvePromptProblem(prompt);
+          if (problem) return yield* fail(problem);
+          if (!(yield* filter.applies(schedule, resolveSlackFilterSubject(message)))) {
+            yield* dispatch(
+              {
+                type: 'schedule.skip',
+                scheduleId: schedule.id,
+                deliveryId: message.eventId,
+                detail: SCHEDULE_FILTER_SKIPPED,
+                replayKey,
+              },
+              `${id}:skip`
+            );
+            return;
+          }
+          yield* dispatch(
+            {
+              type: 'schedule.deliver',
+              scheduleId: schedule.id,
+              deliveryId: message.eventId,
+              text: prompt,
+              replayKey,
+              slackMessage: {
+                teamId: message.teamId,
+                channelId: message.channelId,
+                messageTs: message.messageTs,
+                userId: message.userId,
+                permalink: message.permalink,
+                channelName: message.channelName,
+              },
+            },
+            id
+          ).pipe(
+            Effect.catchTag('DomainError', (error) =>
+              Effect.logWarning('[Slack] A channel message could not run its automation').pipe(
+                Effect.annotateLogs({ scheduleId: schedule.id, error: error.message }),
+                Effect.andThen(fail(error.message))
+              )
+            )
+          );
+        });
+
+        const handleMessages = Effect.fn('Slack.handleMessages')(function* (request: Request) {
+          const read = yield* readSigned(request);
+          if (read instanceof Response) return read;
+          const parsed = parseSlackChannelMessage(read.value);
+          if (Option.isNone(parsed))
+            return respondJsonError('body_invalid', 'The message is missing a part.', 400);
+          const message = parsed.value;
+          const schedules = listSlackChannelSchedules(yield* engine.state, message);
+          if (schedules.length === 0) {
+            yield* Ref.set(watched, '');
+            yield* syncWatches(false);
+          }
+          yield* Effect.forEach(
+            schedules,
+            (schedule) => FiberSet.run(deliveries, deliverMessage(schedule, message)),
+            { discard: true }
+          );
+          return Response.json({ ok: true, delivered: schedules.length }, { status: 202 });
+        });
+
+        const handleTunnel = (request: Request, url: URL) => {
+          if (url.pathname === SLACK_ENGINE_INTERACTIONS_PATH) return handleInteractions(request);
+          return url.pathname === SLACK_ENGINE_MESSAGES_PATH
+            ? handleMessages(request)
             : handleEvents(request);
+        };
 
         const resolveTaskUrl = (taskId: string) => resolveSlackTaskUrl(input.appOrigin, taskId);
 
@@ -321,7 +507,7 @@ export class Slack extends Context.Service<
             serializeSlackEvaluationPrompt(mention),
             SLACK_EVALUATION_SCHEMA
           );
-          if (parseSlackEvaluation(said) === 'none') {
+          if (Option.contains(parseSlackEvaluation(said), 'none')) {
             yield* applyReaction(mention, mention.messageTs, null, SLACK_REACTIONS.sizing);
             const threadKey = resolveSlackThreadKey(mention);
             const seen = yield* Ref.modify(declined, (keys) => [
@@ -342,17 +528,14 @@ export class Slack extends Context.Service<
             effect.taskId,
             resolveTaskUrl
           );
-          if (!message) return;
-          yield* send(effect.thread, null, message);
+          if (Option.isNone(message)) return;
+          yield* send(effect.thread, null, message.value);
         });
 
         const merge = Effect.fn('Slack.merge')(function* (effect: SlackEffect<'slack.merge'>, key: string) {
           const state = yield* engine.state;
-          const message = resolveSlackMergeMessage(
-            state,
-            effect.taskId,
-            effect.round,
-            resolveTaskUrl(effect.taskId)
+          const message = Option.getOrNull(
+            resolveSlackMergeMessage(state, effect.taskId, effect.round, resolveTaskUrl(effect.taskId))
           );
           const posted = state.tasks[effect.taskId]?.slack?.merge;
           if (!message || posted?.round !== effect.round) return;
@@ -386,8 +569,10 @@ export class Slack extends Context.Service<
         ) {
           const state = yield* engine.state;
           const task = state.tasks[effect.taskId];
-          const sent = selectSlackEscalationPost(task?.slackEscalations, effect.escalatedAt, effect.contact);
-          const message = resolveSlackEscalationFollowUp(state, effect.taskId, url);
+          const sent = Option.getOrNull(
+            selectSlackEscalationPost(task?.slackEscalations, effect.escalatedAt, effect.contact)
+          );
+          const message = Option.getOrNull(resolveSlackEscalationFollowUp(state, effect.taskId, url));
           if (!task || !message || !sent?.channelId || !sent.ts) return;
           const { contact } = effect;
           const target = { teamId: contact.teamId, kind: contact.kind, id: contact.id, message };
@@ -484,11 +669,15 @@ export class Slack extends Context.Service<
           key: string
         ) {
           const { state, url, machineToken } = yield* resolveEscalationLink(effect.taskId);
-          const message = resolveSlackEscalationMessage(state, effect.taskId, effect.escalatedAt, url);
+          const message = Option.getOrNull(
+            resolveSlackEscalationMessage(state, effect.taskId, effect.escalatedAt, url)
+          );
           const task = state.tasks[effect.taskId];
           if (!task || !message) return;
           const { contact } = effect;
-          const sent = selectSlackEscalationPost(task.slackEscalations, effect.escalatedAt, contact);
+          const sent = Option.getOrNull(
+            selectSlackEscalationPost(task.slackEscalations, effect.escalatedAt, contact)
+          );
           const target = { teamId: contact.teamId, kind: contact.kind, id: contact.id, message, reply: null };
           if (task.escalation?.at !== effect.escalatedAt) {
             if (machineToken && sent) yield* replaceEscalation(machineToken, target, sent, task.id);
@@ -615,6 +804,7 @@ export class Slack extends Context.Service<
             return off;
           }
           const connectUrl = resolveSlackConnectUrl(input.appOrigin, credentials.instanceId);
+          runFork(syncWatches(true));
           return yield* relay.links(token(credentials.machineToken)).pipe(
             Effect.andThen((answer) =>
               Effect.map(Effect.filter(answer.links, isViewers(viewer)), (links) => ({
@@ -659,8 +849,30 @@ export class Slack extends Context.Service<
           return yield* snapshot(null);
         });
 
+        const channels = Effect.gen(function* () {
+          const credentials = yield* input.credentials;
+          if (!credentials)
+            return yield* new DomainError({ code: 'slack_not_connected', message: SLACK_NOT_CONNECTED });
+          const listed = yield* relay.channels(token(credentials.machineToken)).pipe(
+            Effect.mapError(
+              (failure) =>
+                new DomainError({
+                  code: 'slack_unreachable',
+                  message: `Shinsa could not list the Slack channels: ${failure.message} Try again in a moment.`,
+                })
+            )
+          );
+          yield* syncWatches(true);
+          return listed.channels;
+        });
+
         return Slack.of({
           handleEvents,
+          handleMessages,
+          channels,
+          start,
+          stop,
+          settle: FiberSet.awaitEmpty(deliveries),
           handleInteractions,
           handleTunnel,
           evaluate,

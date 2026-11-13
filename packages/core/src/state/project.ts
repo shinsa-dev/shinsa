@@ -1,3 +1,4 @@
+import { Result, Option } from 'effect';
 import type { AutopilotLesson } from '../autopilot/schema.ts';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
@@ -164,7 +165,10 @@ export function briefingKey(focus: FocusProjects | SingleProjectFocus) {
   const selection = resolveFocusSelection(focus);
   const { projectIds, except } = normaliseFocusProjects(selection.projectIds, selection.except);
   if (projectIds.length === 0) return '*';
-  return selectSingleFocusProject({ projectIds, except }) ?? `${except ? '-' : '+'}${projectIds.join(',')}`;
+  return Option.getOrElse(
+    selectSingleFocusProject({ projectIds, except }),
+    () => `${except ? '-' : '+'}${projectIds.join(',')}`
+  );
 }
 
 export function replaceBriefing(state: ShinsaState, key: string, stored: StoredBriefing) {
@@ -173,8 +177,8 @@ export function replaceBriefing(state: ShinsaState, key: string, stored: StoredB
 
 function recordHandle(state: ShinsaState, handle: string) {
   const parsed = parseTaskHandle(handle);
-  if (!parsed) return;
-  const [key = NO_PROJECT_KEY, number = '0'] = parsed.split('-');
+  if (Option.isNone(parsed)) return;
+  const [key = NO_PROJECT_KEY, number = '0'] = parsed.value.split('-');
   writeEntry(state, 'taskNumbers', key, Math.max(state.taskNumbers[key] ?? 0, Number(number)));
 }
 
@@ -357,7 +361,10 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
   const closed = previous === 'answered' && event.by !== 'you';
   const answered = (previous === 'answering' || closed) && (stage === 'done' || stage === 'merged');
   const duplicated = stage === 'cancelled' && Boolean(task?.duplicate);
-  const text = answered || duplicated ? null : describeStage(stage, event.reason, Boolean(task?.pullRequest));
+  const text =
+    answered || duplicated
+      ? null
+      : Option.getOrNull(describeStage(stage, event.reason, Boolean(task?.pullRequest)));
   if (text && previous !== stage) {
     record(state, event.taskId, event.at, { actor: event.by ?? 'shinsa', kind: 'stage', text });
   }
@@ -639,7 +646,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
 function keepMessage(state: ShinsaState, event: EventOf<'task.messaged'>) {
   const task = state.tasks[event.taskId];
   if (!task) return;
-  const sender = event.scheduleId ? 'schedule' : 'agent';
+  const sender = event.sender ?? (event.scheduleId ? 'schedule' : 'agent');
   const kept: UntoldMessage = {
     at: event.at,
     text: event.text,
@@ -734,7 +741,7 @@ function applyChecksRecorded(state: ShinsaState, event: EventOf<'checks.recorded
     actor: 'shinsa',
     kind: 'check',
     text: describeChecks(event.results),
-    detail: describeFailedChecks(event.results),
+    detail: Option.getOrNull(describeFailedChecks(event.results)),
   });
 }
 
@@ -1206,6 +1213,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'watchdog.checking':
     case 'watchdog.deferred':
     case 'watchdog.live':
+    case 'watchdog.not_live':
     case 'watchdog.missed':
     case 'watchdog.checked':
     case 'watchdog.report_linked':
@@ -1273,16 +1281,17 @@ export function replayEventLog(events: Iterable<ShinsaEvent>, from: ShinsaState 
   let state = from;
   const failures: ReplayFailure[] = [];
   for (const event of events) {
-    try {
-      state = applyEvent(state, event);
-    } catch (error) {
-      state.seq = Math.max(state.seq, event.seq);
-      failures.push({
-        seq: event.seq,
-        type: event.type,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    const applied = Result.try(() => applyEvent(state, event));
+    if (Result.isSuccess(applied)) {
+      state = applied.success;
+      continue;
     }
+    state.seq = Math.max(state.seq, event.seq);
+    failures.push({
+      seq: event.seq,
+      type: event.type,
+      error: applied.failure instanceof Error ? applied.failure.message : String(applied.failure),
+    });
   }
   return { state, failures };
 }

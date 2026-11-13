@@ -79,7 +79,10 @@ const resolveExtensions = Effect.fn('RunSupervisor.resolveExtensions')(function*
   const state = yield* (yield* RunWorld).state;
   const task = state.tasks[run.taskId];
   const repo = task?.repoId ? state.repos[task.repoId] : undefined;
-  const place = { repoPath: repo?.path ?? null, project: task ? resolveTaskProject(state, task) : null };
+  const place = {
+    repoPath: repo?.path ?? null,
+    project: task ? Option.getOrNull(resolveTaskProject(state, task)) : null,
+  };
   return yield* source.resolveSession(place, pin).pipe(
     Effect.catchDefect((defect) =>
       Effect.fail(new ExtensionsUnavailable({ message: describeError(defect) }))
@@ -100,7 +103,9 @@ const issueBrowser = Effect.fn('RunSupervisor.issueBrowser')(function* (run: Run
   if (!browser) return null;
   const state = yield* (yield* RunWorld).state;
   const task = state.tasks[run.taskId];
-  const profile = Option.getOrNull(decodeProfile(task ? resolveTaskProject(state, task) : null));
+  const profile = Option.getOrNull(
+    decodeProfile(task ? Option.getOrNull(resolveTaskProject(state, task)) : null)
+  );
   if (!profile) return null;
   return yield* browser.issue(profile);
 });

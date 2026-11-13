@@ -169,6 +169,7 @@ export const SettingsPatch = Strict(
     autopilot: Schema.optionalKey(AutopilotPatch),
     watchdogsIgnoreUsageLimits: Schema.optionalKey(Bool),
     autoPace: Schema.optionalKey(Bool),
+    autoPaceResets: Schema.optionalKey(Bool),
     sharedTeams: Schema.optionalKey(List(Id())),
     activeHours: Schema.optionalKey(OrNull(List(ActiveDayPatch, ACTIVE_DAY_LIMIT), FIELD_MESSAGES.list)),
   } satisfies Record<(typeof SETTINGS_KEYS)[number], Schema.Top>,
@@ -254,6 +255,14 @@ export const ScheduleTrigger = Tagged('kind', SCHEDULE_TRIGGER_KINDS, [
     kind: Schema.Literal('webhook'),
     signature: NullByDefault(WebhookSignature, FIELD_MESSAGES.object),
     replayKey: NullByDefault(Text(ID_LIMIT), FIELD_MESSAGES.text),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('slack'),
+    teamId: Id(),
+    teamName: Id(),
+    channelId: Id(),
+    channelName: Id(),
+    threadUpdates: ByDefault(Bool, FIELD_MESSAGES.boolean, () => true),
   }),
 ]);
 

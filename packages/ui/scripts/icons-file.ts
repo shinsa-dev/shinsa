@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { Console, Effect, FileSystem, type PlatformError, Schema } from 'effect';
+import { Console, Effect, FileSystem, type PlatformError, Result, Schema } from 'effect';
 import { discoverIcons, isSkippedEntry, isSourceEntry, renderIconsModule, resolveKnownIcons } from './icons';
-import { IconIndex, type IconsFileRequest, IconsNotFound, IconsOutOfDate } from './schema';
+import { IconIndex, type IconsFileRequest, IconsNotFound, IconsOutOfDate, IconsUnrendered } from './schema';
 
 const decodeIndex = Schema.decodeUnknownEffect(Schema.fromJsonString(IconIndex));
 
@@ -36,7 +36,12 @@ export const generateIcons = Effect.fn('Icons.generate')(function* (
   const discovered = discoverIcons(sources, known);
   if (discovered.size === 0)
     return yield* new IconsNotFound({ message: 'No icon usages found. Did the scan roots change?' });
-  return { module: renderIconsModule(discovered), icons: discovered.size };
+  const module = renderIconsModule(discovered);
+  if (Result.isFailure(module))
+    return yield* new IconsUnrendered({
+      message: `Failed to extract SVG for ${module.failure.join(', ')}`,
+    });
+  return { module: module.success, icons: discovered.size };
 });
 
 export const syncIconsFile = Effect.fn('Icons.sync')(function* (request: IconsFileRequest) {

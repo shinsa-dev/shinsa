@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError } from '../domain/errors.ts';
 import { isTaskClosed, resolveCurrentRound } from '../domain/rounds.ts';
@@ -5,6 +6,7 @@ import {
   isSameSlackThread,
   type SlackEscalationPart,
   selectSlackEscalationPost,
+  type SlackMessageRef,
   type SlackThreadRef,
 } from '../domain/slack.ts';
 import type { Gate, Task } from '../domain/types.ts';
@@ -16,10 +18,9 @@ import type { SlackPost } from '../slack/posts.ts';
 import type { SlackDecision, SlackMention } from '../slack/schema.ts';
 import { serializeSlackMessage, serializeSlackRequest } from '../slack/thread.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { answerGate } from './gates.ts';
-import { messageTask, recordHeldMessage } from './messages.ts';
+import { isHeldForYou, messageTask, recordHeldMessage } from './messages.ts';
 import { createTask } from './tasks.ts';
 
 function selectThreadTask(decider: Decider, thread: SlackThreadRef): Task | null {
@@ -36,7 +37,7 @@ function requestPost(decider: Decider, thread: SlackThreadRef, taskId: string, p
 
 function forwardMention(decider: Decider, task: Task, mention: SlackMention) {
   const text = serializeSlackMessage(mention, decider.context.newId());
-  const held = listOpenGates(decider.state, task.id).length > 0;
+  const held = isHeldForYou(decider.state, task);
   if (held) recordHeldMessage(decider, task.id, text);
   else messageTask(decider, { type: 'task.message', taskId: task.id, text });
   decider.run({
@@ -69,17 +70,42 @@ export function startSlackTask(decider: Decider, command: CommandOf<'slack.start
     request: serializeSlackRequest(mention, decider.context.newId()),
     repoId: null,
   });
+  linkSlackThread(decider, taskId, thread, mention, SLACK_REACTIONS.sizing);
+}
+
+export function linkSlackMessageThread(
+  decider: Decider,
+  taskId: string,
+  message: Pick<
+    SlackMessageRef,
+    'teamId' | 'channelId' | 'userId' | 'messageTs' | 'permalink' | 'channelName'
+  >
+) {
+  const thread = { teamId: message.teamId, channelId: message.channelId, threadTs: message.messageTs };
+  if (selectThreadTask(decider, thread)) return;
+  linkSlackThread(decider, taskId, thread, message, null);
+}
+
+function linkSlackThread(
+  decider: Decider,
+  taskId: string,
+  thread: SlackThreadRef,
+  message: Pick<SlackMessageRef, 'userId' | 'messageTs' | 'permalink' | 'channelName'>,
+  reaction: string | null
+) {
   decider.emit({
     type: 'slack.thread_linked',
     taskId,
     link: {
-      ...thread,
-      userId: mention.userId,
-      messageTs: mention.messageTs,
-      permalink: mention.permalink,
-      channelName: mention.channelName,
+      teamId: thread.teamId,
+      channelId: thread.channelId,
+      threadTs: thread.threadTs,
+      userId: message.userId,
+      messageTs: message.messageTs,
+      permalink: message.permalink,
+      channelName: message.channelName,
       statusTs: null,
-      reaction: SLACK_REACTIONS.sizing,
+      reaction,
     },
   });
 }
@@ -92,7 +118,9 @@ export function recordSlackMerge(decider: Decider, command: CommandOf<'slack.rec
 
 export function recordSlackEscalation(decider: Decider, command: CommandOf<'slack.record_escalation'>) {
   const task = decider.state.tasks[command.taskId];
-  if (!task || selectSlackEscalationPost(task.slackEscalations, command.escalatedAt, command.contact)) return;
+  if (!task) return;
+  const sent = selectSlackEscalationPost(task.slackEscalations, command.escalatedAt, command.contact);
+  if (Option.isSome(sent)) return;
   decider.emit({
     type: 'slack.escalation_sent',
     taskId: command.taskId,
@@ -110,7 +138,7 @@ export function recordSlackEscalationFollowUp(
 ) {
   const task = decider.state.tasks[command.taskId];
   const post = selectSlackEscalationPost(task?.slackEscalations, command.escalatedAt, command.contact);
-  if (!post || post.followUpTs !== null) return;
+  if (Option.isNone(post) || post.value.followUpTs !== null) return;
   decider.emit({
     type: 'slack.escalation_followed_up',
     taskId: command.taskId,
@@ -183,6 +211,7 @@ function resolveEventTask(state: ShinsaState, event: ShinsaEventInput) {
     case 'watchdog.armed':
     case 'watchdog.started':
     case 'watchdog.live':
+    case 'watchdog.not_live':
     case 'watchdog.checking':
     case 'watchdog.deferred':
     case 'watchdog.missed':
@@ -198,6 +227,7 @@ function resolveEventTask(state: ShinsaState, event: ShinsaEventInput) {
 const MERGE_EDIT_EVENTS: ReadonlySet<ShinsaEventInput['type']> = new Set<ShinsaEventInput['type']>([
   'watchdog.started',
   'watchdog.live',
+  'watchdog.not_live',
   'watchdog.deferred',
   'watchdog.missed',
   'watchdog.checked',
@@ -210,6 +240,7 @@ function isWatchEvent(event: ShinsaEventInput) {
 }
 
 const WATCH_CHECK_EVENTS: ReadonlySet<ShinsaEventInput['type']> = new Set<ShinsaEventInput['type']>([
+  'watchdog.not_live',
   'watchdog.deferred',
   'watchdog.checked',
   'watchdog.missed',

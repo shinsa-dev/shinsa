@@ -1,11 +1,16 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   ADMISSION_LIMITS,
+  DAY_MS,
+  createPercent,
+  createUsd,
   isOverBudget,
   listActiveRuns,
   listOpenGates,
   type RunUsage,
   RECENT_USAGE_MS,
+  resolveAdmissionRoom,
   resolveBuildEstimate,
   resolvePaceHold,
   resolveRecentUsage,
@@ -231,9 +236,9 @@ describe('metering the weekly usage a run used', () => {
     const runId = harness.activeRun(taskId).id;
     meterWeekly(harness, taskId, 1.5);
     meterWeekly(harness, taskId, 2);
-    expect(weeklyShare(harness, taskId)).toBe(3.5);
+    expect(weeklyShare(harness, taskId)).toBe(createPercent(3.5));
     meterWeekly(harness, taskId, 0);
-    expect(weeklyShare(harness, taskId)).toBe(3.5);
+    expect(weeklyShare(harness, taskId)).toBe(createPercent(3.5));
     expect(harness.state.runs[runId]?.meters).toEqual([
       expect.objectContaining({
         attemptId: `${runId}-attempt`,
@@ -354,7 +359,7 @@ describe('the usage limit per task', () => {
     harness.send({ type: 'settings.change', patch: { taskUsageLimit: 10 } });
     const taskId = createTask(harness);
     meterWeekly(harness, taskId, 12);
-    expect(weeklyShare(harness, taskId)).toBe(0);
+    expect(weeklyShare(harness, taskId)).toBe(createPercent(0));
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ cause: 'budget', title: 'Reached its usage limit' });
@@ -438,10 +443,10 @@ describe('delegated work', () => {
     harness.send({ type: 'run.meter', runId: delegated, usage: usage(0.7) });
     const task = harness.task(taskId);
     const cost = resolveTaskCost(harness.state, task);
-    expect(cost.total).toMatchObject({ runs: 2, knownUsd: 1.1 });
+    expect(cost.total).toMatchObject({ runs: 2, knownUsd: createUsd(1.1) });
     expect(cost.byRole.map(({ role, cost: line }) => [role, line.knownUsd])).toEqual([
-      ['agent', 0.4],
-      ['reviewer', 0.7],
+      ['agent', createUsd(0.4)],
+      ['reviewer', createUsd(0.7)],
     ]);
     expect(isOverBudget(harness.state, task)).toBe(true);
   });
@@ -629,7 +634,9 @@ describe('the daily usage limit', () => {
     expect(next.id).not.toBe(started);
     expect(isDispatched(harness, next.id)).toBe(true);
     expect(harness.task(taskId).usageWait?.status).not.toBe('armed');
-    expect(resolvePaceHold(harness.state, harness.task(taskId), 'claude', harness.now)).toBeNull();
+    expect(
+      Option.getOrNull(resolvePaceHold(harness.state, harness.task(taskId), 'claude', harness.now))
+    ).toBeNull();
   });
 
   test('another task is still held after one task ignores the limit', () => {
@@ -854,8 +861,19 @@ describe('Autopilot and usage limits', () => {
   });
 });
 
-function recordPace(harness: Harness, pace: number | null) {
-  harness.send({ type: 'usage.pace_recorded', provider: 'claude', pace });
+function recordPace(
+  harness: Harness,
+  pace: number | null,
+  resets: { resetPace?: number; endingPace?: number; resetEndsAt?: number | null } = {}
+) {
+  harness.send({
+    type: 'usage.pace_recorded',
+    provider: 'claude',
+    pace,
+    resetPace: resets.resetPace ?? pace,
+    endingPace: resets.endingPace ?? pace,
+    resetEndsAt: resets.resetEndsAt ?? null,
+  });
 }
 
 function autoPaced(pace: number) {
@@ -880,8 +898,13 @@ function plannedTask(
 }
 
 function needOf(harness: Harness, taskId: string) {
-  const need = resolveBuildEstimate(harness.state, harness.task(taskId))?.remainingPercent;
-  if (need === undefined || need === null) throw new Error('no estimate');
+  const need = Option.getOrNull(
+    Option.flatMap(
+      resolveBuildEstimate(harness.state, harness.task(taskId)),
+      (found) => found.remainingPercent
+    )
+  );
+  if (need === null) throw new Error('no estimate');
   return need;
 }
 
@@ -959,6 +982,52 @@ describe('Auto pace', () => {
     recordPace(harness, paceFitting(harness, need * 1.5));
     expect(isHeldStepStarted(harness, first.run.id)).toBe(true);
     expect(isAdmissionHeld(harness, second.taskId)).toBe(true);
+  });
+
+  test('counts on a usage reset only for urgent and high builds, once you allow it', () => {
+    const harness = autoPaced(0.01);
+    const high = plannedTask(harness, { priority: 'high' });
+    const resetPace = paceFitting(harness, needOf(harness, high.taskId)) * 2;
+    recordPace(harness, 0.01, { resetPace, resetEndsAt: harness.now + 30 * DAY_MS });
+    expect(isAdmissionHeld(harness, high.taskId)).toBe(true);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    expect(isHeldStepStarted(harness, high.run.id)).toBe(true);
+    const normal = plannedTask(harness);
+    expect(isAdmissionHeld(harness, normal.taskId)).toBe(true);
+  });
+
+  test('lets every build count on a usage reset that ends within three days, so it is not wasted', () => {
+    const harness = autoPaced(0.01);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    const low = plannedTask(harness, { priority: 'low' });
+    const resetPace = paceFitting(harness, needOf(harness, low.taskId)) * 2;
+    recordPace(harness, 0.01, { resetPace, endingPace: resetPace, resetEndsAt: harness.now + 4 * DAY_MS });
+    expect(isAdmissionHeld(harness, low.taskId)).toBe(true);
+    expect(Option.getOrThrow(resolveAdmissionRoom(harness.state, 'claude', harness.now))).toBeLessThan(0);
+    expect(
+      Option.getOrThrow(resolveAdmissionRoom(harness.state, 'claude', harness.now, 'high'))
+    ).toBeGreaterThan(0);
+    recordPace(harness, 0.01, { resetPace, endingPace: resetPace, resetEndsAt: harness.now + 2 * DAY_MS });
+    expect(isHeldStepStarted(harness, low.run.id)).toBe(true);
+  });
+
+  test('lets a normal or low build count only on the resets that end within three days, never on the others', () => {
+    const harness = autoPaced(0.01);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    const low = plannedTask(harness, { priority: 'low' });
+    const resetPace = paceFitting(harness, needOf(harness, low.taskId)) * 2;
+    recordPace(harness, 0.01, { resetPace, endingPace: 0.01, resetEndsAt: harness.now + 2 * DAY_MS });
+    expect(isAdmissionHeld(harness, low.taskId)).toBe(true);
+    recordPace(harness, 0.01, { resetPace, endingPace: resetPace, resetEndsAt: harness.now + 2 * DAY_MS });
+    expect(isHeldStepStarted(harness, low.run.id)).toBe(true);
+  });
+
+  test('never counts a reset pace below the pace without resets, nor a reset that already ended', () => {
+    const harness = autoPaced(10_000);
+    harness.send({ type: 'settings.change', patch: { autoPaceResets: true } });
+    recordPace(harness, 10_000, { resetPace: 0.01, resetEndsAt: harness.now - DAY_MS });
+    const low = plannedTask(harness, { priority: 'low' });
+    expect(isDispatched(harness, low.run.id)).toBe(true);
   });
 
   test('an urgent build may use the reserve, and starts ahead of the queue', () => {
