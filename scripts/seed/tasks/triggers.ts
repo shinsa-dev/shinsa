@@ -69,6 +69,19 @@ export function listAccountFiles(data: string): Record<string, string> {
             clears: ['five_hour', 'seven_day'],
             usableNow: true,
             endsAt: NOW + 14 * 24 * HOUR,
+            givesBackWeekly: false,
+            weeklyShare: null,
+          },
+          {
+            id: 'seed-fable-grant',
+            label: null,
+            left: 1,
+            total: 1,
+            clears: ['seven_day_overage_included'],
+            usableNow: true,
+            endsAt: NOW + 2 * 24 * HOUR + 3 * HOUR,
+            givesBackWeekly: true,
+            weeklyShare: 27,
           },
         ],
       },
@@ -90,7 +103,12 @@ export function listAccountFiles(data: string): Record<string, string> {
       },
     },
   };
+  const marks = {
+    version: 2,
+    marks: { [PERSONAL.id]: [{ until: NOW + 3 * 24 * HOUR, at: NOW - 4 * MINUTE, model: 'fable' }] },
+  };
   return {
+    'account-marks.json': `${JSON.stringify(marks, null, 2)}\n`,
     'accounts.json': `${JSON.stringify(registry, null, 2)}\n`,
     'usage-limits.json': `${JSON.stringify(limits, null, 2)}\n`,
   };
@@ -350,6 +368,37 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       ],
     },
     {
+      id: 'task-model-wait',
+      request: 'Retry the webhook deliveries that failed during the outage',
+      title: 'Retry failed webhook deliveries',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'waiting for the usage limit to reset',
+      branch: 'fix/retry-webhook-deliveries',
+      ageHours: 0.5,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 6, summary: 'Hit the Fable limit.', failed: true }],
+      extra: [
+        {
+          type: 'usage_wait.armed',
+          taskId: 'task-model-wait',
+          wait: {
+            id: 'wait-model',
+            runId: 'task-model-wait-run-0',
+            role: 'agent',
+            phaseIndex: null,
+            account: PERSONAL,
+            resetAt: NOW + 13 * HOUR,
+            armedAt: NOW - 4 * MINUTE,
+            autoResume: true,
+            status: 'armed',
+            model: 'fable',
+            limitScope: 'model',
+          },
+        },
+      ],
+    },
+    {
       id: 'task-pace-hold',
       request: 'Cache the parsed transcripts so reopening a long session is instant',
       title: 'Cache parsed transcripts in Kanna',
@@ -483,6 +532,26 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
         body: 'To screenshot the new dispute count on the Stripe card, the dashboard has to be signed in.',
         details: {
           browserSignIn: { url: 'https://dashboard.stripe.com/login', site: 'dashboard.stripe.com' },
+        },
+      },
+    },
+    {
+      id: 'task-local-sign-in',
+      request: 'Show the trial length on the local paywall preview',
+      title: 'Show trial length on the paywall preview',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'waiting for your answer',
+      branch: 'feat/paywall-trial-length',
+      ageHours: 0.2,
+      runs: [{ role: 'agent', purpose: 'build', minutes: 5, summary: 'Asked to sign the browser in.' }],
+      gate: {
+        type: 'browser_sign_in',
+        title: 'Sign in to localhost',
+        body: 'The local dashboard sends me to its sign-in page before the paywall preview.',
+        details: {
+          browserSignIn: { url: 'http://localhost:64892/', site: 'localhost' },
         },
       },
     },

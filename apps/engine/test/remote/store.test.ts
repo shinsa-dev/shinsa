@@ -11,8 +11,6 @@ import { openTestStore, readRemoteFile } from './harness.ts';
 const CREDENTIALS = {
   instanceId: 'k3x9',
   machineToken: 'machine',
-  tunnelToken: 'tunnel',
-  tunnelHost: 't-k3x9.shinsa.dev',
   connectKey: 'AAAA',
 };
 
@@ -171,7 +169,7 @@ describe('remote.json', () => {
     writeFileSync(
       path,
       JSON.stringify({
-        credentials: { ...CREDENTIALS, tunnelToken: '' },
+        credentials: { ...CREDENTIALS, connectKey: '' },
         enabled: true,
         machine: { publicKey: 1 },
       })

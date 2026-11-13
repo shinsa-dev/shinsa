@@ -239,6 +239,52 @@ describe('a mention in a thread a task holds', () => {
       true
     );
     expect(harness.lastEffect('slack.react')).toMatchObject({ reaction: 'inbox_tray' });
+    expect(harness.task(taskId).untoldMessages).toEqual([
+      {
+        at: harness.now,
+        text: expect.stringContaining('CSV, go') as unknown as string,
+        sender: 'slack',
+      },
+    ]);
+  });
+
+  test('held at a gate is told once to the next turn of the task’s agent, as its author wrote it', () => {
+    const harness = createHarness();
+    const { taskId, gate } = planInSlack(harness);
+    harness.send({
+      type: 'slack.mention',
+      mention: mention({ eventId: 'Ev2', text: 'and keep the header row' }),
+    });
+    expect(harness.state.gates[gate.id]?.status).toBe('open');
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'revise', response: 'Smaller.' });
+    const prompt = harness.activeRun(taskId).prompt ?? '';
+    expect(prompt).toEndWith(
+      [
+        'While this task waited for the human, these messages were left for you. Act on them along with the rest of this turn:',
+        '- Christo in Slack: and keep the header row',
+        '',
+        'https://acme.slack.com/archives/C1/p1003',
+      ].join('\n')
+    );
+    expect(harness.task(taskId).untoldMessages).toEqual([]);
+  });
+
+  test('at a finished answer starts the follow-up with 👀', () => {
+    const harness = createHarness();
+    const taskId = startFromSlack(harness, { shape: 'answer' });
+    verifySetup(harness, taskId);
+    const answerer = harness.activeRun(taskId);
+    harness.send({ type: 'agent.deliver', runId: answerer.id, step: 'answer', body: 'It is the buffer.' });
+    expect(harness.openGate(taskId).type).toBe('result');
+    harness.send({
+      type: 'slack.mention',
+      mention: mention({ eventId: 'Ev2', messageTs: '100.5', text: 'wdyt' }),
+    });
+    expect(harness.lastEffect('slack.react')).toMatchObject({ messageTs: '100.5', reaction: 'eyes' });
+    const followUp = harness.activeRun(taskId);
+    expect(followUp.id).not.toBe(answerer.id);
+    expect(followUp.prompt).toContain('wdyt');
+    expect(harness.task(taskId).untoldMessages ?? []).toEqual([]);
   });
 
   test('that arrives while another mention of the thread is read still goes to the task', () => {

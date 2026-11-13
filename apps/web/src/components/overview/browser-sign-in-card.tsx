@@ -1,4 +1,4 @@
-import { type Gate, resolveTaskProject, type ShinsaState, type Task } from '@shinsa/core';
+import { type Gate, isLocalSignInUrl, resolveTaskProject, type ShinsaState, type Task } from '@shinsa/core';
 import type { SourceBrowserAnswer } from '@shinsa/core/engine-api/schema';
 import { Button } from '@shinsa/ui/components/button';
 import { toast } from '@shinsa/ui/components/sonner';
@@ -16,6 +16,7 @@ import {
   describeCopyFrom,
   describeNotInSource,
   isCopyRefused,
+  LOCAL_SIGN_IN_HINT,
   resolveDefaultSource,
   selectMatchingSite,
   SIGN_IN_WINDOW_NOTE,
@@ -115,6 +116,7 @@ export function BrowserSignInCard({
   if (!local || !projectId) return <RemoteSignIn state={state} task={task} gate={gate} onReply={onReply} />;
   const project = projectId;
   const copyable = source !== null && !isCopyRefused(site);
+  const windowFirst = url !== null && isLocalSignInUrl(url);
 
   async function act(kind: Exclude<CardBusy, null>, work: () => Promise<boolean>) {
     setBusy(kind);
@@ -154,6 +156,17 @@ export function BrowserSignInCard({
 
   const skip = () => act('skip', () => onReply('skipSignIn'));
 
+  const windowButton = (
+    <Button
+      variant={copyable && !windowFirst ? 'secondary' : 'primary'}
+      size='sm'
+      loading={busy === 'window'}
+      onClick={() => void openWindow()}
+    >
+      Open sign-in window
+    </Button>
+  );
+
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -165,19 +178,18 @@ export function BrowserSignInCard({
           </Button>
         ) : (
           <>
+            {windowFirst && windowButton}
             {copyable && (
-              <Button size='sm' loading={busy === 'copy'} onClick={() => void copy()}>
+              <Button
+                variant={windowFirst ? 'secondary' : 'primary'}
+                size='sm'
+                loading={busy === 'copy'}
+                onClick={() => void copy()}
+              >
                 {describeCopyFrom(source)}
               </Button>
             )}
-            <Button
-              variant={copyable ? 'secondary' : 'primary'}
-              size='sm'
-              loading={busy === 'window'}
-              onClick={() => void openWindow()}
-            >
-              Open sign-in window
-            </Button>
+            {!windowFirst && windowButton}
           </>
         )
       }
@@ -196,6 +208,7 @@ export function BrowserSignInCard({
     >
       {gate.body && <Markdown text={gate.body} className='text-xs text-fg-3' />}
       {url && <Truncate className='text-2xs text-fg-2'>{url}</Truncate>}
+      {windowFirst && !windowOpen && <p className='text-2xs text-fg-2'>{LOCAL_SIGN_IN_HINT}</p>}
       {choose.value && (
         <BrowserCopyDialog
           control={choose.control}

@@ -13,6 +13,8 @@ export type UsageWaitStatus = 'armed' | 'resumed';
 
 export type UsageWaitCause = 'usage_limit' | 'pace';
 
+export type UsageLimitScope = 'model' | 'account';
+
 export type UsagePaceScope = 'daily' | 'project' | 'admission';
 
 export interface UsagePace {
@@ -37,4 +39,6 @@ export interface UsageWait {
   provider?: string;
   cause?: UsageWaitCause;
   pace?: UsagePace;
+  model?: string | null;
+  limitScope?: UsageLimitScope;
 }

@@ -55,8 +55,6 @@ const READY: Record<string, CommandResult> = {
   'gh --version': result(true, 'gh version 2.80.0 (2026-01-01)\nhttps://github.com/cli/cli'),
   'gh auth status': result(true, 'github.com\n  ✓ Logged in to github.com account octo (keyring)'),
   'claude --version': result(true, '2.1.287 (Claude Code)'),
-  'codex --version': result(true, 'codex-cli 0.153.4'),
-  'codex login status': result(true, 'Logged in using ChatGPT'),
   'bun --version': result(true, '1.4.2'),
 };
 
@@ -73,7 +71,6 @@ describe('resolvePrerequisites', () => {
       ['gh', 'Signed in as octo.'],
       ['claude', '2.1.287 (Claude Code)'],
       ['bun', '1.4.2'],
-      ['codex', 'codex-cli 0.153.4'],
     ]);
     expect(report.checks.every((check) => check.fix === null && check.command === null)).toBe(true);
   });
@@ -98,7 +95,6 @@ describe('resolvePrerequisites', () => {
       ['gh', false, 'Not installed.', 'brew install gh'],
       ['claude', false, 'Not installed.', 'curl -fsSL https://claude.ai/install.sh | bash'],
       ['bun', false, 'Not installed.', 'curl -fsSL https://bun.sh/install | bash'],
-      ['codex', false, 'Not installed.', 'npm install -g @openai/codex'],
     ]);
     expect(report.checks.find((check) => check.id === 'claude')?.fix).toBe(
       'Install Claude Code, which agents run on.'
@@ -140,15 +136,10 @@ describe('resolvePrerequisites', () => {
     });
   });
 
-  test('Codex is optional, and so is Homebrew when only Codex would need it', async () => {
-    const missing = await resolvePrerequisites(HOME, createRunner(withoutKeys(['codex --version'])));
-    expect(missing.ready).toBe(true);
-    expect(missing.checks.filter((check) => check.optional).map((check) => check.id)).toEqual(['codex']);
-  });
-
-  test('leaves the Codex sign-in to the Claude step, which shows it', async () => {
+  test('no longer lists Codex, which only comes in when you sign in to it', async () => {
     const report = await resolvePrerequisites(HOME, createRunner(READY));
-    expect(report.checks.map((check) => check.id)).not.toContain('codex_auth');
+    expect(report.checks.map((check) => check.id)).not.toContain('codex');
+    expect(report.checks.filter((check) => check.optional)).toEqual([]);
   });
 
   test('reads an older gh that prints plain text, and a failure with no output', async () => {
@@ -208,7 +199,7 @@ describe('the install scripts', () => {
       listMissingInstalls([
         check('bun', false),
         check('gh', false),
-        check('codex', false, true),
+        check('claude', false, true),
         check('brew', false),
         check('git', false),
         check('claude', true),

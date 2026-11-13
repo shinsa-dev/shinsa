@@ -108,6 +108,14 @@ function failFixing(decider: Decider, task: Task, reason: FailingFixReason, stop
   );
 }
 
+export function failUnchangedFix(decider: Decider, taskId: string, reason: FailingFixReason) {
+  decider.fail(
+    taskId,
+    'Fixing is not making progress',
+    `${STALLED_FIX_SUBJECT[reason]} did not change after a fix round that changed nothing. Steer the agent in the chat, or retry.`
+  );
+}
+
 function escalateReview(decider: Decider, taskId: string, reason: ReviewEscalationReason) {
   const escalation: ReviewEscalation = {
     reason,

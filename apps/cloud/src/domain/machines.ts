@@ -12,14 +12,15 @@ import {
   type RemoteUser,
   type RemoteUserId,
   resolveTeamChannelUrl,
-  resolveTunnelHost,
+  resolveRelayUrl,
   type TeamMachine,
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
 import { Clock, Duration, Effect, Option, Redacted } from 'effect';
 import { NO_SUCH_MACHINE } from '../auth/schema.ts';
+import { CloudConfig } from '../config/service.ts';
 import { CloudCrypto } from '../crypto/service.ts';
-import { Cloudflare } from '../integrations/cloudflare/service.ts';
+import { Relays } from '../integrations/relays/service.ts';
 import { revokeMachineUserTokens } from '../slack/user-tokens.ts';
 import { MachineAccess } from '../store/access/service.ts';
 import { Accounts } from '../store/accounts/service.ts';
@@ -33,10 +34,6 @@ export function isMachineOnline(machine: Machine, now: number) {
     machine.lastSeenAt !== null &&
     machine.lastSeenAt > now - Duration.toMillis(ONLINE_WINDOW)
   );
-}
-
-export function resolveTunnelUrl(machine: Machine) {
-  return `wss://${resolveTunnelHost(machine.id)}`;
 }
 
 export function serializeTeamMachine(machine: Machine, now: number): TeamMachine {
@@ -69,6 +66,7 @@ export const createConnectAnswer = Effect.fn('createConnectAnswer')(function* (
   channel: ConnectChannel = 'remote'
 ) {
   const crypto = yield* CloudCrypto;
+  const config = yield* CloudConfig;
   const expiresAt = (yield* Clock.currentTimeMillis) + CONNECT_TOKEN_TTL_MS;
   const connectKey = Redacted.value(machine.connectKey);
   const nonce = Redacted.value(yield* crypto.createToken(CONNECT_NONCE_BYTES));
@@ -77,11 +75,11 @@ export const createConnectAnswer = Effect.fn('createConnectAnswer')(function* (
       ? createConnectToken(connectKey, { instanceId: machine.id, userId, channel, nonce, expiresAt })
       : createLegacyConnectToken(connectKey, { instanceId: machine.id, userId, expiresAt })
   ).pipe(Effect.orDie);
-  const tunnel = resolveTunnelUrl(machine);
+  const relay = resolveRelayUrl(machine.id, config.origin);
   const url =
     channel === 'team'
-      ? resolveTeamChannelUrl(tunnel, token)
-      : `${tunnel}${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`;
+      ? resolveTeamChannelUrl(relay, token)
+      : `${relay}${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`;
   return { url, expiresAt } satisfies ConnectResponse;
 });
 
@@ -108,9 +106,8 @@ export const listMachinePeople = Effect.fn('listMachinePeople')(function* (machi
 });
 
 export const removeMachine = Effect.fn('removeMachine')(function* (machine: Machine) {
-  const cloudflare = yield* Cloudflare;
   const machines = yield* Machines;
-  yield* cloudflare.removeTunnel(machine.tunnelId, machine.dnsRecordId);
   yield* revokeMachineUserTokens(machine.id);
   yield* machines.remove(machine.id);
+  yield* (yield* Relays).evict(machine.id);
 });

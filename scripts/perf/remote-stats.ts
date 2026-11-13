@@ -33,22 +33,15 @@ export interface CloudSummary {
   warm: Summary;
 }
 
-export interface TunnelStart {
+export interface RelayStart {
   label: string;
-  registered: number;
-  reachable: number;
+  connected: number;
 }
 
 export interface RemoteReport {
   cloud: CloudSummary | null;
-  tunnels: TunnelStart[];
+  relays: RelayStart[];
   routes: RouteSummary[];
-}
-
-const QUICK_TUNNEL_URL = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
-
-export function parseQuickTunnelUrl(line: string) {
-  return QUICK_TUNNEL_URL.exec(line)?.[0] ?? null;
 }
 
 export function summarizeRoute(samples: RouteSamples): RouteSummary {
@@ -109,10 +102,8 @@ export function serializeRemoteTable(report: RemoteReport) {
     rows.push(`| Shinsa Cloud | Connect call, first (DNS, TLS) | ${formatMs(report.cloud.first)} |`);
     rows.push(`| Shinsa Cloud | Connect call, warm | ${formatSpread(report.cloud.warm)} |`);
   }
-  for (const tunnel of report.tunnels) {
-    rows.push(`| ${tunnel.label} | cloudflared registered | ${formatMs(tunnel.registered)} |`);
-    rows.push(`| ${tunnel.label} | Quick tunnel name resolving (DNS) | ${formatMs(tunnel.reachable)} |`);
-  }
+  for (const relay of report.relays)
+    rows.push(`| ${relay.label} | Machine socket connected | ${formatMs(relay.connected)} |`);
   for (const route of report.routes) rows.push(...listRouteRows(route));
   return ['| Path | Leg | Median (p95), or size |', '|---|---|---|', ...rows].join('\n');
 }

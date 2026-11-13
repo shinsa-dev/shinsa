@@ -5,6 +5,8 @@ import { GitHubLayer } from '../../src/github/layers.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { RepoFolders } from '../../src/repos/folders/service.ts';
 import { ReposLayer } from '../../src/repos/layers.ts';
+import type { OriginTarget } from '../../src/repos/origin/schema.ts';
+import { RepoOrigins } from '../../src/repos/origin/service.ts';
 import type { DiscoveryOptions, SetupScope, SetupTarget } from '../../src/repos/schema.ts';
 import { RepoSetup } from '../../src/repos/setup/service.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
@@ -30,4 +32,8 @@ export function prepareSetup(target: SetupTarget) {
 
 export function verifySetup(repo: Repo, scope: SetupScope) {
   return runtime.runPromise(RepoSetup.use((setup) => setup.verify(repo, scope)));
+}
+
+export function connectOrigin(target: OriginTarget, preferredOwners: readonly string[] = []) {
+  return runtime.runPromise(RepoOrigins.use((origins) => origins.connect(target, preferredOwners)));
 }

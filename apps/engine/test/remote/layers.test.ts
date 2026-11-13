@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect, Layer } from 'effect';
 import { QuickCalls } from '../../src/agents/quick/service.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
 import { Handoffs } from '../../src/remote/handoffs/service.ts';
-import { TunnelHealth } from '../../src/remote/health/service.ts';
 import { RemoteEdgeLayer, RemoteLayer, RemoteQuickLayer } from '../../src/remote/layers.ts';
 import { Remote } from '../../src/remote/machine/service.ts';
 import { RemoteUrlOpener } from '../../src/remote/opener/service.ts';
 import { PlacementAsker } from '../../src/remote/placement/service.ts';
+import { createRefusedConnector } from '../../src/remote/relay/refused.ts';
 import { ShareDescriber } from '../../src/remote/share-describe/service.ts';
 import { Shares } from '../../src/remote/shares/service.ts';
 import { RemoteStore } from '../../src/remote/store/service.ts';
@@ -40,7 +39,6 @@ describe('the remote layers', () => {
           yield* TeamFeeds,
           yield* Handoffs,
           yield* RemoteUrlOpener,
-          yield* TunnelHealth,
           yield* PlacementAsker,
           yield* ShareDescriber,
         ];
@@ -50,6 +48,6 @@ describe('the remote layers', () => {
         Effect.scoped
       )
     );
-    expect(built).toEqual({ services: 10, paired: false });
+    expect(built).toEqual({ services: 9, paired: false });
   });
 });

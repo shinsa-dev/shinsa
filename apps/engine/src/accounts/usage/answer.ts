@@ -13,7 +13,6 @@ import {
   KEYED_WINDOWS,
   type KeyedWindow,
   LIMIT_KINDS,
-  RESET_PROGRAM_KEYS,
   UsageBody,
   UsageKeyedEntry,
   UsageLimitEntry,
@@ -21,6 +20,7 @@ import {
   UsageMoneyEntry,
   UsageResetGrantEntry,
   UsageResetProgram,
+  UsageScopedShareEntry,
   UsageSpend,
 } from '../schema.ts';
 
@@ -39,6 +39,8 @@ const decodeSpend = Schema.decodeUnknownOption(UsageSpend);
 const decodeMoney = Schema.decodeUnknownOption(UsageMoneyEntry);
 
 const decodeProgram = Schema.decodeUnknownOption(UsageResetProgram);
+
+const decodeShare = Schema.decodeUnknownOption(UsageScopedShareEntry);
 
 const decodeGrant = Schema.decodeUnknownOption(UsageResetGrantEntry);
 
@@ -148,10 +150,11 @@ export function parseExtraUsage(value: unknown): AccountExtraUsage | null {
   return { enabled, noLimit: enabled && extra?.monthly_limit === undefined && balance === undefined, credit };
 }
 
-function readGrant(value: unknown): UsageResetGrant[] {
+function readGrant(value: unknown, share: number | null): UsageResetGrant[] {
   return Option.toArray(
     Option.flatMap(decodeGrant(value), (grant) => {
       if (grant.resets_left <= 0) return Option.none();
+      const givesBackWeekly = grant.gives_back_weekly === true;
       return Option.some({
         id: grant.id,
         label: grant.label ?? null,
@@ -160,20 +163,27 @@ function readGrant(value: unknown): UsageResetGrant[] {
         clears: (grant.clears ?? []).filter(Predicate.isString),
         usableNow: grant.usable_now === true && grant.paused !== true,
         endsAt: parseResetTime(grant.ends_at),
+        givesBackWeekly,
+        weeklyShare: givesBackWeekly ? share : null,
       });
     })
   );
 }
 
+function resolveScopedShare(shares: readonly unknown[] | undefined) {
+  const used = (shares ?? []).flatMap((share) => Option.toArray(decodeShare(share)));
+  if (used.length === 0) return null;
+  return used.reduce((total, share) => total + share.used_percent_of_weekly, 0);
+}
+
 export function parseResetGrants(value: unknown): UsageResetGrant[] {
   const body = Option.getOrUndefined(decodeBody(value));
   if (!body) return [];
-  const grants = RESET_PROGRAM_KEYS.flatMap((key) =>
-    Option.match(decodeProgram(body[key]), {
-      onNone: () => [],
-      onSome: (program) => (program.grants ?? []).flatMap(readGrant),
-    })
-  );
+  const share = resolveScopedShare(body.weekly_scoped_shares);
+  const grants = Option.match(decodeProgram(body.cedar_ember), {
+    onNone: () => [],
+    onSome: (program) => (program.grants ?? []).flatMap((grant) => readGrant(grant, share)),
+  });
   const seen = new Set<string>();
   return grants.filter((grant) => {
     if (seen.has(grant.id)) return false;

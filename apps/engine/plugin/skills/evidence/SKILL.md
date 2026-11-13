@@ -146,10 +146,17 @@ sign-ins across runs and tasks, so a site the human signed it in to once stays s
 - **Open the page first.** It may be signed in already; sign in or ask only when it asks you to.
 - **The repository's own test users come first.** When the repository says how agents sign in (test accounts, a
   test-user MCP server, a seeded user), do that and never use the human's own session.
-- **Ask with `request_browser_sign_in`**, with the full address of the sign-in page and one sentence on what you need
-  there. The human copies the sign-in from their everyday browser or signs in by hand in a window on their machine;
-  when the tool answers that they did, open the page again. Ask once per site, never per task, and never ask for a
-  password or a code with `ask`.
+- **Ask with `request_browser_sign_in`**, with the full address of the page you want to see (the one that sent you to
+  a sign-in page, never the sign-in page itself, which opens fine signed out) and one sentence on what you need there.
+  The human copies the sign-in from their everyday browser or signs in by hand in a window on their machine; when the
+  tool answers that they did, open the page again. Ask once per site, never per task, and never ask for a
+  password or a code with `ask`. Before it answers, Shinsa opens the address in the shared browser: when the page
+  still ends on another site, the answer says so and where it landed, and you are not signed in.
+- **A local dev server's sign-in belongs to its exact port.** Many apps keep their session in the page's storage,
+  which copying a sign-in does not carry and which belongs to one origin, port included. Ask with the exact address of
+  the service run you screenshot (`http://localhost:64892/`, not `localhost`), say in the reason that it is a local dev
+  server so the human uses Open sign-in window, and keep that same run for every screenshot: restarting the service
+  gives it a new port, and the sign-in has to happen again.
 - **Never launch a browser of your own to sign in.** A browser you start is a fresh one with no sign-ins, and Google
   refuses to sign in to a browser a program drives.
 - **Share it politely.** Other agents use the same browser at the same time: open your own pages, close them when you

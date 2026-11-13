@@ -115,6 +115,8 @@ async function openAccounts(stub: StubEngine, options: AccountsHarnessOptions) {
     update: (accountId: unknown, patch: unknown, requester: string | null = null) =>
       run(roster.update(accountId, patch, requester)),
     remove: (accountId: unknown, requester: string | null = null) => run(roster.remove(accountId, requester)),
+    chooseProvider: (provider: unknown, choice: unknown) => run(roster.chooseProvider(provider, choice)),
+    listHiddenProviders: () => run(roster.listHiddenProviders),
     snapshotEffect: roster.snapshot,
     store: {
       get exists() {
@@ -197,6 +199,7 @@ async function createWorld(options: WorldOptions = {}) {
     requestHttp: (_url, init) => {
       const token = new Headers(init.headers).get('authorization')?.replace('Bearer ', '') ?? '';
       const body = usage.get(token);
+      if (body === LIMITED) return Promise.resolve(new Response('slow down', { status: 429 }));
       return Promise.resolve(body ? Response.json(body) : new Response('no', { status: 401 }));
     },
     spawnLogin,
@@ -249,6 +252,8 @@ async function createWorld(options: WorldOptions = {}) {
 }
 
 type World = Awaited<ReturnType<typeof createWorld>>;
+
+const LIMITED = 'limited';
 
 function windows(session: number, weekly: number, fable = 0, resetsAt = '2030-01-01T00:00:00Z') {
   return {
@@ -646,7 +651,14 @@ describe('recording the safe usage pace', () => {
     const pace = recorded?.type === 'usage.pace_recorded' ? recorded.pace : null;
     expect(pace).toBeGreaterThan(0);
     world.stub.update((state) => {
-      state.usagePaces.claude = { provider: 'claude', pace: pace ?? 0, at: 1 };
+      state.usagePaces.claude = {
+        provider: 'claude',
+        pace: pace ?? 0,
+        resetPace: recorded?.type === 'usage.pace_recorded' ? (recorded.resetPace ?? 0) : 0,
+        endingPace: recorded?.type === 'usage.pace_recorded' ? (recorded.endingPace ?? 0) : 0,
+        resetEndsAt: null,
+        at: 1,
+      };
     });
     const before = paceCommands(world).length;
     await world.accounts.store.update(world.accounts.store.list()[0]?.id ?? '', { switchAt: 80 });
@@ -906,6 +918,100 @@ describe('moving a rejected attempt to another account', () => {
     });
   });
 
+  test('a limit only the run’s model hit marks the account spent for that model alone', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+      state.settings = { ...state.settings, agentModels: { agent: 'fable' } };
+    });
+    world.usage.set('token-a@example.com', windows(10, 40, 100));
+    const verdict = await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(verdict).toMatchObject({
+      retry: false,
+      failure: { limitScope: 'model', model: 'fable', account: { id: a.id } },
+    });
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: 'fable' });
+    expect(
+      (await lease(world, { model: 'opus', previous: { id: a.id, email: a.email } }))?.reason
+    ).toBeNull();
+    const restarted = await createWorld({ root: world.root, now: world.now + 1 });
+    const marks = JSON.parse(readFileSync(join(world.config.dataDir, 'account-marks.json'), 'utf8'));
+    expect(marks.marks[a.id]).toEqual([{ until: world.now + HOUR, at: world.now, model: 'fable' }]);
+    restarted.stub.update((state) => {
+      state.settings = { ...state.settings, agentModels: { agent: 'fable' } };
+    });
+    expect(restarted.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: 'fable' });
+    restarted.stub.update((state) => {
+      state.settings = { ...state.settings, agentModels: { agent: 'opus' } };
+    });
+    expect(restarted.accounts.snapshot().accounts[0]).toMatchObject({ spentUntil: null, spentModel: null });
+  });
+
+  test('a model limit is still told apart while Claude holds back usage reads', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    world.usage.set('token-a@example.com', windows(10, 40, 96));
+    await world.accounts.limits.refresh([a.id], true);
+    world.usage.set('token-a@example.com', LIMITED);
+    await world.accounts.limits.refresh([a.id], true);
+    await world.accounts.limits.recordPush(a.id, {
+      kind: 'rate_limit',
+      status: 'rejected',
+      limit: 'seven_day',
+      utilization: null,
+      resetsAt: world.now + HOUR,
+    });
+    const verdict = await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(verdict.failure).toMatchObject({ limitScope: 'model', model: 'fable' });
+  });
+
+  test('a model limit leaves the account to runs on other models, and each model keeps its own mark', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const b = await addAccount(world, 'b@example.com', 30);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    expect(await reject(world, a.id, { resetAt: world.now + HOUR, limitScope: 'model' })).toEqual({
+      retry: true,
+    });
+    expect((await lease(world, { model: 'fable' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(a.id);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ model: 'opus' });
+    });
+    await reject(world, a.id, { resetAt: world.now + 2 * HOUR, limitScope: 'model' });
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'fable' }))?.id).toBe(b.id);
+    expect((await lease(world, { model: 'sonnet' }))?.id).toBe(a.id);
+  });
+
+  test('a limit the shared windows show, or one on a run without a model, spends the account for every model', async () => {
+    const world = await createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const b = await addAccount(world, 'b@example.com', 30);
+    world.stub.update((state) => {
+      state.tasks['task-1'] = createTask();
+      state.runs['run-1'] = createRun({ model: 'fable' });
+    });
+    world.usage.set('token-a@example.com', windows(10, 100, 100));
+    await reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(world.accounts.snapshot().accounts[0]).toMatchObject({ spentModel: null });
+    expect((await lease(world, { model: 'opus' }))?.id).toBe(b.id);
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ model: null });
+    });
+    const verdict = await reject(world, b.id, { resetAt: world.now + 2 * HOUR }, [a.id, b.id]);
+    expect(verdict.failure).toMatchObject({ limitScope: 'account', model: null });
+  });
+
   test('the accounts a run already tried come with the rejection, so nothing is remembered between runs', async () => {
     const world = await createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
@@ -935,6 +1041,8 @@ describe('moving a rejected attempt to another account', () => {
       failure: failure({
         resetAt: world.now + 4 * HOUR,
         account: { id: bound.id, email: 'bound@example.com' },
+        model: null,
+        limitScope: 'account',
       }),
     });
   });
@@ -2090,7 +2198,12 @@ describe('a provider with a sign-in of its own (Codex)', () => {
 
   test('a run on it starts from the cached weekly reading and ends on a fresh one; an unknown provider reads nothing', async () => {
     const codex = createCodexSource([codexReading(40), codexReading(45)]);
-    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await world.accounts.syncProviderLogins();
     expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
     expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
     expect(await world.accounts.readProviderWeeklyReading('codex', true)).toMatchObject({ percent: 45 });
@@ -2101,7 +2214,12 @@ describe('a provider with a sign-in of its own (Codex)', () => {
     const codex = createCodexSource([
       codexReading(40, { read: { ok: true, windows: [], fastMode: 'available' } }),
     ]);
-    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await world.accounts.syncProviderLogins();
     expect(await world.accounts.readFastMode('codex', null)).toBe('available');
     expect(await world.accounts.readFastMode('gemini', null)).toBe('unknown');
     expect(await world.accounts.readFastMode('claude', null)).toBe('unknown');
@@ -2141,7 +2259,12 @@ describe('a provider with a sign-in of its own (Codex)', () => {
         },
       }),
     ]);
-    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await world.accounts.syncProviderLogins();
     world.stub.update((state) => {
       state.runs['run-1'] = createRun({ model: 'gpt-6-astra' });
     });
@@ -2165,7 +2288,12 @@ describe('a provider with a sign-in of its own (Codex)', () => {
 
   test('its usage limit waits for the reset Codex pushed during the run, before reading its usage again', async () => {
     const codex = createCodexSource([codexReading(10)]);
-    const world = await createWorld({ registry: true, providerUsage: [codex.source] });
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await world.accounts.syncProviderLogins();
     world.stub.update((state) => {
       state.runs['run-1'] = createRun({
         attempts: [
@@ -2202,7 +2330,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
   });
 
   test('signed out, it asks for its own sign-in, and signing in answers that provider’s Sign in gate, not a Claude account’s', async () => {
-    let logins: ProviderLogin[] = [{ ...CODEX_LOGIN, status: 'signed_out' }];
+    let logins: ProviderLogin[] = [CODEX_LOGIN];
     const codex = createCodexSource([codexReading(10)]);
     const world = await createWorld({
       registry: true,
@@ -2210,6 +2338,8 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       providerLogins: () => Promise.resolve(logins),
     });
     await world.accounts.refresh();
+    logins = [{ ...CODEX_LOGIN, status: 'signed_out' }];
+    await world.accounts.syncProviderLogins();
     const verdict = await world.accounts.onRejection({
       runId: 'run-1',
       taskId: 'task-1',
@@ -2345,5 +2475,183 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       usedPercent: 100,
       resetsAt: 9_500_000,
     });
+  });
+});
+
+describe('choosing whether Shinsa uses a provider', () => {
+  const readChoices = (root: string) =>
+    (JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as { providerLogins: unknown })
+      .providerLogins;
+
+  test('a Codex that was never signed in shows nowhere and is never read', async () => {
+    const codex = createCodexSource([codexReading(40)]);
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve([{ ...CODEX_LOGIN, status: 'signed_out' }]),
+    });
+    await world.accounts.refresh();
+    expect(world.accounts.snapshot().providers).toEqual([]);
+    expect(codex.count()).toBe(0);
+    expect([...(await world.accounts.listHiddenProviders())]).toEqual(['codex']);
+  });
+
+  test('a step already running on a Codex it never saw signed in still keeps the limits Codex reports', async () => {
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [createCodexSource([codexReading(40)]).source],
+      providerLogins: () => Promise.resolve([{ ...CODEX_LOGIN, status: 'signed_out' }]),
+    });
+    await world.accounts.refresh();
+    world.stub.update((state) => {
+      state.runs['run-1'] = { attempts: [{ provider: 'codex', account: null }] } as never;
+    });
+    await world.accounts.onNotice('run-1', {
+      kind: 'rate_limit',
+      status: 'rejected',
+      limit: 'seven_day',
+      resetsAt: 9_000_000,
+      utilization: 1,
+    } as never);
+    expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
+    expect(world.accounts.snapshot().providers).toEqual([]);
+  });
+
+  test('a sign-in is kept in config.json, so signing out later still shows the row', async () => {
+    let logins: ProviderLogin[] = [CODEX_LOGIN];
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [createCodexSource([codexReading(40)]).source],
+      providerLogins: () => Promise.resolve(logins),
+    });
+    await world.accounts.syncProviderLogins();
+    expect(readChoices(world.root)).toEqual({ codex: 'added' });
+    logins = [{ ...CODEX_LOGIN, status: 'signed_out' }];
+    await world.accounts.syncProviderLogins();
+    expect(world.accounts.snapshot().providers?.map((login) => login.status)).toEqual(['signed_out']);
+  });
+
+  test('a config.json that cannot be written is logged on a sign-in and refused on a choice', async () => {
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [createCodexSource([codexReading(40)]).source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    mkdirSync(join(world.root, 'config.json'), { recursive: true });
+    const logs = captureLogs();
+    try {
+      await world.accounts.syncProviderLogins();
+    } finally {
+      logs.restore();
+    }
+    expect(logs.entries.map((entry) => entry.message)).toContain(
+      '[Accounts] Could not keep a provider sign-in in config.json'
+    );
+    await expect(world.accounts.chooseProvider('codex', 'removed')).rejects.toMatchObject({
+      _tag: 'AccountStepFailed',
+    });
+  });
+
+  test('removing it forgets it, stops its reads and pushes, and moves the roles on it back to Claude', async () => {
+    const codex = createCodexSource([codexReading(40)]);
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await world.accounts.refresh();
+    const reads = codex.count();
+    world.stub.update((state) => {
+      state.settings = {
+        ...state.settings,
+        agentProviders: { agent: 'codex', reviewer: 'claude' },
+        agentModels: { agent: 'gpt-6' },
+      };
+      state.runs['run-1'] = { attempts: [{ provider: 'codex', account: null }] } as never;
+    });
+    const snapshot = await world.accounts.chooseProvider('codex', 'removed');
+    expect(snapshot.providers).toEqual([]);
+    expect(readChoices(world.root)).toEqual({ codex: 'removed' });
+    expect(world.stub.dispatched.at(-1)).toEqual({
+      type: 'settings.change',
+      patch: { agentProviders: { reviewer: 'claude' } },
+    });
+    await world.accounts.refresh();
+    await world.accounts.onNotice('run-1', {
+      kind: 'rate_limit',
+      status: 'allowed',
+      limit: 'seven_day',
+      resetsAt: 9_000_000,
+      utilization: 0.9,
+    } as never);
+    expect(codex.count()).toBe(reads);
+    expect(world.accounts.snapshot().providers).toEqual([]);
+    expect(await world.accounts.readProviderWeeklyReading('codex', true)).toBeNull();
+    expect(await world.accounts.readFastMode('codex', null)).toBe('unknown');
+  });
+
+  test('removing it again changes no setting, and a default provider on it moves to Claude', async () => {
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [createCodexSource([codexReading(40)]).source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    world.stub.update((state) => {
+      state.settings = { ...state.settings, defaultProvider: 'codex' };
+    });
+    await world.accounts.chooseProvider('codex', 'removed');
+    expect(world.stub.dispatched.at(-1)).toEqual({
+      type: 'settings.change',
+      patch: { defaultProvider: 'claude' },
+    });
+    world.stub.update((state) => {
+      state.settings = { ...state.settings, defaultProvider: 'claude' };
+    });
+    const before = world.stub.dispatched.length;
+    await world.accounts.chooseProvider('codex', 'removed');
+    expect(world.stub.dispatched.length).toBe(before);
+  });
+
+  test('adding it back shows it signed out with its sign-in command, and reads it once signed in', async () => {
+    let logins: ProviderLogin[] = [{ ...CODEX_LOGIN, status: 'signed_out' }];
+    const codex = createCodexSource([codexReading(40)]);
+    const world = await createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve(logins),
+    });
+    await world.accounts.chooseProvider('codex', 'removed');
+    const added = await world.accounts.chooseProvider('codex', 'added');
+    expect(readChoices(world.root)).toEqual({ codex: 'added' });
+    expect(added.providers?.map((login) => login.status)).toEqual(['signed_out']);
+    logins = [CODEX_LOGIN];
+    await world.accounts.refresh();
+    expect(
+      world.accounts.snapshot().providers?.[0]?.usage?.windows.map((window) => window.usedPercent)
+    ).toEqual([10, 40]);
+  });
+
+  test('refuses a provider Shinsa does not run, a choice it does not know, and any change while inspecting', async () => {
+    const world = await createWorld({ registry: true, providerUsage: [createCodexSource([]).source] });
+    await expect(world.accounts.chooseProvider('gemini', 'removed')).rejects.toMatchObject({
+      code: 'provider_invalid',
+    });
+    await expect(world.accounts.chooseProvider(7, 'removed')).rejects.toMatchObject({
+      code: 'provider_invalid',
+    });
+    await expect(world.accounts.chooseProvider('codex', 'gone')).rejects.toMatchObject({
+      code: 'choice_invalid',
+    });
+    const inspecting = await createWorld({
+      registry: true,
+      inspect: true,
+      providerUsage: [createCodexSource([]).source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await inspecting.accounts.syncProviderLogins();
+    await expect(inspecting.accounts.chooseProvider('codex', 'removed')).rejects.toMatchObject({
+      code: 'inspect_read_only',
+    });
+    expect(existsSync(join(inspecting.root, 'config.json'))).toBe(false);
   });
 });

@@ -28,6 +28,7 @@ import { RunSupervisor } from '../../../src/agents/supervisor/service.ts';
 import { DelegationMinute, TeammateTasks } from '../../../src/agents/tool-calls/schema.ts';
 import type { Transcripts } from '../../../src/agents/transcripts/service.ts';
 import { Transcripts as TranscriptsService } from '../../../src/agents/transcripts/service.ts';
+import { BrowserSignInCheck } from '../../../src/browser/check/service.ts';
 import { BrowserProxy } from '../../../src/browser/proxy/service.ts';
 import type { ServerConfig } from '../../../src/config/index.ts';
 import { EngineConfig } from '../../../src/config/service.ts';
@@ -101,6 +102,7 @@ export interface SupervisorOptions {
   services?: unknown;
   trackProcess?: ProcessTracker;
   browser?: Pick<BrowserProxy['Service'], 'issue'>;
+  signInCheck?: BrowserSignInCheck['Service'];
   teamTasks?: () => readonly TeamFeedTask[];
 }
 
@@ -177,9 +179,10 @@ function resolveHooks(options: SupervisorOptions) {
 }
 
 function resolveSurroundings(options: SupervisorOptions) {
-  const { extensions, trackProcess, schedules, manage, services, browser } = options;
+  const { extensions, trackProcess, schedules, manage, services, browser, signInCheck } = options;
   return Layer.mergeAll(
     browser ? Layer.succeed(BrowserProxy, browser as BrowserProxy['Service']) : Layer.empty,
+    signInCheck ? Layer.succeed(BrowserSignInCheck, signInCheck) : Layer.empty,
     extensions ? Layer.succeed(Extensions, extensions as unknown as Extensions['Service']) : Layer.empty,
     trackProcess
       ? Layer.succeed(ProcessLedger, {

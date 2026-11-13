@@ -168,6 +168,34 @@ describe('the forecasts', () => {
   });
 });
 
+describe('a forecast for the agent model', () => {
+  it('counts the agent model’s own weekly window when it leaves less than the all-models one', () => {
+    const account = createAccount({
+      id: 'work',
+      usage: {
+        status: 'ok',
+        windows: [
+          createWindow({ id: 'weekly', kind: 'weekly', usedPercent: 40, resetsAt: NOW + 2 * HOUR_MS }),
+          createWindow({
+            id: 'fable',
+            kind: 'model',
+            model: 'fable',
+            usedPercent: 90,
+            resetsAt: NOW + 2 * HOUR_MS,
+          }),
+        ],
+        detail: null,
+        checkedAt: NOW,
+        source: 'read',
+      },
+    });
+    const snapshot = createSnapshot({ accounts: [account] });
+    const onModel = (agent: string) => ({ ...RUNS, settings: { ...RUNS.settings, agentModels: { agent } } });
+    expect(listProviderForecasts(snapshot, onModel('fable'), NOW)[0]?.forecast.accounts[0]?.left).toBe(10);
+    expect(listProviderForecasts(snapshot, onModel('opus'), NOW)[0]?.forecast.accounts[0]?.left).toBe(60);
+  });
+});
+
 describe('the forecast in words', () => {
   const accounts = [
     { id: 'work', label: 'work@example.com', left: 8, resetsAt: NOW + 15 * HOUR_MS },

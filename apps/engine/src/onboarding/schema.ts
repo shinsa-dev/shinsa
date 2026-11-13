@@ -12,7 +12,7 @@ export type CommandRunner = (
   options?: { timeoutMs?: number }
 ) => Effect.Effect<CommandResult>;
 
-export type PrerequisiteId = 'git' | 'brew' | 'gh' | 'claude' | 'bun' | 'codex';
+export type PrerequisiteId = 'git' | 'brew' | 'gh' | 'claude' | 'bun';
 
 export interface Prerequisite {
   id: PrerequisiteId;

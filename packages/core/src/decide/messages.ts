@@ -292,7 +292,7 @@ function recordMessages(
 }
 
 export function recordHeldMessage(decider: Decider, taskId: string, text: string) {
-  recordMessages(decider, taskId, { texts: [text], comments: [] }, {});
+  recordMessages(decider, taskId, { texts: [text], comments: [] }, { kept: true, sender: 'slack' });
 }
 
 function startNewWork(decider: Decider, task: Task, send: MessageSend, sent: Sent, request: string) {
@@ -331,7 +331,7 @@ function isRepeatedMessage(task: Task, text: string, now: number) {
   );
 }
 
-function isHeldForYou(state: ShinsaState, task: Task) {
+export function isHeldForYou(state: ShinsaState, task: Task) {
   return listOpenGates(state, task.id).some((gate) => gate.type !== 'result');
 }
 
