@@ -90,6 +90,17 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
               weeklyShare: null,
             },
             {
+              id: 'weekly-reset-2612',
+              label: null,
+              left: 1,
+              total: 1,
+              clears: ['seven_day'],
+              usableNow: true,
+              endsAt: now + 27 * 24 * HOUR,
+              givesBackWeekly: false,
+              weeklyShare: null,
+            },
+            {
               id: 'launch-2610-fable-6mo',
               label: 'New model launch: one more Fable reset at 6 months’ tenure',
               left: 1,

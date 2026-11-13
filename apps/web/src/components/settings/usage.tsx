@@ -1,7 +1,9 @@
 import type { AccountUsage, Settings, UsageRate } from '@shinsa/core';
+import { TooltipLabel, useTooltipTrigger } from '@shinsa/ui/components/tooltip';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Fragment } from 'react';
 import { PercentDialog } from '@/components/accounts/percent-dialog.tsx';
 import { ResetTime, UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { UsagePercent } from '@/components/accounts/usage-percent.tsx';
@@ -25,7 +27,9 @@ import {
   describeUsageDetail,
   listUsageNotes,
   listUsageRows,
+  type UsageNotePart,
   type UsageNoteRow,
+  type UsageResetLine,
   type UsageRow,
 } from '@/lib/accounts/usage.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -81,6 +85,41 @@ export function UsageWindows({ account }: { account: { usage: AccountUsage } }) 
   return rows.map((row) => <WindowRow key={row.id} row={row} />);
 }
 
+function ResetLine({ line }: { line: UsageResetLine }) {
+  return (
+    <span className='flex flex-col items-start'>
+      <span>
+        {line.label} <TooltipLabel>{line.value}</TooltipLabel>
+      </span>
+      {line.detail && (
+        <TooltipLabel className={cn(line.ending && TONE_TEXT.amber)}>{line.detail}</TooltipLabel>
+      )}
+    </span>
+  );
+}
+
+function ResetPart({ part }: { part: UsageNotePart }) {
+  return useTooltipTrigger(
+    <span className={cn('cursor-default', part.ending && TONE_TEXT.amber)}>
+      {part.label} {part.count}
+    </span>,
+    {
+      className: 'flex-col items-start gap-1.5',
+      content: part.lines.map((line) => <ResetLine key={line.id} line={line} />),
+    }
+  );
+}
+
+function NoteValue({ row }: { row: UsageNoteRow }) {
+  if (row.parts.length === 0) return row.value;
+  return row.parts.map((part, index) => (
+    <Fragment key={part.id}>
+      {index > 0 && ' · '}
+      <ResetPart part={part} />
+    </Fragment>
+  ));
+}
+
 function NoteRow({ row }: { row: UsageNoteRow }) {
   return (
     <div className={SETTING_ROW}>
@@ -90,7 +129,9 @@ function NoteRow({ row }: { row: UsageNoteRow }) {
           <span className={cn('text-2xs', row.ending ? TONE_TEXT.amber : 'text-fg-2')}>{row.detail}</span>
         )}
       </div>
-      <span className='shrink-0 text-xs text-fg-3 tabular-nums'>{row.value}</span>
+      <span className='shrink-0 text-xs text-fg-3 tabular-nums'>
+        <NoteValue row={row} />
+      </span>
     </div>
   );
 }
