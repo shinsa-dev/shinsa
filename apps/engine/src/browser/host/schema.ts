@@ -13,7 +13,12 @@ export type SignInUrl = typeof SignInUrl.Type;
 export const BrowserMode = Schema.Literals(['stopped', 'headless', 'window']);
 export type BrowserMode = typeof BrowserMode.Type;
 
-const BrowserUnavailableReason = Schema.Literals(['not_installed', 'launch_failed', 'signing_in']);
+const BrowserUnavailableReason = Schema.Literals([
+  'not_installed',
+  'launch_failed',
+  'signing_in',
+  'profile_in_use',
+]);
 
 export class BrowserUnavailable extends Schema.TaggedError<
   BrowserUnavailable,
@@ -74,6 +79,31 @@ export const BrowserHostSettings = Context.Reference<BrowserHostSettings>(
 
 export const ACTIVE_PORT_FILE = 'DevToolsActivePort';
 
+export const SINGLETON_LOCK = 'SingletonLock';
+
+export const SINGLETON_FILES: ReadonlyArray<string> = [SINGLETON_LOCK, 'SingletonCookie', 'SingletonSocket'];
+
+export const SINGLETON_LOCK_TARGET = /^(.+)-(\d+)$/;
+
+export const PROFILE_IN_USE_CODE = 21;
+
+export interface ProfileLock {
+  readonly host: string;
+  readonly pid: number;
+}
+
+export type ProfileHolder =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'stale' }
+  | { readonly kind: 'ours'; readonly pid: number; readonly headless: boolean }
+  | { readonly kind: 'foreign'; readonly pid: number };
+
+export const HOLDER_POLL_SCHEDULE = Schedule.spaced(Duration.millis(50));
+
+export const KILL_GRACE = Duration.seconds(1);
+
+export const HEADLESS_FLAG = '--headless=new';
+
 export const SHARED_ARGS: ReadonlyArray<string> = [
   '--use-mock-keychain',
   '--no-first-run',
@@ -82,7 +112,7 @@ export const SHARED_ARGS: ReadonlyArray<string> = [
 ];
 
 export const HEADLESS_ARGS: ReadonlyArray<string> = [
-  '--headless=new',
+  HEADLESS_FLAG,
   '--remote-debugging-address=127.0.0.1',
   '--remote-debugging-port=0',
   '--force-device-scale-factor=2',
@@ -98,3 +128,6 @@ export const NOT_READY_MESSAGE = 'Chrome did not start in time.';
 
 export const SIGNING_IN_MESSAGE =
   "This project's browser is open for signing in. Try again once the sign-in window is closed.";
+
+export const PROFILE_IN_USE_MESSAGE =
+  "Another program has this project's browser folder open. Quit it and try again.";
