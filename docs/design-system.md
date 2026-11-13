@@ -1705,7 +1705,7 @@ Do: one sentence of what will happen in the description. Don't: put a form in it
 
 #### ProgressRing
 
-A small round gauge for a score out of 100: a 2.5px track in `bg-a2`, the accent arc over it from the top, round at both ends, and the value in its centre.
+A small round gauge for a score out of 100: a 2px track in `bg-a2`, the accent arc over it from the top, round at both ends, and the value in its centre.
 
 **Props:**
 
@@ -1714,7 +1714,7 @@ A small round gauge for a score out of 100: a 2.5px track in `bg-a2`, the accent
 | `value` | required | 0 to 100, drawn clamped. |
 | `label` | required | What it measures; a hidden `<meter>` carries it and the value. |
 | `done` | `false` | The full accent once the value means done; the accent at 60% before. |
-| `className` | | A size class to change its 32px. |
+| `className` | | A size class to change its 26px, the height of a default button or select. |
 
 **In Shinsa** it is the Autopilot score in Settings → Agents → Autopilot, at the end of its row.
 

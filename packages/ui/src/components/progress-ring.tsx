@@ -1,6 +1,6 @@
 import { cn } from '@shinsa/ui/lib/utils';
 
-const RADIUS = 13;
+const RADIUS = 11.75;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 type ProgressRingProps = {
@@ -14,27 +14,27 @@ type ProgressRingProps = {
 };
 
 /**
- * A small round gauge: a 2.5px track in `bg-a2` with the accent arc over it,
+ * A small round gauge: a 2px track in `bg-a2` with the accent arc over it,
  * round at both ends, starting at the top, and the value in its centre. Sized
- * 32px; the caller passes a size class to change it.
+ * 26px, the height of a default button or select; the caller passes a size class to change it.
  */
 function ProgressRing({ value, label, done = false, className }: ProgressRingProps) {
   const shown = Math.max(0, Math.min(100, value));
   return (
     <span
       data-slot='progress-ring'
-      className={cn('relative grid size-8 shrink-0 place-items-center', className)}
+      className={cn('relative grid size-6.5 shrink-0 place-items-center', className)}
     >
       <meter min={0} max={100} value={value} aria-label={label} className='sr-only' />
-      <svg aria-hidden viewBox='0 0 32 32' className='absolute inset-0 size-full -rotate-90'>
-        <circle cx='16' cy='16' r={RADIUS} fill='none' strokeWidth='2.5' className='stroke-bg-a2' />
+      <svg aria-hidden viewBox='0 0 26 26' className='absolute inset-0 size-full -rotate-90'>
+        <circle cx='13' cy='13' r={RADIUS} fill='none' strokeWidth='2' className='stroke-bg-a2' />
         {shown > 0 && (
           <circle
-            cx='16'
-            cy='16'
+            cx='13'
+            cy='13'
             r={RADIUS}
             fill='none'
-            strokeWidth='2.5'
+            strokeWidth='2'
             strokeLinecap='round'
             strokeDasharray={`${(shown / 100) * CIRCUMFERENCE} ${CIRCUMFERENCE}`}
             className={cn(
