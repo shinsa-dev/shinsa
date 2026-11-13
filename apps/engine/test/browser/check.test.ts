@@ -70,7 +70,12 @@ function startChrome(readings: ReadonlyArray<Reading>, options: { refuseTarget?:
 
 function runCheck(
   chrome: FakeChrome | null,
-  options: { unavailable?: BrowserUnavailable['reason']; cap?: Duration.Input; defaults?: boolean } = {}
+  options: {
+    unavailable?: BrowserUnavailable['reason'];
+    cap?: Duration.Input;
+    settle?: Duration.Input;
+    defaults?: boolean;
+  } = {}
 ) {
   const leases = { acquired: 0, released: 0 };
   const host = Layer.succeed(BrowserHost, {
@@ -93,7 +98,7 @@ function runCheck(
   });
   const settings = Layer.succeed(BrowserSignInCheckSettings, {
     poll: '5 millis',
-    settle: '30 millis',
+    settle: options.settle ?? '30 millis',
     cap: options.cap ?? '2 seconds',
   });
   const layer = BrowserSignInCheck.layer.pipe(
@@ -127,7 +132,7 @@ describe('checking a sign-in in the shared browser', () => {
       { ready: 'loading', url: AUTHKIT },
       { ready: 'complete', url: AUTHKIT },
     ]);
-    const { check } = await runCheck(chrome);
+    const { check } = await runCheck(chrome, { settle: '500 millis', cap: '5 seconds' });
     expect(check).toEqual({ kind: 'landed', url: AUTHKIT });
     expect(chrome.methods.at(-1)).toBe('Target.closeTarget');
   });
