@@ -5,12 +5,20 @@ import { Switch } from '@shinsa/ui/components/switch';
 import * as React from 'react';
 import { DemoRoot } from '../frame.tsx';
 
-function Group({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function Group({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className='flex flex-col gap-2'>
       <div className='flex flex-col px-1'>
-        <h3 className='font-medium text-fg-4 text-sm'>{title}</h3>
-        {description && <p className='text-fg-2 text-xs'>{description}</p>}
+        <h3 className='text-sm font-medium text-fg-4'>{title}</h3>
+        {description && <p className='text-xs text-fg-2'>{description}</p>}
       </div>
       <div className='flex flex-col divide-y divide-bg-3 rounded-xl border border-bg-3 bg-background px-3'>
         {children}
@@ -23,8 +31,8 @@ function Row({ title, detail, children }: { title: string; detail?: string; chil
   return (
     <div className='flex min-h-11 items-center gap-4 py-2'>
       <div className='flex min-w-0 flex-1 flex-col'>
-        <span className='text-fg-4 text-sm'>{title}</span>
-        {detail && <span className='text-fg-2 text-xs'>{detail}</span>}
+        <span className='text-sm text-fg-4'>{title}</span>
+        {detail && <span className='text-xs text-fg-2'>{detail}</span>}
       </div>
       {children}
     </div>
@@ -55,12 +63,12 @@ export function KoeSettingsDemo() {
           <span className='size-2.5 rounded-full bg-yellow-4' />
           <span className='size-2.5 rounded-full bg-green-4' />
         </div>
-        <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-hidden px-6 pb-6 mask-b-from-90%'>
+        <div className='flex min-h-0 flex-1 flex-col gap-5 overflow-hidden mask-b-from-90% px-6 pb-6'>
           <div className='flex items-center gap-3'>
             <img src='/koe/koe.svg' alt='' width='44' height='44' className='size-11' />
             <div className='flex flex-col'>
-              <span className='font-medium text-fg-4 text-lg'>Koe</span>
-              <span className='text-fg-2 text-sm'>Talk, point and paste. Everything stays on this Mac.</span>
+              <span className='text-lg font-medium text-fg-4'>Koe</span>
+              <span className='text-sm text-fg-2'>Talk, point and paste. Everything stays on this Mac.</span>
             </div>
           </div>
           <Group title='Dictation' description='Click a shortcut, then press the keys you want.'>
@@ -103,10 +111,16 @@ export function KoeSettingsDemo() {
             </Row>
           </Group>
           <Group title='When you finish'>
-            <Row title='Copy attachments with the text' detail='Screenshots, clips and files paste in after your words.'>
+            <Row
+              title='Copy attachments with the text'
+              detail='Screenshots, clips and files paste in after your words.'
+            >
               <Toggle label='Copy attachments with the text' initial />
             </Row>
-            <Row title='Paste everything with one ⌘V' detail='Your words go in, then Koe pastes the attachments.'>
+            <Row
+              title='Paste everything with one ⌘V'
+              detail='Your words go in, then Koe pastes the attachments.'
+            >
               <Toggle label='Paste everything with one ⌘V' initial />
             </Row>
             <Row title='Paste for you' detail='Presses ⌘V in the app you’re in.'>

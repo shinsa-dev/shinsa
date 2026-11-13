@@ -34,7 +34,7 @@ function Lights() {
 function SettingsPage({ step }: { step: KoeStep }) {
   return (
     <div className='flex min-h-0 flex-1'>
-      <nav className='flex w-36 shrink-0 flex-col gap-0.5 border-bg-3 border-e p-3 text-sm max-sm:hidden'>
+      <nav className='flex w-36 shrink-0 flex-col gap-0.5 border-e border-bg-3 p-3 text-sm max-sm:hidden'>
         {['General', 'Members', 'Billing', 'Integrations'].map((item, index) => (
           <span
             key={item}
@@ -46,16 +46,16 @@ function SettingsPage({ step }: { step: KoeStep }) {
       </nav>
       <div className='flex min-w-0 flex-1 flex-col gap-4 p-6'>
         <div className='flex flex-col gap-0.5'>
-          <span className='font-medium text-fg-4 text-lg'>Workspace</span>
-          <span className='text-fg-2 text-sm'>How your team sees Northwind.</span>
+          <span className='text-lg font-medium text-fg-4'>Workspace</span>
+          <span className='text-sm text-fg-2'>How your team sees Northwind.</span>
         </div>
         <div className='relative max-w-md'>
           <div className='flex flex-col gap-4 rounded-xl border border-bg-3 bg-background p-4'>
-            <div className='flex flex-col gap-1.5 text-fg-3 text-sm'>
+            <div className='flex flex-col gap-1.5 text-sm text-fg-3'>
               Name
               <Input aria-label='Name' value='Northwind Studio' readOnly tabIndex={-1} />
             </div>
-            <div className='flex flex-col gap-1.5 text-fg-3 text-sm'>
+            <div className='flex flex-col gap-1.5 text-sm text-fg-3'>
               Address
               <Input aria-label='Address' value='northwind.app/studio' readOnly tabIndex={-1} />
             </div>
@@ -64,7 +64,7 @@ function SettingsPage({ step }: { step: KoeStep }) {
                 Save
               </Button>
               {step.pin && (
-                <span className='koe-swap absolute -top-2.5 -right-2.5 grid size-5 place-items-center rounded-full bg-primary-4 font-medium text-[11px] text-white shadow-md ring-2 ring-background'>
+                <span className='koe-swap absolute -top-2.5 -right-2.5 grid size-5 place-items-center rounded-full bg-primary-4 text-[11px] font-medium text-white shadow-md ring-2 ring-background'>
                   1
                 </span>
               )}
@@ -101,7 +101,7 @@ function Thumbnail({ pinned }: { pinned: boolean }) {
 function PastedChat() {
   return (
     <div className='koe-swap flex min-h-0 flex-1 flex-col items-center justify-end gap-4 p-6'>
-      <span className='flex items-center gap-2 text-fg-2 text-sm'>
+      <span className='flex items-center gap-2 text-sm text-fg-2'>
         <Icon name='IconBubbleText' />
         What should we work on?
       </span>
@@ -110,7 +110,7 @@ function PastedChat() {
           <Thumbnail pinned={false} />
           <Thumbnail pinned />
         </div>
-        <p className='text-fg-4 text-sm leading-relaxed'>
+        <p className='text-sm leading-relaxed text-fg-4'>
           {KOE_BUNDLE.map((part) =>
             'text' in part ? (
               <span key={part.text}>{part.text} </span>
@@ -123,7 +123,7 @@ function PastedChat() {
             )
           )}
         </p>
-        <div className='flex items-center justify-between text-fg-2 text-xs'>
+        <div className='flex items-center justify-between text-xs text-fg-2'>
           <span>2 images</span>
           <span className='grid size-7 place-items-center rounded-full bg-primary-4 text-white'>
             <Icon name='IconArrowUp' />
@@ -140,7 +140,7 @@ function Caption({ said }: { said: string }) {
       {said && (
         <span
           key={said}
-          className='koe-swap flex items-center gap-2 rounded-full bg-background/80 px-3 py-1 text-fg-3 text-sm shadow-sm ring-1 ring-bg-3 backdrop-blur [--icon-size:14px]'
+          className='koe-swap flex items-center gap-2 rounded-full bg-background/80 px-3 py-1 text-sm text-fg-3 shadow-sm ring-1 ring-bg-3 backdrop-blur [--icon-size:14px]'
         >
           <span className='text-primary-4'>
             <Icon name='IconMicrophone' />
@@ -178,9 +178,9 @@ export function KoeHeroDemo() {
       >
         <Caption said={step.said} />
         <div className='relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-background shadow-xl ring-1 ring-bg-4/70 dark:ring-bg-3'>
-          <div className='relative flex h-9 shrink-0 items-center border-bg-3 border-b px-3'>
+          <div className='relative flex h-9 shrink-0 items-center border-b border-bg-3 px-3'>
             <Lights />
-            <span className='absolute inset-x-0 text-center font-medium text-fg-3 text-xs'>
+            <span className='absolute inset-x-0 text-center text-xs font-medium text-fg-3'>
               {step.pasted ? 'Agent' : 'Northwind'}
             </span>
           </div>
@@ -192,7 +192,7 @@ export function KoeHeroDemo() {
             <KoePillView pill={step.pill} className='shadow-2xl' />
           ) : (
             !step.pasted && (
-              <span className='koe-swap flex items-center gap-2 rounded-full bg-background px-3 py-1.5 text-fg-2 text-sm shadow-md ring-1 ring-bg-3'>
+              <span className='koe-swap flex items-center gap-2 rounded-full bg-background px-3 py-1.5 text-sm text-fg-2 shadow-md ring-1 ring-bg-3'>
                 Hold <Kbd>fn</Kbd> and talk
               </span>
             )

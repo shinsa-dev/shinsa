@@ -52,7 +52,7 @@ function SessionControls({ clock, attached }: { clock: string; attached: number 
         {attached > 0 && (
           <span
             key={attached}
-            className='koe-swap flex h-6 items-center gap-1 rounded-full bg-bg-a2 px-2 text-fg-4 text-xs tabular-nums [--icon-size:12px]'
+            className='koe-swap flex h-6 items-center gap-1 rounded-full bg-bg-a2 px-2 text-xs text-fg-4 tabular-nums [--icon-size:12px]'
           >
             <Icon name='IconPaperclip1' />
             {attached}
@@ -61,7 +61,7 @@ function SessionControls({ clock, attached }: { clock: string; attached: number 
       </span>
       <span className='h-4 w-px shrink-0 bg-fg-a2' />
       <Waveform />
-      <span className='w-7 shrink-0 text-fg-4 text-xs tabular-nums'>{clock}</span>
+      <span className='w-7 shrink-0 text-xs text-fg-4 tabular-nums'>{clock}</span>
       <span className='flex items-center gap-1'>
         <PillButton icon='IconCrossSmall' tone='destructive' label='Discard' />
         <PillButton icon='IconPause' tone='neutral' label='Pause' />
@@ -76,8 +76,8 @@ function PromptControls({ pill }: { pill: Extract<KoePill, { kind: 'prompt' }> }
     <>
       <Waveform bars={9} />
       <span className='flex w-60 min-w-0 flex-col'>
-        <span className='truncate font-medium text-fg-4 text-[13px] leading-4'>{pill.title}</span>
-        <span className='truncate text-fg-2 text-[11px] leading-4'>{pill.detail}</span>
+        <span className='truncate text-[13px] leading-4 font-medium text-fg-4'>{pill.title}</span>
+        <span className='truncate text-[11px] leading-4 text-fg-2'>{pill.detail}</span>
       </span>
       <span className='flex items-center gap-1'>
         <PillButton icon='IconCrossSmall' tone='destructive' label='Cancel' />
@@ -99,8 +99,8 @@ function NoticeControls({ pill }: { pill: Extract<KoePill, { kind: 'notice' }> }
         <Icon name='IconCheckmark1' />
       </span>
       <span className='flex flex-col pe-2'>
-        <span className='font-medium text-fg-4 text-[13px] leading-4'>{pill.title}</span>
-        <span className='text-fg-2 text-[11px] leading-4'>{pill.detail}</span>
+        <span className='text-[13px] leading-4 font-medium text-fg-4'>{pill.title}</span>
+        <span className='text-[11px] leading-4 text-fg-2'>{pill.detail}</span>
       </span>
     </>
   );

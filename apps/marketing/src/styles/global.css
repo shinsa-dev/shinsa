@@ -199,8 +199,7 @@ body {
 .koe-desktop {
   background:
     radial-gradient(60% 70% at 15% 10%, var(--color-primary-a2), transparent 70%),
-    radial-gradient(50% 60% at 90% 100%, var(--color-purple-a2), transparent 70%),
-    var(--color-sidebar);
+    radial-gradient(50% 60% at 90% 100%, var(--color-purple-a2), transparent 70%), var(--color-sidebar);
 }
 
 .koe-swap {
