@@ -6,9 +6,11 @@ import { selectJudgedGateKind } from '../autopilot/prompt.ts';
 import {
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LIMITS,
+  AUTOPILOT_SCORED_KINDS,
   type AutopilotFacts,
   type AutopilotGateKind,
   type AutopilotLimit,
+  type AutopilotVerdict,
 } from '../autopilot/schema.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -139,15 +141,30 @@ interface Refusal {
 
 function forward(decider: Decider, gateId: string, { reason, teaches }: Refusal) {
   const gate = decider.state.gates[gateId];
-  if (!gate || (gate.autopilotHeld === reason && gate.autopilotJudging !== true)) return;
+  if (!gate || (gate.autopilotHeld === reason && gate.autopilotJudging !== true)) return false;
   decider.emit({ type: 'autopilot.forwarded', gateId, reason, teaches });
+  return true;
 }
 
 function requestJudgment(decider: Decider, gateId: string) {
   const gate = decider.state.gates[gateId];
   if (!gate || gate.autopilotJudging === true) return;
   decider.emit({ type: 'autopilot.judging', gateId });
-  decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId });
+  decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId, shadow: false });
+}
+
+function isScoredGate(kind: AutopilotGateKind) {
+  return (AUTOPILOT_SCORED_KINDS as readonly string[]).includes(kind);
+}
+
+function requestShadowJudgment(decider: Decider, gate: Gate, kind: AutopilotGateKind) {
+  if (!isScoredGate(kind) || gate.autopilotGuess !== undefined) return;
+  decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId: gate.id, shadow: true });
+}
+
+function recordGuess(decider: Decider, gate: Gate, kind: AutopilotGateKind, verdict: AutopilotVerdict) {
+  if (!isScoredGate(kind) || gate.autopilotGuess !== undefined) return;
+  decider.emit({ type: 'autopilot.guessed', gateId: gate.id, verdict });
 }
 
 function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): Refusal | null {
@@ -173,8 +190,12 @@ export function askAutopilot(decider: Decider, gate: Gate) {
   const kind = Option.getOrNull(selectJudgedGateKind(gate));
   if (!kind) return;
   const refusal = resolveRefusal(decider, gate, kind);
-  if (refusal !== null) forward(decider, gate.id, refusal);
-  else requestJudgment(decider, gate.id);
+  if (refusal === null) {
+    requestJudgment(decider, gate.id);
+    return;
+  }
+  const firstTime = gate.autopilotHeld === undefined;
+  if (forward(decider, gate.id, refusal) && firstTime) requestShadowJudgment(decider, gate, kind);
 }
 
 const NOT_SURE = 'Autopilot was not sure what to answer, so the question waits for you.';
@@ -185,7 +206,7 @@ function selectJudgedGate(decider: Decider, command: CommandOf<'autopilot.judgme
   const gate = decider.state.gates[command.gateId];
   const task = decider.state.tasks[command.taskId];
   if (!gate || !task || gate.taskId !== task.id || gate.status !== 'open') return null;
-  if (gate.autopilotJudging !== true || isTaskClosed(task)) return null;
+  if (command.shadow === (gate.autopilotJudging === true) || isTaskClosed(task)) return null;
   const kind = Option.getOrNull(selectJudgedGateKind(gate));
   return kind ? { gate, kind } : null;
 }
@@ -198,15 +219,21 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
   const found = selectJudgedGate(decider, command);
   if (!found) return;
   const { gate, kind } = found;
+  if (command.shadow) {
+    recordGuess(decider, gate, kind, command.verdict);
+    return;
+  }
   const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason);
   const refusal = resolveAutopilotPolicy(decider.state.settings).enabled
     ? resolveRefusal(decider, gate, kind)
     : { reason: 'Autopilot is off.', teaches: false };
   if (refusal !== null) {
     forward(decider, gate.id, refusal);
+    recordGuess(decider, gate, kind, command.verdict);
     return;
   }
   if (command.verdict === 'forward') {
+    recordGuess(decider, gate, kind, 'forward');
     forward(decider, gate.id, { reason: reason || 'Autopilot judged this needs you.', teaches: true });
     return;
   }

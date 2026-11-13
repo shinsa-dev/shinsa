@@ -58,7 +58,15 @@ function judgedGate(harness: Harness, taskId: string) {
 function judge(harness: Harness, taskId: string, reason: string, verdict: 'act' | 'forward' = 'act') {
   const gate = judgedGate(harness, taskId);
   if (!gate) throw new Error('No gate waits for Autopilot.');
-  harness.send({ type: 'autopilot.judgment', taskId, gateId: gate.id, verdict, reason, reply: null });
+  harness.send({
+    type: 'autopilot.judgment',
+    taskId,
+    gateId: gate.id,
+    verdict,
+    reason,
+    reply: null,
+    shadow: false,
+  });
 }
 
 function reachMergeAfterAutopilot(harness: Harness) {

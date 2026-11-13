@@ -75,16 +75,24 @@ export class EffectHandlers extends Context.Service<
         attempt: EffectAttempt
       ) {
         const now = yield* Clock.currentTimeMillis;
-        const selected = selectAutopilotJudgeRequest(yield* world.state, effect.gateId, now);
+        const selected = selectAutopilotJudgeRequest(yield* world.state, effect.gateId, now, effect.shadow);
         if (Option.isNone(selected)) return;
         const request = selected.value;
-        const judgment = (yield* world.judgeAutopilot(request.system, request.prompt)) ?? {
+        const answer = yield* world.judgeAutopilot(request.system, request.prompt);
+        if (!answer && effect.shadow) return;
+        const judgment = answer ?? {
           verdict: 'forward' as const,
           reason: 'Autopilot could not reach a model, so this waits for you.',
           reply: null,
         };
         yield* world.dispatch(
-          { type: 'autopilot.judgment', taskId: effect.taskId, gateId: effect.gateId, ...judgment },
+          {
+            type: 'autopilot.judgment',
+            taskId: effect.taskId,
+            gateId: effect.gateId,
+            shadow: effect.shadow,
+            ...judgment,
+          },
           { id: `${attempt.key}:autopilot.judgment` }
         );
       });

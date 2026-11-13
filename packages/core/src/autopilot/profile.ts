@@ -7,11 +7,13 @@ import { isUrgentTask } from './limits.ts';
 import {
   AUTOPILOT_DECISION_ANSWERS,
   AUTOPILOT_PROFILE_LIMITS,
+  AUTOPILOT_SCORED_KINDS,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
   type AutopilotDecisionKind,
   type AutopilotGateKind,
   type AutopilotProfile,
+  type AutopilotScoredKind,
   type AutopilotTally,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
@@ -83,6 +85,14 @@ function resolveDecisionScope(task: Task): AutopilotDecision['scope'] {
   return document ? { phases: document.phases.length, files: document.files.length } : null;
 }
 
+function isScoredKind(kind: AutopilotDecisionKind): kind is AutopilotScoredKind {
+  return (AUTOPILOT_SCORED_KINDS as readonly AutopilotDecisionKind[]).includes(kind);
+}
+
+function resolveDecisionGuess(draft: DecisionDraft) {
+  return isScoredKind(draft.kind) ? (draft.gate?.autopilotGuess ?? null) : null;
+}
+
 export function createAutopilotDecision(draft: DecisionDraft, at: number): AutopilotDecision {
   const { task, gate } = draft;
   return {
@@ -97,6 +107,7 @@ export function createAutopilotDecision(draft: DecisionDraft, at: number): Autop
     urgent: isUrgentTask(task),
     watchdog: task.createdBy?.kind === 'watchdog',
     touched: gate?.autopilotHeld !== undefined,
+    guess: resolveDecisionGuess(draft),
     note: clipNote(draft.note),
   };
 }

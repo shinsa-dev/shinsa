@@ -48,6 +48,7 @@ function decision(overrides: Partial<AutopilotDecision>): AutopilotDecision {
     urgent: false,
     watchdog: false,
     touched: false,
+    guess: null,
     note: null,
     ...overrides,
   };

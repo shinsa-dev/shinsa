@@ -14,4 +14,5 @@ export type AutopilotSystemCommand =
       verdict: AutopilotVerdict;
       reason: string;
       reply: string | null;
+      shadow: boolean;
     };

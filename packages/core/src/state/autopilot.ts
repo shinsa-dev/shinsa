@@ -12,6 +12,10 @@ export function applyAutopilotJudging(state: ShinsaState, event: EventOf<'autopi
   updateGate(state, event.gateId, { autopilotJudging: true });
 }
 
+export function applyAutopilotGuessed(state: ShinsaState, event: EventOf<'autopilot.guessed'>) {
+  updateGate(state, event.gateId, { autopilotGuess: event.verdict });
+}
+
 export function applyAutopilotForwarded(state: ShinsaState, event: EventOf<'autopilot.forwarded'>) {
   const gate = state.gates[event.gateId];
   if (!gate) return;

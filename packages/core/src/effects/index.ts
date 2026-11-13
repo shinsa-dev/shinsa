@@ -49,7 +49,7 @@ export type ShinsaEffect =
       contact: AutopilotContact;
       part: SlackEscalationPart;
     }
-  | { kind: 'autopilot.judge'; taskId: string; gateId: string }
+  | { kind: 'autopilot.judge'; taskId: string; gateId: string; shadow: boolean }
   | { kind: 'feedback.draft'; feedbackId: string }
   | { kind: 'feedback.file'; feedbackId: string };
 

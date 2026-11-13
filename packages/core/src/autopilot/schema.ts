@@ -168,6 +168,7 @@ export interface AutopilotDecision {
   urgent: boolean;
   watchdog: boolean;
   touched: boolean;
+  guess: AutopilotVerdict | null;
   note: string | null;
 }
 
@@ -195,3 +196,26 @@ export const AUTOPILOT_PROFILE_LIMITS = {
 } as const;
 
 export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = { total: 0, decisions: [], tallies: [] };
+
+export const AUTOPILOT_SCORED_KINDS = [
+  'plan',
+  'review',
+  'merge',
+] as const satisfies readonly AutopilotDecisionKind[];
+
+export type AutopilotScoredKind = (typeof AUTOPILOT_SCORED_KINDS)[number];
+
+export interface AutopilotScore {
+  learned: number;
+  scored: number;
+  agreed: number;
+  agreement: number | null;
+  ready: boolean;
+  suggested: AutopilotLevel;
+}
+
+export const AUTOPILOT_SCORE_LIMITS = {
+  window: 100,
+  minScored: 50,
+  agreement: 0.9,
+} as const;

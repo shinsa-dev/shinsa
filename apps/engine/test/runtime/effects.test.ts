@@ -574,7 +574,10 @@ describe('judging a gate for Autopilot', () => {
         }),
     });
     const context = createContext();
-    await runner.apply({ kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan' }, context);
+    await runner.apply(
+      { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan', shadow: false },
+      context
+    );
     expect(asked[0]).toStartWith('Decision: Approve the plan');
     expect(dispatched).toEqual([
       {
@@ -584,6 +587,7 @@ describe('judging a gate for Autopilot', () => {
         verdict: 'act',
         reason: 'Small and clear.',
         reply: null,
+        shadow: false,
       },
     ]);
     expect(commandIds).toEqual([`${context.key}:autopilot.judgment`]);
@@ -592,7 +596,7 @@ describe('judging a gate for Autopilot', () => {
   test('brings the gate to you when no model answers, and does nothing for a gate it no longer judges', async () => {
     const silent = setup(withJudgingGate());
     await silent.runner.apply(
-      { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan' },
+      { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan', shadow: false },
       createContext()
     );
     expect(silent.dispatched).toEqual([
@@ -605,8 +609,26 @@ describe('judging a gate for Autopilot', () => {
     const done = setup(withJudgingGate({ status: 'answered' }), {
       judgeAutopilot: () => Effect.succeed({ verdict: 'act', reason: 'x', reply: null }),
     });
-    await done.runner.apply({ kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan' }, createContext());
+    await done.runner.apply(
+      { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan', shadow: false },
+      createContext()
+    );
     expect(done.dispatched).toEqual([]);
+  });
+
+  test('records a guess for a gate brought to you, and nothing when no model answers it', async () => {
+    const SHADOW = { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan', shadow: true } as const;
+    const held = { autopilotJudging: false, autopilotHeld: 'Above its limits.' };
+    const guessed = setup(withJudgingGate(held), {
+      judgeAutopilot: () => Effect.succeed({ verdict: 'forward', reason: 'Too big.', reply: null }),
+    });
+    await guessed.runner.apply(SHADOW, createContext());
+    expect(guessed.dispatched).toEqual([
+      expect.objectContaining({ type: 'autopilot.judgment', verdict: 'forward', shadow: true }),
+    ]);
+    const silent = setup(withJudgingGate(held));
+    await silent.runner.apply(SHADOW, createContext());
+    expect(silent.dispatched).toEqual([]);
   });
 });
 

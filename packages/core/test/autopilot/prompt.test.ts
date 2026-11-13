@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   AUTOPILOT_JUDGE_SYSTEM,
+  AUTOPILOT_SHADOW_NOTE,
   AUTOPILOT_JUDGMENT_LIMITS,
   type AutopilotFacts,
   type Gate,
@@ -159,6 +160,25 @@ describe('the judge request', () => {
     expect(Option.isNone(selectJudgedGateKind({ ...gate, type: 'secret' }))).toBe(true);
   });
 
+  test('is made for a guess only on a gate brought to you that has none yet, and says it is a guess', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true, gates: ['reviews'] } } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const gate = harness.openGate(taskId);
+    const guess = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now, true));
+    expect(guess?.prompt).toEndWith(AUTOPILOT_SHADOW_NOTE);
+    expect(Option.isNone(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now))).toBe(true);
+    const guessed = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotGuess: 'act' as const } } };
+    expect(Option.isNone(selectAutopilotJudgeRequest(guessed, gate.id, harness.now, true))).toBe(true);
+    const judging = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotJudging: true } } };
+    expect(Option.isNone(selectAutopilotJudgeRequest(judging, gate.id, harness.now, true))).toBe(true);
+    expect(
+      Option.getOrNull(selectAutopilotJudgeRequest(judging, gate.id, harness.now))?.prompt
+    ).not.toContain(AUTOPILOT_SHADOW_NOTE);
+  });
+
   test('carries the summary of every plan you decided', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
@@ -179,6 +199,7 @@ describe('the judge request', () => {
         urgent: false,
         watchdog: false,
         touched: false,
+        guess: null,
         note: 'Keep it smaller',
       },
     ]);

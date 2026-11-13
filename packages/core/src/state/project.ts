@@ -65,6 +65,7 @@ import {
 } from './activity.ts';
 import {
   applyAutopilotForwarded,
+  applyAutopilotGuessed,
   applyAutopilotDecided,
   applyAutopilotLearned,
   applyAutopilotSeen,
@@ -1060,6 +1061,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'autopilot.judging':
       applyAutopilotJudging(state, event);
+      break;
+    case 'autopilot.guessed':
+      applyAutopilotGuessed(state, event);
       break;
     case 'autopilot.forwarded':
       applyAutopilotForwarded(state, event);

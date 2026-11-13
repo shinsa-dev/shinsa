@@ -75,12 +75,21 @@ function describeProfile(profile: readonly string[]) {
   return ['', 'How the developer decides points like this one, with or without you:', ...profile];
 }
 
+function describeShadow(shadow: boolean) {
+  if (!shadow) return [];
+  return ['', AUTOPILOT_SHADOW_NOTE];
+}
+
+export const AUTOPILOT_SHADOW_NOTE =
+  'Autopilot will not act here: this point is the developer’s. Guess what they will do: `act` if they approve it as it is, `forward` if they change or reject it.';
+
 export function resolveAutopilotJudgePrompt(
   task: Task,
   gate: Gate,
   facts: AutopilotFacts,
   lessons: readonly string[] = [],
-  profile: readonly string[] = []
+  profile: readonly string[] = [],
+  shadow = false
 ) {
   const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
   return [
@@ -97,6 +106,7 @@ export function resolveAutopilotJudgePrompt(
     ...describeChoices(gate),
     ...describeLessons(lessons),
     ...describeProfile(profile),
+    ...describeShadow(shadow),
   ]
     .filter((line, index, lines) => line !== '' || lines[index - 1] !== '')
     .join('\n');
@@ -113,10 +123,15 @@ export function selectJudgedGateKind(gate: Gate): Option.Option<AutopilotGateKin
   return Option.fromNullishOr(JUDGED_GATES[gate.type]);
 }
 
-export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, now: number) {
+function isAwaitingJudgment(gate: Gate, shadow: boolean) {
+  if (shadow) return gate.autopilotJudging !== true && gate.autopilotGuess === undefined;
+  return gate.autopilotJudging === true;
+}
+
+export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, now: number, shadow = false) {
   const gate = state.gates[gateId];
   const task = gate ? state.tasks[gate.taskId] : undefined;
-  if (!gate || !task || gate.status !== 'open' || gate.autopilotJudging !== true) return Option.none();
+  if (!gate || !task || gate.status !== 'open' || !isAwaitingJudgment(gate, shadow)) return Option.none();
   return Option.map(selectJudgedGateKind(gate), (kind) => {
     const facts = resolveAutopilotFacts(state, task, kind, gate.openedAt, now);
     const lessons = listAutopilotLessonLines(state, kind);
@@ -126,7 +141,7 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
     });
     return {
       system: AUTOPILOT_JUDGE_SYSTEM,
-      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, profile),
+      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, profile, shadow),
     };
   });
 }

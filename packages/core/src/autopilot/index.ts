@@ -11,6 +11,7 @@ export {
   listAutopilotTallies,
   recordAutopilotDecisions,
 } from './profile.ts';
+export { isAutopilotAgreement, resolveAutopilotScore } from './score.ts';
 export {
   isUrgentTask,
   resolveAutopilotFacts,
@@ -23,6 +24,10 @@ export {
   AUTOPILOT_DECISION_KINDS,
   AUTOPILOT_PROFILE_LIMITS,
   EMPTY_AUTOPILOT_PROFILE,
+  AUTOPILOT_SCORE_LIMITS,
+  AUTOPILOT_SCORED_KINDS,
+  type AutopilotScore,
+  type AutopilotScoredKind,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
   type AutopilotDecisionKind,
@@ -54,6 +59,7 @@ export {
 } from './schema.ts';
 export {
   AUTOPILOT_JUDGE_SYSTEM,
+  AUTOPILOT_SHADOW_NOTE,
   resolveAutopilotJudgePrompt,
   selectAutopilotJudgeRequest,
   selectJudgedGateKind,
