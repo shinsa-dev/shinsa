@@ -129,6 +129,33 @@ describe('a task described for an agent', () => {
     expect(detail).toContain('CI on the pull request:\n- ci / test (action required)');
   });
 
+  test('marks a CI check that fails on the base branch too', () => {
+    const harness = createHarness();
+    const shipped = createTask(harness);
+    reachShipping(harness, shipped);
+    const inherited = {
+      name: 'deploy',
+      status: 'failure' as const,
+      required: true,
+      url: null,
+      failsOnBase: true,
+    };
+    harness.send({
+      type: 'pull_request.record',
+      taskId: shipped,
+      pullRequest: pullRequest({ base: 'main', checks: 'failing', checkRuns: [inherited] }),
+    });
+    expect(serializeTaskDetail(harness.state, shipped)).toContain('- deploy (failure, fails on main too)');
+    harness.send({
+      type: 'pull_request.record',
+      taskId: shipped,
+      pullRequest: pullRequest({ checks: 'failing', checkRuns: [inherited], updatedAt: 1 }),
+    });
+    expect(serializeTaskDetail(harness.state, shipped)).toContain(
+      '- deploy (failure, fails on the base branch too)'
+    );
+  });
+
   test('names the repository, branch and pull request, and what the task waits on', () => {
     const harness = createHarness();
     const blocker = createTask(harness, { request: 'First' });

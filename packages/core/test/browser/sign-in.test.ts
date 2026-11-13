@@ -123,8 +123,8 @@ describe('the reply the waiting agent gets', () => {
     for (const [reason, words] of [
       ['not_installed', 'Google Chrome is not installed'],
       ['launch_failed', 'the shared browser did not start'],
+      ['profile_in_use', 'another program is using the shared browser’s profile'],
       ['signing_in', 'the sign-in window was still open'],
-      ['profile_in_use', 'another program was using the shared browser profile'],
       ['failed', 'the shared browser did not answer'],
     ] as const) {
       expect(resolveBrowserSignInReply(approved, { kind: 'unchecked', reason })).toContain(

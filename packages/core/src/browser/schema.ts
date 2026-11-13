@@ -22,8 +22,8 @@ export const BrowserSignInInput = HandOverRecord({
 const SIGN_IN_CHECK_FAILURES = [
   'not_installed',
   'launch_failed',
-  'signing_in',
   'profile_in_use',
+  'signing_in',
   'timeout',
   'failed',
 ] as const;

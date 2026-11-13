@@ -80,6 +80,17 @@ export function countFixRepeats(task: Task, reason: FixReason, signature: string
   ).length;
 }
 
+export function isUnchangedFix(task: Task, reason: FixReason, signature: string | null) {
+  const last = (task.fixFingerprints ?? []).at(-1);
+  return (
+    last !== undefined &&
+    last.reason === reason &&
+    signature !== null &&
+    last.signature === signature &&
+    isSameTree(last, task.treeHash ?? null)
+  );
+}
+
 export function countUnchangedRounds(task: Task, reason: FixReason) {
   const tree = task.treeHash ?? null;
   return (task.fixFingerprints ?? []).filter(

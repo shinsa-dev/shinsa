@@ -10,6 +10,7 @@ import {
   resolveCurrentRound,
   type Task,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { resolveCommitType, serializeConventionalSubject } from '../../git/conventional.ts';
 import {
   CHECK_STATUS,
@@ -53,13 +54,36 @@ export function resolveCheckRuns(nodes: readonly ContextNode[]): CiRun[] {
   }));
 }
 
+const FAILED_RUN: ReadonlySet<PullRequestCheckStatus> = new Set(['failure', 'cancelled', 'action_required']);
+
+function isFailedRun(check: CiRun) {
+  return FAILED_RUN.has(check.status);
+}
+
 export function resolveCheckRunsState(checks: readonly CiRun[]): CiState {
   if (checks.length === 0) return 'none';
-  if (checks.some((check) => ['failure', 'cancelled', 'action_required'].includes(check.status)))
-    return 'failing';
+  if (checks.some(isFailedRun)) return 'failing';
   const required = checks.filter((check) => check.required === true);
   const gate = required.length > 0 ? required : checks;
   return gate.some((check) => check.status === 'pending') ? 'pending' : 'passing';
+}
+
+function selectBaseOutcome(history: readonly (readonly CiRun[])[], name: string): Option.Option<boolean> {
+  for (const runs of history) {
+    const named = runs.filter((run) => run.name === name);
+    if (named.some(isFailedRun)) return Option.some(true);
+    if (named.some((run) => run.status !== 'pending')) return Option.some(false);
+  }
+  return Option.none();
+}
+
+function markFailsOnBase(checks: readonly CiRun[], base: readonly (readonly ContextNode[])[]): CiRun[] {
+  const history = base.map(resolveCheckRuns);
+  return checks.map((check) =>
+    isFailedRun(check) && Option.getOrElse(selectBaseOutcome(history, check.name), () => false)
+      ? { ...check, failsOnBase: true }
+      : check
+  );
 }
 
 function isBot(author: Login | null) {
@@ -152,7 +176,10 @@ export function serializePullRequest(
   );
   const unresolved = threads.length;
   const contexts = pull?.commits.nodes.at(-1)?.commit.statusCheckRollup?.contexts.nodes ?? null;
-  const checkRuns = contexts ? resolveCheckRuns(contexts) : null;
+  const base = (pull?.baseRef?.target?.history?.nodes ?? []).map(
+    (node) => node.statusCheckRollup?.contexts.nodes ?? []
+  );
+  const checkRuns = contexts ? markFailsOnBase(resolveCheckRuns(contexts), base) : null;
   return {
     number: view.number,
     url: view.url,
