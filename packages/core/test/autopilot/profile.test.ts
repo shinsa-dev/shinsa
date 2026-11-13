@@ -33,7 +33,7 @@ function reachReview(harness: Harness, findings: ReviewFinding[] = []) {
 }
 
 function decisions(harness: Harness) {
-  return harness.state.autopilotProfile.decisions.filter((decision) => decision.kind !== 'request');
+  return harness.state.autopilotProfile.decisions.filter((entry) => entry.kind !== 'request');
 }
 
 function decision(overrides: Partial<AutopilotDecision>): AutopilotDecision {
