@@ -82,6 +82,13 @@ export class Downloads extends Context.Service<
               onSome: (pointer) => streamPointer(request, product, pointer),
             })
           ),
+          Effect.tapError((error) =>
+            Effect.annotateLogs(Effect.logError('Download read from R2 failed'), {
+              product: product.name,
+              channel,
+              error,
+            })
+          ),
           Effect.orElseSucceed(() => Option.none<Response>())
         );
 

@@ -256,7 +256,8 @@ pointer (`docs/release.md` → Downloads).
   with Koe's `Product`: the pointer under `koe/channels/`, `Content-Disposition: attachment; filename="Koe-<version>.dmg"`,
   the same headers, ranges and validators, and the same stable-falls-back-to-beta rule. Koe's repository is private, so
   there is no GitHub fallback: whenever R2 cannot serve, the answer is a `302` to `/koe#soon` with
-  `Cache-Control: no-store`, and the page shows its coming-soon note. `/koe/appcast/<channel>.xml` serves
+  `Cache-Control: no-store`, and the page shows its coming-soon note. An R2 error on that path logs
+  `Download read from R2 failed` first, so an outage is never mistaken for a missing release. `/koe/appcast/<channel>.xml` serves
   `koe/appcast/<channel>.xml` as `application/xml` with `max-age=60`, and `/koe/releases/<version>/Koe.dmg` the
   immutable disk image the appcast's enclosure points at, both through `Updates`; any other path under them answers 404.
 - **Workers limits that apply.** A streamed response has no size limit, an R2 body costs no CPU time per byte, and an

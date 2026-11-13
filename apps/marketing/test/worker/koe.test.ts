@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
   resolveChannel,
   resolveChannelKey,
@@ -219,6 +219,21 @@ describe('respond to a Koe download', () => {
       createWorld(createBucket(pointerOnly).bucket).world
     );
     expect(missing.headers.get('Location')).toBe('/koe#soon');
+  });
+
+  it('logs an error when the bucket fails, so an outage is not read as no release yet', async () => {
+    const errors = spyOn(console, 'error').mockImplementation(() => undefined);
+    const failing: BucketBinding = {
+      head: () => Promise.reject(new Error('R2 down')),
+      get: () => Promise.reject(new Error('R2 down')),
+    };
+    const response = await respond(createRequest('/koe/download/beta'), createWorld(failing).world);
+    expect(response.headers.get('Location')).toBe('/koe#soon');
+    expect(errors).toHaveBeenCalledWith(
+      expect.stringContaining('Download read from R2 failed'),
+      expect.objectContaining({ product: 'koe', channel: 'beta' })
+    );
+    errors.mockRestore();
   });
 
   it("keeps Shinsa's /download apart from Koe's files", async () => {
