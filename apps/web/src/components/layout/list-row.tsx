@@ -13,6 +13,11 @@ export const LIST_ROW_TITLE = 'text-fg-4 text-xs';
 
 export const LIST_ROW_META = 'text-2xs text-fg-2';
 
+const LIST_ROW_SIZE = {
+  md: { line: LIST_ROW_LINE, title: LIST_ROW_TITLE },
+  sm: { line: 'h-6 items-center', title: 'text-2xs font-medium text-fg-3' },
+};
+
 export function ListRow({
   leading,
   title,
@@ -23,6 +28,7 @@ export function ListRow({
   active = false,
   revealWhenActive = false,
   holdsLinks = false,
+  size = 'md',
   onClick,
 }: {
   leading?: React.ReactNode;
@@ -34,6 +40,7 @@ export function ListRow({
   active?: boolean;
   revealWhenActive?: boolean;
   holdsLinks?: boolean;
+  size?: keyof typeof LIST_ROW_SIZE;
   onClick: () => void;
 }) {
   const ref = React.useRef<HTMLButtonElement & HTMLDivElement>(null);
@@ -46,7 +53,11 @@ export function ListRow({
     'aria-current': active || undefined,
     'data-active': active,
     'data-highlight-item': '',
-    className: cn(LIST_ROW, meta || summary ? LIST_ROW_LINES : LIST_ROW_LINE, leading ? 'px-1.5' : 'px-2.5'),
+    className: cn(
+      LIST_ROW,
+      meta || summary ? LIST_ROW_LINES : LIST_ROW_SIZE[size].line,
+      leading ? 'px-1.5' : 'px-2.5'
+    ),
   };
   const content = (
     <>
@@ -54,11 +65,11 @@ export function ListRow({
       <span className='flex min-w-0 flex-1 flex-col'>
         {mark ? (
           <span className='flex min-w-0 items-center gap-1.5'>
-            <Truncate className={cn(LIST_ROW_TITLE, 'min-w-0')}>{title}</Truncate>
+            <Truncate className={cn(LIST_ROW_SIZE[size].title, 'min-w-0')}>{title}</Truncate>
             {mark}
           </span>
         ) : (
-          <Truncate className={cn(LIST_ROW_TITLE, 'contain-inline-size')}>{title}</Truncate>
+          <Truncate className={cn(LIST_ROW_SIZE[size].title, 'contain-inline-size')}>{title}</Truncate>
         )}
         {meta && <Truncate className={LIST_ROW_META}>{meta}</Truncate>}
         {summary && <span className={cn(LIST_ROW_META, 'flex h-4 min-w-0 items-center')}>{summary}</span>}

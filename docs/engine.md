@@ -1482,7 +1482,10 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   In progress lists only the tasks of a bundle still being worked on, several at once when they run side by side; a
   ready task, the lead included, moves to Waiting on another task while any other task of its bundle is not ready,
   and a ready follower stays there on the lead once all are (`listBundleBlockers`, `resolveQueue`), its row naming
-  what it waits on, "Waits on ‹A›". The tree indents every level up to six
+  what it waits on, "Waits on ‹A›". Two or more tasks of one bundle in the same section of Home or the queue (In
+  progress, Waiting, Snoozed; never Needs you) sit under one thin header named after the first of them in bundle order,
+  with how many of the bundle's tasks are ready; it opens the latest of them still being worked on; a single one stays a plain row
+  (`listSectionEntries`, `lib/queue.ts`). The tree indents every level up to six
   (`resolveDepthIndent`, the task list, the popover and the pickers alike), so a long line never reads as tasks side
   by side; a row deeper than that sits at the sixth level with its depth beside the arrow, "‹n› steps down the chain"
   on hover (`DepthMark`). A ready
@@ -1531,7 +1534,11 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   2,000, 12 phases of 60 characters each with distinct names, and 50 open initiatives (`initiative_limit`).
 - **Finishing and cancelling.** Marking the lead task done finishes the initiative: the record stays with its last
   report and its sheet stays on the lead task, but it takes no new tasks (`initiative_finished`), its members' new
-  tasks no longer inherit it, and Home and ⌘K leave it out. Cancelling the lead task dissolves it (`syncCancelledLeads`):
+  tasks no longer inherit it, and Home and ⌘K leave it out. While it is open, two or more of its tasks in one section
+  of Home or the queue (In progress, Waiting, Snoozed; never Needs you) sit under one small row, the initiative's name
+  and its progress (`listInitiativeProgress`), that opens the lead task; once the lead is done its tasks are plain
+  rows again (`selectGroupInitiative` asks `selectInitiativeLead`); a task in a bundle and an initiative groups
+  with the initiative, so a group never nests. Cancelling the lead task dissolves it (`syncCancelledLeads`):
   every member leaves, a focus on it is cleared and `initiative.removed` drops the record.
 - **Phases are labels, not gates.** A phase is `{ id, name }` in the initiative's order. A task carries
   `initiativeId` and `initiativePhaseId` and joins one initiative at a time. Order inside and between phases is the

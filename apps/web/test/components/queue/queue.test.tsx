@@ -9,6 +9,7 @@ import { createRound } from '../../support/rounds.ts';
 import { pushTranscript, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import {
   createGate,
+  createInitiative,
   createProject,
   createRepo,
   createRun,
@@ -208,6 +209,70 @@ describe('wide queue', () => {
     view.unmount();
     renderQueue();
     expect(screen.getByRole('button', { name: /Review the login fix/ }).querySelector('time')).toBeNull();
+  });
+});
+
+describe('groups of a bundle or an initiative', () => {
+  const GROUPED = createShinsaState({
+    initiatives: [createInitiative({ id: 'split', name: 'Chat split', leadTaskId: 'lead' })],
+    tasks: [
+      createTask({
+        id: 'lead',
+        title: 'Chat split',
+        pipeline: ['lead'],
+        stage: 'leading',
+        initiativeId: 'split',
+      }),
+      createTask({ id: 'dock', title: 'Dock host', stage: 'building', initiativeId: 'split' }),
+      createTask({ id: 'panel', title: 'Side panel', stage: 'planning', initiativeId: 'split' }),
+      createTask({ id: 'root', title: 'Add the schema', stage: 'shipping', bundleReady: { commit: 'a' } }),
+      createTask({ id: 'api', title: 'Add the API', stage: 'waiting_on_tasks', stacksOn: ['root'] }),
+      createTask({ id: 'screen', title: 'Add the screen', stage: 'waiting_on_tasks', stacksOn: ['api'] }),
+    ],
+  });
+
+  function titles() {
+    return [...document.querySelectorAll('[data-highlight-item]')].map(
+      (row) => row.querySelector('[class*="text-xs"]')?.textContent
+    );
+  }
+
+  function groupRow(name: string) {
+    return screen.getByRole('button', { name: new RegExp(`^${name}\\s*\\d+ tasks here`) });
+  }
+
+  it('lists an initiative under a small row with its name, its tasks inside a guide line', () => {
+    renderQueue({ state: GROUPED, variant: 'wide' });
+    expect(titles().slice(1, 3)).toEqual(['Dock host', 'Side panel']);
+    const row = groupRow('Chat split');
+    expect(row.textContent).toBe('Chat split2 tasks here · 0 of 2 shipped');
+    expect(row.hasAttribute('data-highlight-item')).toBe(true);
+    expect(row.hasAttribute('aria-expanded')).toBe(false);
+    expect(row.className).toContain('h-6');
+    expect(screen.getByText('Dock host').closest('.border-s')).not.toBeNull();
+    expect(sectionTitles()).toContain('In progress2');
+  });
+
+  it('opens the lead task from the initiative’s row, and keeps its tasks shown', () => {
+    renderQueue({ state: GROUPED, variant: 'wide' });
+    act(() => fireEvent.click(groupRow('Chat split')));
+    expect(location.pathname).toBe('/tasks/lead');
+    expect(screen.getByText('Dock host')).toBeTruthy();
+  });
+
+  it('lists a bundle under a row named after its first task, which opens the task still being worked on', () => {
+    renderQueue({ state: GROUPED, variant: 'wide' });
+    expect(groupRow('Add the schema').textContent).toContain('3 tasks here · 1 of 3 ready');
+    expect(titles()).toEqual(expect.arrayContaining(['Add the schema', 'Add the API', 'Add the screen']));
+    expect(sectionTitles()).toContain('Waiting on another task3');
+    act(() => fireEvent.click(groupRow('Add the schema')));
+    expect(location.pathname).toBe('/tasks/screen');
+  });
+
+  it('marks the group row of the task on screen', () => {
+    writeDisclosure(createDisclosureId('queue', 'section', 'working'), true);
+    renderQueue({ state: GROUPED, activeTaskId: 'lead' });
+    expect(groupRow('Chat split').getAttribute('aria-current')).toBe('true');
   });
 });
 
