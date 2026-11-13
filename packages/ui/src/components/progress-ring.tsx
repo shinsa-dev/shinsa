@@ -15,7 +15,7 @@ type ProgressRingProps = {
 
 /**
  * A small round gauge: a 2px track in `bg-a2` with the accent arc over it,
- * round at both ends, starting at the top, and the value in its centre at 10px. Sized
+ * round at both ends, starting at the top, and the value in its centre in `text-3xs` (10px). Sized
  * 22px, 4px under a default button or select; the caller passes a size class to change it.
  */
 function ProgressRing({ value, label, done = false, className }: ProgressRingProps) {
@@ -44,7 +44,7 @@ function ProgressRing({ value, label, done = false, className }: ProgressRingPro
           />
         )}
       </svg>
-      <span aria-hidden className='text-[10px] leading-none font-medium text-fg-3 tabular-nums'>
+      <span aria-hidden className='text-3xs font-medium text-fg-3 tabular-nums'>
         {value}
       </span>
     </span>

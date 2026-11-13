@@ -88,6 +88,7 @@ only, no eyebrows.
 
 | Utility | Size / line | Role |
 | --- | --- | --- |
+| `text-3xs` | 10px / 10px | The figure inside a `ProgressRing`, nothing else |
 | `text-2xs` | 12px / 15px | Meta, counts, badges, section labels, tooltips, code, paths |
 | `text-xs` | 13px / 15.6px | The body size: rows, buttons, inputs, tabs, card titles, descriptions, prose |
 | `text-sm` | 14px / 17.5px | Dialog, sheet and empty-state titles, the `lg` button |
@@ -593,6 +594,7 @@ Shinsa redefines the bottom of Tailwind's scale and tightens the leading of the 
 
 | Utility | Size | Line height | Line box | Where |
 | --- | --- | --- | --- | --- |
+| `text-3xs` | 0.625rem, 10px | 1 | 10px | The figure inside a `ProgressRing`, nothing else. |
 | `text-2xs` | 0.75rem, 12px | 1.25 | 15px | Meta lines, badges, counts, section labels, tooltips, code, paths, timestamps, the second line of a row. Never for anything a person must read to decide. |
 | `text-xs` | 0.8125rem, 13px | 1.2 | 15.6px | The body size: buttons, inputs, menu rows, tabs, row titles, card titles, descriptions, prose |
 | `text-sm` | 0.875rem, 14px | 1.25 | 17.5px | Dialog and sheet titles, the `lg` button, a fieldset legend, the empty-state title, a few emphasised titles (the now card, a task popover title) |
@@ -603,6 +605,8 @@ Shinsa redefines the bottom of Tailwind's scale and tightens the leading of the 
 
 ```css
 @theme inline {
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 1;
   --text-2xs: 0.75rem;
   --text-2xs--line-height: 1.25;
   --text-xs: 0.8125rem;
@@ -1529,6 +1533,7 @@ Values used throughout this section (defined in the tokens section, repeated her
 
 | Token | px |
 | --- | --- |
+| `text-3xs` | 10px, line-height 1 (10px) |
 | `text-2xs` | 12px, line-height 1.25 (15px) |
 | `text-xs` | 13px, line-height 1.2 (15.6px) |
 | `text-sm` | 14px, line-height 1.25 (17.5px) |
