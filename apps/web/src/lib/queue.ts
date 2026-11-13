@@ -124,7 +124,7 @@ function createGroup(state: ShinsaState, items: QueueItem[], first: QueueItem): 
   return createBundleGroup(state, items, first);
 }
 
-export function listSectionEntries(state: ShinsaState, items: QueueItem[]): QueueEntry[] {
+function listSectionEntries(state: ShinsaState, items: QueueItem[]): QueueEntry[] {
   const grouped = new Map<string, QueueItem[]>();
   for (const item of items) {
     const key = resolveGroupKey(state, item.task);
