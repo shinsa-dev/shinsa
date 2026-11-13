@@ -548,7 +548,7 @@ export function createOverviewScene(now: number) {
       taskId: 'github-sso',
       cause: 'github_sso',
       title: 'GitHub needs SSO authorization for superwall',
-      body: 'The GitHub login Shinsa uses is not authorized for the superwall organization, which enforces SAML single sign-on. [Authorize it on GitHub](https://github.com/orgs/superwall/sso?authorization_request=A5SAMPLE), then retry.',
+      body: 'The GitHub login Shinsa uses is not authorized for the superwall organization, which enforces SAML single sign-on. [Authorize it on GitHub](https://github.com/orgs/superwall/sso?authorization_request=A5SAMPLE), then sign `gh` in again with `gh auth refresh -h github.com` in a terminal and retry.',
       githubSso: {
         organization: 'superwall',
         url: 'https://github.com/orgs/superwall/sso?authorization_request=A5SAMPLE',

@@ -553,7 +553,7 @@ describe('the card for each gate', () => {
       detail: `remote: Resource protected by organization SAML enforcement. ${link}`,
     });
     const message = gateCardOf(harness, taskId, harness.openGate(taskId));
-    expect(readText(message)).toContain(`<${link}|Authorize it on GitHub>, then retry.`);
+    expect(readText(message)).toContain(`<${link}|Authorize it on GitHub>, then sign \`gh\` in again`);
   });
 
   test('an operation is what it runs, Run and Finish without it', () => {

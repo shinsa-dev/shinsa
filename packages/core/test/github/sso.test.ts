@@ -57,7 +57,7 @@ describe('the SSO gate', () => {
   test('names the organization and asks to authorize the login with the link', () => {
     expect(resolveGitHubSsoGate({ organization: 'superwall', url: LINK })).toEqual({
       title: 'GitHub needs SSO authorization for superwall',
-      body: `The GitHub login Shinsa uses is not authorized for the superwall organization, which enforces SAML single sign-on. [Authorize it on GitHub](${LINK}), then retry.`,
+      body: `The GitHub login Shinsa uses is not authorized for the superwall organization, which enforces SAML single sign-on. [Authorize it on GitHub](${LINK}), then sign \`gh\` in again with \`gh auth refresh -h github.com\` in a terminal and retry.`,
       cause: 'github_sso',
       githubSso: { organization: 'superwall', url: LINK },
     });

@@ -45,7 +45,7 @@ function resolveTitle(sso: GateGitHubSso) {
 function resolveBody(sso: GateGitHubSso) {
   const organization = sso.organization ? `the ${sso.organization} organization` : 'this organization';
   if (sso.url.includes('authorization_request='))
-    return `The GitHub login Shinsa uses is not authorized for ${organization}, which enforces SAML single sign-on. [Authorize it on GitHub](${sso.url}), then retry.`;
+    return `The GitHub login Shinsa uses is not authorized for ${organization}, which enforces SAML single sign-on. [Authorize it on GitHub](${sso.url}), then sign \`gh\` in again with \`gh auth refresh -h github.com\` in a terminal and retry.`;
   return `The GitHub token Shinsa uses is not authorized for ${organization}, which enforces SAML single sign-on. [Authorize the token for ${organization} on GitHub](${sso.url}), then retry.`;
 }
 
