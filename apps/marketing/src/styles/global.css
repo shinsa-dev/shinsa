@@ -98,6 +98,14 @@ body {
   opacity: 0.7;
 }
 
+img,
+video,
+svg,
+picture {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
 .board svg {
   display: block;
 }
@@ -313,12 +321,4 @@ body {
   .koe-word {
     transition: none;
   }
-}
-
-img,
-video,
-svg,
-picture {
-  user-select: none;
-  -webkit-user-drag: none;
 }
