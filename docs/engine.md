@@ -7244,10 +7244,10 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   login it shares. Once the logins differ again, both are accounts as before, with their own settings.
 - **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage?cedar_ember=1` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
-  `.credentials.json`), `anthropic-beta: oauth-2025-04-20` and `User-Agent: shinsa claude-cli/2.1.321`. Claude fills
-  `cedar_ember`, an account's reset status, only when the query asks for it and the client name holds a
-  `claude-cli/<version>` token (any version; with `shinsa` alone it answers `ineligible_reason: "surface"` and no
-  grants), so the name keeps `shinsa` and adds that token. The `limits` array wins: `session` is "5-hour
+  `.credentials.json`), `anthropic-beta: oauth-2025-04-20` and `User-Agent: claude-cli/2.1.321 (external, cli)`. Claude fills
+  `cedar_ember`, an account's reset status, only when the query asks for it and the client name is Claude Code's
+  own, `claude-cli/<version> (external, <entrypoint>)`, with nothing before it (to any other name, `shinsa
+  claude-cli/2.1.321` included, it answers `ineligible_reason: "surface"` and no grants), so the name is exactly that. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
   window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
   codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
