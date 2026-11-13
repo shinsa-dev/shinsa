@@ -38,8 +38,8 @@ import { Cause, Clock, Duration, Effect, Layer, Option, type Redacted, Schema } 
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from 'effect/http';
 import { selectMachineRole } from '../../auth/access.ts';
 import { CloudConfig } from '../../config/service.ts';
-import { isMachineOnline } from '../../domain/machines.ts';
-import { requestOnlineMachine } from '../../http/forward.ts';
+import { isMachineOnline, selectOfflineCause } from '../../domain/machines.ts';
+import { recordMachineOffline, requestOnlineMachine } from '../../http/forward.ts';
 import { deferWork } from '../../http/worker.ts';
 import { SlackApi } from '../../integrations/slack/service.ts';
 import { resolveChannelAccess } from '../../slack/membership.ts';
@@ -454,7 +454,10 @@ export const SlackEventRoutes = Layer.unwrap(
         return;
       }
       const now = yield* Clock.currentTimeMillis;
-      if (Option.isNone(machine) || !isMachineOnline(machine.value, now)) {
+      const offline = Option.flatMap(machine, (found) => selectOfflineCause(found, now));
+      if (Option.isSome(machine) && Option.isSome(offline))
+        yield* recordMachineOffline('slack', machine.value.id, offline.value);
+      if (Option.isNone(machine) || Option.isSome(offline)) {
         yield* postInThread(
           serializeSlackOffline(Option.isSome(machine) ? machine.value.name : 'Your machine')
         );
