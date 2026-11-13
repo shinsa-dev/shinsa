@@ -21,7 +21,6 @@ export {
 } from './handoff.ts';
 export {
   type LeadNote,
-  type LeadTeammate,
   resolveLeadPlanningPrompt,
   resolveLeadPrompt,
 } from './initiatives.ts';

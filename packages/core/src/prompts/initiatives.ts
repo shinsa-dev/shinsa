@@ -6,7 +6,7 @@ import { describeTaskLink, resolveLaterMessages, resolveRequest } from './contex
 import { describeOwedReply } from './replies.ts';
 import { resolveHouseRules } from './rules.ts';
 
-export interface LeadTeammate {
+interface LeadTeammate {
   login: string;
   name: string | null;
   task: { handle: string | null; title: string } | null;

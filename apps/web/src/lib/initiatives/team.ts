@@ -65,7 +65,7 @@ export function selectLeadTeamInitiative(feed: TeamFeedSnapshot, task: Pick<Task
   return (feed.initiatives ?? []).find((initiative) => initiative.leadTaskId === task.id) ?? null;
 }
 
-export function resolveTeamLeadTarget(initiative: TeamFeedInitiative): TeamViewTarget {
+function resolveTeamLeadTarget(initiative: TeamFeedInitiative): TeamViewTarget {
   return { teamId: initiative.teamId, instanceId: initiative.instanceId, taskId: initiative.leadTaskId };
 }
 

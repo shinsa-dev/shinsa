@@ -91,7 +91,7 @@ export function changeMembership(decider: Decider, task: Task, next: Membership)
   decider.emit({ type: 'task.initiative_changed', taskId: task.id, ...next });
 }
 
-export function changeTeamMembership(decider: Decider, task: Task, next: TeamInitiativeRef | null) {
+function changeTeamMembership(decider: Decider, task: Task, next: TeamInitiativeRef | null) {
   if (isSameValue(task.teamInitiative ?? null, next)) return;
   decider.emit({ type: 'task.team_initiative_changed', taskId: task.id, teamInitiative: next });
 }

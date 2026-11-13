@@ -49,7 +49,7 @@ export interface InitiativeTeams {
   teams: readonly FocusTeam[];
 }
 
-export const NO_INITIATIVE_TEAMS: InitiativeTeams = { feed: NO_TEAM_FEED, teams: [] };
+const NO_INITIATIVE_TEAMS: InitiativeTeams = { feed: NO_TEAM_FEED, teams: [] };
 
 function resolveTeamValue(initiative: TeamFeedInitiative) {
   return `${TEAM_VALUE}${initiative.teamId}:${initiative.instanceId}:${initiative.id}`;
