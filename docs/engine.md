@@ -7257,9 +7257,12 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   ends, and `givesBackWeekly` from `gives_back_weekly` with `weeklyShare`, the percent of the weekly limit the
   scoped limits used, summed from `weekly_scoped_shares[].used_percent_of_weekly`, only on a grant that gives back;
   a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
-  credit only from one whole unit of its currency, and each grant; the usage menu counts the resets usable now.
-  A usable reset that ends within 3 days (`ADMISSION_LIMITS.resetEndingMs`) is said in amber, on its row ("Clears the
-  weekly Fable limit · ends in 2 days") and in the usage menu ("1 usage reset ends in 2 days"), so none ends unused.
+  credit only from one whole unit of its currency, and one Usage resets row whose value counts the resets left of each
+  kind ("Weekly 2 · Fable 1", `listUsageNotes`: Weekly clears `seven_day`, Fable only the Fable limit, any other by its
+  label); hovering a kind lists each of its grants (what it clears, as "Clears full weekly" or "Clears Fable weekly",
+  how many are left and when it ends). The usage menu counts the resets usable now.
+  A usable reset that ends within 3 days (`ADMISSION_LIMITS.resetEndingMs`) is said in amber, on its kind and its line
+  ("Clears Fable weekly · ends in 2 days") and in the usage menu ("1 usage reset ends in 2 days"), so none ends unused.
   Shinsa never claims a reset or spends extra usage: claiming stays your click in the Claude app. Fast mode reads
   the same decoded extra usage. A failed read keeps both, like the windows. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
