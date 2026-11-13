@@ -63,12 +63,12 @@ describe('agreeing with you', () => {
 });
 
 describe('combining the model with the model call', () => {
-  test('acts only when the call says act and the model is sure you would approve', () => {
+  test('acts when the call says act, unless a sure model says you would not approve', () => {
     expect(resolveAutopilotCombinedVerdict('act', SURE)).toBe('act');
     expect(resolveAutopilotCombinedVerdict('forward', SURE)).toBe('forward');
     expect(resolveAutopilotCombinedVerdict('act', DOUBTFUL)).toBe('forward');
-    expect(resolveAutopilotCombinedVerdict('act', { ...SURE, confidence: 0.3 })).toBe('forward');
-    expect(resolveAutopilotCombinedVerdict('act', null)).toBe('forward');
+    expect(resolveAutopilotCombinedVerdict('act', { ...DOUBTFUL, confidence: 0.3 })).toBe('act');
+    expect(resolveAutopilotCombinedVerdict('act', null)).toBe('act');
   });
 });
 

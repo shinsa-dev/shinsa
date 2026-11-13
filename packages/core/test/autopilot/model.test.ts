@@ -149,6 +149,11 @@ describe('the model', () => {
       'gate|review||low',
       'gate|review||',
     ]);
+    expect(listAutopilotSegmentKeys('gate', decision({ projectId: null, risk: null }))).toEqual([
+      'gate|review||',
+    ]);
+    const lone = learnAutopilotDecisions(undefined, [decision({ projectId: null, risk: null })]).model;
+    expect(guess(lone, { projectId: null, risk: null }).similar).toBe(1);
     const sparse = learnAutopilotDecisions(undefined, repeat(2, { answer: 'approved' })).model;
     expect(guess(sparse, { projectId: 'p2' }).similar).toBeLessThan(AUTOPILOT_MODEL_LIMITS.segmentMinimum);
   });

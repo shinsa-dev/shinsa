@@ -28,10 +28,13 @@ export function resolveAutopilotCombinedVerdict(
   call: AutopilotVerdict,
   guess: AutopilotModelGuess | null
 ): AutopilotVerdict {
-  if (call !== 'act' || !guess) return 'forward';
-  const sure =
-    guess.p >= AUTOPILOT_COMBINE_LIMITS.act && guess.confidence >= AUTOPILOT_COMBINE_LIMITS.confidence;
-  return sure ? 'act' : 'forward';
+  if (call !== 'act') return 'forward';
+  return isAutopilotModelVeto(guess) ? 'forward' : 'act';
+}
+
+export function isAutopilotModelVeto(guess: AutopilotModelGuess | null) {
+  if (!guess || guess.confidence < AUTOPILOT_COMBINE_LIMITS.confidence) return false;
+  return guess.p < AUTOPILOT_COMBINE_LIMITS.act;
 }
 
 export function resolveAutopilotBaseRate(rate: AutopilotRate) {

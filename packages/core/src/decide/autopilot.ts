@@ -1,5 +1,6 @@
 import { Option } from 'effect';
 import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
+import { selectAutopilotEstimate } from '../autopilot/examples.ts';
 import { resolveLessonLimit } from '../autopilot/lessons.ts';
 import {
   isUrgentTask,
@@ -8,6 +9,7 @@ import {
   resolveAutopilotLimits,
   resolveAutopilotSuggestionLimit,
 } from '../autopilot/limits.ts';
+import type { AutopilotModelGuess } from '../autopilot/model/schema.ts';
 import { selectJudgedGateKind } from '../autopilot/prompt.ts';
 import {
   AUTOPILOT_JUDGMENT_LIMITS,
@@ -18,6 +20,7 @@ import {
   type AutopilotLimit,
   type AutopilotVerdict,
 } from '../autopilot/schema.ts';
+import { isAutopilotModelVeto } from '../autopilot/score.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   type AutopilotDue,
@@ -225,6 +228,19 @@ function clip(text: string | null, limit: number) {
   return (text ?? '').trim().slice(0, limit);
 }
 
+function selectModelVeto(decider: Decider, gate: Gate, kind: AutopilotGateKind) {
+  const task = decider.task(gate.taskId);
+  const estimate = selectAutopilotEstimate(decider.state, task, gate, kind, decider.context.now);
+  const guess = Option.getOrNull(estimate);
+  return isAutopilotModelVeto(guess) ? guess : null;
+}
+
+function describeVeto(guess: AutopilotModelGuess) {
+  const share = Math.round(guess.p * 100);
+  const similar = Math.round(guess.similar);
+  return `From ${similar} decisions like this one, Autopilot puts the chance you would approve it at only ${share}%, so it waits for you.`;
+}
+
 export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'autopilot.judgment'>) {
   const found = selectJudgedGate(decider, command);
   if (!found) return;
@@ -249,6 +265,12 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
       teaches: true,
       guesses: true,
     });
+    return;
+  }
+  const veto = selectModelVeto(decider, gate, kind);
+  if (veto) {
+    recordGuess(decider, gate, kind, 'act');
+    forward(decider, gate.id, { reason: describeVeto(veto), teaches: true, guesses: true });
     return;
   }
   const why = reason || NO_REASON;

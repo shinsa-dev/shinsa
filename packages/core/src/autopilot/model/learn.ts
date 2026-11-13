@@ -41,12 +41,13 @@ function round(value: number) {
 export function listAutopilotSegmentKeys(head: AutopilotModelHead, decision: AutopilotDecision) {
   const project = decision.projectId ?? '';
   const risk = decision.risk ?? '';
-  return [
+  const keys = [
     [head, decision.kind, project, risk].join('|'),
     [head, decision.kind, project, ''].join('|'),
     [head, decision.kind, '', risk].join('|'),
     [head, decision.kind, '', ''].join('|'),
   ];
+  return [...new Set(keys)];
 }
 
 function resolveSegmentWeight(segment: AutopilotSegment | undefined) {

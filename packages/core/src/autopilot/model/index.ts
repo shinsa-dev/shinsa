@@ -6,16 +6,13 @@ export {
   listAutopilotSegmentKeys,
   selectAutopilotModelGuess,
 } from './learn.ts';
+export { listAutopilotNeighbours, listAutopilotWords } from './retrieve.ts';
 export {
-  AUTOPILOT_HEAD_OF_KIND,
   AUTOPILOT_MODEL_HEADS,
   AUTOPILOT_MODEL_LIMITS,
-  AUTOPILOT_POSITIVE_ANSWERS,
-  type AutopilotFeature,
-  type AutopilotHeadWeights,
+  AUTOPILOT_RETRIEVAL_LIMITS,
   type AutopilotLearnedDecision,
   type AutopilotModel,
   type AutopilotModelGuess,
   type AutopilotModelHead,
-  type AutopilotSegment,
 } from './schema.ts';

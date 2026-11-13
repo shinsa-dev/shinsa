@@ -1,16 +1,23 @@
 export { isAutopilotDoneSeeable, listAutopilotDone } from './done.ts';
+export {
+  createAutopilotProbe,
+  describeAutopilotEstimate,
+  listAutopilotExampleLines,
+  selectAutopilotEstimate,
+} from './examples.ts';
 export { describeAutopilotLesson, listAutopilotLessons, resolveLessonLimit } from './lessons.ts';
 export {
   type AutopilotProfileContext,
   type AutopilotScoredDecision,
   listAutopilotKindLines,
-  listAutopilotProfileLines,
+  listAutopilotSteeringLines,
   listAutopilotTallies,
   recordAutopilotDecisions,
 } from './profile.ts';
 export {
   isAutopilotAgreement,
   resolveAutopilotBaseRate,
+  isAutopilotModelVeto,
   resolveAutopilotCombinedVerdict,
   resolveAutopilotLoss,
   resolveAutopilotScore,

@@ -6,7 +6,8 @@ import {
   EMPTY_AUTOPILOT_PROFILE,
   HOUR_MS,
   MINUTE_MS,
-  listAutopilotProfileLines,
+  listAutopilotKindLines,
+  listAutopilotSteeringLines,
   listAutopilotTallies,
   type ReviewFinding,
   type ReviewRatings,
@@ -276,13 +277,14 @@ describe('the profile summary for a judgment', () => {
 
   test('is empty until you decided that kind of point', () => {
     expect(
-      listAutopilotProfileLines({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'plan', NO_CONTEXT)
+      listAutopilotKindLines({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, ['plan'], NO_CONTEXT)
     ).toEqual([]);
     const state = profile([decision({ kind: 'merge' })]);
-    expect(listAutopilotProfileLines(state, 'plan', NO_CONTEXT)).toEqual([]);
+    expect(listAutopilotKindLines(state, ['plan'], NO_CONTEXT)).toEqual([]);
+    expect(listAutopilotSteeringLines(state, NO_CONTEXT)).toEqual([]);
   });
 
-  test('counts the review and its findings overall, in this project and at this risk, then your recent words', () => {
+  test('counts each kind overall, in this project and at this risk, then your recent words', () => {
     const state = profile([
       decision({ kind: 'review', answer: 'approved', projectId: 'p1', risk: 'low', note: 'first' }),
       decision({ kind: 'review', answer: 'revised', projectId: 'p2', risk: 'high', note: 'second' }),
@@ -290,7 +292,7 @@ describe('the profile summary for a judgment', () => {
       decision({ kind: 'finding', answer: 'fixed', projectId: 'p1', risk: 'low', note: 'fourth' }),
       decision({ kind: 'merge', answer: 'approved', note: 'not a review' }),
     ]);
-    expect(listAutopilotProfileLines(state, 'review', { projectId: 'p1', risk: 'low' })).toEqual([
+    expect(listAutopilotKindLines(state, ['review', 'finding'], { projectId: 'p1', risk: 'low' })).toEqual([
       '- All reviews: 2 decided: approved 1, revised 1; lately approved 50%, revised 50%',
       '- In this project: 1 decided: approved 1; lately approved 100%',
       '- At low risk: 1 decided: approved 1; lately approved 100%',
@@ -304,7 +306,7 @@ describe('the profile summary for a judgment', () => {
     ]);
   });
 
-  test('adds how you steer and file your tasks to every kind of point, after that point’s own counts', () => {
+  test('says how you steer and file your tasks', () => {
     const state = profile([
       decision({ kind: 'plan', answer: 'approved' }),
       decision({ kind: 'message', answer: 'sent', note: 'Keep it small.' }),
@@ -313,8 +315,7 @@ describe('the profile summary for a judgment', () => {
       decision({ kind: 'priority', answer: 'raised' }),
       decision({ kind: 'cancel', answer: 'cancelled' }),
     ]);
-    expect(listAutopilotProfileLines(state, 'plan', NO_CONTEXT)).toEqual([
-      '- All plans: 1 decided: approved 1; lately approved 100%',
+    expect(listAutopilotSteeringLines(state, NO_CONTEXT)).toEqual([
       'How they steer their tasks:',
       '- All messages to agents: 1 decided: sent 1; lately sent 100%',
       '- All their own code edits: 1 decided: edited 1; lately edited 100%',
@@ -324,17 +325,11 @@ describe('the profile summary for a judgment', () => {
       'Their recent words:',
       '- messages to agents, sent: “Keep it small.”',
     ]);
-    expect(
-      listAutopilotProfileLines(profile([decision({ kind: 'message', answer: 'sent' })]), 'merge', NO_CONTEXT)
-    ).toEqual([
-      'How they steer their tasks:',
-      '- All messages to agents: 1 decided: sent 1; lately sent 100%',
-    ]);
   });
 
   test('leaves out a project or risk you never decided at, and words when there are none', () => {
     const state = profile([decision({ kind: 'plan', answer: 'approved', projectId: 'p1', risk: 'low' })]);
-    expect(listAutopilotProfileLines(state, 'plan', { projectId: 'p9', risk: 'high' })).toEqual([
+    expect(listAutopilotKindLines(state, ['plan'], { projectId: 'p9', risk: 'high' })).toEqual([
       '- All plans: 1 decided: approved 1; lately approved 100%',
     ]);
   });
@@ -344,7 +339,7 @@ describe('the profile summary for a judgment', () => {
     const state = profile(
       Array.from({ length: 6 }, () => decision({ kind: 'question', answer: 'replied', note: long }))
     );
-    const lines = listAutopilotProfileLines(state, 'question', NO_CONTEXT);
+    const lines = listAutopilotKindLines(state, ['question'], NO_CONTEXT);
     expect(lines.join('\n').length).toBeLessThanOrEqual(AUTOPILOT_PROFILE_LIMITS.summary);
     expect(lines).toHaveLength(3);
     expect(lines[0]).toBe('- All agent questions: 6 decided: replied 6; lately replied 100%');

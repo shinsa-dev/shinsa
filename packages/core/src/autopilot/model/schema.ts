@@ -60,3 +60,12 @@ export const AUTOPILOT_MODEL_LIMITS = {
   hashBuckets: 16,
   precision: 10_000,
 } as const;
+
+export const AUTOPILOT_RETRIEVAL_LIMITS = {
+  examples: 8,
+  budget: 2_400,
+  title: 80,
+  halfLife: 50,
+  shortestWord: 3,
+  weights: { features: 0.6, words: 0.25, recency: 0.15 },
+} as const;

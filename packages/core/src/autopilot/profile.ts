@@ -19,7 +19,6 @@ import {
   type AutopilotDecisionFacts,
   type AutopilotFindingCounts,
   type AutopilotDecisionKind,
-  type AutopilotGateKind,
   type AutopilotProfile,
   type AutopilotRate,
   type AutopilotScoredKind,
@@ -302,14 +301,6 @@ export function listAutopilotTallies(
   return (state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE).tallies.filter((tally) => tally.kind === kind);
 }
 
-const GATE_DECISION_KINDS: Record<AutopilotGateKind, readonly AutopilotDecisionKind[]> = {
-  plan: ['plan'],
-  question: ['question'],
-  review: ['review', 'finding'],
-  merge: ['merge'],
-  proposal: ['proposal'],
-};
-
 const STEERING_KINDS: readonly AutopilotDecisionKind[] = ['message', 'edit', 'request', 'priority', 'cancel'];
 
 const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
@@ -396,15 +387,12 @@ export interface AutopilotProfileContext {
   risk: ReviewRating | null;
 }
 
-export function listAutopilotProfileLines(
+export function listAutopilotSteeringLines(
   state: Pick<ShinsaState, 'autopilotProfile'>,
-  gate: AutopilotGateKind,
   context: AutopilotProfileContext
 ): string[] {
-  const own = listAutopilotKindLines(state, GATE_DECISION_KINDS[gate], context);
   const steering = listAutopilotKindLines(state, STEERING_KINDS, context);
-  const steeringLines = steering.length > 0 ? ['How they steer their tasks:', ...steering] : [];
-  return fitToBudget([...own, ...steeringLines]);
+  return steering.length > 0 ? ['How they steer their tasks:', ...steering] : [];
 }
 
 export function listAutopilotKindLines(

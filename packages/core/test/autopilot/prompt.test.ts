@@ -7,7 +7,6 @@ import {
   type AutopilotFacts,
   type Gate,
   resolveAutopilotJudgePrompt,
-  recordAutopilotDecisions,
   selectAutopilotJudgeRequest,
   selectJudgedGateKind,
 } from '../../src/index.ts';
@@ -111,22 +110,25 @@ describe('the judge prompt', () => {
     ).toEndWith('Choices:\n- A');
   });
 
-  test('adds how you decide points like this one after the lessons', () => {
+  test('adds the model’s estimate, the nearest earlier decisions and how you steer, after the lessons', () => {
     const { task, gate } = setup();
-    const prompt = resolveAutopilotJudgePrompt(
-      task,
-      gate,
-      FACTS,
-      ['- a lesson'],
-      ['- All agent questions: 1 decided']
-    );
+    const prompt = resolveAutopilotJudgePrompt(task, gate, FACTS, ['- a lesson'], {
+      estimate: 'Their personal model: 90%.',
+      examples: ['- A question: they replied.'],
+      steering: ['How they steer their tasks:', '- All messages to agents: 1 decided'],
+    });
     expect(prompt).toEndWith(
       [
         'What the developer taught you at earlier ones, most recent first:',
         '- a lesson',
         '',
-        'How the developer decides points like this one, with or without you:',
-        '- All agent questions: 1 decided',
+        'Their personal model: 90%.',
+        '',
+        'Earlier decisions most like this one, with or without you:',
+        '- A question: they replied.',
+        '',
+        'How they steer their tasks:',
+        '- All messages to agents: 1 decided',
       ].join('\n')
     );
     expect(resolveAutopilotJudgePrompt(task, gate, FACTS)).not.toContain('with or without you');
@@ -179,34 +181,58 @@ describe('the judge request', () => {
     ).not.toContain(AUTOPILOT_SHADOW_NOTE);
   });
 
-  test('carries the summary of every plan you decided', () => {
+  test('carries the model’s estimate and your earlier plans most like this one, with your words', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
     harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true } } });
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
-    const learned = recordAutopilotDecisions(undefined, [
-      {
-        at: 1,
-        taskId: 'other',
-        gateId: null,
-        kind: 'plan',
-        answer: 'revised',
-        projectId: null,
-        risk: null,
-        scope: null,
-        urgent: false,
-        watchdog: false,
-        touched: false,
-        guess: null,
-        note: 'Keep it smaller',
-        facts: null,
-      },
-    ]);
-    const state = { ...harness.state, autopilotProfile: learned };
-    const prompt = Option.getOrNull(selectAutopilotJudgeRequest(state, gate.id, harness.now))?.prompt;
-    expect(prompt).toContain('- All plans: 1 decided: revised 1');
-    expect(prompt).toContain('- plans, revised: “Keep it smaller”');
+    harness.replay({
+      type: 'autopilot.decided',
+      decisions: [
+        {
+          at: 1,
+          taskId,
+          gateId: null,
+          kind: 'plan',
+          answer: 'revised',
+          projectId: null,
+          risk: null,
+          scope: null,
+          urgent: false,
+          watchdog: false,
+          touched: false,
+          guess: null,
+          note: 'Keep it smaller',
+          facts: null,
+        },
+        {
+          at: 2,
+          taskId: 'gone',
+          gateId: null,
+          kind: 'message',
+          answer: 'sent',
+          projectId: null,
+          risk: null,
+          scope: null,
+          urgent: false,
+          watchdog: false,
+          touched: false,
+          guess: null,
+          note: null,
+          facts: null,
+        },
+      ],
+    });
+    const prompt = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now))?.prompt;
+    expect(prompt).toMatch(
+      /\nTheir personal model, learned from every decision they made: \d+% that they approve this, from 1 similar decisions\. It is still learning, so weigh it lightly\.\n/
+    );
+    expect(prompt).toContain(
+      `- A plan on “${harness.task(taskId).title}”: they asked for changes. They wrote: “Keep it smaller”`
+    );
+    expect(prompt).toContain('- All messages to agents: 1 decided: sent 1; lately sent 100%');
+    expect(prompt).not.toContain('- All plans:');
   });
 });
