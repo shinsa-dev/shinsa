@@ -19,11 +19,7 @@ export {
   resolveHandoff,
   resolveHandoffPrompt,
 } from './handoff.ts';
-export {
-  type LeadNote,
-  resolveLeadPlanningPrompt,
-  resolveLeadPrompt,
-} from './initiatives.ts';
+export { type LeadNote, resolveLeadPlanningPrompt, resolveLeadPrompt } from './initiatives.ts';
 export { MANAGE_RULES } from './manage.ts';
 export {
   type DeliveredQuestion,
