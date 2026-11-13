@@ -7566,7 +7566,9 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   when that work finishes (origin `task-notification`) continues the run; once the set is empty and no such turn
   started within `BACKGROUND_GRACE` (10 s), the session sends a follow-up naming what finished
   (`resolveBackgroundFollowUp`). `BACKGROUND_WAIT` (30 min, across the whole run) bounds it: the session stops the
-  remaining tasks (`stopTask`) and tells the agent so in the same session.
+  remaining tasks (`stopTask`) and tells the agent so in the same session. A step that already handed over never
+  waits and is never followed up: the supervisor marks the session's `handedOver` once a hand-over tool is accepted,
+  so a dev server left running after `complete_phase` closes the session as before.
   `ClaudeProvider.startSession` hands it to the supervisor as its `AgentSession`, in the attempt's scope.
 - **One app layer, run once.** `main.ts` runs the CLI's program with `BunRuntime.runMain`, the only run in the
   engine's source (`bun lint:conventions` fails `ManagedRuntime`, a `run*` call and any exported class that is not a

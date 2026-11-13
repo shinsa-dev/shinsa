@@ -1111,6 +1111,32 @@ describe('background work at the end of a turn', () => {
     }
   });
 
+  test('a turn that handed over ends at once, even with work still running', async () => {
+    const { input, entries } = createInput({ handedOver: () => true });
+    const { session, messages, prompts } = startScripted(input);
+    messages.push(backgroundTasks({ task_id: 'dev-server' }));
+    messages.push(success('Handed over.'));
+    expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Handed over.' });
+    expect(prompts).toHaveLength(1);
+    expect(entries.some((entry) => entry.type === 'notice' && entry.notice.kind === 'background_wait')).toBe(
+      false
+    );
+  });
+
+  test('a hand-over made while it waits ends the session instead of following up', async () => {
+    let handedOver = false;
+    const { input, entries } = createInput({ handedOver: () => handedOver });
+    const { session, messages, prompts } = startScripted(input, { backgroundGraceMs: 20 });
+    messages.push(backgroundTasks({ task_id: 'shell-1' }));
+    messages.push(success('Waiting.'));
+    await Bun.sleep(20);
+    handedOver = true;
+    messages.push(backgroundTasks());
+    expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Waiting.' });
+    expect(prompts).toHaveLength(1);
+    expect(listFollowUps(entries)).toEqual([]);
+  });
+
   test('ambient work never holds a session open', async () => {
     const { input } = createInput();
     const { session, messages } = startScripted(input);

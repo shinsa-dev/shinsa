@@ -214,6 +214,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     const current = yield* Ref.get(state);
     const wait = current.waiting;
     if (!wait || current.closed || current.cancelled || current.ledger.pending.length > 0) return;
+    if (input.handedOver?.()) return yield* Effect.forkIn(detach(close), scope);
     yield* Ref.update(state, (latest) => ({ ...latest, waiting: { ...wait, finished: [] } }));
     const text = resolveBackgroundFollowUp(wait);
     input.onEntry({ type: 'user', from: 'shinsa', text, attachments: [] });
@@ -283,7 +284,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
 
   const endTurn = Effect.gen(function* () {
     const current = yield* Ref.get(state);
-    if (current.background.size > 0 && !current.waiting?.timedOut) {
+    if (current.background.size > 0 && !current.waiting?.timedOut && !input.handedOver?.()) {
       recorder.notify({ kind: 'background_wait', tasks: current.background.size });
       return yield* awaitBackground;
     }
