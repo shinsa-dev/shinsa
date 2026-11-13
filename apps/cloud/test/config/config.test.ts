@@ -31,8 +31,7 @@ describe('the Worker reads its configuration once, secrets redacted', () => {
     const config = exit.value;
     expect(config.origin).toBe(REMOTE_APP_ORIGIN);
     expect(config.previewOrigin).toBe(PREVIEW_ORIGIN);
-    expect(config.tunnelZone).toBe('shinsa.dev');
-    expect(config.maxInstances).toBe(50);
+    expect(config.maxInstances).toBe(10_000);
     expect(config.githubClientId).toBe('');
     expect(Redacted.value(config.slackSigningSecret)).toBe('');
   });

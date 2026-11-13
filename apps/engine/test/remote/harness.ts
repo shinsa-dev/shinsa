@@ -30,11 +30,7 @@ import type {
   RemoteChannelHandle,
 } from '../../src/remote/channel/schema.ts';
 import { RemoteOrigin } from '../../src/remote/client/schema.ts';
-import { createRefusedConnector } from '../../src/remote/connector/refused.ts';
-import type { TunnelConnectorLayer } from '../../src/remote/connector/schema.ts';
 import { Handoffs } from '../../src/remote/handoffs/service.ts';
-import type { HealthCheck } from '../../src/remote/health/schema.ts';
-import { TunnelHealth } from '../../src/remote/health/service.ts';
 import { RemoteClientLayer } from '../../src/remote/layers.ts';
 import { HandoffClaimFailed, RemoteUrlUnopened } from '../../src/remote/machine/schema.ts';
 import { Remote } from '../../src/remote/machine/service.ts';
@@ -42,6 +38,8 @@ import { RemoteUrlOpener } from '../../src/remote/opener/service.ts';
 import { PairPollInterval } from '../../src/remote/pairing/schema.ts';
 import { Presence } from '../../src/remote/presence/service.ts';
 import { Previews } from '../../src/remote/previews/service.ts';
+import { createRefusedConnector } from '../../src/remote/relay/refused.ts';
+import type { RelayConnectorLayer } from '../../src/remote/relay/schema.ts';
 import type { ChannelInput, ShareChannelHandle } from '../../src/remote/share-channel/schema.ts';
 import { Shares } from '../../src/remote/shares/service.ts';
 import {
@@ -76,8 +74,7 @@ export interface RemoteTestOptions {
   origin?: string;
   fetch?: typeof fetch;
   pairPollMs?: number;
-  connector?: TunnelConnectorLayer;
-  ping?: HealthCheck['check'];
+  connector?: RelayConnectorLayer;
   openUrl?: (url: string) => Promise<void>;
   machineName?: string;
   version?: string;
@@ -157,9 +154,6 @@ export async function createRemoteTest(options: RemoteTestOptions = {}) {
   );
   const edge = Layer.mergeAll(
     options.connector ?? createRefusedConnector('no tunnel in this test'),
-    options.ping
-      ? Layer.succeed(TunnelHealth, { check: options.ping })
-      : TunnelHealth.layer.pipe(Layer.provide(FetchHttpClient.layer)),
     Layer.succeed(RemoteUrlOpener, {
       open: (url) =>
         opener
@@ -343,9 +337,6 @@ export function adaptRemote(test: RemoteTest) {
     appOrigin: origin,
     get isEnabled() {
       return runSync(remote.isEnabled);
-    },
-    get tunnelHost() {
-      return runSync(remote.tunnelHost);
     },
     snapshot: () => runSync(remote.snapshot),
     startPairing: () => runPromise(remote.startPairing),

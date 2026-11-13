@@ -4,7 +4,6 @@ import {
   MAX_INSTANCE_MEMBERS,
   type RemoteMember,
   type RemoteUserId,
-  resolveTunnelHost,
 } from '@shinsa/core';
 import { CurrentMachine, RemoteApi } from '@shinsa/core/remote/api';
 import { GuestsFull, MembersFull, NotFound, Revoked } from '@shinsa/core/remote/errors';
@@ -16,7 +15,6 @@ import type { TokenHash } from '../../crypto/schema.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
 import { listMachinePeople, removeMachine } from '../../domain/machines.ts';
 import { listUserTeams } from '../../domain/teams.ts';
-import { Cloudflare } from '../../integrations/cloudflare/service.ts';
 import { MachineAccess } from '../../store/access/service.ts';
 import { Accounts } from '../../store/accounts/service.ts';
 import { Machines } from '../../store/machines/service.ts';
@@ -64,7 +62,6 @@ export const MachineHandlers = HttpApiBuilder.group(
     const machines = yield* Machines;
     const access = yield* MachineAccess;
     const crypto = yield* CloudCrypto;
-    const cloudflare = yield* Cloudflare;
 
     const createLink = Effect.fn('machine.createLink')(function* (
       record: (instanceId: InstanceId, tokenHash: TokenHash) => Effect.Effect<void>
@@ -113,12 +110,6 @@ export const MachineHandlers = HttpApiBuilder.group(
         'heartbeat',
         Effect.fn('machine.heartbeat')(function* ({ payload }) {
           const machine = yield* findCurrentMachine;
-          if (payload.localUrl !== machine.localUrl)
-            yield* cloudflare.updateIngress(
-              machine.tunnelId,
-              resolveTunnelHost(machine.id),
-              payload.localUrl
-            );
           yield* machines.recordHeartbeat(machine.id, {
             localUrl: payload.localUrl,
             signingKey: payload.signingKey ?? null,

@@ -53,7 +53,6 @@ import {
 import {
   BodyInvalid,
   BodyTooLarge,
-  CloudflareFailed,
   ContentTypeInvalid,
   Forbidden,
   GuestsFull,
@@ -162,13 +161,7 @@ class PairsGroup extends HttpApiGroup.make('pairs')
     HttpApiEndpoint.post('approve', `${REMOTE_PATHS.pairs}/:claimCode/approve`, {
       params: { claimCode: ClaimCode },
       success: PairApproveResponse,
-      error: [
-        wire(PairExpired),
-        wire(InstancesFull),
-        wire(ServiceFull),
-        wire(PairClaimed),
-        wire(CloudflareFailed),
-      ],
+      error: [wire(PairExpired), wire(InstancesFull), wire(ServiceFull), wire(PairClaimed)],
     })
   )
   .middleware(RequestGate)
@@ -185,7 +178,7 @@ class InstancesGroup extends HttpApiGroup.make('instances')
     HttpApiEndpoint.post('remove', `${REMOTE_PATHS.instances}/:instanceId/remove`, {
       params: InstanceParams,
       success: RemoteOk,
-      error: [wire(NotFound), wire(NotOwner), wire(CloudflareFailed)],
+      error: [wire(NotFound), wire(NotOwner)],
     }),
     HttpApiEndpoint.post('leave', `${REMOTE_PATHS.instances}/:instanceId/leave`, {
       params: InstanceParams,
@@ -255,13 +248,10 @@ class MachineGroup extends HttpApiGroup.make('machine')
     HttpApiEndpoint.post('heartbeat', REMOTE_PATHS.heartbeat, {
       payload: HeartbeatRequest,
       success: HeartbeatResponse,
-      error: [wire(NotFound), wire(CloudflareFailed)],
+      error: wire(NotFound),
     }),
     HttpApiEndpoint.post('offline', REMOTE_PATHS.offline, { success: RemoteOk }),
-    HttpApiEndpoint.post('remove', REMOTE_PATHS.machineRemove, {
-      success: RemoteOk,
-      error: wire(CloudflareFailed),
-    }),
+    HttpApiEndpoint.post('remove', REMOTE_PATHS.machineRemove, { success: RemoteOk }),
     HttpApiEndpoint.post('inviteCreate', REMOTE_PATHS.machineInvites, { success: InviteCreateResponse }),
     HttpApiEndpoint.post('inviteRemove', REMOTE_PATHS.machineInviteRemove, { success: RemoteOk }),
     HttpApiEndpoint.post('requesterFind', REMOTE_PATHS.machineRequester, {

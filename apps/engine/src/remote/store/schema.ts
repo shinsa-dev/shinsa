@@ -12,13 +12,7 @@ import type { JsonFileWriteFailed } from '../../files/schema.ts';
 
 export const REMOTE_FILE = 'remote.json';
 
-export const CREDENTIAL_FIELDS = [
-  'instanceId',
-  'machineToken',
-  'tunnelToken',
-  'tunnelHost',
-  'connectKey',
-] as const;
+export const CREDENTIAL_FIELDS = ['instanceId', 'machineToken', 'connectKey'] as const;
 
 export interface MachineKey {
   publicKey: string;

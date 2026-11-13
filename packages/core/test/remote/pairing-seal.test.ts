@@ -14,8 +14,6 @@ import {
 const CREDENTIALS: MachineCredentials = {
   instanceId: 'studio000001',
   machineToken: 'machine-token',
-  tunnelToken: 'tunnel-token',
-  tunnelHost: 't-studio000001.shinsa.dev',
   connectKey: 'connect-key',
 };
 

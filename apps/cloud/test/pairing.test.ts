@@ -50,7 +50,7 @@ describe('pairing a machine', () => {
     expect(await poll(harness, start)).toEqual({ status: 'pending' });
   });
 
-  test('pairs a machine once when two approvals race, making one tunnel', async () => {
+  test('pairs a machine once when two approvals race', async () => {
     const harness = createHarness();
     const mona = await harness.signIn('mona', 42);
     const kai = await harness.signIn('kai', 43);
@@ -61,10 +61,6 @@ describe('pairing a machine', () => {
     ]);
     expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
     expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM machines').get()).toEqual({ count: 1 });
-    const tunnels = harness.calls.filter(
-      (call) => call.method === 'POST' && call.url.endsWith('/cfd_tunnel')
-    );
-    expect(tunnels).toHaveLength(1);
   });
 
   test('shows the machine and its key fingerprint to the signed-in person who approves it', async () => {
@@ -84,44 +80,20 @@ describe('pairing a machine', () => {
     });
   });
 
-  test('approving makes a tunnel, its DNS record and the instance, and the machine collects its credentials once', async () => {
+  test('approving makes only the instance, calling nothing outside the Worker, and the machine collects its credentials once', async () => {
     const harness = createHarness();
     const { pair, start } = await startPair(harness);
     const session = await harness.signIn('mona', 42);
+    harness.calls.length = 0;
     const approved = await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
     const { instanceId } = await readJson<{ instanceId: string }>(approved);
     expect(instanceId).toMatch(/^[a-z0-9]{12}$/);
-    const api = harness.calls.filter((call) => call.url.startsWith('https://api.cloudflare.com'));
-    expect(api.map((call) => `${call.method} ${new URL(call.url).pathname}`)).toEqual([
-      'POST /client/v4/accounts/account-1/cfd_tunnel',
-      'PUT /client/v4/accounts/account-1/cfd_tunnel/tunnel-1/configurations',
-      'GET /client/v4/accounts/account-1/cfd_tunnel/tunnel-1/token',
-      'GET /client/v4/zones',
-      'POST /client/v4/zones/zone-1/dns_records',
-    ]);
-    expect(api[0]?.headers.get('authorization')).toBe('Bearer api-token');
-    expect(JSON.parse(api[1]?.body ?? '')).toEqual({
-      config: {
-        ingress: [
-          { hostname: `t-${instanceId}.shinsa.dev`, service: 'http://127.0.0.1:7446' },
-          { service: 'http_status:404' },
-        ],
-      },
-    });
-    expect(JSON.parse(api[4]?.body ?? '')).toEqual({
-      type: 'CNAME',
-      name: `t-${instanceId}.shinsa.dev`,
-      content: 'tunnel-1.cfargotunnel.com',
-      proxied: true,
-    });
+    expect(harness.calls).toEqual([]);
     const claimed = await poll(harness, start);
     expect(claimed).toMatchObject({ status: 'claimed', owner: 'mona' });
     const credentials = await openClaimed(pair, claimed);
-    expect(credentials).toMatchObject({
-      instanceId,
-      tunnelToken: 'tunnel-token-1',
-      tunnelHost: `t-${instanceId}.shinsa.dev`,
-    });
+    expect(Object.keys(credentials).sort()).toEqual(['connectKey', 'instanceId', 'machineToken']);
+    expect(credentials.instanceId).toBe(instanceId);
     expect(await poll(harness, start)).toEqual({ status: 'expired' });
     const stored = harness.db.sqlite.query('SELECT machine_token_hash FROM machines').get() as {
       machine_token_hash: string;
@@ -137,7 +109,6 @@ describe('pairing a machine', () => {
     const row = harness.db.sqlite.query('SELECT credentials FROM pairings').get() as {
       credentials: string;
     };
-    expect(row.credentials).not.toContain('tunnel-token-1');
     expect(row.credentials).not.toContain('machineToken');
   });
 
@@ -152,7 +123,7 @@ describe('pairing a machine', () => {
     expect(claimed).toMatchObject({
       status: 'claimed',
       owner: 'mona',
-      credentials: { instanceId, tunnelToken: 'tunnel-token-1', tunnelHost: `t-${instanceId}.shinsa.dev` },
+      credentials: { instanceId },
     });
     expect(claimed).not.toHaveProperty('sealedCredentials');
     const row = harness.db.sqlite.query('SELECT features FROM machines').get() as { features: string };
@@ -225,44 +196,20 @@ describe('pairing a machine', () => {
     });
   });
 
-  test('cleans up a half-made tunnel when Cloudflare refuses a later step', async () => {
+  test('a failed approval releases the code, so the next approval pairs the machine', async () => {
     const harness = createHarness();
-    harness.handlers.push((call) =>
-      call.method === 'POST' && call.url.endsWith('/dns_records')
-        ? Response.json({ success: false, errors: [{ message: 'record exists' }] }, { status: 400 })
-        : new Response('', { status: 599 })
-    );
     const session = await harness.signIn();
     const { start } = await startPair(harness);
+    harness.db.sqlite.run(
+      "CREATE TRIGGER refuse_machines BEFORE INSERT ON machines BEGIN SELECT RAISE(ABORT, 'refused'); END"
+    );
     const logged = spyOn(console, 'error').mockImplementation(() => undefined);
     const failed = await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
-    expect(failed.status).toBe(502);
-    expect(logged.mock.calls.map((call) => call[0])).toContain('[Cloud] Request failed');
     logged.mockRestore();
-    expect((await readJson<{ error: { message: string } }>(failed)).error.message).toContain('record exists');
-    expect(harness.calls.at(-1)).toMatchObject({ method: 'DELETE' });
-    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM machines').get()).toEqual({ count: 0 });
+    expect(failed.status).toBe(500);
     expect(await poll(harness, start)).toEqual({ status: 'pending' });
-    harness.handlers.length = 0;
-    const retried = await harness.post(resolvePairApprovePath(start.claimCode), {}, { session });
-    expect(retried.status).toBe(200);
-  });
-
-  test('pairs a machine once when two approvals race, making one tunnel', async () => {
-    const harness = createHarness();
-    const mona = await harness.signIn('mona', 42);
-    const kai = await harness.signIn('kai', 43);
-    const { start } = await startPair(harness);
-    const answers = await Promise.all([
-      harness.post(resolvePairApprovePath(start.claimCode), {}, { session: mona }),
-      harness.post(resolvePairApprovePath(start.claimCode), {}, { session: kai }),
-    ]);
-    expect(answers.map((answer) => answer.status).sort()).toEqual([200, 409]);
-    expect(harness.db.sqlite.query('SELECT COUNT(*) AS count FROM machines').get()).toEqual({ count: 1 });
-    const tunnels = harness.calls.filter(
-      (call) => call.method === 'POST' && call.url.endsWith('/cfd_tunnel')
-    );
-    expect(tunnels).toHaveLength(1);
+    harness.db.sqlite.run('DROP TRIGGER refuse_machines');
+    expect((await harness.post(resolvePairApprovePath(start.claimCode), {}, { session })).status).toBe(200);
   });
 
   test('refuses a bad machine key or body, and too many waiting pairings from one address', async () => {

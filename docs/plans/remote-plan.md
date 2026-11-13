@@ -13,8 +13,9 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
 
 1. **One URL per login: `https://app.shinsa.dev`.** Everyone opens the same address and signs in. It is one fixed
    subdomain with the app at its root, an origin of its own apart from the marketing site. Kanna gives each
-   machine its own subdomain (`‹sub›.kanna.sh`); Shinsa never does. A machine's tunnel host exists only as plumbing
-   the browser connects to after sign-in, never as an address you type or share.
+   machine its own subdomain (`‹sub›.kanna.sh`); Shinsa never does. A machine has no host of its own at all: its
+   channel is a path on app.shinsa.dev (`/__relay/‹instance›/…`) the browser connects to after sign-in, never an
+   address you type or share.
 2. **Machines are a first-class part of one dashboard.** There is nothing to open: the dashboard is the same whether
    you have one machine or 20. It connects to every machine this device was added to at once, each over its own sealed
    channel, merges their tasks, queue and gates into one view, and shows each task's machine on the task, as Kanna does.
@@ -25,7 +26,7 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    machine with its status, its open tasks, its task capacity and Remove, and Settings → Routing policies says which machine runs which work. On the machine a
    device was added from, the dashboard calls that machine This machine.
 3. **GitHub is the only sign-in.** On the machine, turning remote access on opens GitHub sign-in in your browser and
-   that is what creates the instance and its tunnel. On app.shinsa.dev, GitHub sign-in shows your instances. An
+   that is what creates the instance. On app.shinsa.dev, GitHub sign-in shows your instances. An
    instance has one owner, the GitHub account that paired it, and may have members, who reach it exactly as the owner
    does. A team shares one machine, such as a server everyone uses, from its Machines list in Settings → Teams: the
    machine then runs each teammate's tasks as that person, on their own Claude accounts and GitHub token, in their
@@ -34,12 +35,16 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    for access, and you accept or decline each request on the machine or from any device that already reaches it.
    Accepting a request from an account not yet on the machine makes it a member. Only the machine invites or removes a member; a member
    can leave.
-4. **Each machine dials out through its own Cloudflare tunnel.** `cloudflared` runs with a token for that machine's
-   named tunnel; no inbound port is ever opened.
+4. **Each machine dials out to Shinsa's own relay.** The engine keeps one outbound WebSocket to
+   `wss://app.shinsa.dev/__relay/‹instance›/machine`, ending in a `MachineRelay` Durable Object of its own that
+   carries every browser socket, webhook, preview and Slack forward as a stream on it; no inbound port is ever
+   opened. It replaced a Cloudflare tunnel and `cloudflared` per machine (LOC-272): those cost a tunnel and a DNS
+   record each on our account, capped the service at 50 machines and charged per machine past it, while a
+   hibernating Durable Object costs nothing while idle and needs no download on the machine.
 5. **The hosted web app is the same web app.** `apps/web` built in remote mode and served by the Worker; it talks to
    your local engine and holds no state of its own. Nothing is copied to the cloud, shared tasks included: a task you
    share is read live from the machine, by read-only remote access to that one task. Its link
-   (`app.shinsa.dev/share/t/‹token›#‹key›`, one opaque token rather than a readable machine or task name) opens a channel through the machine's tunnel that is sealed with
+   (`app.shinsa.dev/share/t/‹token›#‹key›`, one opaque token rather than a readable machine or task name) opens a channel through the machine's relay that is sealed with
    the key in the link's fragment, which no server sees; the machine pushes the task down it the moment it changes and
    reads nothing back. A link shows what its owner sees on its Overview, Review and Code: the request, plan, phase
    reports, walkthrough, review, checks with their output, evidence, activity, notes, gates without their answers, who
@@ -56,20 +61,20 @@ and changed the rest: one URL instead of a URL per machine, GitHub sign-in, and 
    with keys only those two hold. A browser is trusted once: it asks for access through a link the machine shows, and
    the machine takes its key only once you accept; a GitHub account alone opens nothing.
 7. **Webhooks get a stable public URL through the hosted side**:
-   `https://app.shinsa.dev/hooks/‹instance›/‹schedule›/‹token›`, forwarded to the machine's tunnel. Outside
-   services (Maple alerts, GitHub, Stripe) call it; the URL does not change when the tunnel does.
+   `https://app.shinsa.dev/hooks/‹instance›/‹schedule›/‹token›`, forwarded through the machine's relay. Outside
+   services (Maple alerts, GitHub, Stripe) call it; the URL does not change when the machine reconnects.
 
 ## The pieces
 
 ```
 browser on app.shinsa.dev ──HTTPS──► Worker (apps/cloud, D1)   sign-in, instances,
         │                                  │                    pairing, connect tokens,
-        │ wss + connect token              │ Cloudflare API     webhooks, the web build
+        │ wss + connect token              │                    webhooks, the web build
         ▼                                  ▼
-t-‹instance›.shinsa.dev ◄── outbound tunnel ── cloudflared ── the engine
-        sealed frames only                                    (127.0.0.1)
+/__relay/‹instance›/remote ──► MachineRelay ◄── one outbound wss ── the engine
+        sealed frames only     (Durable Object)                     (127.0.0.1)
 
-anyone with a share link ──wss, sealed with the link's key──► t-‹instance›.shinsa.dev/share
+anyone with a share link ──wss, sealed with the link's key──► /__relay/‹instance›/share
         the machine pushes one task, reads nothing back; app.shinsa.dev stores nothing
 ```
 
@@ -80,20 +85,23 @@ anyone with a share link ──wss, sealed with the link's key──► t-‹ins
   remove this; it protects against reading traffic, not against altered code. An installed app would.
 - **The dashboard has its own origin.** app.shinsa.dev is not shinsa.dev, so nothing the marketing site runs can
   reach the enrolled device keys (IndexedDB), the session cookie or `/__remote/instances/<id>/connect`.
-- **Machines' hosts are same-site with the dashboard.** `t-<id>.shinsa.dev` is served by whichever machine owns it,
-  so the cookies carry the `__Host-` prefix (no other host can set or replace them) and every POST a page makes needs
-  the dashboard's exact `Origin`; SameSite alone would not keep a sibling host out.
+- **Machines share the dashboard's origin only as sockets.** A machine is reached at `/__relay/<id>/…` on
+  app.shinsa.dev itself, which takes only WebSocket upgrades and drops the browser's cookies and authorization before
+  the relay, so a machine never sees the session. The cookies still carry the `__Host-` prefix and every POST a page
+  makes needs the dashboard's exact `Origin`.
 - **Who can get in.** Sign-in is GitHub OAuth with PKCE, open to any GitHub account: an account
-  lists only the machines it paired, and even a signed-in account reaches no machine: the tunnel answers only the sealed channel,
+  lists only the machines it paired, and even a signed-in account reaches no machine: the relay carries only the sealed channel,
   which needs a device key that machine enrolled and proves the machine's own key, pinned from its QR.
-- **Anyone can make a tunnel on our account.** Any GitHub account can pair up to 5 machines, and each is a named
-  Cloudflare tunnel and a proxied `t-<id>.shinsa.dev` host on our account, serving whatever that machine answers (the
-  engine answers only health, webhooks and the sealed channel, but a modified engine could serve anything under our
-  domain). The Worker caps the whole service at `MAX_INSTANCES` (50 by default) so the account's tunnel and DNS quotas
-  hold; past it an approval is refused with `service_full`. Abuse is handled by removing the instance.
+- **Anyone can pair a machine to our relay.** Any GitHub account can pair up to 5 machines, and each gets a Durable
+  Object on our account that serves whatever that machine answers on its previews (the engine answers only health,
+  webhooks, previews and the sealed channel, but a modified engine could serve anything on a `shinsa.page` label).
+  The Worker caps the whole service at `MAX_INSTANCES` (10,000 by default) against runaway pairing; past it an
+  approval is refused with `service_full`. Abuse is handled by removing the instance, which closes its relay.
 - **A second public entry point.** The request class is decided once, first, from `cf-connecting-ip`, and every route
   test runs as local and as remote.
-- **`cloudflared` is a downloaded binary**, so it is pinned and checksummed rather than whatever the package fetches.
+- **The relay is ours to run.** Every machine's traffic passes one Worker and its Durable Objects, so their limits
+  (32 MiB a WebSocket message, a Durable Object's own throughput) are the service's, and an outage of the Worker is an
+  outage of remote access; the relay still sees only sealed frames on a channel.
 - **Metadata stays visible**: when you use Shinsa, from where, and how much.
 - **A share link is a key.** Whoever holds the link reads the task, live, for as long as it is shared; Stop sharing
   ends every open link at once. app.shinsa.dev and Cloudflare never see the key (it is in the fragment) and carry

@@ -34,7 +34,7 @@ export const createConnect = Effect.fn('Sandbox.createConnect')(function* (
 ) {
   const { token, expiresAt } = yield* signConnect(machine, user, 'remote');
   const answer: ConnectResponse = {
-    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
+    url: `ws://${HOST}:${PORT}${SANDBOX_PATH}/relay/${machine.id}?${REMOTE_CONNECT_PARAM}=${encodeURIComponent(token)}`,
     expiresAt,
   };
   return answer;
@@ -70,7 +70,7 @@ export const respondTeamConnect = Effect.fn('Sandbox.respondTeamConnect')(functi
   if (!target) return Response.json(NOT_IN_TEAM, { status: 404 });
   const { token, expiresAt } = yield* signConnect(target, viewer, 'team');
   const answer: ConnectResponse = {
-    url: resolveTeamChannelUrl(`ws://${HOST}:${PORT}${SANDBOX_PATH}/tunnel/${target.id}`, token),
+    url: resolveTeamChannelUrl(`ws://${HOST}:${PORT}${SANDBOX_PATH}/relay/${target.id}`, token),
     expiresAt,
   };
   return Response.json(answer);

@@ -5,17 +5,17 @@ import {
   SHARE_CHANNEL_PATH,
   TEAM_CHANNEL_PATH,
 } from '../../packages/core/src/index.ts';
-import { type Machine, ORIGIN, TUNNEL, type TunnelData } from './schema.ts';
+import { type Machine, ORIGIN, RELAY, type RelayData } from './schema.ts';
 import { teammateLink } from './team.ts';
 
-export function upgradeTunnel(
+export function upgradeRelay(
   request: Request,
   url: URL,
   teammates: Machine[],
-  server: Bun.Server<TunnelData>
+  server: Bun.Server<RelayData>
 ) {
-  const tunnel = TUNNEL.exec(url.pathname);
-  const machine = teammates.find((entry) => entry.id === tunnel?.[1]);
+  const route = RELAY.exec(url.pathname);
+  const machine = teammates.find((entry) => entry.id === route?.[1]);
   if (!machine) return null;
   if (machine.id === 'kai' && !teammateLink.online) return new Response('Offline', { status: 502 });
   const token = encodeURIComponent(url.searchParams.get(REMOTE_CONNECT_PARAM) ?? '');
@@ -23,12 +23,12 @@ export function upgradeTunnel(
     '/share': `${SHARE_CHANNEL_PATH}${url.search}`,
     '/team': `${TEAM_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${token}`,
   };
-  const path = channels[tunnel?.[2] ?? ''] ?? `${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${token}`;
+  const path = channels[route?.[2] ?? ''] ?? `${REMOTE_CHANNEL_PATH}?${REMOTE_CONNECT_PARAM}=${token}`;
   if (server.upgrade(request, { data: { machine, path, upstream: null, pending: [] } })) return undefined;
   return new Response('Upgrade failed', { status: 400 });
 }
 
-function openUpstream(socket: ServerWebSocket<TunnelData>) {
+function openUpstream(socket: ServerWebSocket<RelayData>) {
   const { machine, path } = socket.data;
   if (machine.id === 'kai') teammateLink.sockets.add(socket);
   const upstream = new WebSocket(`ws://127.0.0.1:${machine.port}${path}`, {
@@ -45,7 +45,7 @@ function openUpstream(socket: ServerWebSocket<TunnelData>) {
   socket.data.upstream = upstream;
 }
 
-export const TUNNEL_SOCKET: Bun.WebSocketHandler<TunnelData> = {
+export const RELAY_SOCKET: Bun.WebSocketHandler<RelayData> = {
   open: openUpstream,
   message(socket, message) {
     const payload = typeof message === 'string' ? message : new Uint8Array(message);

@@ -441,7 +441,7 @@ task showing its machine, and with several machines New task places each task au
 where a router reads your plain-English policies, each machine's projects and how busy it is, and sends it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
 `docs/plans/remote-plan.md`). Share task (a task's menu) makes a link,
 `app.shinsa.dev/share/t/<token>#<key>`, that anyone can open without signing in: live, read-only remote
-access to that one task through the machine's tunnel, sealed with the key in the link, which no server sees. It is the
+access to that one task through the machine's relay, sealed with the key in the link, which no server sees. It is the
 owner's own task page with every button and input taken away, showing everything its owner sees on its Overview,
 Review, Code (a private repository's too, from the working copy before a pull request) and Chat, with the agents'
 live output and tool calls but never your messages to them, and it changes the moment the task does. Share as picks
@@ -474,7 +474,7 @@ address, fork it onto their own machine and make share links for it. Every perso
 Offline with when they were last seen, and leaving the team, taking a project out of it or narrowing someone's scopes
 ends their access at once (`docs/engine.md` → Teams → Teammates act on team tasks).
 Share preview, on a task's running service with a preview URL, does the same for the dev server itself: a link,
-`<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's tunnel, hot reload
+`<label>.shinsa.page/?key=…`, that opens the running service in any browser through the machine's relay, hot reload
 included, each preview its own origin on a domain apart from shinsa.dev. It has the same time limits, ends with the
 task, says when the service is stopped or the machine offline, and is only yours to share; unlike a task's link it is
 not sealed end to end, since a browser loads it as plain pages (`docs/engine.md` → Sharing a preview).
@@ -527,8 +527,8 @@ own machine in Settings → General → Slack (`docs/engine.md` → Slack).
   mid-run (`load_mcp_server`, `load_skill`). Each run's chat
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access
-  opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through a Cloudflare tunnel the
-  machine dials out, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
+  opens your machines as one dashboard at one URL, app.shinsa.dev, behind GitHub sign-in, through one relay socket the
+  machine dials out to Shinsa's own relay, end to end encrypted to devices enrolled at the machine; the cloud holds no state but the
   tasks you share by link, as a read-only projection without their chat (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
@@ -1167,7 +1167,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   the same loop as Home's input with everything on Auto: triage picks the project, the repository, the kind (a
   question is answered and ends there) and the priority.
 - **One shared bot, locked to its owner.** The app lives on app.shinsa.dev and relays each mention to the machine of
-  the Slack user who wrote it, over remote access's tunnel; someone who has not connected Slack to their own Shinsa
+  the Slack user who wrote it, over remote access's relay; someone who has not connected Slack to their own Shinsa
   gets a private link to do so, and nothing runs. A teammate who connects gets tasks on their machine. No machine holds
   a Slack token, and the relay stores no message text.
 - **The thread follows the task, in Block Kit**: one status message edited in place as it moves, one post for each
@@ -1248,7 +1248,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   machine, with full control, without an invite or a request; their browser adds itself with the team's key the next
   time they open Shinsa Cloud. You take it back under Remote access, like any member.
 - **Nothing about the work leaves your machine for the cloud.** app.shinsa.dev keeps who is in which team, never a
-  task. Each view is read from the owner's machine over its tunnel and sealed with a team key that lives only on
+  task. Each view is read from the owner's machine over its relay and sealed with a team key that lives only on
   members' machines and browsers, carried in the join link's fragment, which no server receives.
 - **Offline teammates stay listed.** Each machine keeps the last list it got from every teammate's machine, beside
   `remote.json`, and shows it marked Offline with when it was last updated; the live list replaces it once the
