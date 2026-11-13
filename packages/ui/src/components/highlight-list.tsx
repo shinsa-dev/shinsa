@@ -63,7 +63,9 @@ function HighlightList({
  *
  * `holdOverGaps` keeps the highlight on the last hovered item while the
  * pointer crosses the space between items (a gap, an indent, a guide line),
- * so it slides from row to row instead of snapping back to rest.
+ * so it slides from row to row instead of snapping back to rest. An element
+ * marked `data-highlight-release` (a section header) is not a gap: pointing at
+ * it lets the highlight go back to rest.
  */
 function HoverHighlight({
   children,
@@ -92,11 +94,13 @@ function HoverHighlight({
     const rest = () => mark(root.querySelector('[data-highlight-item][data-active="true"]'));
     const itemFrom = (target: EventTarget | null) =>
       target instanceof Element ? target.closest('[data-highlight-item]') : null;
+    const isRelease = (target: EventTarget | null) =>
+      target instanceof Element && target.closest('[data-highlight-release]') !== null;
     const onOver = (event: PointerEvent) => {
       pointerInside = true;
       const item = itemFrom(event.target);
       if (item) mark(item);
-      else if (!holdOverGaps) rest();
+      else if (!holdOverGaps || isRelease(event.target)) rest();
     };
     const onLeave = () => {
       pointerInside = false;

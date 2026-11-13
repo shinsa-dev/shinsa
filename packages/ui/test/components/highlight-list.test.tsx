@@ -65,6 +65,26 @@ describe('HoverHighlight', () => {
     expect(plain.getByRole('button', { name: 'Home' }).hasAttribute('data-hovered')).toBe(true);
   });
 
+  it('lets the highlight go back to rest over an element marked as a release, even while holding over gaps', () => {
+    const view = render(
+      <HoverHighlight holdOverGaps>
+        <div data-highlight-release=''>
+          <span data-testid='header'>In progress</span>
+        </div>
+        <button type='button' data-highlight-item data-active='true'>
+          Home
+        </button>
+        <button type='button' data-highlight-item>
+          Settings
+        </button>
+      </HoverHighlight>
+    );
+    fireEvent.pointerOver(view.getByRole('button', { name: 'Settings' }));
+    fireEvent.pointerOver(view.getByTestId('header'));
+    expect(view.getByRole('button', { name: 'Home' }).hasAttribute('data-hovered')).toBe(true);
+    expect(view.getByRole('button', { name: 'Settings' }).hasAttribute('data-hovered')).toBe(false);
+  });
+
   it('drops its pointer mark when it cleans up, so a page shown again rests on the current item', () => {
     const view = render(<List />);
     const settings = view.getByRole('button', { name: 'Settings' });

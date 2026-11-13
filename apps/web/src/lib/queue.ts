@@ -63,7 +63,8 @@ function listGateItems(entries: QueuedGate[]): QueueItem[] {
 const WAITING_GROUP = { title: 'Waiting on another task', icon: 'IconHourglass', tone: 'neutral' } as const;
 
 function selectGroupInitiative(state: ShinsaState, task: Task) {
-  return task.initiativeId ? (state.initiatives[task.initiativeId] ?? null) : null;
+  const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
+  return initiative && selectInitiativeLead(state, initiative) ? initiative : null;
 }
 
 function resolveGroupKey(state: ShinsaState, task: Task) {

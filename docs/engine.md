@@ -1501,8 +1501,9 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
 - **Finishing and cancelling.** Marking the lead task done finishes the initiative: the record stays with its last
   report and its sheet stays on the lead task, but it takes no new tasks (`initiative_finished`), its members' new
   tasks no longer inherit it, and Home and ⌘K leave it out. While it is open, two or more of its tasks in one section
-  of Home or the queue (In progress, Waiting, Snoozed; never Needs you) sit under one thin header, the initiative's name
-  and its progress (`listInitiativeProgress`); the header opens the lead task; a task in a bundle and an initiative groups
+  of Home or the queue (In progress, Waiting, Snoozed; never Needs you) sit under one small row, the initiative's name
+  and its progress (`listInitiativeProgress`), that opens the lead task; once the lead is done its tasks are plain
+  rows again (`selectGroupInitiative` asks `selectInitiativeLead`); a task in a bundle and an initiative groups
   with the initiative, so a group never nests. Cancelling the lead task dissolves it (`syncCancelledLeads`):
   every member leaves, a focus on it is cleared and `initiative.removed` drops the record.
 - **Phases are labels, not gates.** A phase is `{ id, name }` in the initiative's order. A task carries

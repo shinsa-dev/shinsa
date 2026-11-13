@@ -294,6 +294,17 @@ describe('groups of a bundle or an initiative', () => {
     ]);
   });
 
+  it('leaves the tasks of a finished initiative as plain rows, since its name opens nothing', () => {
+    const state = createGroupWorld();
+    const lead = state.tasks.lead;
+    if (!lead) throw new Error('No lead');
+    const finished = { ...state, tasks: { ...state.tasks, lead: { ...lead, stage: 'done' as const } } };
+    const working = listQueueSections(finished, resolveQueue(finished, NOW)).find(
+      (section) => section.key === 'working'
+    );
+    expect(working?.entries.map(describeEntry)).toEqual(['dock', 'solo', 'panel']);
+  });
+
   it('opens the lead task from an initiative, with how far its tasks have shipped', () => {
     const group = groupIn('working');
     expect(group.opens?.id).toBe('lead');

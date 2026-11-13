@@ -270,6 +270,11 @@ export function TaskQueue({
       onNavigate={onNavigate}
     />
   ));
-  if (variant === 'compact') return <CompactSections className={className}>{views}</CompactSections>;
+  if (variant === 'compact')
+    return (
+      <CompactSections holdOverGaps className={className}>
+        {views}
+      </CompactSections>
+    );
   return <>{views}</>;
 }

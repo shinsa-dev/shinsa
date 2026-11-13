@@ -257,7 +257,9 @@ Only these, and they win over anything below:
    order) the latest of its tasks still being worked on, else the latest still waiting. Its tasks are ordinary
    `ListRow`s inside a 1px `border-border` guide line 16px in, always shown, and a section's count counts each of
    them. The hover highlight holds on the last row while the pointer crosses a gap, an indent or a guide line
-   (`HoverHighlight`'s `holdOverGaps`), so it slides from row to row. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
+   (`HoverHighlight`'s `holdOverGaps`, on Home's sections and the compact queue only), so it slides from row to
+   row; a section header is marked `data-highlight-release`, so pointing at it lets the highlight go back to the
+   task on screen. Once an initiative's lead task is done, its tasks are plain rows again. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from All tasks' groups (`lib/tasks/groups.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
