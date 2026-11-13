@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveBoard, resolveInsets } from '../../src/lib/board.ts';
+import { resolveBoard, resolveInsets, resolveSignal } from '../../src/lib/board.ts';
 
 const PAGE_WIDTH = 1440;
 const BOTH = { incoming: true, outgoing: true };
@@ -37,5 +37,33 @@ describe('resolveBoard', () => {
       entry: 62,
       exit: 62,
     });
+  });
+
+  it('draws no lines beside a section that fills the page', () => {
+    const wide = { left: 0, right: PAGE_WIDTH, top: 0, bottom: 800 };
+    expect(resolveBoard([wide, { ...wide, top: 1000, bottom: 1800 }], PAGE_WIDTH).pins).toHaveLength(0);
+  });
+
+  it('adds pads beside narrow sections with room for stubs', () => {
+    const chips = Array.from({ length: 8 }, (_, index) => ({
+      left: 400,
+      right: 1040,
+      top: index * 1000,
+      bottom: index * 1000 + 800,
+    }));
+    expect(resolveBoard(chips, PAGE_WIDTH).pads.length).toBeGreaterThan(0);
+  });
+});
+
+describe('resolveSignal', () => {
+  it('runs from 0 at the start of a bus to 1 at its end', () => {
+    const bus = { d: '', from: 100, to: 300 };
+    expect(resolveSignal(bus, 50)).toBe(0);
+    expect(resolveSignal(bus, 200)).toBe(0.5);
+    expect(resolveSignal(bus, 400)).toBe(1);
+  });
+
+  it('stays at 0 on a bus with no length', () => {
+    expect(resolveSignal({ d: '', from: 300, to: 300 }, 300)).toBe(0);
   });
 });
