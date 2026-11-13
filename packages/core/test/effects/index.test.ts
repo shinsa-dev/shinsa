@@ -26,7 +26,9 @@ describe('resolveEffectKey', () => {
     expect(resolveEffectKey({ kind: 'run.execute', runId: 'r' }, 9)).toBe('run.execute:r');
     expect(resolveEffectKey({ kind: 'run.cancel', runId: 'r' }, 9)).toBe('run.cancel:r');
     expect(resolveEffectKey({ kind: 'question.resolve', gateId: 'g' }, 9)).toBe('question.resolve:g');
-    expect(resolveEffectKey({ kind: 'autopilot.judge', taskId: 't', gateId: 'g' }, 9)).toBe('autopilot.judge:g:9');
+    expect(resolveEffectKey({ kind: 'autopilot.judge', taskId: 't', gateId: 'g' }, 9)).toBe(
+      'autopilot.judge:g:9'
+    );
   });
 
   test('repeatable effects are keyed by the event that asked for them', () => {
