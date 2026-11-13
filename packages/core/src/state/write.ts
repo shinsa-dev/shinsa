@@ -1,3 +1,4 @@
+import { Result } from 'effect';
 import { type Activity, type Gate, type Run, resolveRoundStamp, type Task } from '../domain/index.ts';
 import { writeEntry } from './draft.ts';
 import { recordPresence } from './presence.ts';
@@ -19,11 +20,9 @@ const ACTOR_STAMPS = new WeakMap<ShinsaState, ActorStamp>();
 
 export function applyStamped<T>(state: ShinsaState, stamp: ActorStamp, apply: () => T): T {
   ACTOR_STAMPS.set(state, stamp);
-  try {
-    return apply();
-  } finally {
-    ACTOR_STAMPS.delete(state);
-  }
+  const applied = Result.try(apply);
+  ACTOR_STAMPS.delete(state);
+  return Result.getOrThrow(applied);
 }
 
 export function record(state: ShinsaState, taskId: string, at: number, entry: ActivityEntry) {

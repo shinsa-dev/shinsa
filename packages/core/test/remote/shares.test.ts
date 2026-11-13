@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import { serializeBase64Url } from '../../src/remote/bytes.ts';
 import {
   isShareId,
@@ -28,24 +29,34 @@ describe('the share link', () => {
     expect(path).toMatch(/^\/share\/t\/[A-Za-z0-9_-]+$/);
     expect(path).not.toContain('inst');
     expect(new URL(url).pathname).not.toContain(KEY);
-    expect(parseShareUrl(url)).toEqual({ instanceId: 'inst', shareId: SHARE_ID, key: KEY });
+    expect(Option.getOrNull(parseShareUrl(url))).toEqual({ instanceId: 'inst', shareId: SHARE_ID, key: KEY });
+  });
+
+  test('reads an unreadable share id as an empty one', () => {
+    expect(resolveSharePagePath('inst', '!!')).toBe(resolveSharePagePath('inst', ''));
   });
 
   test('is refused without its key, with a short token or key, or as anything but a share page', () => {
     const path = resolveSharePagePath('inst', SHARE_ID);
-    expect(parseShareLocation(path, '')).toBeNull();
-    expect(parseShareLocation(path, '#short')).toBeNull();
-    expect(parseShareLocation(`/share/t/${SHARE_ID}`, `#${KEY}`)).toBeNull();
-    expect(parseShareLocation(resolveSharePagePath('../x', SHARE_ID), `#${KEY}`)).toBeNull();
+    expect(Option.getOrNull(parseShareLocation(path, ''))).toBeNull();
+    expect(Option.getOrNull(parseShareLocation(path, '#short'))).toBeNull();
+    expect(Option.getOrNull(parseShareLocation(`/share/t/${SHARE_ID}`, `#${KEY}`))).toBeNull();
     expect(
-      parseShareLocation(`/share/t/${serializeBase64Url(new Uint8Array(20).fill(255))}`, `#${KEY}`)
+      Option.getOrNull(parseShareLocation(resolveSharePagePath('../x', SHARE_ID), `#${KEY}`))
     ).toBeNull();
-    expect(parseShareLocation('/share/t/a!b', `#${KEY}`)).toBeNull();
-    expect(parseShareLocation(path.replace(/^\/share\/t\//, '/share/'), `#${KEY}`)).toBeNull();
-    expect(parseShareLocation(`${path}/more`, `#${KEY}`)).toBeNull();
-    expect(parseShareLocation(`/tasks/${SHARE_ID}`, `#${KEY}`)).toBeNull();
-    expect(parseShareUrl(null)).toBeNull();
-    expect(parseShareUrl('not a url')).toBeNull();
+    expect(
+      Option.getOrNull(
+        parseShareLocation(`/share/t/${serializeBase64Url(new Uint8Array(20).fill(255))}`, `#${KEY}`)
+      )
+    ).toBeNull();
+    expect(Option.getOrNull(parseShareLocation('/share/t/a!b', `#${KEY}`))).toBeNull();
+    expect(
+      Option.getOrNull(parseShareLocation(path.replace(/^\/share\/t\//, '/share/'), `#${KEY}`))
+    ).toBeNull();
+    expect(Option.getOrNull(parseShareLocation(`${path}/more`, `#${KEY}`))).toBeNull();
+    expect(Option.getOrNull(parseShareLocation(`/tasks/${SHARE_ID}`, `#${KEY}`))).toBeNull();
+    expect(Option.getOrNull(parseShareUrl(null))).toBeNull();
+    expect(Option.getOrNull(parseShareUrl('not a url'))).toBeNull();
   });
 
   test('knows a share id by its length', () => {

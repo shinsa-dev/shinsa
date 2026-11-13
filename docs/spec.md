@@ -747,7 +747,12 @@ other agents and gets the results pushed back into its turn; it can file tasks o
 agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 - **Schedules and webhooks start work for you.** An agent can set a schedule (once, every N minutes,
-  daily at a time on chosen weekdays) or a webhook that starts a task or messages one. A machine
+  daily at a time on chosen weekdays), a webhook, or a Slack channel (with Slack connected and @Shinsa in
+  the channel, every new message there, an alert a bot posts included) that starts a task or messages one. The
+  automation's own text decides whether a webhook request or a channel message is acted on: "only file bugs"
+  or "only failed deploys" leaves the rest alone, recorded as a skipped run. A task filed from a channel message gets
+  what a mention gets, in that message's thread: Shinsa's reaction, the status card with its buttons, the result
+  and "Merged"; `slack_updates: false` files tasks without posting. A machine
   that slept runs a missed schedule once, not once per slot; a run is skipped while the last one is
   still open. A watch reads one of a project's integrations (a Slack channel, a support inbox,
   traces) on a clock or a webhook, out of sight, and files a task for each new report in it, with the report kept on the
@@ -758,7 +763,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   thing to approve.
   Settings → Automations and ⌘K pause, resume and delete them. Webhooks are signed
   (HMAC), deduped by a replay key and rate limited, and what they carry reaches the agent framed as
-  untrusted data.
+  untrusted data; a Slack message is deduped, rate limited and framed the same way.
 - **Secrets never touch the chat.** An agent asks for one (`request_secret`); you paste it into a
   password field, Shinsa keeps it on disk and the agent only ever sees a one-use reference.
 - **Some decisions are only yours.** The decisions at your gates (`docs/engine.md` → Who can

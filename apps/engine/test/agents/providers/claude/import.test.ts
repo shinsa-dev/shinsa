@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { convertClaudeSession } from '../../../../src/agents/providers/claude/import.ts';
 
+const NOW = Date.UTC(2026, 9, 1, 12);
+
 describe('importing a Claude Code session', () => {
   test('a Claude Code session becomes chat entries with the closing reply final', () => {
     const lines = [
@@ -27,7 +29,7 @@ describe('importing a Claude Code session', () => {
       },
       { type: 'assistant', isSidechain: true, message: { content: [{ type: 'text', text: 'hidden' }] } },
     ];
-    const entries = convertClaudeSession(lines.map((line) => JSON.stringify(line)).join('\n'));
+    const entries = convertClaudeSession(lines.map((line) => JSON.stringify(line)).join('\n'), NOW);
     expect(entries.map((entry) => entry.type)).toEqual([
       'user',
       'agent',
@@ -48,6 +50,8 @@ describe('converting edge cases', () => {
     const lines = [
       'not json',
       '',
+      '[1, 2]',
+      JSON.stringify({ type: 'user', isMeta: 'yes', message: { content: 'Wrong shape' } }),
       JSON.stringify({ type: 'user', uuid: 'u1', message: { content: 'Plain prompt' } }),
       JSON.stringify({
         type: 'user',
@@ -57,10 +61,12 @@ describe('converting edge cases', () => {
       JSON.stringify({ type: 'assistant', message: { content: 'not an array' } }),
       JSON.stringify({ type: 'assistant' }),
       JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use' }, { type: 'text' }] } }),
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 5 }, 'loose'] } }),
     ];
-    const entries = convertClaudeSession(lines.join('\n'));
+    const entries = convertClaudeSession(lines.join('\n'), NOW);
     expect(entries.map((entry) => entry.type)).toEqual(['user', 'user', 'tool_call']);
     expect(entries[0]?.id).toBe('u1');
-    expect(entries[1]?.id).toBe('line-3-0');
+    expect(entries[1]?.id).toBe('line-5-0');
+    expect(entries.every((entry) => entry.at === NOW)).toBe(true);
   });
 });

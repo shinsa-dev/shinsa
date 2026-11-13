@@ -35,7 +35,7 @@ import {
   verifyTeamHello,
   TEAM_REFUSALS,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Layer, Redacted, Ref } from 'effect';
+import { Clock, Context, Effect, Layer, Redacted, Ref, Option } from 'effect';
 import { Transcripts } from '../../agents/transcripts/service.ts';
 import { describeError } from '../../log/redact.ts';
 import { EngineCore } from '../../runtime/engine/service.ts';
@@ -179,7 +179,7 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
       });
 
       const join = Effect.fn('Teams.join')(function* (url: string) {
-        const fragment = parseTeamJoinUrl(url);
+        const fragment = Option.getOrNull(parseTeamJoinUrl(url));
         if (!fragment) return yield* new DomainError(TEAM_DOMAIN_ERRORS.linkInvalid);
         const token = yield* findMachineToken();
         const answer = yield* calls.join(token, fragment.invite).pipe(
@@ -395,9 +395,9 @@ export class Teams extends Context.Service<Teams, TeamsHandle>()('shinsa/engine/
       });
 
       const authorize = Effect.fn('Teams.authorize')(function* (text: string, userId: string) {
-        const delivery = parseTeamKeyDelivery(text);
+        const delivery = Option.getOrNull(parseTeamKeyDelivery(text));
         if (delivery) return yield* receiveKey(delivery, userId);
-        const hello = parseTeamHello(text);
+        const hello = Option.getOrNull(parseTeamHello(text));
         if (!hello) return null;
         const subject: TeamSubject = {
           teamId: hello.team,

@@ -273,9 +273,12 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           let openFrame: ((frame: Bytes) => Effect.Effect<Bytes, FrameError>) | null = null;
 
           const readWelcome = Effect.fn('TeamFeeds.readWelcome')(function* (text: string) {
-            const welcome = yield* Effect.try({ try: () => parseShareWelcome(text), catch: unreadable });
+            const welcome = yield* Effect.try({
+              try: () => Option.getOrNull(parseShareWelcome(text)),
+              catch: unreadable,
+            });
             if (welcome?.type === 'refused') {
-              const keyRequest = parseTeamKeyRefusal(text);
+              const keyRequest = Option.getOrNull(parseTeamKeyRefusal(text));
               const end: TeamStreamEnd = { reason: welcome.reason, gone: true };
               return keyRequest ? { ...end, keyRequest } : end;
             }
@@ -304,7 +307,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             const frame = new Uint8Array(data) as Bytes;
             const opened = yield* opener(frame).pipe(Effect.mapError(unreadable));
             const message = yield* Effect.try({
-              try: () => parseShareMessage(decodeText(opened)),
+              try: () => Option.getOrNull(parseShareMessage(decodeText(opened))),
               catch: unreadable,
             });
             if (!message) return offline;
@@ -438,7 +441,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         let adopted = false;
         for (const snapshot of held) {
           const instanceId = yield* Effect.try({
-            try: () => selectTeamSnapshotSigner(snapshot),
+            try: () => Option.getOrNull(selectTeamSnapshotSigner(snapshot)),
             catch: unreadable,
           });
           const feed = instanceId ? yield* selectFeed(resolveFeedKey(teamId, instanceId)) : null;
@@ -537,7 +540,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
               continue;
             }
             if (event.type === 'close' || typeof event.data !== 'string') return false;
-            const answer = parseShareWelcome(event.data);
+            const answer = Option.getOrNull(parseShareWelcome(event.data));
             return answer?.type === 'refused' && answer.reason === TEAM_KEY_RECEIVED;
           }
         }).pipe(

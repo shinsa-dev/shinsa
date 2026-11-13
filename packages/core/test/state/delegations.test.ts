@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   applyEvent,
   createState,
@@ -54,15 +55,19 @@ function withRuns(...runs: Run[]): ShinsaState {
 
 describe('delivery items', () => {
   test('read back from their wire form', () => {
-    expect(parseDeliveryItem('result:r1')).toEqual({ kind: 'result', runId: 'r1' });
-    expect(parseDeliveryItem('question:r1:q1')).toEqual({ kind: 'question', runId: 'r1', questionId: 'q1' });
-    expect(parseDeliveryItem('message:m1')).toEqual({ kind: 'message', messageId: 'm1' });
+    expect(Option.getOrNull(parseDeliveryItem('result:r1'))).toEqual({ kind: 'result', runId: 'r1' });
+    expect(Option.getOrNull(parseDeliveryItem('question:r1:q1'))).toEqual({
+      kind: 'question',
+      runId: 'r1',
+      questionId: 'q1',
+    });
+    expect(Option.getOrNull(parseDeliveryItem('message:m1'))).toEqual({ kind: 'message', messageId: 'm1' });
   });
 
   test('anything else is not an item', () => {
-    expect(parseDeliveryItem('result')).toBeNull();
-    expect(parseDeliveryItem('question:r1')).toBeNull();
-    expect(parseDeliveryItem('settled')).toBeNull();
+    expect(Option.getOrNull(parseDeliveryItem('result'))).toBeNull();
+    expect(Option.getOrNull(parseDeliveryItem('question:r1'))).toBeNull();
+    expect(Option.getOrNull(parseDeliveryItem('settled'))).toBeNull();
   });
 });
 
@@ -73,8 +78,8 @@ describe('the tree of delegated runs', () => {
       stepRun('a', { delegation: delegation('step') }),
       stepRun('b', { delegation: delegation('a') })
     );
-    expect(selectRootRun(state, state.runs.b as Run)?.id).toBe('step');
-    expect(selectRootRun(state, state.runs.step as Run)?.id).toBe('step');
+    expect(Option.getOrNull(selectRootRun(state, state.runs.b as Run))?.id).toBe('step');
+    expect(Option.getOrNull(selectRootRun(state, state.runs.step as Run))?.id).toBe('step');
   });
 
   test('a chain that loops or loses its top has no root', () => {
@@ -82,9 +87,9 @@ describe('the tree of delegated runs', () => {
       stepRun('a', { delegation: delegation('b') }),
       stepRun('b', { delegation: delegation('a') })
     );
-    expect(selectRootRun(looped, looped.runs.a as Run)).toBeNull();
+    expect(Option.getOrNull(selectRootRun(looped, looped.runs.a as Run))).toBeNull();
     const orphan = withRuns(stepRun('a', { delegation: delegation('gone') }));
-    expect(selectRootRun(orphan, orphan.runs.a as Run)).toBeNull();
+    expect(Option.getOrNull(selectRootRun(orphan, orphan.runs.a as Run))).toBeNull();
   });
 
   test('a task’s delegated runs are listed oldest first, and step runs are not among them', () => {

@@ -9,6 +9,7 @@ import {
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
+import { Option } from 'effect';
 import * as React from 'react';
 import { EvidencePointer } from '@/components/evidence/evidence-pointer.tsx';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
@@ -180,7 +181,7 @@ export function OverviewTab({
   const hint = readOnly ? null : resolveMessageHint(state, task);
   const fade = useTaskScrollFade();
   const led = selectLedInitiative(state, task);
-  const sheet = led ? resolveInitiativeSheet(state, led.id, Date.now()) : null;
+  const sheet = led ? Option.getOrNull(resolveInitiativeSheet(state, led.id, Date.now())) : null;
   const feed = useTeamFeed();
   const shared = !led && readOnly ? selectLeadTeamInitiative(feed, task) : null;
   return (

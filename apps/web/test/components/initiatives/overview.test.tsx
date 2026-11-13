@@ -2,6 +2,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { resolveInitiativeSheet, resolveQueue, type ShinsaState, type TeamFeedSnapshot } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { render, screen } from '@testing-library/react';
+import { Option } from 'effect';
 import { InitiativeOverview, TeamInitiativeOverview } from '@/components/initiatives/sheet.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { connection } from '@/lib/connection/socket.ts';
@@ -76,7 +77,7 @@ function createSplitState(report: { narrative: string } | null) {
 }
 
 function renderOverview(state: ShinsaState) {
-  const sheet = resolveInitiativeSheet(state, 'split', NOW);
+  const sheet = Option.getOrNull(resolveInitiativeSheet(state, 'split', NOW));
   if (!sheet) throw new Error('no sheet');
   render(
     <TooltipProvider>

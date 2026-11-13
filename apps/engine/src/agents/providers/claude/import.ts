@@ -1,26 +1,12 @@
 import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent, markFinalReplies } from '@shinsa/core';
+import { Option, Schema } from 'effect';
 import type { ImageStore } from '../types.ts';
 import { mapClaudePrompt, mapClaudeResult, mapClaudeTool } from './map.ts';
+import { SessionContentBlock, type SessionLine, SessionLineText } from './schema.ts';
 
-interface ContentBlock {
-  type: string;
-  text?: string;
-  name?: string;
-  id?: string;
-  input?: unknown;
-  tool_use_id?: string;
-  is_error?: boolean;
-  content?: unknown;
-}
+const decodeSessionLine = Schema.decodeUnknownOption(SessionLineText);
 
-interface SessionLine {
-  type?: string;
-  uuid?: string;
-  timestamp?: string;
-  isSidechain?: boolean;
-  isMeta?: boolean;
-  message?: { role?: string; content?: string | ContentBlock[] };
-}
+const decodeContentBlock = Schema.decodeUnknownOption(SessionContentBlock);
 
 interface TimedEvent {
   at: number;
@@ -40,7 +26,7 @@ function createChatEntries(timed: TimedEvent[]): ChatEntry[] {
 
 function mapBlock(
   line: SessionLine,
-  block: ContentBlock,
+  block: SessionContentBlock,
   storeImage: ImageStore | undefined
 ): ChatEvent | null {
   if (line.type === 'assistant' && block.type === 'text' && block.text?.trim())
@@ -52,18 +38,15 @@ function mapBlock(
   return null;
 }
 
-export function convertClaudeSession(text: string, storeImage?: ImageStore): ChatEntry[] {
+export function convertClaudeSession(text: string, now: number, storeImage?: ImageStore): ChatEntry[] {
   const timed: TimedEvent[] = [];
   text.split('\n').forEach((raw, lineIndex) => {
     if (!raw.trim()) return;
-    let line: SessionLine;
-    try {
-      line = JSON.parse(raw) as SessionLine;
-    } catch {
-      return;
-    }
+    const decoded = decodeSessionLine(raw);
+    if (Option.isNone(decoded)) return;
+    const line = decoded.value;
     if (line.isSidechain || line.isMeta || !line.message) return;
-    const at = line.timestamp ? Date.parse(line.timestamp) : Date.now();
+    const at = line.timestamp ? Date.parse(line.timestamp) : now;
     const base = line.uuid ?? `line-${lineIndex}`;
     const content = line.message.content;
     if (line.type === 'user' && typeof content === 'string') {
@@ -72,8 +55,9 @@ export function convertClaudeSession(text: string, storeImage?: ImageStore): Cha
       return;
     }
     if (!Array.isArray(content)) return;
-    content.forEach((block, blockIndex) => {
-      const event = mapBlock(line, block, storeImage);
+    content.forEach((value, blockIndex) => {
+      const block = decodeContentBlock(value);
+      const event = Option.isSome(block) ? mapBlock(line, block.value, storeImage) : null;
       if (event) timed.push({ at, id: `${base}-${blockIndex}`, event });
     });
   });

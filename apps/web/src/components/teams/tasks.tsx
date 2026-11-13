@@ -2,6 +2,7 @@ import { resolveFocusTeam, type ShinsaState, type TeamFeedTask } from '@shinsa/c
 import { Badge } from '@shinsa/ui/components/badge';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { Option } from 'effect';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { MentionText } from '@/components/people/user-tag.tsx';
@@ -83,7 +84,7 @@ export function TeamFeedRefusals({ state }: { state: ShinsaState }) {
     feed,
     teams,
     listFullMachineIds(machines),
-    resolveFocusTeam(state, Date.now())
+    Option.getOrNull(resolveFocusTeam(state, Date.now()))
   );
   const described = describeTeamFeedRefusals(refusals);
   if (!described) return null;

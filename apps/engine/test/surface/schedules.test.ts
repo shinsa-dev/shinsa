@@ -32,8 +32,12 @@ const RESPONSES = {
   },
 };
 
-async function write(words: string[], hookSecrets?: SurfaceHookSecrets) {
-  const fake = createFakeClient(RESPONSES);
+async function write(
+  words: string[],
+  hookSecrets?: SurfaceHookSecrets,
+  responses: Record<string, unknown> = {}
+) {
+  const fake = createFakeClient({ ...RESPONSES, ...responses });
   if (hookSecrets) fake.client.hookSecrets = hookSecrets;
   setSystemTime(new Date(NOW));
   try {
@@ -66,6 +70,91 @@ describe('listing schedules', () => {
 });
 
 describe('writing a schedule', () => {
+  test('on a Slack channel names its workspace and channel, and says what to do when the bot is not in it', async () => {
+    const channels = {
+      '/api/slack/channels': {
+        channels: [
+          { teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts', private: false },
+          { teamId: 'T2', teamName: 'Beta', channelId: 'C9', channelName: 'alerts', private: false },
+        ],
+      },
+    };
+    const words = ['--message', 'Look into it', '--new-task', '--slack-channel', '#alerts'];
+    const { command } = await write([...words, '--slack-workspace', 'Beta'], undefined, channels);
+    expect(command.trigger).toEqual({
+      kind: 'slack',
+      teamId: 'T2',
+      teamName: 'Beta',
+      channelId: 'C9',
+      channelName: 'alerts',
+      threadUpdates: true,
+    });
+    const quiet = await write(
+      [...words, '--slack-workspace', 'Acme', '--slack-updates=false'],
+      undefined,
+      channels
+    );
+    expect(quiet.command.trigger).toMatchObject({ teamId: 'T1', threadUpdates: false });
+    const negated = await write(
+      [...words, '--slack-workspace', 'Acme', '--no-slack-updates'],
+      undefined,
+      channels
+    );
+    expect(negated.command.trigger).toMatchObject({ teamId: 'T1', threadUpdates: false });
+    const stored = {
+      ...channels,
+      '/api/schedules': {
+        schedules: [
+          schedule({
+            trigger: {
+              kind: 'slack',
+              teamId: 'T1',
+              teamName: 'Acme',
+              channelId: 'C1',
+              channelName: 'alerts',
+              threadUpdates: false,
+            },
+          }),
+        ],
+      },
+    };
+    const renamed = [...words, '--slack-workspace', 'Acme', '--id', 'sch-1'];
+    expect((await write(renamed, undefined, stored)).command.trigger).toMatchObject({ threadUpdates: false });
+    expect((await write([...renamed, '--slack-updates'], undefined, stored)).command.trigger).toMatchObject({
+      threadUpdates: true,
+    });
+    expect(
+      (await write([...words, '--slack-workspace', 'Acme', '--id', 'sch-404'], undefined, stored)).command
+        .trigger
+    ).toMatchObject({ threadUpdates: true });
+    await expect(
+      write(['--message', 'x', '--new-task', '--every-minutes', '5', '--slack-updates=false'])
+    ).rejects.toThrow('slack_updates only goes with a Slack channel automation');
+    expect((await write(['--id', 'sch-1', '--slack-updates'], undefined, stored)).command.trigger).toEqual({
+      kind: 'slack',
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+      threadUpdates: true,
+    });
+    await expect(write(['--id', 'sch-404', '--no-slack-updates'], undefined, stored)).rejects.toThrow(
+      'slack_updates only changes an automation on a Slack channel'
+    );
+    await expect(write(['--message', 'x', '--new-task', '--no-slack-updates'])).rejects.toThrow(
+      'or alone with schedule_id'
+    );
+    await expect(write(words, undefined, channels)).rejects.toThrow(
+      '#alerts is in several Slack workspaces: Acme, Beta. Name the workspace too.'
+    );
+    await expect(
+      write(['--message', 'x', '--new-task', '--slack-channel', 'deploys'], undefined, channels)
+    ).rejects.toThrow('Shinsa is not in #deploys.');
+    await expect(
+      write(['--message', 'x', '--new-task', '--every-minutes', '5', '--slack-workspace', 'Beta'])
+    ).rejects.toThrow('slack_workspace only goes with slack_channel.');
+  });
+
   test('a one-off that starts a new task in a repository, on the machine’s time zone', async () => {
     const { result, command } = await write([
       '--name',

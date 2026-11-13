@@ -1,6 +1,11 @@
+import { Match, Option } from 'effect';
 import type { RunRole, RunUsage, Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { createPercent, createUsd } from './amounts.ts';
 import { resolveUsageShares, type UsageShareState } from './rate.ts';
+import type { Percent, Usd } from './schema.ts';
+export { createPercent, createUsd } from './amounts.ts';
+export { Percent, Usd } from './schema.ts';
 export {
   listRecentSpends,
   type PaceHold,
@@ -60,13 +65,13 @@ export interface CostLine {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   tokens: number;
-  knownUsd: number;
+  knownUsd: Usd;
   unpricedRuns: number;
-  weeklyPercent: number;
+  weeklyPercent: Percent;
   weeklyRuns: number;
   weeklyTasks: number;
   learningRuns: number;
-  estimatedPercent: number;
+  estimatedPercent: Percent;
 }
 
 export interface TaskCost {
@@ -77,14 +82,18 @@ export interface TaskCost {
 
 export type BudgetUnit = 'percent' | 'usd';
 
-export interface TaskBudget {
-  unit: BudgetUnit;
-  cap: number;
-  limit: number;
-  spent: number;
+interface BudgetAmounts<Unit extends BudgetUnit, Amount extends number> {
+  unit: Unit;
+  cap: Amount;
+  limit: Amount;
+  spent: Amount;
   share: number;
   estimated: boolean;
 }
+
+export type TaskBudget = BudgetAmounts<'usd', Usd> | BudgetAmounts<'percent', Percent>;
+
+export type BudgetAmount = 'cap' | 'limit' | 'spent';
 
 const ROLE_RANK: Record<RunRole, number> = {
   agent: 1,
@@ -104,13 +113,13 @@ function createLine(): CostLine {
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
     tokens: 0,
-    knownUsd: 0,
+    knownUsd: createUsd(0),
     unpricedRuns: 0,
-    weeklyPercent: 0,
+    weeklyPercent: createPercent(0),
     weeklyRuns: 0,
     weeklyTasks: 0,
     learningRuns: 0,
-    estimatedPercent: 0,
+    estimatedPercent: createPercent(0),
   };
 }
 
@@ -125,13 +134,13 @@ function addRun(line: CostLine, usage: RunUsage, share: UsageShareState | undefi
     cacheWriteTokens: line.cacheWriteTokens + usage.cacheWriteTokens,
     tokens:
       line.tokens + usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
-    knownUsd: line.knownUsd + (usage.costUsd ?? 0),
+    knownUsd: createUsd(line.knownUsd + (usage.costUsd ?? 0)),
     unpricedRuns: line.unpricedRuns + (usage.costUsd === null ? 1 : 0),
-    weeklyPercent: line.weeklyPercent + (known?.percent ?? 0),
+    weeklyPercent: createPercent(line.weeklyPercent + (known?.percent ?? 0)),
     weeklyRuns: line.weeklyRuns + (known ? 1 : 0),
     weeklyTasks: Math.max(line.weeklyTasks, known?.tasks ?? 0),
     learningRuns: line.learningRuns + (share !== undefined && !known ? 1 : 0),
-    estimatedPercent: line.estimatedPercent + estimate,
+    estimatedPercent: createPercent(line.estimatedPercent + estimate),
   };
 }
 
@@ -189,15 +198,33 @@ export function resolveTaskCost(state: ShinsaState, task: Task): TaskCost {
   };
 }
 
-function createBudget(
-  unit: BudgetUnit,
+function createUsdBudget(cap: number, acknowledged: number, spent: Usd): TaskBudget {
+  const limit = acknowledged + cap;
+  return {
+    unit: 'usd',
+    cap: createUsd(cap),
+    limit: createUsd(limit),
+    spent,
+    share: spent / limit,
+    estimated: false,
+  };
+}
+
+function createPercentBudget(
   cap: number,
   acknowledged: number,
-  spent: number,
-  estimated = false
+  spent: Percent,
+  estimated: boolean
 ): TaskBudget {
   const limit = acknowledged + cap;
-  return { unit, cap, limit, spent, share: spent / limit, estimated };
+  return {
+    unit: 'percent',
+    cap: createPercent(cap),
+    limit: createPercent(limit),
+    spent,
+    share: spent / limit,
+    estimated,
+  };
 }
 
 export function listTaskBudgets(state: ShinsaState, task: Task): TaskBudget[] {
@@ -207,17 +234,16 @@ export function listTaskBudgets(state: ShinsaState, task: Task): TaskBudget[] {
   const budgets: TaskBudget[] = [];
   if (taskUsageLimit != null) {
     budgets.push(
-      createBudget(
-        'percent',
+      createPercentBudget(
         taskUsageLimit,
         task.usageAcknowledgedPercent ?? 0,
-        total.weeklyPercent + total.estimatedPercent,
+        createPercent(total.weeklyPercent + total.estimatedPercent),
         total.learningRuns > 0
       )
     );
   }
   if (taskBudgetUsd != null) {
-    budgets.push(createBudget('usd', taskBudgetUsd, task.budgetAcknowledgedUsd ?? 0, total.knownUsd));
+    budgets.push(createUsdBudget(taskBudgetUsd, task.budgetAcknowledgedUsd ?? 0, total.knownUsd));
   }
   return budgets;
 }
@@ -227,19 +253,19 @@ export function listSpentBudgets(state: ShinsaState, task: Task) {
 }
 
 export function selectSpentBudget(state: ShinsaState, task: Task) {
-  return listSpentBudgets(state, task)[0] ?? null;
+  return Option.fromNullishOr(listSpentBudgets(state, task)[0]);
 }
 
 export function isOverBudget(state: ShinsaState, task: Task) {
-  return selectSpentBudget(state, task) !== null;
+  return Option.isSome(selectSpentBudget(state, task));
 }
 
-export function describeUsd(value: number) {
+export function describeUsd(value: Usd) {
   if (value > 0 && value < 0.01) return '<$0.01';
   return `$${value.toFixed(2)}`;
 }
 
-export function describeWeeklyPercent(value: number) {
+export function describeWeeklyPercent(value: Percent) {
   if (value > 0 && value < 0.1) return '<0.1%';
   if (value < 10) return `${Number(value.toFixed(1))}%`;
   return `${Math.round(value)}%`;
@@ -249,6 +275,11 @@ export function resolveCostUnit(line: CostLine): BudgetUnit {
   return line.weeklyRuns > 0 && line.weeklyRuns + line.unpricedRuns >= line.runs ? 'percent' : 'usd';
 }
 
-export function describeBudgetAmount(budget: Pick<TaskBudget, 'unit'>, value: number) {
-  return budget.unit === 'usd' ? describeUsd(value) : describeWeeklyPercent(value);
+export function describeBudgetAmount(budget: TaskBudget, amount: BudgetAmount) {
+  return Match.value(budget).pipe(
+    Match.discriminatorsExhaustive('unit')({
+      usd: (usd) => describeUsd(usd[amount]),
+      percent: (percent) => describeWeeklyPercent(percent[amount]),
+    })
+  );
 }

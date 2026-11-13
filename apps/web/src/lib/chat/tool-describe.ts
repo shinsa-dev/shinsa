@@ -206,12 +206,12 @@ function describeShinsaWork(name: Exclude<ShinsaToolName, PlainShinsaTool>, args
         'Split the plan into',
         describeCount(readList(args, 'tasks').length, 'task', 'tasks')
       );
-    case 'set_schedule':
-      return plain(
-        readString(args, 'source') ? 'IconRadar' : 'IconClock',
-        readString(args, 'source') ? 'Suggested a watch:' : 'Set a schedule:',
-        readString(args, 'name') ?? firstLine(readString(args, 'message') ?? '')
-      );
+    case 'set_schedule': {
+      const named = readString(args, 'name') ?? firstLine(readString(args, 'message') ?? '');
+      if (readString(args, 'source')) return plain('IconRadar', 'Suggested a watch:', named);
+      if (readString(args, 'slack_channel')) return plain('IconSlack', 'Set a Slack trigger:', named);
+      return plain('IconClock', 'Set a schedule:', named);
+    }
     default:
       return describeShinsaMessage(name, args);
   }

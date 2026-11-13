@@ -1,3 +1,5 @@
+import { Option } from 'effect';
+
 import { capitalise, quoteTitle } from '../chat/text.ts';
 import {
   compareTasks,
@@ -160,9 +162,9 @@ export function resolveInitiativeSheet(
   state: ShinsaState,
   initiativeId: string,
   now: number
-): InitiativeSheet | null {
+): Option.Option<InitiativeSheet> {
   const initiative = state.initiatives[initiativeId];
-  if (!initiative) return null;
+  if (!initiative) return Option.none();
   const members = listInitiativeWork(state, initiativeId);
   const queue = resolveQueue({ ...state, focus: { ...NO_FOCUS, initiativeId } }, now);
   const needsYou = queue.ready.filter((entry) => !isLeadTask(entry.task));
@@ -180,7 +182,7 @@ export function resolveInitiativeSheet(
     .flatMap(listTaskDecisions)
     .sort((left, right) => right.at - left.at || left.taskId.localeCompare(right.taskId))
     .slice(0, DECISION_LIMIT);
-  return {
+  return Option.some({
     initiative,
     needsYou,
     now: workingTasks,
@@ -192,7 +194,7 @@ export function resolveInitiativeSheet(
     decisions,
     progress: listProgress(initiative, members),
     teammates: listTeammates(initiative),
-  };
+  });
 }
 
 export function listInitiativeProgress(state: ShinsaState, initiative: Initiative) {

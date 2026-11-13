@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   INITIATIVE_LIMITS,
   isInFocus,
@@ -407,14 +408,14 @@ describe('focusing on an initiative', () => {
     const other = createTask(harness);
     join(harness, member, id);
     harness.send({ type: 'focus.change', projectId: null, initiativeId: id, until: harness.now + 10_000 });
-    expect(resolveFocusInitiative(harness.state, harness.now)).toBe(id);
+    expect(Option.getOrNull(resolveFocusInitiative(harness.state, harness.now))).toBe(id);
     expect(resolveFocusProjects(harness.state, harness.now)).toEqual({ projectIds: [], except: false });
     expect(isInFocus(harness.state, harness.task(member), harness.now)).toBe(true);
     expect(isInFocus(harness.state, harness.task(other), harness.now)).toBe(false);
     expect(resolveQueue(harness.state, harness.now).focusInitiativeId).toBe(id);
-    expect(resolveFocusInitiative(harness.state, harness.now + 20_000)).toBeNull();
+    expect(Option.getOrNull(resolveFocusInitiative(harness.state, harness.now + 20_000))).toBeNull();
     harness.send({ type: 'focus.change', projectId: null, until: null });
-    expect(resolveFocusInitiative(harness.state, harness.now)).toBeNull();
+    expect(Option.getOrNull(resolveFocusInitiative(harness.state, harness.now))).toBeNull();
   });
 
   test('refuses an unknown initiative and a focus on an initiative and anything else at once', () => {

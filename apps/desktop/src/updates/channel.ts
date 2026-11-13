@@ -36,7 +36,7 @@ export function resolveDowngradeOffer({
   kept: string | null;
 }) {
   if (kept === current || !isAboveChannel(current, channel)) return null;
-  return resolveVersionOrder(latest, current) === -1 ? latest : null;
+  return Option.contains(resolveVersionOrder(latest, current), -1) ? latest : null;
 }
 
 export function describeUpdateChannel(channel: UpdateChannel) {

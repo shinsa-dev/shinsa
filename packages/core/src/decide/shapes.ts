@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { ChangeProposalInput, CommandOf } from '../commands/index.ts';
 import {
   type DeliveringStep,
@@ -134,19 +135,20 @@ function reshapeTask(
   decider.emit({ type: 'task.reshaped', taskId, pipeline, by, reason });
 }
 
-type EntryStep = InquiryStep | 'lead' | 'your_ok' | 'plan' | null;
+type EntryStep = InquiryStep | 'lead' | 'your_ok' | 'plan';
 
 function hasYourOk(task: Task) {
   return task.proposal?.status === 'accepted';
 }
 
-export function resolveNextStep(task: Task): EntryStep {
+export function resolveNextStep(task: Task): Option.Option<EntryStep> {
   const pipeline = resolveTaskPipeline(task);
-  if (pipeline.includes('lead')) return pipeline.includes('plan') && !task.plan ? 'plan' : 'lead';
+  if (pipeline.includes('lead'))
+    return Option.some(pipeline.includes('plan') && !task.plan ? 'plan' : 'lead');
   const inquiry = resolveInquiryStep(pipeline);
-  if (inquiry && !isInquiryDone(task, inquiry)) return inquiry;
-  if (pipeline.includes('your_ok') && !hasYourOk(task)) return 'your_ok';
-  return pipeline.includes('plan') ? 'plan' : null;
+  if (Option.isSome(inquiry) && !isInquiryDone(task, inquiry.value)) return inquiry;
+  if (pipeline.includes('your_ok') && !hasYourOk(task)) return Option.some('your_ok');
+  return pipeline.includes('plan') ? Option.some('plan') : Option.none();
 }
 
 export function startInquiry(decider: Decider, taskId: string, step: InquiryStep, followUp: string | null) {
@@ -193,7 +195,7 @@ export function startAfterPlan(decider: Decider, taskId: string, addition = '') 
     return;
   }
   retitleFromPlan(decider, taskId);
-  if (resolveWorkStep(resolveTaskPipeline(decider.task(taskId))) === 'operate') {
+  if (Option.contains(resolveWorkStep(resolveTaskPipeline(decider.task(taskId))), 'operate')) {
     startOperation(decider, taskId, null);
     return;
   }
@@ -202,7 +204,7 @@ export function startAfterPlan(decider: Decider, taskId: string, addition = '') 
 
 export function finishMerge(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
-  if (resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge') {
+  if (!Option.contains(resolveOperationTiming(resolveTaskPipeline(task)), 'post_merge')) {
     settleTask(decider, taskId, 'merged', 'pull request merged');
     return;
   }
@@ -274,11 +276,12 @@ export function answerOperation(
   startOperation(decider, gate.taskId, notes);
 }
 
-export function startStep(decider: Decider, taskId: string, step: EntryStep) {
-  if (step === null) {
+export function startStep(decider: Decider, taskId: string, next: Option.Option<EntryStep>) {
+  if (Option.isNone(next)) {
     settleTask(decider, taskId, 'done', 'finished every step');
     return;
   }
+  const step = next.value;
   if (step === 'plan') {
     startPlanning(decider, taskId, null);
     return;
@@ -297,7 +300,7 @@ export function startStep(decider: Decider, taskId: string, step: EntryStep) {
 export function proceedAfterSetup(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const step = resolveNextStep(task);
-  if (step !== null && isWorktreeStep(step) && !isLeadTask(task)) {
+  if (Option.isSome(step) && isWorktreeStep(step.value) && !isLeadTask(task)) {
     requestWorkspace(decider, taskId);
     return;
   }
@@ -306,7 +309,7 @@ export function proceedAfterSetup(decider: Decider, taskId: string) {
 
 function resolveProposalTitle(task: Task, step: InquiryStep, recommend: ProposalRecommendation) {
   if (recommend === 'close') return CLOSE_PROPOSAL_TITLE[step];
-  const operation = resolveWorkStep(resolveTaskPipeline(task)) === 'operate';
+  const operation = Option.contains(resolveWorkStep(resolveTaskPipeline(task)), 'operate');
   return operation ? OPERATION_PROPOSAL_TITLE[step] : CHANGE_PROPOSAL_TITLE[step];
 }
 
@@ -433,7 +436,7 @@ export function recordDelivery(decider: Decider, command: CommandOf<'agent.deliv
 }
 
 function finishOperation(decider: Decider, taskId: string) {
-  if (resolveOperationTiming(resolveTaskPipeline(decider.task(taskId))) === 'before_build') {
+  if (Option.contains(resolveOperationTiming(resolveTaskPipeline(decider.task(taskId))), 'before_build')) {
     startPhase(decider, taskId, 0);
     return;
   }
@@ -475,7 +478,7 @@ export function recordReshape(decider: Decider, command: CommandOf<'agent.reshap
   decider.endRun(run, 'completed', command.reason);
   reshapeTask(decider, task.id, pipeline, 'agent', command.reason);
   const work = resolveWorkStep(pipeline);
-  if (work !== null && work !== resolveWorkStep(before)) {
+  if (Option.isSome(work) && !Option.contains(resolveWorkStep(before), work.value)) {
     startWork(decider, task.id);
     return;
   }
@@ -555,7 +558,9 @@ export function restartAnswer(decider: Decider, task: Task, text: string | null)
 
 export function resolveRestingStage(task: Task) {
   const merged = task.pullRequest?.state === 'merged';
-  return merged && resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge' ? 'merged' : 'done';
+  return merged && !Option.contains(resolveOperationTiming(resolveTaskPipeline(task)), 'post_merge')
+    ? 'merged'
+    : 'done';
 }
 
 function throwFollowUpProposal(): never {
@@ -594,6 +599,6 @@ export function acceptsFollowUp(task: Task) {
   return (
     (task.stage === 'done' || task.stage === 'answered') &&
     !pipeline.includes('plan') &&
-    resolveInquiryStep(pipeline) !== null
+    Option.isSome(resolveInquiryStep(pipeline))
   );
 }

@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isAgentQuestion, isDecisionGate } from '../domain/gates.ts';
 import { resolveTaskRounds, type Round } from '../domain/rounds.ts';
 import type { Task, TimingSpan, YourInput } from '../domain/types.ts';
@@ -84,21 +85,21 @@ function listConcurrency(source: StatsSource, clock: YourClock, window: Turnarou
   return segments;
 }
 
-export function resolveWeightedMedian(segments: readonly Concurrency[]): number | null {
+export function resolveWeightedMedian(segments: readonly Concurrency[]): Option.Option<number> {
   const total = segments.reduce((sum, segment) => sum + segment.weight, 0);
-  if (total === 0) return null;
+  if (total === 0) return Option.none();
   const sorted = [...segments].sort((a, b) => a.count - b.count);
   let running = 0;
   const middle = sorted.find((segment) => {
     running += segment.weight;
     return running >= total / 2;
   });
-  return middle?.count ?? null;
+  return Option.map(Option.fromNullishOr(middle), (segment) => segment.count);
 }
 
 function resolveTasksAtOnce(segments: readonly Concurrency[]): TasksAtOnce {
   return {
-    median: resolveWeightedMedian(segments),
+    median: Option.getOrNull(resolveWeightedMedian(segments)),
     peak: segments.length === 0 ? null : Math.max(...segments.map((segment) => segment.count)),
   };
 }
@@ -123,7 +124,7 @@ function countMessages(inputs: readonly YourInput[]) {
 
 export function resolveFirstReview(inputs: readonly YourInput[]) {
   const review = inputs.find((input) => input.kind === 'gate' && input.gate === 'review');
-  return review?.kind === 'gate' ? review.decision : null;
+  return review?.kind === 'gate' ? Option.some(review.decision) : Option.none();
 }
 
 function resolveShare(matching: number, count: number) {
@@ -131,7 +132,7 @@ function resolveShare(matching: number, count: number) {
 }
 
 function resolveApprovedFirstTime(rounds: readonly YourInput[][]): FirstTimeApprovals {
-  const reviews = rounds.map(resolveFirstReview).filter((decision) => decision !== null);
+  const reviews = rounds.flatMap((inputs) => Option.toArray(resolveFirstReview(inputs)));
   const approved = reviews.filter((decision) => decision === 'approve').length;
   return { share: resolveShare(approved, reviews.length), count: reviews.length };
 }

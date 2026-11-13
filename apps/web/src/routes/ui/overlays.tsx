@@ -71,6 +71,7 @@ import { toast } from '@shinsa/ui/components/sonner';
 import { Switch } from '@shinsa/ui/components/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@shinsa/ui/components/tooltip';
 import { describeFailure } from '@/lib/connection/commands.ts';
+import { scheduleAfter } from '@/lib/runtime/timers.ts';
 import { SAMPLE_GIT_FAILURE } from './samples.ts';
 import { Section } from './section.tsx';
 
@@ -349,7 +350,7 @@ export function OverlaySpecimens() {
           variant='outline'
           onClick={() => {
             const id = toast.loading('Merging…');
-            setTimeout(() => toast.success('Merged #4512', { id }), 1600);
+            scheduleAfter(1600, () => toast.success('Merged #4512', { id }));
           }}
         >
           Loading → success

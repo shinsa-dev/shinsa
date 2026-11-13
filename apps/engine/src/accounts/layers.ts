@@ -6,6 +6,7 @@ import { StoredLogins } from './credentials/service.ts';
 import { Cswap } from './cswap/service.ts';
 import { AccountFolders } from './folders/service.ts';
 import { AccountImports } from './imports/service.ts';
+import { LoginKeepalive } from './keepalive/service.ts';
 import { Keychain } from './keychain/service.ts';
 import { UsageLimits } from './limits/service.ts';
 import { AccountLogins } from './login/service.ts';
@@ -29,7 +30,13 @@ export const AccountsLayer = Layer.mergeAll(Accounts.layer, UsageResume.layer).p
   Layer.provideMerge(AccountRotation.layer),
   Layer.provideMerge(Layer.mergeAll(UsageLimits.layer, AccountImports.layer)),
   Layer.provideMerge(
-    Layer.mergeAll(Cswap.layer, UsageReadings.layer, LoginRenewal.layer, AccountLogins.layer)
+    Layer.mergeAll(
+      Cswap.layer,
+      UsageReadings.layer,
+      LoginRenewal.layer,
+      LoginKeepalive.layer,
+      AccountLogins.layer
+    )
   ),
   Layer.provideMerge(AccountStore.layer),
   Layer.provideMerge(StoredLogins.layer),

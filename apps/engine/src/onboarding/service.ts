@@ -14,7 +14,7 @@ import {
   type TerminalInfo,
   type WorktreeUsage,
 } from '@shinsa/core';
-import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option } from 'effect';
 import { QuickCalls } from '../agents/quick/service.ts';
 import type { MachineConfig } from '../config/machine/schema.ts';
 import { EngineConfig } from '../config/service.ts';
@@ -268,7 +268,7 @@ export class Onboarding extends Context.Service<
         });
 
         const recordWelcome = Effect.gen(function* () {
-          if (engine.readOnly || selectWelcomeTask((yield* engine.state).tasks)) return;
+          if (engine.readOnly || Option.isSome(selectWelcomeTask((yield* engine.state).tasks))) return;
           const context = yield* resolveContext(null);
           const steps = ONBOARDING_STEPS.filter((step) => step.id !== 'prerequisites');
           const lines = yield* Effect.forEach(
@@ -319,7 +319,10 @@ export class Onboarding extends Context.Service<
               isCompleted: Effect.map(store.config, (machine) => machine.onboardedAt !== null),
               complete: Effect.asVoid(complete),
               requestHelp,
-              selectWelcome: Effect.map(engine.state, (state) => selectWelcomeTask(state.tasks)?.id ?? null),
+              selectWelcome: Effect.map(
+                engine.state,
+                (state) => Option.getOrNull(selectWelcomeTask(state.tasks))?.id ?? null
+              ),
               reviseProjects: Effect.fn('Onboarding.reviseProjects')(function* (revision, text, choices) {
                 const suggestions = yield* listProjectSuggestions(
                   projects,

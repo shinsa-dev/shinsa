@@ -2,6 +2,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { usePaneWidth } from '@/lib/preferences/pane-width.ts';
 import { useStoredToggle } from '@/lib/preferences/stored-flag.ts';
+import { listStoredStrings } from '@/lib/preferences/stored-list.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 const EXPLORER_WIDTH = { min: 200, max: 480, initial: 280 } as const;
@@ -53,12 +54,7 @@ function resolveViewedKey(taskId: string, head: string) {
 }
 
 export function readViewedFiles(taskId: string, head: string): string[] {
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(resolveViewedKey(taskId, head)) ?? '[]');
-    return Array.isArray(stored) ? stored.filter((path): path is string => typeof path === 'string') : [];
-  } catch {
-    return [];
-  }
+  return listStoredStrings(resolveViewedKey(taskId, head));
 }
 
 export function toggleViewedFile(taskId: string, head: string, path: string) {

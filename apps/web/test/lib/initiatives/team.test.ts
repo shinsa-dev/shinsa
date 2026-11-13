@@ -6,6 +6,7 @@ import {
   type TeamFeedInitiative,
   type TeamFeedSnapshot,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import {
   changeTeamPhase,
   describeTeamInitiativeLabel,
@@ -269,8 +270,7 @@ describe('the lead’s table with teammates’ tasks', () => {
       createTask({ id: 'mine', stage: 'waiting_on_tasks', initiativeId: 'split', initiativePhaseId: 'p2' }),
     ],
   });
-  const sheet = resolveInitiativeSheet(state, 'split', NOW);
-  if (!sheet) throw new Error('No sheet');
+  const sheet = Option.getOrThrow(resolveInitiativeSheet(state, 'split', NOW));
 
   it('puts each teammate’s task where theirs stands, beside yours in its phase, and skips one the feed lacks', () => {
     const sections = listInitiativeTaskSections(state, sheet, Object.values(kai));

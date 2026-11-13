@@ -20,6 +20,7 @@ import {
   type Task,
   type TerminalInfo,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import { describeProviderLogin } from '@/lib/accounts/providers.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 import { type Route, resolveTaskPath } from '@/router.ts';
@@ -181,12 +182,12 @@ export function describeAccountSource(account: AccountSummary) {
   const plan = resolvePlanLabel(account.plan);
   const parts = [ACCOUNT_ORIGIN[account.origin]];
   if (account.signIn === 'signed_out') parts.push('Signed out');
-  else if (plan) parts.push(`${plan} plan`);
+  else if (Option.isSome(plan)) parts.push(`${plan.value} plan`);
   return parts.join(' · ');
 }
 
 export function describeProviderSource(login: ProviderLogin) {
-  const plan = login.status === 'signed_in' ? resolvePlanLabel(login.plan ?? null) : null;
+  const plan = login.status === 'signed_in' ? Option.getOrNull(resolvePlanLabel(login.plan ?? null)) : null;
   const title = describeProviderLogin(login).title;
   return plan ? `${title} · ${plan} plan` : title;
 }
@@ -262,7 +263,7 @@ export type HelpView =
 
 export function resolveHelpView(state: ShinsaState | null, task: Task | null): HelpView {
   if (!(state && task)) return { kind: 'loading' };
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate && gate.type !== 'result') return { kind: 'gate', gate };
   if (task.result) return { kind: 'result', body: task.result.body };
   return STOPPED_STAGES.has(task.stage) ? { kind: 'stopped' } : { kind: 'loading' };

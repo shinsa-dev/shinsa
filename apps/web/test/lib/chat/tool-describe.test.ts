@@ -322,6 +322,9 @@ describe('describeTool', () => {
     expect(shinsa('set_schedule', { name: 'Bugs in #feedback', source: 'slack' })).toBe(
       'Suggested a watch: Bugs in #feedback'
     );
+    expect(shinsa('set_schedule', { name: 'Triage alerts', slack_channel: '#alerts' })).toBe(
+      'Set a Slack trigger: Triage alerts'
+    );
     expect(shinsa('set_schedule', { message: 'Sync the docs\nThen report' })).toBe(
       'Set a schedule: Sync the docs'
     );

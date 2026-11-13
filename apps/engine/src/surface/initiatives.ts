@@ -12,7 +12,7 @@ import type {
   InitiativeView,
   TaskView,
 } from '@shinsa/core/engine-api/schema';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { FieldSpec, Values } from './fields.ts';
 import { findTaskId } from './resolve.ts';
 import type { SurfaceClient } from './schema.ts';
@@ -40,7 +40,7 @@ export const findInitiative = Effect.fn('Surface.findInitiative')(function* (
   ref: string
 ) {
   const { initiatives } = yield* client.api.state.initiatives();
-  const initiative = selectInitiativeByReference(initiatives, ref);
+  const initiative = Option.getOrNull(selectInitiativeByReference(initiatives, ref));
   if (!initiative) {
     return yield* new DomainError({
       code: 'initiative_not_found',
@@ -62,7 +62,7 @@ const selectTeamInitiative = Effect.fn('Surface.selectTeamInitiative')(function*
   const feed = yield* client.api.teams
     .tasks({ query: {} })
     .pipe(Effect.catch(() => Effect.succeed({ initiatives: [] as TeamFeedInitiative[] })));
-  return selectInitiativeByReference(feed.initiatives ?? [], ref);
+  return Option.getOrNull(selectInitiativeByReference(feed.initiatives ?? [], ref));
 });
 
 function isTaskReference(listing: TeamFeedTask, ref: string) {

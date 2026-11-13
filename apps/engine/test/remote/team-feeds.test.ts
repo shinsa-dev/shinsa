@@ -21,7 +21,7 @@ import {
   TEAM_REFUSALS,
 } from '@shinsa/core';
 import { NotFound } from '@shinsa/core/remote/errors';
-import { Clock, Effect, Layer } from 'effect';
+import { Clock, Effect, Layer, Option } from 'effect';
 import { EgressGate } from '../../src/remote/egress/service.ts';
 import {
   type FeedSocket,
@@ -1038,7 +1038,7 @@ function createPeer(): RelayPeer {
     messages: [],
     closed: null,
     send: (data) => {
-      const message = typeof data === 'string' ? parseShareMessage(data) : null;
+      const message = typeof data === 'string' ? Option.getOrNull(parseShareMessage(data)) : null;
       if (message) peer.messages.push(message);
     },
     close: (_code, reason) => {
@@ -1279,7 +1279,7 @@ function createScriptedSocket(script: Script) {
 }
 
 async function signWelcome(hello: string, key: string) {
-  const parsed = parseTeamHello(hello);
+  const parsed = Option.getOrNull(parseTeamHello(hello));
   if (!parsed) throw new Error('not a team hello');
   const server = (await crypto.subtle.generateKey(REMOTE_KEY_ALGORITHM, true, [
     'deriveBits',

@@ -6,6 +6,7 @@ import {
   type ReferenceOptions,
   type ShinsaState,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import * as React from 'react';
 import { BranchChip } from '@/components/links/branch.tsx';
 import { FileLink } from '@/components/links/file.tsx';
@@ -104,14 +105,15 @@ export function ReferenceAnchor({ href, children }: { href: string; children?: R
   const state = useShinsaState();
   const scope = useReferenceScope();
   const reference = parseReference(href);
-  if (!reference || !state) return <>{children}</>;
-  return <ReferenceLink state={state} reference={reference} label={children} scope={scope} />;
+  if (Option.isNone(reference) || !state) return <>{children}</>;
+  return <ReferenceLink state={state} reference={reference.value} label={children} scope={scope} />;
 }
 
 export function ReferenceLabel({ href, children }: { href: string; children?: React.ReactNode }) {
   const state = useShinsaState();
-  const reference = parseReference(href);
-  if (!reference) return <>{children}</>;
+  const option = parseReference(href);
+  if (Option.isNone(option)) return <>{children}</>;
+  const reference = option.value;
   const task = reference.kind === 'task' ? state?.tasks[reference.id] : undefined;
   return (
     <span className='font-medium text-fg-4'>

@@ -10,6 +10,7 @@ import {
 } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { Option } from 'effect';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
 import { createAccount, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
@@ -54,7 +55,7 @@ const ACCOUNTS = [weeklyAccount('overclock', 92, 15 * HOUR_MS), weeklyAccount('h
 
 function expectedPace() {
   const now = Math.floor(Date.now() / MINUTE_MS) * MINUTE_MS;
-  const forecast = resolveUsageForecast(listForecastAccounts(ACCOUNTS, now), now);
+  const forecast = Option.getOrNull(resolveUsageForecast(listForecastAccounts(ACCOUNTS, now), now));
   return forecast?.safePace ?? 0;
 }
 

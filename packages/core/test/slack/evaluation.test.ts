@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   parseSlackEvaluation,
+  resolveSlackFilterSubject,
+  type SlackChannelMessage,
   SLACK_EVALUATION_SYSTEM,
   type SlackMention,
   serializeSlackEvaluationPrompt,
@@ -66,14 +69,45 @@ describe('the evaluation of a mention that links to a thread', () => {
 
 describe('the evaluation answer', () => {
   test('is a task or not a task, and nothing else', () => {
-    expect(parseSlackEvaluation({ decision: 'task' })).toBe('task');
-    expect(parseSlackEvaluation({ decision: 'none' })).toBe('none');
+    expect(Option.getOrNull(parseSlackEvaluation({ decision: 'task' }))).toBe('task');
+    expect(Option.getOrNull(parseSlackEvaluation({ decision: 'none' }))).toBe('none');
     expect(SLACK_EVALUATION_SYSTEM).toContain('never chats');
   });
 
   test('is unreadable without a decision it knows', () => {
-    expect(parseSlackEvaluation(null)).toBeNull();
-    expect(parseSlackEvaluation({})).toBeNull();
-    expect(parseSlackEvaluation({ decision: 'reply' })).toBeNull();
+    expect(Option.getOrNull(parseSlackEvaluation(null))).toBeNull();
+    expect(Option.getOrNull(parseSlackEvaluation({}))).toBeNull();
+    expect(Option.getOrNull(parseSlackEvaluation({ decision: 'reply' }))).toBeNull();
+  });
+});
+
+describe('whether an automation applies to a channel message', () => {
+  const message: SlackChannelMessage = {
+    eventId: 'Ev9',
+    teamId: 'T1',
+    channelId: 'C1',
+    messageTs: '200.1',
+    userId: 'U7',
+    userName: 'Mia',
+    bot: false,
+    text: ' The export button is misaligned. ',
+    permalink: null,
+    channelName: 'feedback',
+  };
+
+  test('is the fenced subject: the channel, the author and the text', () => {
+    expect(resolveSlackFilterSubject(message)).toEqual({
+      label: 'The message in #feedback',
+      tag: 'slack-message',
+      body: 'From Mia:\nThe export button is misaligned.',
+    });
+  });
+
+  test('marks a bot, and names no channel Slack did not give', () => {
+    expect(resolveSlackFilterSubject({ ...message, bot: true, channelName: null })).toEqual({
+      label: 'The message in the channel',
+      tag: 'slack-message',
+      body: 'From Mia (bot):\nThe export button is misaligned.',
+    });
   });
 });

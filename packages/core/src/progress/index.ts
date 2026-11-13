@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import {
   type FixReason,
   isRoundFinished,
@@ -236,7 +237,7 @@ function resolveCheckTitle(pipeline: readonly PipelineStep[]) {
 
 function resolveTitle(task: Task, key: DisplayKey) {
   const pipeline = resolveTaskPipeline(task);
-  if (key === 'proposal' && resolveWorkStep(pipeline) === 'operate') return 'Your OK to run';
+  if (key === 'proposal' && Option.contains(resolveWorkStep(pipeline), 'operate')) return 'Your OK to run';
   if (key === 'check') return resolveCheckTitle(pipeline);
   return DISPLAY_TITLE[key];
 }

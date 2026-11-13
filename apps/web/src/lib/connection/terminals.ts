@@ -6,7 +6,7 @@ import {
   type TerminalPlace,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import { useSyncExternalStore } from 'react';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { connection } from '@/lib/connection/socket.ts';
@@ -92,9 +92,9 @@ export function openTerminal(projectKey: string, projectId: string, place: Termi
 }
 
 export function selectTaskTerminal(state: ShinsaState | null, task: Task) {
-  const projectId = state ? resolveTaskProject(state, task) : null;
+  const projectId = state ? Option.getOrNull(resolveTaskProject(state, task)) : null;
   const project = projectId ? state?.projects[projectId] : undefined;
-  const place = state ? resolveTaskTerminalPlace(state, task) : null;
+  const place = state ? Option.getOrNull(resolveTaskTerminalPlace(state, task)) : null;
   return project && place ? { project, place } : null;
 }
 

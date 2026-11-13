@@ -58,11 +58,6 @@ const program = Effect.gen(function* () {
     });
   const token = settings.token.value;
 
-  const check = <A>(step: () => A) =>
-    Effect.try({
-      try: step,
-      catch: (error) => new UploadFailed({ message: error instanceof Error ? error.message : String(error) }),
-    });
   const request = <A>(step: () => Promise<A>) =>
     Effect.tryPromise({
       try: step,
@@ -95,7 +90,7 @@ const program = Effect.gen(function* () {
       Effect.mapError(
         (error) => new UploadFailed({ message: `Could not verify CLOUDFLARE_API_TOKEN: ${error.message}` })
       ),
-      Effect.flatMap((answer) => check(() => parseTokenId(answer))),
+      Effect.flatMap((answer) => Effect.fromResult(parseTokenId(answer))),
       withRetry('Verify the Cloudflare token')
     );
     const credentials = resolveR2Credentials(Redacted.value(token), tokenId);
@@ -105,8 +100,7 @@ const program = Effect.gen(function* () {
     const file = bucket.file(key);
     const read = Effect.gen(function* () {
       if (!(yield* request(() => file.exists()))) return null;
-      const text = yield* request(() => file.text());
-      return yield* check(() => parseStoredPointer(text));
+      return Option.getOrNull(parseStoredPointer(yield* request(() => file.text())));
     });
     return yield* read.pipe(withRetry(`Read ${key}`));
   });
@@ -119,7 +113,7 @@ const program = Effect.gen(function* () {
     .pipe(withRetry(`Read release ${tag}`));
   const release = yield* decodeJson(view).pipe(
     Effect.mapError(() => new UploadFailed({ message: 'gh did not describe a release.' })),
-    Effect.flatMap((described) => check(() => parseDownloadRelease(described)))
+    Effect.flatMap((described) => Effect.fromResult(parseDownloadRelease(described)))
   );
   const updateName = UPDATE_CHANNEL_FILES[release.channel];
   yield* command
@@ -146,12 +140,12 @@ const program = Effect.gen(function* () {
   const dmg = join(directory, DMG_NAME);
   const zip = join(directory, ZIP_NAME);
   const dmgFile = { size: yield* resolveSize(dmg), sha256: yield* resolveDigest(dmg, 'sha256', 'hex') };
-  yield* check(() => assertDownloadFile(release, dmgFile));
+  yield* Effect.fromResult(assertDownloadFile(release, dmgFile));
   const updatePath = join(directory, updateName);
   const updateText = yield* fs.readFileString(updatePath).pipe(Effect.mapError(unreadable(updatePath)));
-  const update = yield* check(() => parseUpdateFile(release, updateText));
+  const update = yield* Effect.fromResult(parseUpdateFile(release, updateText));
   const zipFile = { size: yield* resolveSize(zip), sha512: yield* resolveDigest(zip, 'sha512', 'base64') };
-  yield* check(() => assertUpdateZip(release, update, zipFile));
+  yield* Effect.fromResult(assertUpdateZip(release, update, zipFile));
   const bucket = yield* requestBucket();
   const current = {
     stable: yield* requestPointer(bucket, resolveChannelKey('stable')),

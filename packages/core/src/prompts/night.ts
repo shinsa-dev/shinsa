@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { type NightShift, resolveNightShift } from '../costs/away.ts';
 import type { RunPurpose, RunRole, Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -16,6 +17,8 @@ export function resolveNightShiftTold(
   purpose: RunPurpose | null,
   now: number
 ) {
-  const shift = resolveNightShift(state, task, role, purpose, now);
-  return shift ? NIGHT_SHIFT_TOLD[shift] : '';
+  return Option.match(resolveNightShift(state, task, role, purpose, now), {
+    onNone: () => '',
+    onSome: (shift) => NIGHT_SHIFT_TOLD[shift],
+  });
 }

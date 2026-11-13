@@ -45,7 +45,7 @@ export class PullRequestDescriber extends Context.Service<
         piece: Evidence
       ) {
         if (piece.kind !== 'screenshot' && piece.kind !== 'recording') return null;
-        if (resolvePublicUrl(piece) !== null) return null;
+        if (Option.isSome(resolvePublicUrl(piece))) return null;
         const path = yield* selectPath(piece);
         const type = path ? ATTACHMENT_TYPES[extname(path).toLowerCase()] : undefined;
         if (!path || !type) return null;

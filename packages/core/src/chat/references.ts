@@ -1,3 +1,4 @@
+import { Option, Result } from 'effect';
 import { isWatchHome, type Task, type TaskStage } from '../domain/index.ts';
 import type { TeamFeedTask } from '../remote/teams.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -47,11 +48,10 @@ const CODE = /```[\s\S]*?(?:```|$)|`[^`\n]*`/g;
 const ANY_LINK = /\[[^\]\n]*\]\([^)\n]*\)|<?https?:\/\/[^\s>]+>?/g;
 
 function decode(part: string) {
-  try {
-    return decodeURIComponent(part);
-  } catch {
-    return part;
-  }
+  return Result.getOrElse(
+    Result.try(() => decodeURIComponent(part)),
+    () => part
+  );
 }
 
 function parseNumber(text: string | undefined) {
@@ -60,54 +60,66 @@ function parseNumber(text: string | undefined) {
   return value > 0 ? value : null;
 }
 
-function parsePullRequest(rest: string): Reference | null {
+function parsePullRequest(rest: string): Option.Option<Reference> {
   const match = /^(?:(.+?)(?:#|\/))?#?(\d{1,6})$/.exec(rest);
-  if (!match) return null;
+  if (!match) return Option.none();
   const number = parseNumber(match[2]);
-  if (number === null) return null;
+  if (number === null) return Option.none();
   const repo = match[1] ? decode(match[1]) : null;
-  if (repo !== null && !NAME.test(repo)) return null;
-  return { kind: 'pr', repo, number };
+  if (repo !== null && !NAME.test(repo)) return Option.none();
+  return Option.some({ kind: 'pr', repo, number });
 }
 
-function parseFileReference(rest: string): Reference | null {
+function parseFileReference(rest: string): Option.Option<Reference> {
   const hash = rest.indexOf('#');
   const path = decode(hash < 0 ? rest : rest.slice(0, hash)).replace(/^\/+/, '');
-  if (!path || path.split('/').some((segment) => segment === '' || segment === '..')) return null;
+  if (!path || path.split('/').some((segment) => segment === '' || segment === '..')) return Option.none();
   const anchor = hash < 0 ? null : FILE_ANCHOR.exec(rest.slice(hash + 1));
-  if (hash >= 0 && !anchor) return null;
+  if (hash >= 0 && !anchor) return Option.none();
   const line = parseNumber(anchor?.[1]);
   const end = parseNumber(anchor?.[2]);
-  return { kind: 'file', path, line, end: line !== null && end !== null && end > line ? end : null };
+  return Option.some({
+    kind: 'file',
+    path,
+    line,
+    end: line !== null && end !== null && end > line ? end : null,
+  });
 }
 
-export function parseReference(href: string): Reference | null {
-  if (href.slice(0, REFERENCE_SCHEME.length).toLowerCase() !== REFERENCE_SCHEME) return null;
+function parseNamed(rest: string, valid: (name: string) => boolean) {
+  return Option.liftPredicate(decode(rest), valid);
+}
+
+export function parseReference(href: string): Option.Option<Reference> {
+  if (href.slice(0, REFERENCE_SCHEME.length).toLowerCase() !== REFERENCE_SCHEME) return Option.none();
   const body = href.slice(REFERENCE_SCHEME.length);
   const slash = body.indexOf('/');
-  if (slash <= 0) return null;
+  if (slash <= 0) return Option.none();
   const kind = body.slice(0, slash).toLowerCase();
   const rest = body.slice(slash + 1);
-  if (!rest) return null;
+  if (!rest) return Option.none();
   switch (kind) {
-    case 'task': {
-      const id = decode(rest);
-      return ID.test(id) ? { kind: 'task', id } : null;
-    }
+    case 'task':
+      return Option.map(
+        parseNamed(rest, (id) => ID.test(id)),
+        (id) => ({ kind: 'task', id })
+      );
     case 'pr':
       return parsePullRequest(rest);
-    case 'repo': {
-      const name = decode(rest);
-      return NAME.test(name) ? { kind: 'repo', name } : null;
-    }
-    case 'branch': {
-      const name = decode(rest);
-      return BRANCH.test(name) && !name.includes('..') ? { kind: 'branch', name } : null;
-    }
+    case 'repo':
+      return Option.map(
+        parseNamed(rest, (name) => NAME.test(name)),
+        (name) => ({ kind: 'repo', name })
+      );
+    case 'branch':
+      return Option.map(
+        parseNamed(rest, (name) => BRANCH.test(name) && !name.includes('..')),
+        (name) => ({ kind: 'branch', name })
+      );
     case 'file':
       return parseFileReference(rest);
     default:
-      return null;
+      return Option.none();
   }
 }
 
@@ -143,23 +155,23 @@ function listExplicitSpans(text: string) {
   const spans: ReferenceSpan[] = [];
   for (const match of text.matchAll(MARKDOWN_LINK)) {
     const reference = parseReference(match[2] ?? '');
-    if (!reference) continue;
+    if (Option.isNone(reference)) continue;
     spans.push({
       start: match.index,
       end: match.index + match[0].length,
       label: match[1] ?? '',
-      reference,
+      reference: reference.value,
       source: 'link',
     });
   }
   for (const match of text.matchAll(BARE_URL)) {
     const reference = parseReference(match[0]);
-    if (!reference) continue;
+    if (Option.isNone(reference)) continue;
     spans.push({
       start: match.index,
       end: match.index + match[0].length,
       label: '',
-      reference,
+      reference: reference.value,
       source: 'url',
     });
   }

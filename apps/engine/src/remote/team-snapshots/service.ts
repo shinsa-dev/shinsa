@@ -25,7 +25,7 @@ export const makeTeamSnapshots = Effect.fn('TeamSnapshots.make')(function* (
           ...list,
           tasks: tasks as TeamTask[],
           ...(initiatives ? { initiatives: initiatives as TeamInitiative[] } : {}),
-          snapshot: readTeamSnapshot(snapshot),
+          snapshot: Option.getOrNull(readTeamSnapshot(snapshot)),
         })
       )
     ),

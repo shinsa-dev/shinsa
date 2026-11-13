@@ -1,4 +1,6 @@
+import type { SlackChannel } from '@shinsa/core';
 import { Schema } from 'effect';
+import type { PrivateMemberships } from '../../slack/schema.ts';
 
 export const REFUSED_BLOCK_CODES = new Set([
   'invalid_blocks',
@@ -17,3 +19,10 @@ export interface RelayThread {
   readonly channelId: string;
   readonly threadTs: string;
 }
+
+export interface ListedChannel {
+  readonly channel: SlackChannel;
+  readonly unsure: string | null;
+}
+
+export const NO_MEMBERSHIPS: PrivateMemberships = { member: new Set(), failed: null };

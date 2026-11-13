@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   DEFAULT_TEAM_SCOPES,
   describeInitiativeDigest,
@@ -415,8 +416,7 @@ describe('teammates’ members on the lead’s machine', () => {
       member({ taskId: 'e', handle: 'SW-5', title: 'Dropped', stage: 'cancelled', phaseId: dock }),
       member({ taskId: 'f', handle: 'SW-6', title: 'Queued', stage: 'triage' }),
     ]);
-    const sheet = resolveInitiativeSheet(harness.state, initiativeId, harness.state.seq);
-    if (!sheet) throw new Error('no sheet');
+    const sheet = Option.getOrThrow(resolveInitiativeSheet(harness.state, initiativeId, harness.state.seq));
     expect(sheet.teammates.map((row) => [row.member.taskId, row.section, row.phase?.name ?? null])).toEqual([
       ['a', 'now', 'Dock'],
       ['d', 'shipped', 'Dock'],
@@ -525,15 +525,15 @@ describe('a teammate writing to the lead', () => {
     };
     const fromTeammateTask = { handle: 'SW-7', title: 'Sign webhooks' };
     const toLead = { type: 'task.message', taskId: leadId, text: 'Hi', fromTeammateTask } as const;
-    expect(resolveScopedRefusal(harness.state, muted, toLead)).toBeNull();
+    expect(resolveScopedRefusal(harness.state, muted, toLead)).toEqual(Option.none());
     expect(
       resolveScopedRefusal(harness.state, muted, { type: 'task.message', taskId: leadId, text: 'Hi' })
-    ).toBe(TEAM_SCOPE_MESSAGES.message);
-    expect(resolveScopedRefusal(harness.state, muted, { ...toLead, kind: 'new_round' })).toBe(
-      TEAM_SCOPE_MESSAGES.message
+    ).toEqual(Option.some(TEAM_SCOPE_MESSAGES.message));
+    expect(resolveScopedRefusal(harness.state, muted, { ...toLead, kind: 'new_round' })).toEqual(
+      Option.some(TEAM_SCOPE_MESSAGES.message)
     );
-    expect(resolveScopedRefusal(harness.state, muted, { ...toLead, taskId: shared })).toBe(
-      TEAM_SCOPE_MESSAGES.message
+    expect(resolveScopedRefusal(harness.state, muted, { ...toLead, taskId: shared })).toEqual(
+      Option.some(TEAM_SCOPE_MESSAGES.message)
     );
     expect(
       resolveScopedRefusal(harness.state, muted, {
@@ -541,7 +541,7 @@ describe('a teammate writing to the lead', () => {
         taskId: leadId,
         roundId: 'r',
       } as never)
-    ).toBe(TEAM_SCOPE_MESSAGES.message);
+    ).toEqual(Option.some(TEAM_SCOPE_MESSAGES.message));
   });
 
   test('without the message scope, nothing reaches a lead that is not resting, so no gate moves', () => {
@@ -565,7 +565,9 @@ describe('a teammate writing to the lead', () => {
       ...harness.state,
       tasks: { ...harness.state.tasks, [leadId]: { ...lead, stage: 'awaiting_plan' } },
     };
-    expect(resolveScopedRefusal(planning as never, muted, toLead)).toBe(TEAM_SCOPE_MESSAGES.message);
+    expect(resolveScopedRefusal(planning as never, muted, toLead)).toEqual(
+      Option.some(TEAM_SCOPE_MESSAGES.message)
+    );
     const gate = {
       id: 'gate-failure',
       taskId: leadId,
@@ -574,7 +576,9 @@ describe('a teammate writing to the lead', () => {
       openedAt: 0,
     };
     const paused = { ...harness.state, gates: { ...harness.state.gates, [gate.id]: gate } };
-    expect(resolveScopedRefusal(paused as never, muted, toLead)).toBe(TEAM_SCOPE_MESSAGES.message);
-    expect(resolveScopedRefusal(harness.state, muted, toLead)).toBeNull();
+    expect(resolveScopedRefusal(paused as never, muted, toLead)).toEqual(
+      Option.some(TEAM_SCOPE_MESSAGES.message)
+    );
+    expect(resolveScopedRefusal(harness.state, muted, toLead)).toEqual(Option.none());
   });
 });

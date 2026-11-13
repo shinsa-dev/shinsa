@@ -1,20 +1,21 @@
 import { MINUTE_MS } from '@shinsa/core';
+import { scheduleEvery } from '@/lib/runtime/timers.ts';
 
 const SECOND_MS = 1000;
 
 function createClock(periodMs: number) {
   const listeners = new Set<() => void>();
-  let timer: ReturnType<typeof setInterval> | undefined;
+  let stop: (() => void) | undefined;
   return (listener: () => void) => {
     listeners.add(listener);
-    timer ??= setInterval(() => {
+    stop ??= scheduleEvery(periodMs, () => {
       for (const notify of listeners) notify();
-    }, periodMs);
+    });
     return () => {
       listeners.delete(listener);
       if (listeners.size > 0) return;
-      clearInterval(timer);
-      timer = undefined;
+      stop?.();
+      stop = undefined;
     };
   };
 }

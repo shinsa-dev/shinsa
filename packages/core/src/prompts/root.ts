@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { isTaskComplete, type Run, type RunPurpose, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { resolveBundle } from '../state/queries.ts';
@@ -30,7 +31,10 @@ export function resolveRoundBrief(
   run: Pick<Run, 'purpose' | 'phaseIndex'>,
   prompt: string
 ) {
-  const instruction = splitHouseRules(prompt)?.instruction ?? prompt;
+  const instruction = Option.match(splitHouseRules(prompt), {
+    onNone: () => prompt,
+    onSome: (split) => split.instruction,
+  });
   const brief = resolveBrief(state, task, run.purpose ?? 'build', run.phaseIndex ?? null);
   return resolveAgentPrompt([brief, '', instruction].join('\n'));
 }

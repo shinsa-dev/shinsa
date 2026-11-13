@@ -4,6 +4,15 @@ export interface SlackThreadRef {
   threadTs: string;
 }
 
+export interface SlackMessageRef {
+  teamId: string;
+  channelId: string;
+  messageTs: string;
+  userId: string;
+  permalink: string | null;
+  channelName: string | null;
+}
+
 export interface SlackDecided {
   userId: string;
   text: string;

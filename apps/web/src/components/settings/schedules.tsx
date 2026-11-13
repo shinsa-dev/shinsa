@@ -17,7 +17,6 @@ import { StatusTile } from '@/components/status/tile.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
-  AUTOMATION_TYPE_LOOK,
   canResume,
   copyWebhookUrl,
   describeNextRun,
@@ -25,6 +24,7 @@ import {
   describeRemoval,
   describeScheduleSummary,
   removeSchedule,
+  resolveAutomationLook,
   resolveAutomationType,
   resolveScheduleStatus,
   resolveScheduleTaskId,
@@ -110,7 +110,7 @@ export function ScheduleRow({
   const status = resolveScheduleStatus(schedule);
   const at = status?.at ?? null;
   const type = resolveAutomationType(schedule);
-  const look = AUTOMATION_TYPE_LOOK[type];
+  const look = resolveAutomationLook(schedule);
   return (
     <div className={SETTING_ROW}>
       <div className='flex min-w-0 flex-1 items-center gap-2.5'>

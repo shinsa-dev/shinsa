@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { resolveComparableText } from '../chat/text.ts';
 import type { PlanDocument, PlanPhase } from './types.ts';
 
@@ -59,11 +60,16 @@ export function resolvePlanChanges(before: PlanDocument | null, after: PlanDocum
 
 export type PhaseChange = 'added' | 'changed';
 
-export function resolvePhaseChange(changes: PlanChange[] | undefined, title: string): PhaseChange | null {
+export function resolvePhaseChange(
+  changes: PlanChange[] | undefined,
+  title: string
+): Option.Option<PhaseChange> {
   const key = resolveComparableText(title);
   for (const change of changes ?? []) {
-    if (change.kind === 'phase_added' && resolveComparableText(change.title) === key) return 'added';
-    if (change.kind === 'phase_changed' && resolveComparableText(change.title) === key) return 'changed';
+    if (change.kind === 'phase_added' && resolveComparableText(change.title) === key)
+      return Option.some('added');
+    if (change.kind === 'phase_changed' && resolveComparableText(change.title) === key)
+      return Option.some('changed');
   }
-  return null;
+  return Option.none();
 }

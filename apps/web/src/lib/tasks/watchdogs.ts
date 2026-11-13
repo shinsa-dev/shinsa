@@ -33,8 +33,9 @@ export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
   const checks = describeCount(watchdog.checks.length, 'check', 'checks');
   switch (watchdog.status) {
     case 'needs_source':
-    case 'awaiting_production':
       return null;
+    case 'awaiting_production':
+      return watchdog.checks.length > 0 ? checks : null;
     case 'watching':
       return `${formatWholeHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
     case 'passed':
@@ -46,6 +47,16 @@ export function describeWatchdogMeta(watchdog: Watchdog, now: number) {
 
 function describeLastCheck(watchdog: Watchdog) {
   return watchdog.checks.at(-1)?.summary ?? null;
+}
+
+function describeProductionWait(watchdog: Watchdog) {
+  if (watchdog.checks.length === 0) return 'Starts once the change is live in production.';
+  const last = watchdog.checks.at(-1);
+  const since = watchdog.awaitingSince;
+  if (!last || since === null || last.at < since) {
+    return 'The change is not live in production. Starts over once it is.';
+  }
+  return `${last.summary} Starts over once the change is live in production.`;
 }
 
 function listTaskLinks(state: ShinsaState, taskIds: readonly string[]) {
@@ -62,9 +73,7 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
       return 'Starts once you connect an integration.';
     case 'awaiting_production':
       if (watchdog.runId) return 'Checking whether the change is live in production.';
-      return last
-        ? `Starts once the change is live in production. ${last}`
-        : 'Starts once the change is live in production.';
+      return describeProductionWait(watchdog);
     case 'watching':
       if (watchdog.runId) return 'Checking now.';
       if (!last) return `First check in ${formatTimeLeft((watchdog.nextCheckAt ?? now) - now)}.`;

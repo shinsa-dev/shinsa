@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { quoteTitle } from '../chat/text.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
@@ -162,7 +163,7 @@ export function syncCancelledLeads(decider: Decider, before: ShinsaState) {
   for (const event of [...decider.events]) {
     if (event.type !== 'task.staged' || event.stage !== 'cancelled') continue;
     if (before.tasks[event.taskId]?.stage === 'cancelled') continue;
-    const initiative = selectLeadInitiative(listInitiatives(decider.state), event.taskId);
+    const initiative = Option.getOrNull(selectLeadInitiative(listInitiatives(decider.state), event.taskId));
     if (initiative) dissolveInitiative(decider, initiative);
   }
 }
@@ -172,7 +173,7 @@ function isIdle(state: ShinsaState, task: Task) {
 }
 
 function findLeadInitiative(decider: Decider, taskId: string) {
-  const initiative = selectLeadInitiative(listInitiatives(decider.state), taskId);
+  const initiative = Option.getOrNull(selectLeadInitiative(listInitiatives(decider.state), taskId));
   if (!initiative) {
     throw new DomainError({
       code: 'initiative_not_found',
@@ -191,7 +192,7 @@ export function startLeadTurn(decider: Decider, taskId: string, note: LeadNote |
   const initiative = findLeadInitiative(decider, taskId);
   decider.stage(taskId, 'leading', resolveLeadReason(note));
   const now = decider.context.now;
-  const sheet = resolveInitiativeSheet(decider.state, initiative.id, now);
+  const sheet = Option.getOrNull(resolveInitiativeSheet(decider.state, initiative.id, now));
   const milestones = initiative.milestones ?? [];
   const prompt = resolveLeadPrompt({
     initiative,
@@ -212,7 +213,7 @@ export function startLeadTurn(decider: Decider, taskId: string, note: LeadNote |
 export function wakeLead(decider: Decider, command: CommandOf<'initiative.wake_lead'>) {
   const initiative = decider.state.initiatives[command.initiativeId];
   if (!initiative || (initiative.milestones ?? []).length === 0) return;
-  const lead = selectInitiativeLead(decider.state, initiative);
+  const lead = Option.getOrNull(selectInitiativeLead(decider.state, initiative));
   if (!lead || lead.stage !== 'leading' || !isIdle(decider.state, lead)) return;
   startLeadTurn(decider, lead.id, null);
 }
@@ -259,7 +260,7 @@ function resolveMemberMilestone(
   const task = decider.state.tasks[taskId];
   const initiative = task?.initiativeId ? decider.state.initiatives[task.initiativeId] : undefined;
   if (!task || !initiative || initiative.leadTaskId === task.id) return null;
-  if (!selectInitiativeLead(decider.state, initiative)) return null;
+  if (!Option.getOrNull(selectInitiativeLead(decider.state, initiative))) return null;
   if (kind === 'joined' && task.createdBy?.taskId === initiative.leadTaskId) return null;
   return {
     initiativeId: initiative.id,
@@ -371,7 +372,7 @@ function listTeamMilestones(
 export function recordTeamMembers(decider: Decider, command: CommandOf<'initiative.record_team_members'>) {
   const initiative = decider.state.initiatives[command.initiativeId];
   if (!initiative || !isInitiativeInTeam(initiative, command.teamId)) return;
-  if (!selectInitiativeLead(decider.state, initiative)) return;
+  if (Option.isNone(selectInitiativeLead(decider.state, initiative))) return;
   const members = command.members
     .filter((member) => member.teamId === command.teamId)
     .slice(0, INITIATIVE_LIMITS.teamMembers);

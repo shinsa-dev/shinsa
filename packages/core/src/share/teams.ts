@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { hashText } from '../domain/hash.ts';
 import {
   INITIATIVE_LIMITS,
@@ -66,7 +67,7 @@ export function isSharedLead(state: ShinsaState, task: Task, teamId: string) {
 export function isTeamTask(state: ShinsaState, task: Task, teamId: string) {
   if (task.watchHome) return false;
   if (isSharedLead(state, task, teamId)) return true;
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   const project = projectId ? state.projects[projectId] : undefined;
   return (project?.teamIds ?? []).includes(teamId);
 }

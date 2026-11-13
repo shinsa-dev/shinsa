@@ -1,4 +1,4 @@
-import { identity, Result } from 'effect';
+import { identity, Result, Option } from 'effect';
 import { isAgentCommand, isUserCommand, type ShinsaCommand } from '../commands/index.ts';
 import { DomainError } from '../domain/index.ts';
 import {
@@ -130,6 +130,7 @@ import {
   deliverSchedule,
   enableSchedule,
   failSchedule,
+  skipSchedule,
   fireSchedule,
   removeOwnSchedule,
   removeSchedule,
@@ -517,6 +518,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return deliverSchedule(decider, command);
     case 'schedule.fail':
       return failSchedule(decider, command);
+    case 'schedule.skip':
+      return skipSchedule(decider, command);
     case 'watch_suggestion.record':
       return recordWatchSuggestion(decider, command);
     case 'watch_suggestion.accept':
@@ -557,7 +560,9 @@ function apply(decider: Decider, command: ShinsaCommand) {
 }
 
 function resolveGuestRefusal(state: ShinsaState, command: ShinsaCommand, guest: ScopedActor) {
-  return isUserCommand(command) ? resolveScopedRefusal(state, guest, command) : SCOPE_MESSAGES.command;
+  return isUserCommand(command)
+    ? resolveScopedRefusal(state, guest, command)
+    : Option.some(SCOPE_MESSAGES.command);
 }
 
 function resolveDomainFailure(error: unknown) {
@@ -570,8 +575,9 @@ export function decide(
   command: ShinsaCommand,
   context: DecideContext
 ): Result.Result<Decision, DomainError> {
-  const refusal = context.guest ? resolveGuestRefusal(state, command, context.guest) : null;
-  if (refusal) return Result.fail(new DomainError({ code: SCOPE_REFUSAL_CODE, message: refusal }));
+  const refusal = context.guest ? resolveGuestRefusal(state, command, context.guest) : Option.none<string>();
+  if (Option.isSome(refusal))
+    return Result.fail(new DomainError({ code: SCOPE_REFUSAL_CODE, message: refusal.value }));
   return Result.try({ try: () => resolveDecision(state, command, context), catch: resolveDomainFailure });
 }
 
