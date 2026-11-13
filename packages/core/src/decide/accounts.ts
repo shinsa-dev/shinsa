@@ -158,7 +158,7 @@ export function resumeUsageWait(decider: Decider, command: CommandOf<'usage_wait
     return;
   }
   decider.emit({ type: 'usage_wait.ended', taskId: task.id, waitId: wait.id, status: 'reset' });
-  decider.fail(task.id, 'The usage limit has reset', describeReset(wait), wait.runId);
+  decider.hold(task.id, 'The usage limit has reset', describeReset(wait), wait.runId);
 }
 
 function canIgnorePaceLimits(decider: Decider) {

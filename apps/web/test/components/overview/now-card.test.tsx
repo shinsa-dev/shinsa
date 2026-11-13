@@ -978,6 +978,40 @@ describe('NowCard on the Overview', () => {
     );
   });
 
+  it('shows a pending automatic retry with its reason, retries now or stops retrying on request', async () => {
+    const now = Date.now();
+    const task = createTask({
+      id: 'task-1',
+      stage: 'fixing',
+      autoRetry: {
+        at: now + 5 * 60_000,
+        attempt: 2,
+        title: 'Fixing is not making progress',
+        detail: 'The failing checks came back after 8 fix rounds.',
+        runId: null,
+        cause: null,
+        milestone: 'm',
+        status: 'armed',
+      },
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task] }), task, undefined);
+    expect(view.getByText('Fixing is not making progress')).toBeTruthy();
+    expect(view.getByText('The failing checks came back after 8 fix rounds.')).toBeTruthy();
+    expect(view.getByText(/Retries in 5m/)).toBeTruthy();
+    expect(view.getByText(/Retry 2 of 10/)).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Retry now' }));
+    await waitFor(() => expect(listSentCommands()).toEqual([{ type: 'task.retry', taskId: 'task-1' }]));
+    const stop = view.getByRole('button', { name: 'Stop retrying' }) as HTMLButtonElement;
+    await waitFor(() => expect(stop.disabled).toBe(false));
+    fireEvent.click(stop);
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([
+        { type: 'task.retry', taskId: 'task-1' },
+        { type: 'task.pause', taskId: 'task-1' },
+      ])
+    );
+  });
+
   it('flags a run that went quiet, and snoozes or dismisses the flag', async () => {
     const task = createTask({ id: 'task-1' });
     const run = createRun({

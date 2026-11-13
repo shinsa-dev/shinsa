@@ -17,6 +17,7 @@ import { MonitorClock } from '../runtime/monitors/service.ts';
 import { WatchdogClock } from '../runtime/watchdogs/service.ts';
 import { Schedules } from '../schedules/service.ts';
 import { Slack } from '../slack/service.ts';
+import { TaskRetry } from '../tasks/index.ts';
 import { Terminals } from '../terminals/service.ts';
 import { MessageInbox } from '../triage/index.ts';
 import { Versions } from '../versions/service.ts';
@@ -42,7 +43,7 @@ export const WorkLayer = Layer.effectDiscard(
     const terminals = yield* Terminals;
     const extensions = yield* Extensions;
     const eunoe = yield* EunoeServer;
-    const clocks = [yield* MonitorClock, yield* WatchdogClock, yield* ShareClock];
+    const clocks = [yield* MonitorClock, yield* WatchdogClock, yield* ShareClock, yield* TaskRetry];
     const lock = yield* Effect.serviceOption(ServeLock);
     if (Option.isSome(lock)) yield* lock.value.update({ port: server.port, url: server.url });
     yield* (yield* ServerAddress).replace(server.url);

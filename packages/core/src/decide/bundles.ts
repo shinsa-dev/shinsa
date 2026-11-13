@@ -2,6 +2,7 @@ import { Option } from 'effect';
 import {
   type BundleConflict,
   type BundlePullRequest,
+  isRetryArmed,
   isTaskSettled,
   type Task,
   type TaskStage,
@@ -36,7 +37,11 @@ function resolveBundlePlace(decider: Decider, task: Task) {
 }
 
 function isBundleMerging(decider: Decider, task: Task) {
-  return task.stage === 'awaiting_merge' && listOpenGates(decider.state, task.id).length === 0;
+  return (
+    task.stage === 'awaiting_merge' &&
+    !isRetryArmed(task) &&
+    listOpenGates(decider.state, task.id).length === 0
+  );
 }
 
 export function clearBundleReady(decider: Decider, taskId: string) {
@@ -123,6 +128,7 @@ function isShippingAtRest(decider: Decider, task: Task) {
   return (
     task.stage === 'shipping' &&
     !task.pushPending &&
+    !isRetryArmed(task) &&
     listActiveRuns(decider.state, task.id).length === 0 &&
     listOpenGates(decider.state, task.id).length === 0
   );
@@ -180,7 +186,7 @@ function reviewStackParents(decider: Decider, task: Task) {
   if (cancelled) {
     if (listOpenGates(decider.state, task.id).length > 0) return;
     const rest = parents.filter((parent) => parent.stage !== 'cancelled');
-    decider.fail(task.id, `“${cancelled.title}” was cancelled`, describeCancelledParent(rest));
+    decider.hold(task.id, `“${cancelled.title}” was cancelled`, describeCancelledParent(rest));
     return;
   }
   const bases = task.stackBases ?? [];

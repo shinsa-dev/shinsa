@@ -5,9 +5,11 @@ import {
   dismissSuggestion,
   keepSuggestion,
   requestCheckInNow,
+  requestRetryNow,
   SNOOZE_HINT,
   snoozeSilence,
   stopDelegation,
+  stopRetrying,
 } from '@/lib/tasks/process.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createTask } from '../../support/state.ts';
@@ -28,12 +30,16 @@ describe('process actions', () => {
     await snoozeSilence('r', 1_000);
     await dismissSilence('r');
     await stopDelegation('child');
+    await requestRetryNow('t');
+    await stopRetrying('t');
     expect(SNOOZE_HINT).toBe('30 minutes');
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'monitor.check_in_now', taskId: 't' }, 'Checking in now.'],
       [{ type: 'run.snooze_silence', runId: 'r', until: 1_000 + 30 * 60_000 }, 'Snoozed for 30 minutes.'],
       [{ type: 'run.dismiss_silence', runId: 'r' }, 'Dismissed for this step.'],
       [{ type: 'delegation.cancel', runId: 'child' }, 'Stopped.'],
+      [{ type: 'task.retry', taskId: 't' }, 'Retrying now.'],
+      [{ type: 'task.pause', taskId: 't' }, 'Stopped retrying.'],
     ] as never);
   });
 

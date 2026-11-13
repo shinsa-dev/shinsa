@@ -4,6 +4,7 @@ import {
   type DeliveringStep,
   type DisplayPhase,
   type Gate,
+  isRetryArmed,
   listActiveRuns,
   listOpenGates,
   type Run,
@@ -36,7 +37,7 @@ export const RESULT_TITLE: Record<DeliveringStep, string> = {
   operate: 'Reported the outcome',
 };
 
-export type NowKind = 'gate' | 'usage_wait' | 'wait' | 'result' | 'work';
+export type NowKind = 'gate' | 'usage_wait' | 'retry' | 'wait' | 'result' | 'work';
 
 const SETTLED_TITLE: Partial<Record<Task['stage'], string>> = {
   merged: 'Merged. Nothing left to do.',
@@ -106,6 +107,7 @@ export function resolveNowKind(state: ShinsaState, task: Task, gate: Gate | unde
   if (gate && !(gate.type === 'post_merge' && working)) return 'gate';
   if (working) return 'work';
   if (isUsageWaitArmed(task)) return 'usage_wait';
+  if (isRetryArmed(task)) return 'retry';
   if (task.monitor?.status === 'armed') return 'wait';
   return task.stage === 'done' && task.result ? 'result' : 'work';
 }
