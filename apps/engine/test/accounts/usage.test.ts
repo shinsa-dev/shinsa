@@ -465,7 +465,7 @@ describe('reading an account’s usage from Claude', () => {
     expect(Object.fromEntries(new Headers(calls[0]?.[1].headers))).toEqual({
       authorization: 'Bearer token-1',
       'anthropic-beta': 'oauth-2025-04-20',
-      'user-agent': 'shinsa claude-cli/2.1.321',
+      'user-agent': 'claude-cli/2.1.321 (external, cli)',
     });
     expect(calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
   });
