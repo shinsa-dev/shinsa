@@ -1,6 +1,7 @@
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
   AutopilotDue,
+  AutoRetry,
   BacklogCause,
   BundleConflict,
   BundleReady,
@@ -219,6 +220,8 @@ type EventBody =
       onto?: number | null;
     }
   | { type: 'task.recovered'; taskId: string; recoveries: number; fingerprint?: string }
+  | { type: 'task.retry_scheduled'; taskId: string; retry: AutoRetry }
+  | { type: 'task.retry_cleared'; taskId: string; streak: 'kept' | 'reset' }
   | { type: 'worktree.requested'; taskId: string; workspace: WorkspaceMode }
   | {
       type: 'worktree.created';

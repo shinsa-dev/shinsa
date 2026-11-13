@@ -83,6 +83,7 @@ import { Slack } from '../slack/service.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES, Evidence } from '../store/index.ts';
 import { StoreLayer } from '../store/layers.ts';
 import { resolveStateVersion } from '../store/snapshot/version.ts';
+import { TaskRetry } from '../tasks/index.ts';
 import { TerminalsLayer } from '../terminals/layers.ts';
 import { ServiceRefiner } from '../terminals/refine/service.ts';
 import { Terminals } from '../terminals/service.ts';
@@ -302,7 +303,8 @@ function createClocksLayer(options: ShinsaOptions) {
     MonitorClock.layer,
     WatchdogClock.layer,
     AutopilotClock.layer,
-    ShareClock.layer
+    ShareClock.layer,
+    TaskRetry.layer
   ).pipe(
     Layer.provide(
       Layer.mergeAll(

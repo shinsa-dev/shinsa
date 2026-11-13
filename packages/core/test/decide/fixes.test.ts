@@ -6,6 +6,7 @@ import {
   createHarness,
   createTask,
   failing,
+  fireRetry,
   type Harness,
   linkSession,
   PASSING,
@@ -208,10 +209,10 @@ describe('checks and agent review', () => {
     expect(harness.task(taskId).stage).toBe('fixing');
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     repeatFailingChecks(harness, taskId, 1);
-    const gate = harness.openGate(taskId);
-    expect(gate.type).toBe('failure');
-    expect(gate.title).toBe('Fixing is not making progress');
-    expect(gate.body).toBe(
+    const retry = harness.task(taskId).autoRetry;
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(retry?.title).toBe('Fixing is not making progress');
+    expect(retry?.detail).toBe(
       'The failing checks came back after 8 fix rounds. Steer the agent in the chat, or retry.'
     );
     expect(harness.task(taskId).fixRounds).toBe(8);
@@ -247,7 +248,7 @@ describe('checks and agent review', () => {
     harness.send({ type: 'checks.record', taskId, results: failing('r4') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Two.' });
     harness.send({ type: 'checks.record', taskId, results: failing('r5') });
-    expect(harness.openGate(taskId).title).toBe('Out of automatic fix rounds');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Out of automatic fix rounds');
   });
 
   test('retrying after a stalled loop gives the agent another go', () => {
@@ -259,13 +260,7 @@ describe('checks and agent review', () => {
     harness.send({ type: 'checks.record', taskId, results: failing('r3') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'One.' });
     harness.send({ type: 'checks.record', taskId, results: failing('r4') });
-    const gate = harness.openGate(taskId);
-    harness.send({
-      type: 'gate.answer',
-      gateId: gate.id,
-      decision: 'approve',
-      response: 'Look at the types.',
-    });
+    fireRetry(harness, taskId);
     expect(harness.task(taskId).stage).toBe('checking');
   });
 
@@ -294,7 +289,7 @@ describe('fix loop limits', () => {
         treeHash: `t${round}`,
       });
     }
-    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Fixing is not making progress');
     expect(harness.task(taskId).fixRounds).toBe(16);
   });
 
@@ -323,7 +318,7 @@ describe('the automatic fix budget', () => {
     harness.send({ type: 'checks.record', taskId, results: failing('r3') });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'One.' });
     harness.send({ type: 'checks.record', taskId, results: failing('r4') });
-    expect(harness.openGate(taskId).title).toBe('Out of automatic fix rounds');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Out of automatic fix rounds');
     harness.send({ type: 'task.retry', taskId });
     harness.send({ type: 'checks.record', taskId, results: failing('r4') });
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
@@ -335,7 +330,7 @@ describe('the automatic fix budget', () => {
     const taskId = createTask(harness);
     buildAll(harness, taskId);
     repeatFailingChecks(harness, taskId, 9);
-    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Fixing is not making progress');
     harness.send({ type: 'task.retry', taskId });
     harness.send({ type: 'checks.record', taskId, results: failing() });
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
@@ -574,7 +569,7 @@ describe('fix fingerprints', () => {
       harness.send({ type: 'checks.record', taskId, results: failing(`r${round}`) });
       if (harness.task(taskId).stage !== 'fixing') break;
     }
-    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Fixing is not making progress');
     expect(harness.task(taskId).fixRounds).toBe(9);
   });
 

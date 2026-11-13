@@ -333,6 +333,7 @@ export {
   type StepPlacement,
   validatePipeline,
 } from './steps.ts';
+export { describeRetriesSpent, isRetryArmed, MAX_AUTO_RETRIES, resolveAutoRetryDelay } from './retries.ts';
 export { DAY_MS, HOUR_MS, MINUTE_MS } from './time.ts';
 export {
   hasTool,

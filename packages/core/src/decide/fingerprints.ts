@@ -1,6 +1,23 @@
 import { Option } from 'effect';
 import { hashText } from '../domain/hash.ts';
-import { type FixFingerprint, type FixReason, listBlockingChecks, type Task } from '../domain/index.ts';
+import {
+  type FixFingerprint,
+  type FixReason,
+  type Gate,
+  type GateType,
+  listBlockingChecks,
+  resolveCurrentRound,
+  type Task,
+} from '../domain/index.ts';
+
+const MILESTONE_GATES: ReadonlySet<GateType> = new Set<GateType>([
+  'plan',
+  'review',
+  'merge',
+  'proposal',
+  'operation',
+  'result',
+]);
 
 function listFailingChecks(task: Task) {
   return listBlockingChecks(task)
@@ -34,6 +51,19 @@ export function resolveRecoveryFingerprint(task: Task) {
       : null,
   };
   return `recovery:${hashText(JSON.stringify(durable)).toString(16).padStart(8, '0')}`;
+}
+
+function hashFingerprint(prefix: string, value: unknown) {
+  return `${prefix}:${hashText(JSON.stringify(value)).toString(16).padStart(8, '0')}`;
+}
+
+export function resolveRetryMilestone(task: Task, gates: readonly Gate[]) {
+  return hashFingerprint('milestone', {
+    round: resolveCurrentRound(task).number,
+    plan: task.plan?.version ?? 0,
+    phases: task.phaseReports.map((report) => report.index).sort((a, b) => a - b),
+    reached: gates.filter((gate) => gate.taskId === task.id && MILESTONE_GATES.has(gate.type)).length,
+  });
 }
 
 function isSameTree(fingerprint: FixFingerprint, tree: string | null) {

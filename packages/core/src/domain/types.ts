@@ -340,6 +340,19 @@ export interface Monitor {
   status: MonitorStatus;
 }
 
+export type AutoRetryStatus = 'armed' | 'spent';
+
+export interface AutoRetry {
+  at: number;
+  attempt: number;
+  title: string;
+  detail: string;
+  runId: string | null;
+  cause: GateCause | null;
+  milestone: string;
+  status: AutoRetryStatus;
+}
+
 export interface RunUsage {
   inputTokens: number;
   outputTokens: number;
@@ -550,6 +563,7 @@ export interface Task {
   escalation?: TaskEscalation | null;
   reviewedInput?: string | null;
   monitor?: Monitor | null;
+  autoRetry?: AutoRetry | null;
   treeHash?: string | null;
   fixFingerprints?: FixFingerprint[];
   recoveryFingerprint?: string | null;

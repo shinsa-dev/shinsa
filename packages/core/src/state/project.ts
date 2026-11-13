@@ -1137,6 +1137,8 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'usage_wait.armed':
     case 'usage_wait.ended':
     case 'task.pace_limits_ignored':
+    case 'task.retry_scheduled':
+    case 'task.retry_cleared':
       applyWaitEvent(state, event);
       break;
     case 'run.started':

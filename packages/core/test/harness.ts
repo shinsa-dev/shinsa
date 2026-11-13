@@ -1,4 +1,5 @@
 import { Result, Option } from 'effect';
+import { resolveRetryMilestone } from '../src/decide/fingerprints.ts';
 import {
   type AgentReply,
   applyEvent,
@@ -8,6 +9,7 @@ import {
   type ScopedActor,
   listActiveRuns,
   listOpenGates,
+  MAX_AUTO_RETRIES,
   parseUserCommand,
   type PlanDocument,
   type PullRequest,
@@ -419,4 +421,29 @@ export function learnUsageRate(harness: Harness) {
       costUsd: 2,
     });
   }
+}
+
+export function fireRetry(harness: Harness, taskId: string) {
+  const retry = harness.task(taskId).autoRetry;
+  if (retry?.status !== 'armed') throw new Error(`task ${taskId} has no armed retry`);
+  harness.advance(Math.max(0, retry.at - harness.now));
+  return harness.send({ type: 'task.auto_retry', taskId });
+}
+
+export function spendRetries(harness: Harness, taskId: string) {
+  const task = harness.task(taskId);
+  harness.replay({
+    type: 'task.retry_scheduled',
+    taskId,
+    retry: {
+      at: harness.now,
+      attempt: MAX_AUTO_RETRIES,
+      title: 'Retried',
+      detail: '',
+      runId: null,
+      cause: null,
+      milestone: resolveRetryMilestone(task, Object.values(harness.state.gates)),
+      status: 'spent',
+    },
+  });
 }
