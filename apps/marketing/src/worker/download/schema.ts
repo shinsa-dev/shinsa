@@ -1,3 +1,5 @@
+import type { Channel } from '../releases/schema.ts';
+
 export interface Validators {
   readonly etag: string;
   readonly lastModified: string;
@@ -12,3 +14,9 @@ export const DMG_HEADERS = {
 };
 
 export const VERSION_HEADERS = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' };
+
+export const CHANNEL_SUFFIXES: Record<string, Channel> = {
+  '': 'stable',
+  '/beta': 'beta',
+  '/canary': 'canary',
+};

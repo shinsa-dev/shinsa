@@ -20,6 +20,37 @@ export const FeedVersions = Schema.Array(Version);
 
 export const DMG_NAME = 'Shinsa-mac-arm64.dmg';
 
+export const KOE_DMG_NAME = 'Koe.dmg';
+
+export interface Product {
+  readonly name: 'shinsa' | 'koe';
+  readonly downloadPath: string;
+  readonly prefix: string;
+  readonly dmgName: string;
+  readonly fileStem: string;
+  readonly comingSoonUrl: Option.Option<string>;
+}
+
+export const SHINSA: Product = {
+  name: 'shinsa',
+  downloadPath: '/download',
+  prefix: '',
+  dmgName: DMG_NAME,
+  fileStem: 'Shinsa',
+  comingSoonUrl: Option.none(),
+};
+
+export const KOE: Product = {
+  name: 'koe',
+  downloadPath: '/koe/download',
+  prefix: 'koe/',
+  dmgName: KOE_DMG_NAME,
+  fileStem: 'Koe',
+  comingSoonUrl: Option.some('/koe#soon'),
+};
+
+export const PRODUCTS: readonly Product[] = [SHINSA, KOE];
+
 export const REPOSITORY_URL = 'https://github.com/shinsa-dev/shinsa';
 
 export const RELEASES_PAGE = `${REPOSITORY_URL}/releases`;

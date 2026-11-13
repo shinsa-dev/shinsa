@@ -15,6 +15,7 @@ import {
   LATEST_STABLE_URL,
   RELEASES_FEED,
   RELEASES_PAGE,
+  SHINSA,
 } from '../../src/worker/releases/schema.ts';
 import { listFeedVersions, selectChannelVersion } from '../../src/worker/releases/versions.ts';
 import { respond, type TestWorld } from './harness.ts';
@@ -149,12 +150,12 @@ function dmgUrl(tag: string) {
 
 describe('resolveChannel', () => {
   it('reads the stable, beta and canary download paths, with or without a trailing slash', () => {
-    expect(resolveChannel('/download')).toBe('stable');
-    expect(resolveChannel('/download/')).toBe('stable');
-    expect(resolveChannel('/download/beta')).toBe('beta');
-    expect(resolveChannel('/download/beta/')).toBe('beta');
-    expect(resolveChannel('/download/canary')).toBe('canary');
-    expect(resolveChannel('/download/canary/')).toBe('canary');
+    expect(resolveChannel('/download')).toEqual({ product: SHINSA, channel: 'stable' });
+    expect(resolveChannel('/download/')).toEqual({ product: SHINSA, channel: 'stable' });
+    expect(resolveChannel('/download/beta')).toEqual({ product: SHINSA, channel: 'beta' });
+    expect(resolveChannel('/download/beta/')).toEqual({ product: SHINSA, channel: 'beta' });
+    expect(resolveChannel('/download/canary')).toEqual({ product: SHINSA, channel: 'canary' });
+    expect(resolveChannel('/download/canary/')).toEqual({ product: SHINSA, channel: 'canary' });
   });
 
   it('leaves every other path to the static assets', () => {
