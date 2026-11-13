@@ -38,6 +38,16 @@ export const MachineGitHub = Context.Reference<MachineGitHubShape | null>(
 
 export const GITHUB_HEADER_KEY = 'http.https://github.com/.extraheader';
 
+export const GITHUB_CREDENTIAL_KEY = 'credential.https://github.com.helper';
+
+export const MACHINE_GIT_CREDENTIALS = {
+  GIT_CONFIG_COUNT: '2',
+  GIT_CONFIG_KEY_0: GITHUB_CREDENTIAL_KEY,
+  GIT_CONFIG_VALUE_0: '',
+  GIT_CONFIG_KEY_1: GITHUB_CREDENTIAL_KEY,
+  GIT_CONFIG_VALUE_1: '!gh auth git-credential',
+} as const;
+
 export const NO_REPLY_DOMAIN = 'users.noreply.github.com';
 
 export const MAX_GITHUB_TOKEN = 400;

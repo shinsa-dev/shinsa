@@ -1,4 +1,4 @@
 ---
 kind: fixed
 ---
-When a GitHub organization enforces single sign-on and Shinsa's GitHub login is not authorized for it, the task now pauses at once with an Authorize on GitHub button, instead of retrying eight times and showing GitHub's raw error.
+Pushes now use the same GitHub login as the `gh` command, so once you authorize it for an organization with single sign-on, Retry works. Such a refusal also pauses the task at once with an Authorize on GitHub button.

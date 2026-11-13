@@ -3547,7 +3547,12 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
     authorization header in git's config through `GIT_CONFIG_COUNT` (never on the command line, so it shows in no process list or push
     error; an SSH remote still pushes with the machine's key), and commits and merges are authored as the owner while
     the machine stays the committer. A member with no token yet ships with the machine's own login, and the pull
-    request's description says so (`serializeMachineLoginNote`).
+    request's description says so (`serializeMachineLoginNote`). With the machine's own login, pushes and fetches to
+    `https://github.com` take their credentials from `gh` (`MACHINE_GIT_CREDENTIALS`: an empty
+    `credential.https://github.com.helper`, which drops the helpers before it, then `!gh auth git-credential`, as
+    `gh auth setup-git` writes it, through `GIT_CONFIG_COUNT`), so git uses the same login `gh` reads with. Without
+    it git falls back to the system's helper (macOS keychain), which can hold an older token GitHub refuses for an
+    SSO organization while `gh` works.
   - **The web app.** On a shared machine All tasks opens on your own tasks with an Owner column (removing the filter
     writes `owner=everyone`, which sticks), Home, the queue and the "N need you" count only ever show yours
     (`useOwnQueue`), a task's facts name its Owner ("You", the
@@ -5799,7 +5804,8 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   The paused card adds "Authorize on GitHub", which opens that URL. With the machine's own `gh` login the
   body also says to run `gh auth refresh -h github.com`: `gh`'s token is an OAuth app token, which GitHub
   authorizes for an organization only when the app is authorized during an active SSO session, so a token
-  made before the organization enforced SSO stays refused until `gh` signs in again. Retry restarts the
+  made before the organization enforced SSO stays refused until `gh` signs in again. Pushes use that same
+  `gh` login (see Shared machines → GitHub), so once `gh` works for the organization, so does the push. Retry restarts the
   watch as for any failure gate, and nothing resumes on its own once the login is authorized.
 - **A stopped watch** is not read by the periodic sync. Retry restarts it (the push or the
   recheck it starts), and so does a read that finds the pull request clean: that one opens the

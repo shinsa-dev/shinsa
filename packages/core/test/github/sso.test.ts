@@ -16,7 +16,19 @@ const PUSH_WITH_LINK = `remote: The 'superwall' organization has enabled or enfo
 const PUSH_WITH_TOKEN =
   "remote: The `acme' organization has enabled or enforced SAML SSO. To access\nremote: this repository, you must use the HTTPS remote with a personal access token or SSH with an SSH key and passphrase\nremote: that has been authorized for this organization.";
 
+const PUSH_REAUTHORIZE = [
+  "remote: The 'superwall' organization has enabled or enforced SAML SSO.",
+  "remote: To access this repository, you must re-authorize the OAuth Application 'GitHub CLI'.",
+  "fatal: unable to access 'https://github.com/superwall/superwall.git/': The requested URL returned error: 403",
+].join('\n');
+
 describe('reading a GitHub SSO refusal', () => {
+  test('names the organization from a push that asks to re-authorize the GitHub CLI', () => {
+    expect(parseGitHubSso(PUSH_REAUTHORIZE, Option.none())).toEqual(
+      Option.some({ organization: 'superwall', url: 'https://github.com/orgs/superwall/sso' })
+    );
+  });
+
   test('takes the organization and the exact link from the GraphQL error', () => {
     expect(parseGitHubSso(GRAPHQL, Option.some('other'))).toEqual(
       Option.some({ organization: 'superwall', url: LINK })
