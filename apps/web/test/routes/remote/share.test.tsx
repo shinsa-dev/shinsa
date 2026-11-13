@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, it, mock, spyOn } from 'bun:test';
 import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import type { ShareLiveView, Task } from '@shinsa/core';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { requestCodeEditor } from '@/components/code/editor-pane.tsx';
 import { READ_ONLY_REFUSAL, selectReadOnlyRefusal } from '@/lib/connection/read-only.ts';
 import { SharePage } from '@/routes/remote/share.tsx';
 import { createSharedTask, DIFF } from '../../lib/share/fixtures.ts';
@@ -13,6 +14,11 @@ const ORIGINAL_SOCKET = globalThis.WebSocket;
 const CODE_LOADED = { timeout: 5000 };
 const CODE_TEST_TIMEOUT = 15_000;
 const blobs = new Map<string, Promise<string>>();
+
+beforeAll(async () => {
+  await import('@/routes/task/code.tsx');
+  await requestCodeEditor();
+});
 
 afterEach(() => {
   mock.restore();
