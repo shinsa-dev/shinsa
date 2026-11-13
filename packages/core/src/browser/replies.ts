@@ -11,6 +11,7 @@ const CHECK_FAILURE: Record<SignInCheckFailure, string> = {
   not_installed: 'Google Chrome is not installed',
   launch_failed: 'the shared browser did not start',
   signing_in: 'the sign-in window was still open',
+  profile_in_use: 'another program was using the shared browser profile',
   timeout: 'the page did not load in time',
   failed: 'the shared browser did not answer',
 };
