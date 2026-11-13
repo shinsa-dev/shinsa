@@ -1,7 +1,7 @@
 # @shinsa/cloud
 
 The Worker on `https://app.shinsa.dev` that remote access runs through (`docs/engine.md` → Remote access, the design in
-`docs/plans/remote-plan.md`). It signs you in with GitHub, pairs a machine, makes that machine's Cloudflare tunnel,
+`docs/plans/remote-plan.md`). It signs you in with GitHub, pairs a machine, relays every machine's traffic through one Durable Object per machine,
 lists your machines and the ones shared with you, keeps who belongs to each machine, mints the short connect token a browser opens a machine's channel with, forwards webhooks, passes a
 shared preview on `*.shinsa.page` through to its machine, and serves the web app's remote build. It never sees what a browser and a machine say to each other: the channel is
 sealed end to end (core's `remote/`), and the Worker holds no key that opens it. Everything it stores is in D1, and
@@ -52,7 +52,7 @@ src/
 │                    HttpOnly, Secure, SameSite=Lax), responses.ts (redirects with their cookies, the one
 │                    redirect to sign in and back, respondSignInRedirect, a failure as JSON,
 │                    text, a header on an API answer), request.ts (the request's URL and a cookie), forward.ts (what
-│                    never reaches a machine: hop-by-hop, Cloudflare's and proxies' headers; the tunnel statuses that
+│                    never reaches a machine: hop-by-hop, Cloudflare's and proxies' headers; the relay statuses that
 │                    mean offline; requestOnlineMachine and recordMachineOffline, the one warn line
 │                    `[Cloud] Machine offline`), worker.ts (WorkerContext and deferWork, Assets, WorkerLogger: Workers
 │                    Logs' console, errors to console.error, warnings to console.warn)
@@ -68,7 +68,7 @@ src/
 ├── domain/          The Worker's own steps several routes share: machines.ts (isMachineOnline, a machine row as a
 │                    RemoteInstance or a TeamMachine, a connect token's answer for the /remote or /team channel,
 │                    findOwner: a machine's or a team's owner, a machine's members and guests, removeMachine: its
-│                    tunnel, then its row), teams.ts (a RemoteTeam with its machines and,
+│                    row, then its relay closed), teams.ts (a RemoteTeam with its machines and,
 │                    for its owner, the requests; a user's teams; an invite replaced, a team found by its invite,
 │                    joining, leaving and a team connect token), schema.ts (ONLINE_WINDOW, CONNECT_NONCE_BYTES)
 ├── routes/          One folder per group of the API and per set of plain routes, each a handler.ts and, when it has
@@ -80,9 +80,15 @@ src/
 │                    machine's), slack-relay/ (a machine's links, posts, thread status and reactions), slack-link/
 │                    (Sign in with Slack, adding the app), slack-events/ (events, a card's decision buttons and
 │                    forms, who may decide; each Slack payload a schema: EventEnvelope, MentionEnvelope,
-│                    UninstallEvent, ThreadMessage, BlockActions, ViewSubmission), hooks/ (/hooks/<instance>/<schedule>/<token> to the machine), preview-open/ (the
+│                    UninstallEvent, ThreadMessage, BlockActions, ViewSubmission), relay/ (/__relay/<instance>/machine for the machine,
+│                    its machine token required; /__relay/<instance>/<path> for a browser's channel, share and team
+│                    sockets, cookies and authorization dropped), hooks/ (/hooks/<instance>/<schedule>/<token> to the machine), preview-open/ (the
 │                    open route for a private address), previews/ (PreviewHost, service.ts: *.shinsa.page forwarded
 │                    to its machine; address.ts: isPreviewHost and resolveForwardCookie)
+├── relay/          The relay (How it works → The relay): hub.ts (createRelayHub, the whole of it as plain code over
+│                    a socket port: which socket is the machine, its streams, their bodies, timeouts and refusals),
+│                    durable.ts (MachineRelay, the Durable Object around it: hibernating sockets tagged by role, the
+│                    ping auto-response; outside coverage like index.ts), schema.ts (roles, refusals, close reasons)
 ├── slack/           What the Slack routes share: signed-body.ts (readSignedBody: its size, Slack's signature within
 │                    five minutes), workspace.ts (a workspace's bot token, opened; a request to a machine signed with
 │                    its connect key), schema.ts (the limits)
@@ -98,12 +104,11 @@ src/
                      over HttpClient (http.ts: OutboundHttp, fetch with trace headers off, so no request to GitHub,
                      Cloudflare or Slack carries ours): github/ (signIn: the code and verifier to an account, the
                      answer decoded straight to a RemoteUser by GitHubUser, SignInFailed when refused, a defect when
-                     unreachable), cloudflare/ (createTunnel, which removes a half-made tunnel, updateIngress,
-                     removeTunnel; the zone looked up once; every refusal a CloudflareFailed naming the call),
+                     unreachable),
                      slack/ (SlackApi: call with the answer's Schema, SlackCallFailed with Slack's code,
-                     selectUserName, hasBotScopes; the scopes), tunnels/ (Tunnels: the one way anything reaches a
-                     machine's t-<instance>.shinsa.dev: webhooks, previews and Slack, never following a redirect;
-                     TunnelUnreachable when it does not answer)
+                     selectUserName, hasBotScopes; the scopes), relays/ (Relays: the one way anything reaches a
+                     machine, through its MachineRelay: webhooks, previews and Slack, never following a redirect;
+                     connect for the machine's own socket, evict on removal; RelayUnreachable when the object fails)
 migrations/          D1's schema (wrangler d1 migrations): 0001_schema.sql is the whole of it; test/store/schema.test.ts
                      pins its rules (How it works → The schema)
 slack-manifest.json  The Slack app to create (api.slack.com → Create New App → From a manifest); test/slack.test.ts
@@ -115,8 +120,8 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
                      they should. One file per route group, against harness.ts: makeCloudHandler on a SQLite file with every
                      migration in a temporary folder test/preload.ts removes (it also gives every test 30 s, since CI runs every workspace at once; harness.db.sqlite reads the same rows), a clock a test moves
                      (harness.clock.now), the configuration a test may change (harness.world.config, which builds
-                     the handler again), waitUntil collected for settle(), and GitHub, the Cloudflare API, Slack and
-                     a machine's tunnel as fakes behind one fetch (harness.world.fetch, its calls in harness.calls,
+                     the handler again), waitUntil collected for settle(), and GitHub, Slack and a machine's relay
+                     as fakes behind one fetch (harness.world.fetch, its calls in harness.calls,
                      answers in handlers); http/ tests the logger and deferWork; config/, crypto/, store/ and
                      integrations/ test each service against layers.ts: runTest and flipTest provide CloudServices on
                      SQLite in memory with every migration, TEST_ENV, a TestClock at TEST_NOW and an Upstream (the
@@ -156,25 +161,37 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   per address, each for 10 minutes) and gets an 8-character claim code, a poll secret (kept only as a hash) and the
   `/pair?code=` link. You open it signed in, see the machine's name and key fingerprint (`/__remote/pairs/<code>`),
   and approve (`…/approve`), which first reserves the code in one conditional update so two approvals at once pair
-  it only once (a failed approval releases it): the Worker makes the tunnel `shinsa-<instance>`, its ingress to `http://127.0.0.1:7446`
-  with a 404 for anything else, its token and the proxied CNAME `t-<instance>.shinsa.dev`, then the instance with
-  the hash of a new machine token and a new connect key. A failed step removes the half-made tunnel. The credentials
-  (machine token, tunnel token, connect key) are sealed to the machine's own public key from `pair/start` before
+  it only once (a failed approval releases it): the Worker makes the instance with the hash of a new machine token and
+  a new connect key, and nothing outside D1: no tunnel, no DNS record. The credentials (machine token, connect key)
+  are sealed to the machine's own public key from `pair/start` before
   they are stored (`CloudCrypto.sealCredentials`, core's `pairing-seal.ts`), so the waiting row in D1 holds nothing the
   Worker or a copy of D1 can open. The machine's next poll with the right secret collects them once as
   `sealedCredentials`, opens them with its private key, and the row is then gone. Only a machine whose `pair/start`
   names `sealed-pairing` in `features` (kept in `pairings.features` and then `machines.features`) is sealed to; an older engine that names nothing collects them in the clear as
-  `credentials`, as it always has. At most 5 machines per account, and at most `MAX_INSTANCES` (50 by default, a
-  variable in `wrangler.jsonc`) on the whole service, each one a tunnel and a DNS record on our Cloudflare account; past
-  it an approval is 503 `service_full`.
+  `credentials`, as it always has. At most 5 machines per account, and at most `MAX_INSTANCES` (10,000 by default, a
+  variable in `wrangler.jsonc`) on the whole service, a guard against runaway pairing rather than a quota, since a
+  machine costs a D1 row and a Durable Object that sleeps while nothing flows; past it an approval is 503
+  `service_full`.
 - **Machines.** A heartbeat (machine token as bearer) records the `features` the engine names (`machines.features`)
-  and marks the instance online and, when the machine's loopback
-  address changed, moves the tunnel's ingress there; any address but loopback is refused. Online means a heartbeat in
+  and marks the instance online, with the machine's loopback address; any address but loopback is refused. Online means a heartbeat in
   the last 5 minutes and no offline call since. An unknown machine token is 401, which the machine reads as revoked.
-  Removing an instance, from its owner's dashboard or by the machine, deletes its DNS record and tunnel, then the row
-  with its members, guests, invites and hand-off links. The heartbeat answers `{ ok, owner, members, guests, teams }`
+  Removing an instance, from its owner's dashboard or by the machine, deletes the row with its members, guests,
+  invites and hand-off links, then tells its relay to close the machine's socket and every open stream (a relay that
+  cannot be reached is a warning; the machine token is gone either way). The heartbeat answers `{ ok, owner, members, guests, teams }`
   (`HeartbeatResponse`), the machine's owner, its members and its guests as users, so the machine keeps its own copy
   and forgets the devices of anyone no longer listed.
+- **The relay.** Each machine keeps one outbound WebSocket to `/__relay/<instance>/machine`, its machine token as a
+  bearer (401 otherwise, which the machine reads as revoked once a heartbeat agrees), ending in that machine's own
+  `MachineRelay` Durable Object (`relay/durable.ts`, named by the instance id through `RelayRooms`). Everything that
+  reaches the machine is a stream on that socket in core's relay frames (`remote/relay/`): a browser's channel, share
+  and team socket (`/__relay/<instance>/remote|share|team`, its cookies and authorization dropped, its address kept as
+  the stream's), and every webhook, preview and Slack forward (`Relays.request`). The hub (`relay/hub.ts`) gives each
+  stream an id, sends `open`, waits for the machine's `response` (101 for an accepted socket, else the machine's own
+  status), and passes body chunks of at most 64 KiB and whole socket messages up to 32 MiB both ways. No machine
+  socket, or 1,024 streams already open, is 503; a machine that drops a stream is 502 and one that does not answer
+  within 60 seconds 504. A newer machine socket replaces the older one, and a closing machine socket closes every
+  stream. The socket hibernates: the object sleeps while nothing flows, and the machine's 30-second `ping` is answered
+  `pong` by the runtime's auto-response, so liveness never wakes it. An idle machine costs storage and nothing else.
 - **Members.** A machine has one owner, the account that paired it, and up to 20 members (`MAX_INSTANCE_MEMBERS`,
   `machine_members`), who reach it exactly as its owner does. Only the machine invites, and only it lets someone
   in. `POST /__remote/machine/invites` (machine token) answers the machine's one reusable invite token, replacing the
@@ -260,12 +277,12 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   any key or machine is checked, so a dev server's own robots file is never served there. It then reads the instance
   and the preview id from the label (`parsePreviewHost`); a `?key=` on any path is set as `__Host-shinsa_preview` (HttpOnly, Secure, SameSite=Lax, 30
   days, that host only) and answered with a 303 to the same address without it, written in full so a path starting `//` stays on the host. With the cookie, a request to an
-  instance that is online is forwarded to `https://t-<instance>.shinsa.dev/__preview/<id><path>` with its method,
+  instance that is online is forwarded through its relay to `/__preview/<id><path>` with its method,
   query, body and headers, minus the preview cookie, Cloudflare's and proxies' own, and with the key in
-  `x-shinsa-preview-key`; a WebSocket upgrade passes through as Cloudflare's 101. The machine checks the key. No
+  `x-shinsa-preview-key`; a WebSocket upgrade passes through as the relay's 101. The machine checks the key. No
   cookie, a malformed key or an unknown instance is "This preview is not shared" (404); an instance offline or
-  a tunnel that does not answer (a network error, 502, 503, 504, 530 without the machine's
-  `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a tunnel
+  a relay that does not answer (no machine socket, 502, 503, 504 without the machine's
+  `x-shinsa-preview-page` mark, `PREVIEW_PAGE_HEADER`) is the offline page (503, `Retry-After: 30`), and a relay
   that fails for an online instance is logged as the warn line `[Cloud] Machine offline` with `surface: preview`
   (below); the machine's own
   pages, such as a stopped service's, pass through with the mark removed. Every answer carries `X-Robots-Tag: noindex, nofollow, noarchive`, the Worker's own error page included.
@@ -284,15 +301,15 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   `x-shinsa-preview-access` a browser sends is dropped before forwarding, and the preview cookies never reach the dev
   server. An expired or forged token is the not-shared page.
 - **Webhooks.** `/hooks/<instance>/<schedule>/<token>`, the schedule and the token each 1 to 128 characters of
-  `A-Z a-z 0-9 _ -` (anything else, an encoded slash, `?` or dot segment included, is 404 before the tunnel is
-  called, so a hook never reaches another path of the machine), is forwarded to `https://t-<instance>.shinsa.dev/api/hooks/…`
+  `A-Z a-z 0-9 _ -` (anything else, an encoded slash, `?` or dot segment included, is 404 before the relay is
+  called, so a hook never reaches another path of the machine), is forwarded through the relay to `/api/hooks/…`
   with its method, query, body (1 MB at most) and headers, minus cookies and Cloudflare's and proxies' own. The
-  machine checks the token. A tunnel that does not answer (a network error, 502, 503, 504, 530) is 503 with
+  machine checks the token. A relay that does not answer (no machine socket, 502, 503, 504) is 503 with
   `Retry-After: 60`, so the sender tries again.
-- **An offline machine is a warning, not an error.** A webhook, a Slack mention or a preview whose tunnel does not
+- **An offline machine is a warning, not an error.** A webhook, a Slack mention or a preview whose relay does not
   answer writes one warn line, `[Cloud] Machine offline` (`recordMachineOffline` in `http/forward.ts`), with
   `surface` (`webhook`, `slack` or `preview`), `instanceId` and `reason`: `unreachable` with the fetch's `error`, or
-  `status` with the tunnel's status. A machine asleep or off its network is expected, so a watch counts this line
+  `status` with the relay's status. A machine asleep or off its network is expected, so a watch counts this line
   on its own. Workers Logs still marks the webhook's 503 request itself as error level, as it does any 5xx, with no
   `console.error` behind it, so a watch on the Worker's errors must leave out a 503 on `/hooks/` (and on a preview
   host) that comes with this warn line, and count the warn line apart.
@@ -314,9 +331,9 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   threads the mention links to with that person's user token and never the bot's (only for a machine that names
   `slack-linked-threads`; one it cannot read gets a private note, or "Connect Slack again" when the token is missing
   or refused), names the people
-  in them, turns Slack's markup into text, adds the linked account (`linkedUserId`, whose task it starts) and posts it to `https://t-<instance>.shinsa.dev/api/slack/events`, signed
+  in them, turns Slack's markup into text, adds the linked account (`linkedUserId`, whose task it starts) and posts it through the relay to `/api/slack/events`, signed
   with an HMAC over the time and the body keyed by the machine's connect key (`createSlackForwardSignature`); a
-  machine offline, or a tunnel that does not answer, gets "offline" in the thread instead. A machine posts and edits
+  machine offline, or a relay that does not answer, gets "offline" in the thread instead. A machine posts and edits
   through `/__remote/slack/post` with its machine token, only in a thread it was sent, or a thread of a channel it
   watches (`SlackStore.hasWatch`; the first post, reaction or status there records the thread, so a task filed from
   a channel message keeps its thread after the watch ends), and only editing what it
@@ -377,7 +394,7 @@ model. The Worker's part of it:
 - **Three gates in, one gate out.** Every request passes `Ingress`, the sign-in middleware its group names
   (`PageSession` or `MachineSession`) and `RequestGate`, in that order, and nothing else decides who may call a route
   (`test/gates.test.ts`, which reads every route from `RemoteApi` and fails on a new one open to anyone until it is
-  added to the open list on purpose). Everything that reaches a machine goes through `Tunnels`, with a path built only
+  added to the open list on purpose). Everything that reaches a machine goes through `Relays`, with a path built only
   from checked parts (a webhook's schedule and token, 1 to 128 base64url characters, `test/hooks.test.ts`), never
   following a redirect.
 - **What D1 keeps.** Hashes of sessions, sign-in codes, poll secrets, machine tokens and invite and hand-off tokens;
@@ -438,9 +455,9 @@ model. The Worker's part of it:
   reads D1 with `no such table`. Undo one only with the other, in the same minute.
 - Before the first deploy: a D1 database `shinsa-cloud` (`wrangler d1 create shinsa-cloud`, its id in
   `wrangler.jsonc`) with the migrations applied (`bun run migrate`), a GitHub OAuth app whose callback is
-  `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and
-  `CLOUDFLARE_API_TOKEN` (`wrangler secret put`; the token needs Cloudflare Tunnel edit on the account and DNS edit on
-  the `shinsa.dev` zone). The Slack bot needs the app made from `slack-manifest.json` (a change to its events or scopes is made again in the app's settings on api.slack.com, which no deploy does), with public distribution on
+  `https://app.shinsa.dev/__remote/sign-in/callback`, and the secrets `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`
+  (`wrangler secret put`). The `MachineRelay` Durable Object and its migration are in `wrangler.jsonc`; `wrangler
+  deploy` creates the class. The Slack bot needs the app made from `slack-manifest.json` (a change to its events or scopes is made again in the app's settings on api.slack.com, which no deploy does), with public distribution on
   (Manage Distribution) so other workspaces can add it, and the secrets
   `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET` (the app's Basic Information) and `SLACK_TOKEN_KEY`
   (32 random bytes in base64url: `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`). Changing `SLACK_TOKEN_KEY`
