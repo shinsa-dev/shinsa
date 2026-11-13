@@ -246,6 +246,8 @@ const TeamHolder = Schema.Struct({ login: Data, name: Data, avatarUrl: Data });
 
 const TeamPresence = Schema.Struct({ userId: Data, status: Data, seenAt: Data });
 
+const TeamTaskInitiative = Schema.Struct({ instanceId: Data, initiativeId: Data, phaseId: Data });
+
 const TeamTask = Schema.Struct({
   task: SharedTaskRecord,
   gates: Schema.Array(SharedGate),
@@ -255,12 +257,25 @@ const TeamTask = Schema.Struct({
   ownerProfile: Schema.optionalKey(Schema.NullOr(SharedPerson)),
   machine: Data,
   heldBy: Schema.optionalKey(Schema.NullOr(TeamHolder)),
+  initiative: Schema.optionalKey(Schema.NullOr(TeamTaskInitiative)),
+});
+
+const TeamInitiative = Schema.Struct({
+  id: Data,
+  name: Data,
+  description: Data,
+  phases: Schema.Array(Schema.Struct({ id: Data, name: Data })),
+  leadTaskId: Data,
+  report: Schema.NullOr(Schema.Struct({ narrative: Data, at: Data })),
+  finished: Data,
+  updatedAt: Data,
 });
 
 const TeamSnapshot = Schema.Struct({ body: Data, signature: Data });
 
 const TeamListView = Schema.Struct({
   tasks: Schema.Array(TeamTask),
+  initiatives: Schema.optionalKey(Schema.Array(TeamInitiative)),
   machineKey: Data,
   grant: Schema.optionalKey(Data),
   updatedAt: Data,
@@ -272,6 +287,8 @@ const TeamListView = Schema.Struct({
 export const EgressView = Schema.fromJsonString(Schema.Union([ShareView, TeamListView]));
 
 export const TeamTasks = Schema.Array(TeamTask);
+
+export const TeamInitiatives = Schema.Array(TeamInitiative);
 
 export const PREVIEW_DROPPED_HEADERS: ReadonlySet<string> = new Set([
   'connection',

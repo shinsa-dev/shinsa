@@ -97,6 +97,33 @@ describe('schema', () => {
     expect(expiries.filter((expiry) => expiry.indexed !== 1)).toEqual([]);
   });
 
+  test('a machine keeps no tunnel columns, since the relay replaced its tunnel', async () => {
+    const columns = await runSqlTest(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        return yield* SqlSchema.findAll({
+          Request: Schema.Void,
+          Result: Schema.Struct({ name: Schema.String }),
+          execute: () => sql`SELECT name FROM pragma_table_info('machines') ORDER BY cid`,
+        })(undefined);
+      }).pipe(Effect.orDie)
+    );
+    expect(columns.map((column) => column.name)).toEqual([
+      'id',
+      'owner_id',
+      'name',
+      'fingerprint',
+      'machine_token_hash',
+      'connect_key',
+      'signing_key',
+      'features',
+      'local_url',
+      'online',
+      'last_seen_at',
+      'created_at',
+    ]);
+  });
+
   test('a value of the wrong type is refused instead of stored', async () => {
     const outcome = await runSqlTest(
       Effect.gen(function* () {

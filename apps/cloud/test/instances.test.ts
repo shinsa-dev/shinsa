@@ -50,6 +50,19 @@ describe('instances', () => {
     expect((await harness.call(REMOTE_PATHS.instances)).status).toBe(401);
   });
 
+  test('lists a machine that beats without joining the relay as offline, until it joins', async () => {
+    const harness = createHarness();
+    const session = await harness.signIn();
+    const studio = await pairMachine(harness, session);
+    await heartbeat(harness, studio, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    expect((await listInstances(harness, session))[0]).toMatchObject({
+      online: false,
+      lastSeenAt: harness.clock.now,
+    });
+    await heartbeat(harness, studio);
+    expect((await listInstances(harness, session))[0]?.online).toBe(true);
+  });
+
   test('goes offline at once when the machine says so', async () => {
     const harness = createHarness();
     const session = await harness.signIn();

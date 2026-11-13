@@ -20,7 +20,7 @@ function summarise(task: Task, label: string, kind: QueueSummaryEntry['kind'], b
 
 export function resolveQueueSummary(state: ShinsaState, now: number, baseUrl: string): QueueSummary {
   const queue = resolveQueue(state, now);
-  const stored = state.briefings[briefingKey(queue.focus)];
+  const stored = state.briefings[briefingKey(queue.focus, queue.focusInitiativeId)];
   return {
     briefing: serializeBriefing(reconcileBriefing(stored, queue, now), state),
     decisions: queue.ready.map((entry) =>

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   listRankedSpots,
   type PlanDocument,
+  PLAN_INITIATIVE_NOTE,
   serializePlanMarkdown,
   serializeReportMarkdown,
   serializeTestingMarkdown,
@@ -79,6 +80,14 @@ describe('serializePlanMarkdown', () => {
       ].join('\n')
     );
     expect(serializePlanMarkdown(PLAN)).not.toContain('## Other tasks');
+  });
+
+  test('says when approving the split makes an initiative', () => {
+    const split = [{ title: 'Add export', request: 'Add the export button.', order: 'parallel' as const }];
+    expect(serializePlanMarkdown({ ...PLAN, split, initiative: true })).toContain(
+      `starts now): Add the export button.\n\n${PLAN_INITIATIVE_NOTE}`
+    );
+    expect(serializePlanMarkdown({ ...PLAN, initiative: true })).not.toContain(PLAN_INITIATIVE_NOTE);
   });
 
   test('leaves out empty sections', () => {

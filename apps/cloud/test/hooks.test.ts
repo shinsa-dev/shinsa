@@ -104,8 +104,7 @@ describe('webhooks through app.shinsa.dev', () => {
         {
           surface: 'webhook',
           instanceId: credentials.instanceId,
-          reason: 'unreachable',
-          error: 'This machine has not connected to the relay yet.',
+          reason: 'not_joined',
         },
       ],
     ]);

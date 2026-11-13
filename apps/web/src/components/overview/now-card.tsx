@@ -2,6 +2,7 @@ import {
   type Gate,
   listActiveRuns,
   listWaitsOn,
+  PLAN_INITIATIVE_NOTE,
   resolvePhaseChange,
   resolveTaskProgress,
   type ShinsaState,
@@ -112,6 +113,7 @@ function PlanSplitList({ task }: { task: Task }) {
           </li>
         ))}
       </ul>
+      {task.plan?.document?.initiative && <p className='text-2xs text-fg-2'>{PLAN_INITIATIVE_NOTE}</p>}
     </div>
   );
 }
@@ -205,13 +207,25 @@ export function PausedCard({
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
       title={gate.title}
       action={
-        <Button
-          size='sm'
-          loading={busy === resolveRetryReply(gate)}
-          onClick={() => reply(resolveRetryReply(gate))}
-        >
-          {resolveRetryLabel(state, gate)}
-        </Button>
+        <>
+          {gate.githubSso && (
+            <Button
+              size='sm'
+              nativeButton={false}
+              render={<a href={gate.githubSso.url} target='_blank' rel='noreferrer' />}
+            >
+              Authorize on GitHub
+            </Button>
+          )}
+          <Button
+            variant={gate.githubSso ? 'secondary' : 'primary'}
+            size='sm'
+            loading={busy === resolveRetryReply(gate)}
+            onClick={() => reply(resolveRetryReply(gate))}
+          >
+            {resolveRetryLabel(state, gate)}
+          </Button>
+        </>
       }
       footer={
         <FooterNote note={RETRY_NOTE}>

@@ -21,6 +21,7 @@ const HeldTeamListFields = Schema.Struct({
   instanceId: Schema.String,
   keyDigest: Schema.String,
   tasks: Schema.Array(Schema.Unknown),
+  initiatives: Schema.optionalKey(Schema.Array(Schema.Unknown)),
   updatedAt: Schema.Number,
   snapshot: Schema.optionalKey(Schema.Unknown),
 });

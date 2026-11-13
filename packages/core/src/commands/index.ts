@@ -20,6 +20,7 @@ import type {
   RunOutcome,
   RunUsage,
   TaskPriority,
+  PresetShape,
   TaskShape,
   TaskSize,
   TeammateOriginal,
@@ -52,6 +53,7 @@ import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationAgentCommand, DelegationSystemCommand } from './delegations.ts';
 import type { FeedbackAgentCommand, FeedbackSystemCommand } from './feedback.ts';
 import type { HandoffSystemCommand } from './handoffs.ts';
+import type { InitiativeAgentCommand, InitiativeSystemCommand } from './initiatives.ts';
 import type { MemoryAgentCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand } from './schedules.ts';
@@ -69,7 +71,7 @@ export interface MessageRoute {
   kind?: MessageKind;
   title?: string;
   why?: string;
-  shape?: TaskShape;
+  shape?: PresetShape;
 }
 
 export type InquiryShape = Extract<TaskShape, 'answer' | 'investigate' | 'research'>;
@@ -194,6 +196,7 @@ type AgentCommand =
   | DelegationAgentCommand
   | ScheduleAgentCommand
   | MemoryAgentCommand
+  | InitiativeAgentCommand
   | FeedbackAgentCommand;
 
 type SystemCommand =
@@ -336,6 +339,7 @@ type SystemCommand =
   | WatchdogSystemCommand
   | FeedbackSystemCommand
   | ShareSystemCommand
+  | InitiativeSystemCommand
   | HandoffSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };

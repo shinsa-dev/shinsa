@@ -21,6 +21,7 @@ import {
   type TaskShape,
   type TriageDecisions,
 } from '../domain/index.ts';
+import { parseGitHubSso, resolveGitHubSsoGate, resolveTaskGitHubOwner } from '../github/index.ts';
 import { resolveFocusProject } from '../queue/rank.ts';
 import { resolveNextHandle } from '../state/project.ts';
 import { findProject, findRepo } from '../state/queries.ts';
@@ -42,6 +43,7 @@ import {
 import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
+import { resolveCreatedMembership } from './initiatives.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { finishMove } from './moves.ts';
@@ -94,6 +96,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   if (command.forkOf !== undefined && command.teammateFork !== undefined)
     throw new DomainError({ code: 'fork_twice', message: 'Fork one task at a time.' });
   const owner = resolveCreatedOwner(decider, lineage);
+  const membership = resolveCreatedMembership(decider, command, lineage, projectId ?? null);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
@@ -117,6 +120,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     ...(command.teammateFork ? { teammateFork: command.teammateFork } : {}),
     ...(owner ? { owner } : {}),
+    ...membership,
     ...lineage,
   });
   const by = lineage.createdBy ? 'shinsa' : 'you';
@@ -353,7 +357,23 @@ function isRepeatedFailure(decider: Decider, command: CommandOf<'effect.fail'>) 
   );
 }
 
+function holdGitHubSso(decider: Decider, command: CommandOf<'effect.fail'>) {
+  const owner = resolveTaskGitHubOwner(decider.state, decider.task(command.taskId));
+  const sso = parseGitHubSso(command.detail, owner);
+  if (Option.isNone(sso)) return false;
+  const gate = resolveGitHubSsoGate(sso.value);
+  const repeated = decider.hasOpenGate(
+    command.taskId,
+    (open) => open.type === 'failure' && open.title === gate.title && open.body === gate.body
+  );
+  if (!repeated) {
+    decider.hold(command.taskId, gate.title, gate.body, null, gate.cause, { githubSso: gate.githubSso });
+  }
+  return true;
+}
+
 export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {
+  if (holdGitHubSso(decider, command)) return;
   if (isRepeatedFailure(decider, command)) return;
   decider.fail(command.taskId, command.title, command.detail);
 }

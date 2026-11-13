@@ -16,8 +16,20 @@ const HEADER =
 
 const REVEAL = 'opacity-0 group-hover/disclosure:opacity-100';
 
-export function CompactSections({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <HoverHighlight className={cn('flex flex-col', className)}>{children}</HoverHighlight>;
+export function CompactSections({
+  className,
+  holdOverGaps = false,
+  children,
+}: {
+  className?: string;
+  holdOverGaps?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <HoverHighlight holdOverGaps={holdOverGaps} className={cn('flex flex-col', className)}>
+      {children}
+    </HoverHighlight>
+  );
 }
 
 export function CompactSection({
@@ -45,19 +57,21 @@ export function CompactSection({
       data-folded={disclosure.open ? undefined : ''}
       className='flex flex-col border-t border-border px-2 py-1.5 first-of-type:border-t-0'
     >
-      <DisclosureHeader
-        disclosure={disclosure}
-        label={label}
-        action={action}
-        className={cn(HEADER, 'h-6 pe-1')}
-      >
-        <span className={ICON_SLOT}>{leading}</span>
-        <span className='min-w-0 truncate'>{title}</span>
-        <span className='flex min-w-0 items-center gap-1.5 font-normal tabular-nums'>
-          {count}
-          <DisclosureChevron className={REVEAL} />
-        </span>
-      </DisclosureHeader>
+      <div data-highlight-release=''>
+        <DisclosureHeader
+          disclosure={disclosure}
+          label={label}
+          action={action}
+          className={cn(HEADER, 'h-6 pe-1')}
+        >
+          <span className={ICON_SLOT}>{leading}</span>
+          <span className='min-w-0 truncate'>{title}</span>
+          <span className='flex min-w-0 items-center gap-1.5 font-normal tabular-nums'>
+            {count}
+            <DisclosureChevron className={REVEAL} />
+          </span>
+        </DisclosureHeader>
+      </div>
       {disclosure.open && <div className='flex flex-col pt-0.5'>{children}</div>}
     </section>
   );

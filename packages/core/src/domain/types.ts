@@ -16,6 +16,7 @@ import type { ViewScope } from '../scopes/schema.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
 import type { UsageLimitScope, UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
+import type { TeamInitiativeRef } from './initiatives.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret, SourceReport } from './schedules.ts';
@@ -51,6 +52,7 @@ export type TaskStage =
   | 'researching'
   | 'operating'
   | 'watching'
+  | 'leading'
   | 'awaiting_proposal'
   | 'awaiting_operation'
   | 'answered'
@@ -75,7 +77,7 @@ export type RunRole =
   | 'investigator'
   | 'researcher';
 
-export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch' | 'intake';
+export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate' | 'watch' | 'intake' | 'lead';
 
 export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 
@@ -168,7 +170,7 @@ export type GateType =
   | 'post_merge'
   | 'result';
 
-export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused' | 'owner_account';
+export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused' | 'owner_account' | 'github_sso';
 
 export type EditsApproval = 'review' | 'merge';
 
@@ -252,6 +254,7 @@ export interface FocusProjects {
 
 export interface Focus extends FocusProjects {
   teamId: string | null;
+  initiativeId?: string | null;
   until: number | null;
 }
 
@@ -540,6 +543,9 @@ export interface Task {
   owner?: TaskOwner | null;
   forkOf?: string | null;
   teammateFork?: TeammateFork | null;
+  initiativeId?: string | null;
+  initiativePhaseId?: string | null;
+  teamInitiative?: TeamInitiativeRef | null;
   splits?: TaskSplit[];
   scheduleId?: string | null;
   sourceReport?: SourceReport | null;
@@ -767,6 +773,11 @@ export interface GateBrowserSignIn {
   site: string;
 }
 
+export interface GateGitHubSso {
+  organization: string | null;
+  url: string;
+}
+
 export interface Gate {
   id: string;
   taskId: string;
@@ -790,6 +801,7 @@ export interface Gate {
   account?: RunAccount | null;
   secret?: GateSecret | null;
   browserSignIn?: GateBrowserSignIn | null;
+  githubSso?: GateGitHubSso | null;
   commit?: string | null;
   notes?: string | null;
   round?: number;

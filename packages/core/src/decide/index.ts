@@ -67,6 +67,21 @@ import {
   recordHandoff,
   removeHandoff,
 } from './handoffs.ts';
+import {
+  addInitiativeToTeam,
+  joinInitiative,
+  removeInitiativeFromTeam,
+  writeInitiative,
+} from './initiatives.ts';
+import {
+  adoptTask,
+  createInitiativeTask,
+  reportInitiative,
+  syncCancelledLeads,
+  syncInitiativeMilestones,
+  recordTeamMembers,
+  wakeLead,
+} from './leads.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -186,6 +201,7 @@ import {
 
 export type { DecideContext, Decision } from './decider.ts';
 export { describeFeedbackLeaks } from './feedback.ts';
+export { listTaskDescendants } from './initiatives.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
 export { isTaskPausable, PAUSED_TITLE } from './pause.ts';
@@ -222,7 +238,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
     case 'settings.change':
       return changeSettings(decider, command);
     case 'task.create':
-      return createTask(decider, command);
+      return command.initiative ? createInitiativeTask(decider, command) : createTask(decider, command);
     case 'task.triage':
       return triageTask(decider, command);
     case 'task.prioritize':
@@ -305,6 +321,20 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return suggestTasks(decider, command);
     case 'agent.remember':
       return rememberRule(decider, command);
+    case 'initiative.write':
+      return writeInitiative(decider, command);
+    case 'initiative.adopt_task':
+      return adoptTask(decider, command);
+    case 'initiative.add_to_team':
+      return addInitiativeToTeam(decider, command);
+    case 'initiative.remove_from_team':
+      return removeInitiativeFromTeam(decider, command);
+    case 'initiative.wake_lead':
+      return wakeLead(decider, command);
+    case 'initiative.record_team_members':
+      return recordTeamMembers(decider, command);
+    case 'task.join_initiative':
+      return joinInitiative(decider, command);
     case 'memory.write':
       return writeMemory(decider, command);
     case 'memory.accept':
@@ -517,6 +547,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return writeWatchSource(decider, command);
     case 'watch_source.remove':
       return removeWatchSource(decider, command);
+    case 'agent.report_initiative':
+      return reportInitiative(decider, command);
     case 'agent.report_read':
       return reportRead(decider, command);
     case 'agent.file_report':
@@ -573,6 +605,8 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
+  syncCancelledLeads(decider, state);
+  syncInitiativeMilestones(decider, state);
   dispatchRuns(decider);
   syncSlackThreads(decider);
   assertGatesStayOpen(decider, state);

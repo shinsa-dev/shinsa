@@ -1,6 +1,6 @@
-import type { ShareLiveView, TeamListView, TeamTask } from '@shinsa/core';
+import type { ShareLiveView, TeamInitiative, TeamListView, TeamTask } from '@shinsa/core';
 import { Schema } from 'effect';
-import { EgressView, PREVIEW_DROPPED_HEADERS, TeamTasks } from './schema.ts';
+import { EgressView, PREVIEW_DROPPED_HEADERS, TeamInitiatives, TeamTasks } from './schema.ts';
 
 export const EgressGate = {
   serializeView(view: ShareLiveView | TeamListView): string {
@@ -9,6 +9,10 @@ export const EgressGate = {
   listTeamTasks(tasks: readonly TeamTask[]): TeamTask[] {
     const listed: readonly unknown[] = Schema.encodeUnknownSync(TeamTasks)(tasks);
     return listed as TeamTask[];
+  },
+  listTeamInitiatives(initiatives: readonly TeamInitiative[]): TeamInitiative[] {
+    const listed: readonly unknown[] = Schema.encodeUnknownSync(TeamInitiatives)(initiatives);
+    return listed as TeamInitiative[];
   },
   resolvePreviewHeaders(source: Headers, localOrigins: readonly string[]): Headers {
     const headers = new Headers();

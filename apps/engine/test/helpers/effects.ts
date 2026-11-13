@@ -1,5 +1,5 @@
 import type { ShinsaEffect } from '@shinsa/core';
-import { Effect, Layer, ManagedRuntime } from 'effect';
+import { Duration, Effect, Layer, ManagedRuntime } from 'effect';
 import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
 import { RunSupervisor as RunSupervisorTag } from '../../src/agents/supervisor/service.ts';
 import type { BriefingWriter } from '../../src/briefing/service.ts';
@@ -11,6 +11,8 @@ import { ConfigStore } from '../../src/config/store/service.ts';
 import { GitLayer } from '../../src/git/layers.ts';
 import { MachineGitHub, type MachineGitHubShape } from '../../src/github/identity/schema.ts';
 import { GitHubLayer } from '../../src/github/layers.ts';
+import { LeadWakeDebounce } from '../../src/initiatives/schema.ts';
+import { LeadWakes } from '../../src/initiatives/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { CurrentLogin } from '../../src/repos/current-login/service.ts';
 import { RepoWorkLayer } from '../../src/repos/layers.ts';
@@ -24,6 +26,13 @@ import { Evidence } from '../../src/store/evidence/service.ts';
 import { WorkspacesServiceLayer } from '../../src/workspaces/layers.ts';
 import type { Engine } from './engine.ts';
 import { JsonFileLayer } from './files.ts';
+
+const TEST_LEAD_WAKE_DEBOUNCE = Duration.millis(20);
+
+type TestEffectRunnerOptions = EffectRunnerOptions & {
+  machineGitHub?: MachineGitHubShape | null;
+  leadWakeDebounce?: Duration.Duration;
+};
 
 function awaitAbort(signal: AbortSignal) {
   return Effect.callback<void>((resume) => {
@@ -39,12 +48,13 @@ function createEffectRunnerLayer(
   config: ServerConfig,
   runs: RunSupervisor['Service'],
   briefings: BriefingWriter['Service'],
-  { machineGitHub = null, ...options }: TestEffectRunnerOptions
+  { machineGitHub = null, leadWakeDebounce = TEST_LEAD_WAKE_DEBOUNCE, ...options }: TestEffectRunnerOptions
 ) {
   const repositories = Layer.mergeAll(
     Evidence.layer,
     CurrentLogin.layer.pipe(Layer.provideMerge(RepoWorkLayer)),
-    WorkspacesServiceLayer
+    WorkspacesServiceLayer,
+    LeadWakes.layer.pipe(Layer.provide(Layer.succeed(LeadWakeDebounce, leadWakeDebounce)))
   ).pipe(
     Layer.provideMerge(ConfigStore.layer.pipe(Layer.provide(JsonFileLayer))),
     Layer.provideMerge(Layer.mergeAll(ChecksLayer, GitHubLayer)),
@@ -64,8 +74,6 @@ function createEffectRunnerLayer(
     Layer.provide(repositories)
   );
 }
-
-type TestEffectRunnerOptions = EffectRunnerOptions & { machineGitHub?: MachineGitHubShape | null };
 
 export class EffectRunner {
   readonly #runtime: ManagedRuntime.ManagedRuntime<EffectRunnerTag, never>;
