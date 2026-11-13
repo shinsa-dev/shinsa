@@ -259,7 +259,7 @@ export const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage?cedar_ember=
 
 export const USAGE_HEADERS = {
   'anthropic-beta': 'oauth-2025-04-20',
-  'User-Agent': 'shinsa claude-cli/2.1.321',
+  'User-Agent': 'claude-cli/2.1.321 (external, cli)',
 };
 
 export const USAGE_TIMEOUT = Duration.seconds(5);

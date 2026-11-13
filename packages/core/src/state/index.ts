@@ -9,6 +9,7 @@ export {
   resolveCohort,
   selectRootRun,
 } from './delegations.ts';
+export { describeDependencyWait } from './dependency-wait.ts';
 export type { StateChanges } from './draft.ts';
 export {
   listFeedback,

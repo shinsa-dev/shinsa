@@ -195,7 +195,7 @@ describe('describeWaitsOn', () => {
   const fourth = createTask({ id: 'd', title: 'Tidy CSS' });
 
   it('names one or two tasks it waits on', () => {
-    expect(describeWaitsOn([first])).toBe('Waits on “Add login”');
+    expect(describeWaitsOn([first])).toBe('Waits on “Add login”, which is being built');
     expect(describeWaitsOn([first, second])).toBe('Waits on “Add login” and “Fix tabs”');
   });
 
@@ -203,6 +203,26 @@ describe('describeWaitsOn', () => {
     expect(describeWaitsOn([first, second, third])).toBe('Waits on “Add login”, “Fix tabs” and 1 more');
     expect(describeWaitsOn([first, second, third, fourth])).toBe(
       'Waits on “Add login”, “Fix tabs” and 2 more'
+    );
+  });
+
+  it('names what the one task it waits on is doing on its pull request', () => {
+    const shipping = createTask({
+      id: 's',
+      title: 'Ship the relay',
+      stage: 'shipping',
+      pullRequest: {
+        number: 257,
+        url: 'https://github.com/shinsa-dev/shinsa/pull/257',
+        state: 'open',
+        checks: 'pending',
+        unresolvedComments: 0,
+        mergeable: true,
+        updatedAt: 0,
+      },
+    });
+    expect(describeWaitsOn([shipping])).toBe(
+      'Waits on “Ship the relay”, which has pull request #257 waiting for CI'
     );
   });
 
@@ -538,13 +558,13 @@ describe('the tasks of a bundle in All tasks', () => {
       title: 'Right',
     });
     const state = createShinsaState({ tasks: [root, left, right] });
-    expect(describeBundleWait(state, root)).toBe('Waits on “Left”');
-    expect(describeBundleWait(state, right)).toBe('Waits on “Left”');
+    expect(describeBundleWait(state, root)).toBe('Waits on “Left”, which is being built');
+    expect(describeBundleWait(state, right)).toBe('Waits on “Left”, which is being built');
     expect(describeBundleWait(state, left)).toBeNull();
     const done = createShinsaState({
       tasks: [root, { ...left, stage: 'shipping', bundleReady: { commit: 'c' } }, right],
     });
-    expect(describeBundleWait(done, right)).toBe('Waits on “Root”');
+    expect(describeBundleWait(done, right)).toBe('Waits on “Root”, which is opening its pull request');
     expect(describeBundleWait(done, root)).toBeNull();
   });
 
@@ -553,7 +573,7 @@ describe('the tasks of a bundle in All tasks', () => {
     const held = createTask({ id: 'held', stage: 'awaiting_review', waitsOn: ['parent'] });
     const building = createTask({ id: 'building', stage: 'building', waitsOn: ['parent'] });
     const state = createShinsaState({ tasks: [parent, held, building] });
-    expect(describeHeldWait(state, held)).toBe('Waits on “Parent”');
+    expect(describeHeldWait(state, held)).toBe('Waits on “Parent”, which is being built');
     expect(describeHeldWait(state, building)).toBeNull();
     const merged = createShinsaState({ tasks: [{ ...parent, stage: 'merged' }, held] });
     expect(describeHeldWait(merged, held)).toBeNull();

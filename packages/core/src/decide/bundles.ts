@@ -124,6 +124,15 @@ export function startBundleMerge(decider: Decider, taskId: string): BundlePullRe
   return bundle;
 }
 
+export function releaseBundleMerge(decider: Decider, lead: Task) {
+  const followers = listBundleFollowers(decider.state, lead);
+  if (followers.length === 0) return false;
+  for (const follower of followers) {
+    if (isBundleMerging(decider, follower)) decider.stage(follower.id, 'shipping', READY_REASON);
+  }
+  return true;
+}
+
 function isShippingAtRest(decider: Decider, task: Task) {
   return (
     task.stage === 'shipping' &&

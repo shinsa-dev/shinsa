@@ -177,8 +177,9 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   moveWatchCheck(decider, run.id, next.id);
 }
 
-function describeStop(outcome: RunOutcome, summary: string | null) {
+function describeStop(outcome: RunOutcome, summary: string | null, backgroundWork: boolean) {
   if (outcome === 'failed') return summary ?? 'it stopped with an error';
+  if (backgroundWork) return 'it ended its turn while its background work was still running';
   return 'it ended its turn without calling the hand-over tool';
 }
 
@@ -191,7 +192,8 @@ function finishRun(
   run: Run,
   outcome: RunOutcome,
   summary: string | null,
-  failure: RunFailure | null
+  failure: RunFailure | null,
+  backgroundWork = false
 ) {
   if (outcome === 'completed' && hasOutstandingDelegations(decider.state, run)) {
     waitForDelegations(decider, run);
@@ -206,7 +208,7 @@ function finishRun(
   decider.endRun(run, outcome, summary, failure);
   const task = decider.task(run.taskId);
   if (!isTaskSettled(task) && outcome !== 'cancelled' && isRecoveredStage(task, run)) {
-    recover(decider, run, failure?.message ?? describeStop(outcome, summary), failure);
+    recover(decider, run, failure?.message ?? describeStop(outcome, summary, backgroundWork), failure);
   }
   if (held) decider.releaseDelegations(run.id);
 }
@@ -216,7 +218,14 @@ export function endRun(decider: Decider, command: CommandOf<'run.end'>) {
   if (!run || run.endedAt !== null || isStaleAttempt(run, command.attemptId)) return;
   if (command.cacheExpiresAt)
     decider.emit({ type: 'run.cached', runId: run.id, cacheExpiresAt: command.cacheExpiresAt });
-  finishRun(decider, run, command.outcome, command.summary, command.failure ?? null);
+  finishRun(
+    decider,
+    run,
+    command.outcome,
+    command.summary,
+    command.failure ?? null,
+    command.backgroundWork ?? false
+  );
 }
 
 export function linkRun(decider: Decider, command: CommandOf<'run.link'>) {

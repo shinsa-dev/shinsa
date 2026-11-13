@@ -1085,7 +1085,7 @@ folds in `state/shapes.ts`).
   starts a lead, for an initiative.`) and it is never one of the presets below (`PresetShape`).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
-  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it, but for Initiative, which only you start). `task.create`
+  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
   takes no `shape`: only triage and the Agent, while it plans, shape a task. The Agent of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with
@@ -1344,7 +1344,15 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   fetched default branch, which now holds every parent's work, and planning starts. A worktree
   left from before (a task that was planning when it was told to wait) is reset onto the updated
   default branch first; it never has commits of its own at that point. Its prompts name the tasks
-  it built on and say they have merged (`describeBases`).
+  it built on and say they have merged (`describeBases`). Merged means a pull request merged, not
+  the stage: a task that merged and then checks a watchdog or answers a follow-up still counts as
+  merged. Each wait keeps the round the other task was on when it began (`waitsOnRounds`, folded
+  from `task.waits_on_changed`), and ends once that round's pull request or a later one's merges
+  (`hasMergedSince`): a task named after one that has started its next round waits for that round,
+  and one that waited from before keeps the round it waited for. A task held at the merge gate is
+  judged again on the same command that clears its last blocker (`releaseMergeHolds`, after every command), never only on its next pull request read.
+  While it waits, its line names what the one task it waits on is doing (`describeDependencyWait`:
+  "Waits on “X”, which has pull request #257 waiting for CI").
 - **Chains and diamonds.** MCP v2 → embedded chat → paywall editing in the chat: each link waits for
   the one before it, so they start one after another as each merges. A diamond (B and C wait on
   A, D waits on B and C) starts B and C together when A merges, and D only after both. Cycles
@@ -1463,7 +1471,10 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   push makes that task ready again, which reads the lead again, so the bundle is brought up to date one branch at a
   time, each pull request's diff staying its own work. When no branch is behind, the lead pauses with a failure gate,
   "The bundle conflicts with main". The engine runs the same check again right before the merge and merges nothing
-  when it fails.
+  when it fails: it records the conflict (`bundle.record_merge_conflict`), which moves the lead and its followers back
+  to ready and starts the same update, so the bundle is brought up to date without a Retry and the gate opens again
+  for the new heads. A lead whose followers all left while it merged checks its pull request again instead, which
+  opens its own merge gate.
 - **Leaving and losing a bundle.** When a task with nothing stacked on it is cancelled or turns out to ship no pull
   request, the bundle is one task smaller; a lead with no followers left gets its own merge gate. A task below merged
   outside Shinsa drops out of the bundle: it leaves the bases of each task above, a task whose first base it was
@@ -1521,10 +1532,10 @@ the fold in `state/initiatives.ts`, the sheet in `initiatives/`); the engine ser
 (`apps/engine/src/surface/initiatives.ts`, `http/initiative-views.ts`, `initiatives/service.ts`) and the web app draws
 it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
 
-- **Starting one.** You start one like any task: Home's composer with Kind of task set to Initiative, or `shinsa tasks
-  create --initiative` (`task.create` with `initiative: true`). The request's first line names it and the rest
-  describes it; Shinsa creates the `Initiative` record and its lead task in one command (`createInitiativeTask`), the
-  lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
+- **Starting one.** Home's composer never starts one: it leaves the kind of every task to Shinsa. An agent or the
+  command line starts one with `shinsa tasks create --initiative` (`task.create` with `initiative: true`). The
+  request's first line names it and the rest describes it; Shinsa creates the `Initiative` record and its lead task
+  in one command (`createInitiativeTask`), the lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
   either: **Make an initiative from this task** (`initiative.adopt_task`: the task's menus, ⌘K, `shinsa initiatives
   adopt`) and a plan that asks for one (below) make it for you.
 - **The record.** `Initiative { id, name, description, phases, leadTaskId, createdAt, updatedAt }`, plus the lead's
@@ -5578,7 +5589,10 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
 ## Recovery
 
 - A run that ends without handing over, or fails, is resumed once on its own session with a
-  nudge. A second stop fails the step, which arms an automatic retry (Gates → Automatic retries) and opens the
+  nudge. A Claude turn that ends with the agent's own background work still running is not such an end: the session
+  waits for it (The Claude session, below). When a run still ends with that work pending (the 30-minute limit ran
+  out), `run.end`'s `backgroundWork` makes the nudge say it ended its turn while its background work was still
+  running. A second stop fails the step, which arms an automatic retry (Gates → Automatic retries) and opens the
   failure gate only once 10 retries at the same milestone are spent. Any progress resets that budget. How a failed run
   recovers depends on its failure class, in the table in The agent loop (below): another account, a
   usage wait, a Sign in gate, a fresh session told to read the worktree, a resume of the same
@@ -6160,7 +6174,7 @@ names: a provider adapter maps into it, and the web renders only it. Each entry 
 | `tool_result` | `callId`, `status` (`ok` or `error`), `output`, `images` | Linked to its call by `callId`; images are `/api/evidence/…` URLs |
 | `status` | `status`, `outcome` | `started`, `waiting` (on your answer), `working`, `ended` (with the run outcome). Written by the run supervisor (`agents/supervisor/`), so every provider gets them |
 | `error` | `text` | The session failed |
-| `notice` | `notice` (keyed by `kind`) | Something about the run rather than the conversation: `interrupted`, `compaction` (`trigger`: `auto`, `manual` or `fold`, `preTokens`, the `summary` once the agent writes it, and `by: 'eunoe'` when eunoe compacted or folded on the wire), `proxy` (`proxy: 'eunoe'`, `status: 'unavailable'`, `detail`: eunoe could not be reached, so the run went direct), `fast_mode` (`status`: `unavailable` or `cooldown`, `reason`: fast mode was asked for and is not running), `extensions` (what the run loaded and what the optimizer left out; MCP servers, plugins and skills, below), `context` (`usedTokens`, `maxTokens`, `totalProcessedTokens`), `account` (`email`, `organization`, `plan`), `rate_limit` (`status`, `limit`, `resetsAt`, `utilization`), `account_switched` (`email`, `previous`, `reason`: `usage_limit`, `signed_out`, `headroom` or `bound`; written by the supervisor when an attempt runs on another account than the task's last one), `delegation` (`event`: `started` or `reported`, `runIds`; written when the step delegates a task and when reports reach it) and `handoff` (`reason`, `fromProvider`, `toProvider`, entry counts) |
+| `notice` | `notice` (keyed by `kind`) | Something about the run rather than the conversation: `interrupted`, `compaction` (`trigger`: `auto`, `manual` or `fold`, `preTokens`, the `summary` once the agent writes it, and `by: 'eunoe'` when eunoe compacted or folded on the wire), `proxy` (`proxy: 'eunoe'`, `status: 'unavailable'`, `detail`: eunoe could not be reached, so the run went direct), `fast_mode` (`status`: `unavailable` or `cooldown`, `reason`: fast mode was asked for and is not running), `background_wait` (`tasks`: a Claude turn ended while that many of the agent's own background shells or subagents still ran, so the session waits for them, "Waiting for its background work to finish"), `extensions` (what the run loaded and what the optimizer left out; MCP servers, plugins and skills, below), `context` (`usedTokens`, `maxTokens`, `totalProcessedTokens`), `account` (`email`, `organization`, `plan`), `rate_limit` (`status`, `limit`, `resetsAt`, `utilization`), `account_switched` (`email`, `previous`, `reason`: `usage_limit`, `signed_out`, `headroom` or `bound`; written by the supervisor when an attempt runs on another account than the task's last one), `delegation` (`event`: `started` or `reported`, `runIds`; written when the step delegates a task and when reports reach it) and `handoff` (`reason`, `fromProvider`, `toProvider`, entry counts) |
 
 ### Attachments
 
@@ -7310,10 +7324,10 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   login it shares. Once the logins differ again, both are accounts as before, with their own settings.
 - **Usage** (`accounts/readings/service.ts`, `accounts/limits/service.ts`). `GET https://api.anthropic.com/api/oauth/usage?cedar_ember=1` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
-  `.credentials.json`), `anthropic-beta: oauth-2025-04-20` and `User-Agent: shinsa claude-cli/2.1.321`. Claude fills
-  `cedar_ember`, an account's reset status, only when the query asks for it and the client name holds a
-  `claude-cli/<version>` token (any version; with `shinsa` alone it answers `ineligible_reason: "surface"` and no
-  grants), so the name keeps `shinsa` and adds that token. The `limits` array wins: `session` is "5-hour
+  `.credentials.json`), `anthropic-beta: oauth-2025-04-20` and `User-Agent: claude-cli/2.1.321 (external, cli)`. Claude fills
+  `cedar_ember`, an account's reset status, only when the query asks for it and the client name is Claude Code's
+  own, `claude-cli/<version> (external, <entrypoint>)`, with nothing before it (to any other name, `shinsa
+  claude-cli/2.1.321` included, it answers `ineligible_reason: "surface"` and no grants), so the name is exactly that. The `limits` array wins: `session` is "5-hour
   limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
   window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and other rotating
   codenames are dropped. Two more parts of the answer are kept on the reading, each decoded on its own so a
@@ -7637,6 +7651,15 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   SDK's `query()` as a `Stream`, takes prompts and steers from an Effect `Queue`, and runs the folded-turn
   (`FOLDED_TURN`, 60 s), context-read (`CONTEXT_TIMEOUT`, 5 s), exit-grace (`EXIT_GRACE`, 10 s) and interrupt
   (`INTERRUPT_TIMEOUT`, 5 s) timers as fibers. Releasing it interrupts the query and kills `claude`'s process tree.
+  A turn that ends while the SDK's `background_tasks_changed` set lists work that is not `ambient` (a shell started
+  with `run_in_background`, a background subagent) does not close the session: it records a `background_wait`
+  notice and keeps the process, so the run stays active and nothing pauses. The turn Claude Code starts by itself
+  when that work finishes (origin `task-notification`) continues the run; once the set is empty and no such turn
+  started within `BACKGROUND_GRACE` (10 s), the session sends a follow-up naming what finished
+  (`resolveBackgroundFollowUp`). `BACKGROUND_WAIT` (30 min, across the whole run) bounds it: the session stops the
+  remaining tasks (`stopTask`) and tells the agent so in the same session. A step that already handed over never
+  waits and is never followed up: the supervisor marks the session's `handedOver` once a hand-over tool is accepted,
+  so a dev server left running after `complete_phase` closes the session as before.
   `ClaudeProvider.startSession` hands it to the supervisor as its `AgentSession`, in the attempt's scope.
 - **One app layer, run once.** `main.ts` runs the CLI's program with `BunRuntime.runMain`, the only run in the
   engine's source (`bun lint:conventions` fails `ManagedRuntime`, a `run*` call and any exported class that is not a

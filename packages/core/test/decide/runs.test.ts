@@ -26,6 +26,41 @@ describe('recovery', () => {
     expect(harness.task(taskId).recoveries).toBe(1);
   });
 
+  test('a turn that ends while its background work still runs is resumed with that cause', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    linkSession(harness, taskId, 'plan-1');
+    const first = harness.activeRun(taskId);
+    harness.send({
+      type: 'run.end',
+      runId: first.id,
+      outcome: 'completed',
+      summary: null,
+      backgroundWork: true,
+    });
+    const second = harness.activeRun(taskId);
+    expect(second).toMatchObject({ role: 'agent', purpose: 'plan', continues: first.id });
+    expect(second.sessionId).toBe('plan-1');
+    expect(second.prompt).toContain('ended its turn while its background work was still running');
+    expect(second.prompt).not.toContain('without calling the hand-over tool');
+  });
+
+  test('a run that failed while background work ran keeps its own error as the cause', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const first = harness.activeRun(taskId);
+    harness.send({
+      type: 'run.end',
+      runId: first.id,
+      outcome: 'failed',
+      summary: 'Overloaded',
+      backgroundWork: true,
+    });
+    const second = harness.activeRun(taskId);
+    expect(second.prompt).toContain('Overloaded');
+    expect(second.prompt).not.toContain('background work');
+  });
+
   test('a second stop retries the step on its own a minute later, as Retry does', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

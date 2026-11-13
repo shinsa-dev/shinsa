@@ -545,6 +545,7 @@ export interface Task {
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;
   waitsOn: string[];
+  waitsOnRounds?: Record<string, number>;
   stacksOn?: string[];
   stackBases?: string[];
   bundleReady?: BundleReady | null;

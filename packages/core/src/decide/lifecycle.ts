@@ -235,10 +235,4 @@ export function settleTask(
   if (task.worktreePath) decider.run({ kind: 'worktree.remove', taskId });
   decider.run({ kind: 'scratch.remove', taskId });
   decider.requestBriefing(taskId);
-  for (const dependent of Object.values(decider.state.tasks)) {
-    if (!dependent.waitsOn.includes(taskId)) continue;
-    if (dependent.stage === 'shipping' || dependent.stage === 'awaiting_merge') {
-      decider.run({ kind: 'pull_request.watch', taskId: dependent.id });
-    }
-  }
 }

@@ -1,5 +1,12 @@
 import type { SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { PendingPrompt, PromptLedger } from './schema.ts';
+import {
+  BACKGROUND_CARRY_ON,
+  BACKGROUND_FINISHED,
+  BACKGROUND_TIMED_OUT,
+  type BackgroundWait,
+  type PendingPrompt,
+  type PromptLedger,
+} from './schema.ts';
 
 export function createUserMessage(text: string, id: string): SDKUserMessage {
   return {
@@ -42,4 +49,15 @@ export function takeAnsweredPrompts(
 
 export function listUndeliveredSteers(ledger: PromptLedger) {
   return ledger.pending.filter((prompt) => prompt.steer).map((prompt) => prompt.text);
+}
+
+export function resolveBackgroundFollowUp(wait: BackgroundWait) {
+  const opening = wait.timedOut ? BACKGROUND_TIMED_OUT : BACKGROUND_FINISHED;
+  const finished = wait.finished.map((line) => `- ${line}`).join('\n');
+  return [opening, finished, BACKGROUND_CARRY_ON].filter(Boolean).join('\n\n');
+}
+
+export function describeFinishedTask(status: string, summary: string) {
+  const text = summary.trim() || 'No summary.';
+  return `${text} (${status})`;
 }
