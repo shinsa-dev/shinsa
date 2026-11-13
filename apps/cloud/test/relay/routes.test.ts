@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { resolveRelayPath } from '@shinsa/core';
 import { RELAY_ADDRESS_HEADER, RELAY_ROLE_HEADER } from '../../src/relay/schema.ts';
-import { createHarness, type Harness, pairMachine } from '../harness.ts';
+import { createHarness, type Harness, heartbeat, pairMachine } from '../harness.ts';
 
 const RELAYED = 'x-relayed';
 
@@ -84,12 +84,57 @@ describe('the relay routes', () => {
     expect(listRelayCalls(harness)).toEqual([]);
   });
 
+  test('refuse a machine socket for a machine that no longer exists, so its engine forgets it', async () => {
+    const { harness, studio } = await setUp();
+    for (const authorization of [`Bearer ${studio.machineToken}`, 'Bearer not-a-token']) {
+      const answer = await upgrade(harness, `${resolveRelayPath('nosuchmachine')}/machine`, {
+        authorization,
+      });
+      expect(answer.status).toBe(401);
+    }
+    expect(listRelayCalls(harness)).toEqual([]);
+  });
+
+  test('warn that a machine is offline when its engine has not joined the relay, without calling the relay', async () => {
+    const { harness, studio } = await setUp();
+    await heartbeat(harness, studio, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const answer = await upgrade(harness, `${resolveRelayPath(studio.instanceId)}/team?token=abc`);
+    expect(answer.status).toBe(503);
+    expect(await answer.text()).toBe('This machine is offline. Try again later.');
+    expect(warnings.mock.calls).toEqual([
+      ['[Cloud] Machine offline', { surface: 'relay', instanceId: studio.instanceId, reason: 'not_joined' }],
+    ]);
+    expect(listRelayCalls(harness)).toEqual([]);
+    warnings.mockRestore();
+  });
+
+  test('warn that a machine is offline when its relay answers that it is not connected', async () => {
+    const { harness, studio } = await setUp();
+    harness.handlers.unshift((call) =>
+      new URL(call.url).hostname.endsWith('.relay.test')
+        ? new Response('The machine is not connected.', { status: 503 })
+        : new Response('', { status: 599 })
+    );
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const answer = await upgrade(harness, `${resolveRelayPath(studio.instanceId)}/team?token=abc`);
+    expect(answer.status).toBe(503);
+    expect(warnings.mock.calls).toEqual([
+      [
+        '[Cloud] Machine offline',
+        { surface: 'relay', instanceId: studio.instanceId, reason: 'status', status: 503 },
+      ],
+    ]);
+    warnings.mockRestore();
+  });
+
   test('say the machine is offline when its room cannot be reached', async () => {
     const { harness, studio } = await setUp();
     harness.handlers.unshift((call) => {
       if (new URL(call.url).hostname.endsWith('.relay.test')) throw new Error('The room is gone.');
       return new Response('', { status: 599 });
     });
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
     const socket = await upgrade(harness, `${resolveRelayPath(studio.instanceId)}/remote`);
     expect(socket.status).toBe(503);
     expect(socket.headers.get('retry-after')).toBe('30');
@@ -97,5 +142,10 @@ describe('the relay routes', () => {
       authorization: `Bearer ${studio.machineToken}`,
     });
     expect(machine.status).toBe(503);
+    expect(warnings.mock.calls.map(([message, fields]) => [message, fields.surface, fields.reason])).toEqual([
+      ['[Cloud] Machine offline', 'relay', 'unreachable'],
+      ['[Cloud] Machine offline', 'relay', 'unreachable'],
+    ]);
+    warnings.mockRestore();
   });
 });

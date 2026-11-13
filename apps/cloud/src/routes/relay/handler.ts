@@ -4,7 +4,7 @@ import { Effect, Layer, Option, Redacted } from 'effect';
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { BEARER, NOT_PAIRED } from '../../auth/schema.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
-import { resolveForwardHeaders } from '../../http/forward.ts';
+import { recordMachineOffline, requestOnlineMachine, resolveForwardHeaders } from '../../http/forward.ts';
 import { CurrentUrl } from '../../http/request.ts';
 import { respondText } from '../../http/responses.ts';
 import { Relays } from '../../integrations/relays/service.ts';
@@ -42,18 +42,23 @@ export const RelayRoutes = Layer.unwrap(
       const request = yield* HttpServerRequest.HttpServerRequest;
       if (request.headers.upgrade?.toLowerCase() !== 'websocket')
         return yield* new NotFound({ message: RELAY_SOCKETS_ONLY_MESSAGE });
-      const machine = Option.isSome(params) ? yield* machines.select(params.value.instanceId) : Option.none();
-      if (Option.isNone(params) || Option.isNone(machine))
-        return yield* new NotFound({ message: 'No such machine.' });
-      const instanceId = machine.value.id;
+      if (Option.isNone(params)) return yield* new NotFound({ message: 'No such machine.' });
+      const instanceId = params.value.instanceId;
       const url = yield* CurrentUrl;
       const path = url.pathname.slice(resolveRelayPath(instanceId).length);
       if (path === `/${RELAY_MACHINE_SEGMENT}`) {
         yield* assertMachineToken(instanceId, request.headers.authorization);
-        const accepted = yield* Effect.option(relays.connect(instanceId));
+        const accepted = yield* relays.connect(instanceId).pipe(
+          Effect.tapError((error) => recordMachineOffline('relay', instanceId, { error: error.message })),
+          Effect.option
+        );
         return Option.isSome(accepted) ? HttpServerResponse.raw(accepted.value) : respondOffline();
       }
-      const answer = yield* Effect.option(
+      const machine = yield* machines.select(instanceId);
+      if (Option.isNone(machine)) return yield* new NotFound({ message: 'No such machine.' });
+      const answer = yield* requestOnlineMachine(
+        'relay',
+        instanceId,
         relays.request(machine.value, `${path}${url.search}`, {
           method: 'GET',
           headers: resolveForwardHeaders(new Headers(request.headers), RELAY_FORWARDED_AWAY),
