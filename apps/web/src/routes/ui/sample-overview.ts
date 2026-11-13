@@ -276,6 +276,7 @@ export function createOverviewScene(now: number) {
     budget: createSampleTask(now, { id: 'budget', title: 'Rewrite the framework commands' }),
     keyed: createSampleTask(now, { id: 'keyed', title: 'Rename the billing webhooks' }),
     ranOut: createSampleTask(now, { id: 'ran-out', title: 'Check the preview link once staging deploys' }),
+    githubSso: createSampleTask(now, { id: 'github-sso', title: 'Watch the paywall cache pull request' }),
     question: createSampleTask(now, { id: 'question', title: 'Remove the v1 chat endpoint' }),
     review: createSampleTask(now, {
       id: 'review',
@@ -541,6 +542,17 @@ export function createOverviewScene(now: number) {
       cause: 'budget',
       title: 'Reached its usage limit',
       body: 'This task reached its usage limit of 10% of the weekly limit, so the next step did not start. Continue to allow another 10%, or cancel the task.',
+    }),
+    githubSso: createSampleGate(now, {
+      id: 'github-sso-gate',
+      taskId: 'github-sso',
+      cause: 'github_sso',
+      title: 'GitHub needs SSO authorization for superwall',
+      body: 'The GitHub login Shinsa uses is not authorized for the superwall organization, which enforces SAML single sign-on. Authorize it on GitHub, then retry.',
+      githubSso: {
+        organization: 'superwall',
+        url: 'https://github.com/orgs/superwall/sso?authorization_request=A5SAMPLE',
+      },
     }),
     ranOut: createSampleGate(now, {
       id: 'ran-out-gate',

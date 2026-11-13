@@ -5769,6 +5769,19 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   rate limit is logged and not counted, since waiting is the fix. At eight the watch stops (`stopped:
   'unreadable'`) and a failure gate says how often and why. It is not acted on while an agent works on the
   task or while the merge gate is open; the count stays at eight and the next failed read acts once it can.
+- **GitHub's SAML single sign-on stops the watch at once.** When an organization enforces SAML SSO and
+  the GitHub login Shinsa uses is not authorized for it, every read fails the same way, so counting to
+  eight only delays the pause. `parseGitHubSso` (core, `github/sso.ts`) reads GitHub's refusal in the
+  GraphQL, REST and `git push` wordings: the organization, and the `orgs/<org>/sso?authorization_request=…`
+  link when GitHub gives one. A read it matches stops the watch on the first failure (with the same holds
+  while an agent works or the merge gate is open), and any other effect that fails with it (a push, opening
+  the pull request, reading CI) goes through `effect.fail` to the same gate: a failure gate with cause
+  `github_sso` and `githubSso { organization, url }`, titled for the organization, whose body says the
+  login is not authorized and leaves out GitHub's raw text (kept in the log). Without a link (a personal
+  access token) the URL is the organization's SSO page, or the token settings when no organization is
+  known (none named and none in the pull request or remote URL), and the body says to authorize the token.
+  The paused card adds "Authorize on GitHub", which opens that URL; Retry restarts the watch as for any
+  failure gate, and nothing resumes on its own once the login is authorized.
 - **A stopped watch** is not read by the periodic sync. Retry restarts it (the push or the
   recheck it starts), and so does a read that finds the pull request clean: that one opens the
   merge gate and withdraws the failure gate.
