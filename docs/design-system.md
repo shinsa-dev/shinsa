@@ -1714,7 +1714,7 @@ A small round gauge for a score out of 100: a 2px track in `bg-a2`, the accent a
 | `value` | required | 0 to 100, drawn clamped. |
 | `label` | required | What it measures; a hidden `<meter>` carries it and the value. |
 | `done` | `false` | The full accent once the value means done; the accent at 60% before. |
-| `className` | | A size class to change its 26px, the height of a default button or select. |
+| `className` | | A size class to change its 22px, 4px under a default button or select. |
 
 **In Shinsa** it is the Autopilot score in Settings → Agents → Autopilot, at the end of its row.
 
