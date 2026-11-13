@@ -220,6 +220,15 @@ describe('the owner and the members', () => {
     expect(await readCode(full)).toBe('members_full');
   });
 
+  test('a teammate’s machine that has not joined the relay is listed offline, so no one keeps reaching for it', async () => {
+    const { harness, kai, studio, laptop } = await joinedTeam();
+    await heartbeat(harness, studio, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    await heartbeat(harness, laptop);
+    const [seen] = await listTeams(harness, kai);
+    const online = Object.fromEntries(seen?.machines.map((machine) => [machine.id, machine.online]) ?? []);
+    expect(online).toEqual({ [studio.instanceId]: false, [laptop.instanceId]: true });
+  });
+
   test('declining a request drops it, so it can no longer be accepted', async () => {
     const { harness, mona, kai, studio, team, invite } = await startTeam();
     await joinTeam(harness, kai, invite);
