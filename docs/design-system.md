@@ -1705,7 +1705,7 @@ Do: one sentence of what will happen in the description. Don't: put a form in it
 
 #### ProgressRing
 
-A small round gauge for a score out of 100: a 2px track in `bg-a2`, the accent arc over it from the top, round at both ends, and the value in its centre.
+A small round gauge for a score out of 100: a 2px track in `bg-a2`, the accent arc over it from the top, round at both ends, and the value in its centre in 10px figures.
 
 **Props:**
 
