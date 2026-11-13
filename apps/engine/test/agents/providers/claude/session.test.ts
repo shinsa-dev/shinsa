@@ -1035,6 +1035,9 @@ describe('background work at the end of a turn', () => {
     expect(await session.done).toMatchObject({ outcome: 'completed', summary: 'Handed over.' });
     expect(prompts).toHaveLength(1);
     expect(listFollowUps(entries)).toEqual([]);
+    expect(
+      entries.filter((entry) => entry.type === 'notice' && entry.notice.kind === 'background_wait')
+    ).toEqual([{ type: 'notice', notice: { kind: 'background_wait', tasks: 1 } }]);
   });
 
   test('work that ends without a turn of its own gets a follow-up naming what finished', async () => {

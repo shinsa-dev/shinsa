@@ -283,7 +283,10 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
 
   const endTurn = Effect.gen(function* () {
     const current = yield* Ref.get(state);
-    if (current.background.size > 0 && !current.waiting?.timedOut) return yield* awaitBackground;
+    if (current.background.size > 0 && !current.waiting?.timedOut) {
+      recorder.notify({ kind: 'background_wait', tasks: current.background.size });
+      return yield* awaitBackground;
+    }
     yield* close;
   });
 

@@ -1043,7 +1043,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.record_closed` | the close effect | the pull requests it `closed` and the ones it `failed` to close (`{ number, detail }[]`): `pull_request.closed`, only on a cancelled task with something in either list |
 | `evidence.record_uploads` | open and push effects | the GitHub attachment `url` of each uploaded piece (`uploads: { evidenceId, url }[]`): `evidence.uploaded` with the pieces of this task whose address is new, nothing otherwise |
 | `effect.fail` | the engine and effects | an effect gave up: a failure gate when its kind has one |
-| `run.attempt`, `run.link`, `run.meter`, `run.end` | the run supervisor | an attempt starts, links its session, is metered, ends |
+| `run.attempt`, `run.link`, `run.meter`, `run.end` | the run supervisor | an attempt starts, links its session, is metered, ends; `run.end` carries `backgroundWork: true` when the turn ended with the agent's own background shells or subagents still running, so the recovery nudge names that cause |
 | `run.interrupt`, `run.continue` | the supervisor at shutdown and boot | marks a run for restart continuation, continues it |
 | `run.record_lost_session` | the supervisor | marks a session that cannot be resumed |
 | `run.compact` | the supervisor (idle compaction) | records an idle compaction |
