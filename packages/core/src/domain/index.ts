@@ -167,6 +167,8 @@ export {
   canChangeRoundShipping,
   DEFAULT_ROUND_SHIPPING,
   formatRoundLabel,
+  hasMergedSince,
+  isDependencyComplete,
   isLaterRound,
   isOfCurrentRound,
   isTaskClosed,
@@ -298,6 +300,7 @@ export {
 export {
   compareTasks,
   hasArmedWait,
+  hasMergedPullRequest,
   isAskTask,
   isRoundFinished,
   isTaskComplete,

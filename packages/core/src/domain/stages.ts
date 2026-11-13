@@ -44,6 +44,10 @@ export function isTaskComplete(task: Task) {
   return task.stage === 'answered' || task.stage === 'merged' || task.stage === 'done';
 }
 
+export function hasMergedPullRequest(task: Pick<Task, 'pullRequest'>) {
+  return task.pullRequest?.state === 'merged';
+}
+
 export function hasArmedWait(task: Task) {
   return task.monitor?.status === 'armed' || task.usageWait?.status === 'armed' || isRetryArmed(task);
 }
