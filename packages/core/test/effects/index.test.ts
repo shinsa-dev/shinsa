@@ -26,6 +26,12 @@ describe('resolveEffectKey', () => {
     expect(resolveEffectKey({ kind: 'run.execute', runId: 'r' }, 9)).toBe('run.execute:r');
     expect(resolveEffectKey({ kind: 'run.cancel', runId: 'r' }, 9)).toBe('run.cancel:r');
     expect(resolveEffectKey({ kind: 'question.resolve', gateId: 'g' }, 9)).toBe('question.resolve:g');
+    expect(resolveEffectKey({ kind: 'autopilot.judge', taskId: 't', gateId: 'g', shadow: false }, 9)).toBe(
+      'autopilot.judge:g:9'
+    );
+    expect(resolveEffectKey({ kind: 'autopilot.weigh', taskId: 't', suggestionId: 's' }, 9)).toBe(
+      'autopilot.weigh:t:s'
+    );
   });
 
   test('repeatable effects are keyed by the event that asked for them', () => {
@@ -51,6 +57,12 @@ describe('resolveEffectLane', () => {
     expect(resolveEffectLane({ kind: 'run.cancel', runId: 'r' })).toBe('cancel:r');
     expect(resolveEffectLane({ kind: 'run.steer', runId: 'r', text: 'x' })).toBe('steer:r');
     expect(resolveEffectLane({ kind: 'question.resolve', gateId: 'g' })).toBe('gate:g');
+    expect(resolveEffectLane({ kind: 'autopilot.judge', taskId: 't', gateId: 'g', shadow: false })).toBe(
+      'autopilot:t'
+    );
+    expect(resolveEffectLane({ kind: 'autopilot.weigh', taskId: 't', suggestionId: 's' })).toBe(
+      'autopilot:t'
+    );
     expect(resolveEffectLane({ kind: 'briefing.request', projectId: 'a' })).toBe('briefing');
     expect(resolveEffectLane({ kind: 'initiative.wake', initiativeId: 'i' })).toBe('initiative:i');
     expect(resolveEffectLane({ kind: 'watch.suggest', projectId: 'a', server: 'slack', data: 'Bugs' })).toBe(
@@ -177,5 +189,18 @@ describe('slack effects', () => {
       resolveEffectLane({ kind: 'slack.react', thread, messageTs: '100.3', reaction: 'inbox_tray' }),
     ];
     expect(new Set(lanes)).toEqual(new Set(['slack:T1:C1:100.1']));
+  });
+
+  test('an escalation’s post and its edit run in order, in a lane of their own per task', () => {
+    const contact = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C9', name: 'oncall' };
+    const escalate = {
+      kind: 'slack.escalate' as const,
+      taskId: 't',
+      escalatedAt: 500,
+      contact,
+      part: 'message' as const,
+    };
+    expect(resolveEffectKey(escalate, 9)).toBe('slack.escalate:message:t:500:T1:C9:9');
+    expect(resolveEffectLane(escalate)).toBe('slack-escalation:t');
   });
 });

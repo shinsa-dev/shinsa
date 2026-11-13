@@ -1,3 +1,4 @@
+import type { AutopilotVerdict } from '../autopilot/schema.ts';
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   AgentReply,
@@ -31,7 +32,7 @@ import type {
   TaskResult,
   TriageDecisions,
 } from './shapes.ts';
-import type { SlackThreadLink } from './slack.ts';
+import type { SlackEscalationPost, SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
 import type { WorkspaceMode } from './workspaces.ts';
@@ -473,11 +474,8 @@ export interface Autopiloted {
   reason: string;
 }
 
-export type AutopilotAction = 'escalate' | 'merge';
-
 export interface AutopilotDue {
   at: number;
-  action: AutopilotAction;
 }
 
 export interface EscalationFinder {
@@ -611,6 +609,7 @@ export interface Task {
   carriedMergeSteps?: CarriedMergeStep[];
   watchdogs?: Watchdog[];
   slack?: SlackThreadLink | null;
+  slackEscalations?: SlackEscalationPost[];
   backlog?: TaskBacklog | null;
   share?: TaskShare | null;
   previews?: PreviewShare[];
@@ -836,6 +835,12 @@ export interface Gate {
   cause?: GateCause;
   escalation?: ReviewEscalation;
   autopilotHeld?: string;
+  autopilotJudging?: boolean;
+  autopilotGuess?: AutopilotVerdict;
+  autopilotAnswer?: string;
+  autopilotTeaches?: boolean;
+  autopilotLearned?: boolean;
+  autopilotSeen?: boolean;
   autopilotDue?: AutopilotDue | null;
   verdicts?: FindingVerdict[];
   supersededBy?: string | null;

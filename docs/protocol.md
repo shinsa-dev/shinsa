@@ -62,7 +62,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | judgement call | A choice the agent made in a phase, with its reason and the alternatives it rejected | `JudgementCall` | Judgement call, "Judgement calls" |
 | disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
 | rating | The reviewer's two ratings of a change: how sure it is (`confidence`) and what breaks if it is wrong (`risk`), each low, medium or high | `ReviewRatings`, `ReviewRating`, `report_review`'s `confidence` and `risk`, `Task.reviewRatings` | Confidence, Risk |
-| Autopilot | Your pre-approval: a policy that approves a review, merges, or escalates an urgent change to your team for you | `autopilot` (`AutopilotPolicy`), `Task.autopiloted`, `Task.escalation`, `Gate.autopilotDue`, `autopilot.fire` | Autopilot, Approved for you, Sent to your team, Sent by your team, Why this reached you |
+| Autopilot | Your delegate: a pre-approval policy under which, inside hard limits, a model judges each plan, question, review and merge (and suggested tasks and watchdog tasks) to act on for you or bring to you, learns from every decision you make, and as a last resort sends an urgent change to your team | `autopilot` (`AutopilotPolicy`: `level`, `gates`, `autoMerge`, `escalate`, its `contacts` a list of `AutopilotContact`), `AutopilotFacts`, `AutopilotLimits`, `AutopilotLesson`, `state.autopilotLessons`, `AutopilotDecision`, `state.autopilotProfile`, `AutopilotScore`, `Task.autopiloted`, `Task.escalation`, `Task.slackEscalations`, `Gate.autopilotDue`, `autopilot.judge`, `autopilot.weigh`, `autopilot.fire` | Autopilot, Ask me first, Balanced, Most things, Auto merge, Handled by Autopilot, How well it knows you, Autopilot score, Suggested level, Suggested tasks, Watchdog tasks, Approved for you, Sent to your team, Sent by your team, Why this reached you, Who it asks, Send a test |
 | spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
 | walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
 | request (an iteration) | Something you sent an agent that its next hand-over answers (changes at a gate, line comments, feedback on a plan, a message to a running or resting agent, a follow-up, a restarted step), with its reply: a headline, each point you raised marked done, answered or not changed with a note, and what you do now. The chat shows it on the hand-over's card and the overview on the card it belongs to, the earlier ones under Earlier requests, so you never read the chat to know what changed | `Iteration` (`Task.iterations`), `IterationRequest`, `AgentReply` (the `reply` of every hand-over that answers one), `ReplyingHandOver`, `ReplyPoint`, `ReplyOutcome`, `iteration.requested`, `iteration.answered` | "Your request", Earlier requests, Done, Answered, Not changed, "What to do now" |
@@ -103,8 +103,9 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | rate pool | The accounts that learn one usage rate together: every account on one provider and plan, or one account whose plan is unknown | `resolveRatePool`, `plan:<provider>:<plan>`, `state.accountPlans`, `STARTING_RATES` | "an estimate from its plan's usual rate" |
 | build estimate | What a task's build will cost, from the nearest past builds or a measured table, corrected after each phase | `BuildEstimate` (`resolveBuildEstimate`) | "About 6% to build", Build estimate |
 | Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `autoPaceResets`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, Count on usage resets, "Waiting to build", "Builds tonight", Build now |
+| your hours | When you are usually active, per hour of the week on your clock, learned or set by hand; Autopilot and Auto pace read it | `ActiveHours` (`resolveActiveHours`, `isActiveAt`, `resolveNextActiveChange`), `activeHours` (`ActiveDay`), `clock.record`, `state.timeZone` | Your hours, "Outside your usual hours" |
+| night shift | What Auto pace does outside your hours: queued builds run, and the Agent records judgement calls instead of asking | `ActiveHours`, `NightShift`, `resolveNightShiftTold` | "built overnight" |
 | Automatic | The model choice that picks each step's Claude model from the task's size, the step and each model's room, and writes the Home guide with Codex first | `auto` (`AUTO_MODEL`) in `agentModels`, `resolveStepModel`, `MODEL_ROUTES`, `resolveQuickProvider`, `usage.models_recorded`, `state.modelRoom`, `models.routing` | Automatic |
-| night shift | What Auto pace does in your away hours: queued builds run, and the Agent records judgement calls instead of asking | `AwayHours` (`resolveAwayHours`), `NightShift`, `resolveNightShiftTold` | "built overnight" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
@@ -700,8 +701,14 @@ Soft gates, decided by Shinsa or the reviewer:
 | `choices?`, `recommendation?` | | a question's one-click answers |
 | `cause?` | `budget` \| `monitor` \| `push_hook` \| `paused` \| `owner_account` \| `github_sso` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round; `paused` is your `task.pause`, whose approve (Resume) restarts the step; `github_sso` is GitHub refusing Shinsa's login for an organization that enforces SAML single sign-on (`parseGitHubSso`), opened on the first failure, whose approve (Retry) starts the step or the watch again |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
-| `autopilotHeld?` | string | why Autopilot left this review gate for you ("The reviewer’s confidence is medium.") |
-| `autopilotDue?` | `{ at, action: 'escalate' \| 'merge' }` \| null | an open merge gate's Autopilot deadline (`autopilot.scheduled`); `AutopilotClock` fires `autopilot.fire` at `at` |
+| `autopilotHeld?` | string | why Autopilot brought this plan, question, review or merge gate to you (`autopilot.forwarded`: "The reviewer’s confidence is medium.") |
+| `autopilotTeaches?` | boolean | whether your answer to a gate Autopilot brought you teaches it (false when a setting held it back) |
+| `autopilotJudging?` | boolean | a judgment was asked for this gate (`autopilot.judging`) and has not come back |
+| `autopilotGuess?` | `act` \| `forward` | Autopilot's background guess at a plan, review or merge gate it left to you (`autopilot.guessed`), scored against your answer |
+| `autopilotAnswer?` | string | the reason Autopilot gave when it answered this gate for you |
+| `autopilotLearned?` | boolean | the lessons from your answer to this gate were kept |
+| `autopilotSeen?` | boolean | you marked what Autopilot did here seen (`autopilot.seen`), so it leaves Handled by Autopilot |
+| `autopilotDue?` | `{ at }` \| null | an urgent task's open merge gate's next Autopilot check, an hour on (`autopilot.scheduled`); `AutopilotClock` fires `autopilot.fire` at `at` |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
 | `provider?` | string | the provider a Sign in gate is for, set on every one (`claude` for a Claude account) |
@@ -926,8 +933,9 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, or `initiativeId`, one kind at a time (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
+| `autopilot.seen` | marks what Autopilot did at these gates as seen (`gateIds`), so it leaves Handled by Autopilot; gates it did not answer for you are skipped | `autopilot seen` | **human** |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `autoPaceResets`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy, `urgentWaitMinutes` 1 to 1,440, `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `autopilot`, `watchdogsIgnoreUsageLimits`, `autoPace`, `autoPaceResets`, `sharedTeams`, `activeHours` (`HUMAN_ONLY_SETTINGS`); a partial `autopilot` is merged into the current policy: `level` `ask_first`, `balanced` (default) or `most`, `gates` a list of `plans`, `questions`, `reviews`, `suggestions`, `watchdogTasks` (all but `suggestions` by default) replaced whole, `autoMerge` `off`, `low_risk` (default) or `approved`, `escalate` (true by default), `ignoreUsageLimits` (true by default) lets an urgent task's runs skip the usage and cost limits, `contacts` (none by default, at most 5, each `slack_channel` or `slack_person` with `teamId`, `id`, `name` and, for a person, `image`) is replaced whole; `activeHours` is null (learned) or at most 14 `ActiveDay` spans, each `weekday` 0 (Sunday) to 6, `from` 0 to 23 and `to` after `from` up to 24, none overlapping on a weekday |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1063,7 +1071,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `message.route`, `message.drop` | `MessageInbox` (`triage/inbox/service.ts`) | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
-| `autopilot.fire` | `AutopilotClock` | acts on an open merge gate's Autopilot deadline (`dueAt`): merges for you, or escalates to your team and, with `escalate_then_merge`, sets the merge deadline |
+| `autopilot.fire` | `AutopilotClock` | an urgent task's merge gate's hourly check (`dueAt`): escalates when the hard limits allow, asks for a judgment when it may merge, or revises an escalation whose promised merge it can no longer make |
+| `autopilot.judgment` | the `autopilot.judge` effect | the judge's answer for a gate (`verdict` `act` or `forward`, `reason`, `reply` for a question, `shadow`); core checks the limits again, then acts for you or brings it to you; a `shadow` answer only records the guess |
+| `autopilot.weighed` | the `autopilot.weigh` effect | the weigher's answer for a suggested task (`taskId`, `suggestionId`, `verdict` `accept`, `dismiss` or `forward`, `reason`); core checks the limits again, then accepts or dismisses it for you |
+| `idle.record` | the engine's `IdleWatch` | your Mac's last keyboard or mouse input (`inputAt`) and, once 10 idle minutes end, the span you were away (`away`); refused for a span `away.record` refuses |
 | `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
 | `task.auto_retry` | `TaskRetry` (`tasks/retry/service.ts`) | retries a failed step when its armed `Task.autoRetry` is due, as Retry does; nothing when none is armed |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
@@ -1074,6 +1085,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `account.plan_recorded` | the account roster, when an account's plan differs from `state.accountPlans` | records the account's `provider` and `plan` under its plan key, or forgets it with `plan: null`; nothing when unchanged |
 | `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast without usage resets), `resetPace` (with each usable reset as a budget ending at its `endsAt`), `endingPace` (with only the resets that end within 3 days) and `resetEndsAt` (when the soonest of them ends), or clears them with a null pace; nothing when unchanged |
+| `clock.record` | the engine, on start | records this Mac's time zone (`timeZone`, an IANA name); refused for a name that is not one (`clock_refused`); nothing when unchanged |
 | `usage.models_recorded` | the account roster, on an accounts refresh | records each Claude family's room (`models`: `{ family, usable, left, accounts }`, each account's own `{ account, usable, left }`, `listModelRoom`); nothing unless a family or one account's reading turned usable or spent or moved by 5 points; re-checks model waits under Automatic |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
@@ -1088,6 +1100,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.mention` | `POST /api/slack/events`, command id `slack:<event id>` | a signed `SlackMention`: messages the open task of its thread with 👀 on the mention (kept with 📥 while a gate is open, `slack.react`), else asks for `slack.evaluate` |
 | `slack.start_task` | the `slack.evaluate` effect, when the mention is work | the mention: starts a task as Home does and links it to the thread, or messages the thread's task when one opened meanwhile |
 | `slack.record_status` | the `slack.status` effect | the ts of the task's card and the reaction now on the mention, once Slack has them |
+| `slack.record_escalation` | the `slack.escalate` effect | where an Autopilot escalation went in Slack (`channelId`, `ts`) or why it could not (`problem`), once per escalation and contact: `slack.escalation_sent` |
+| `slack.record_escalation_follow_up` | the `slack.escalate` effect | the ts of the "Merged" reply in an escalation's thread, once per escalation and contact: `slack.escalation_followed_up` |
 | `slack.decide` | `POST /api/slack/interactions`, command id `slack-decide:<trigger id>` | a signed `SlackDecision` from someone app.shinsa.dev found to be an owner or member of the machine: decides an open gate of the task linked to that thread as Shinsa does (`answerGate`, so `plan_changed` and `gate_closed` hold), for the decisions `SLACK_DECIDABLE` allows, then `slack.decided`; refused `slack_decision_closed`, `slack_decision_refused` or `slack_decision_choice` |
 
 ## Events
@@ -1100,7 +1114,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `repo.registered`, `repo.updated`, `repo.removed` | a repository is registered, changed, forgotten |
 | `project.written`, `project.removed` | a project is written, removed |
 | `focus.changed` | the focus changes; closes the open entry of `state.focusHistory` and, with projects, opens one (`{ projectIds, except, from, to, until }`, kept a year) |
+| `mac.used` | you used your Mac in this hour (`usedAt`, from `idle.record`), kept in `state.presence` like something you did in Shinsa |
 | `away.recorded` | the Mac app reported a span you were away (`from`, `to`), kept in `state.away` for a year; never counted as something you did |
+| `clock.recorded` | the engine recorded this Mac's time zone (`timeZone`), kept as `state.timeZone`, the clock your hours are learned and read on |
 | `settings.changed` | settings change (the whole settings object) |
 | `task.created` | a task is created (`request`, `planFirst`, `auto`; with its handle when it has a project you chose (`auto.project` false); `createdBy`, `scheduleId` and `sourceReport` for one a watch's read filed; `watchHome` for a watch's home) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
@@ -1151,7 +1167,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.delivered` | an answer, a diagnosis, a report or an outcome was handed over (`step`) |
 | `task.change_proposed`, `task.change_approved`, `task.change_declined` | a proposal was made (with its `recommend`), approved, declined |
 | `task.actions_suggested` | a hand-over suggested replies (`actions`, empty to clear them); also cleared by your message or a gate answer |
-| `task.suggested`, `suggestion.settled` | a task was suggested (`request`; `splitOff` for a split-off); accepted or dismissed (`keptRound` when it was kept here as a round) |
+| `task.suggested`, `suggestion.settled` | a task was suggested (`request`; `splitOff` for a split-off); accepted or dismissed (`keptRound` when it was kept here as a round; `autopilot`, the reason, when Autopilot settled it) |
 | `task.account_bound` | the task's account changed |
 | `task.split` | `split_task` made tasks |
 | `task.moving`, `task.moved` | `move_to_repository` started moving the task (`repoId`, `runId`, `reason`; sets `movingTo`), and the old worktree is gone, so the task now works in `repoId` |
@@ -1192,8 +1208,15 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
 | `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `ahead` when that approval was made for you, `autopilot` with the reason when Autopilot made it), withdrawn, or replaced by your message |
-| `autopilot.scheduled` | an open merge gate's Autopilot deadline was set or cleared (`gateId`, `due` or null) |
+| `autopilot.scheduled` | an open merge gate's next Autopilot check was set or cleared (`gateId`, `due` or null) |
+| `autopilot.judging` | Autopilot asked for a judgment on a gate (`gateId`) |
+| `autopilot.forwarded` | Autopilot brought a gate to you (`gateId`, `reason`, `teaches`) |
+| `autopilot.guessed` | Autopilot's background guess at a gate it left to you (`gateId`, `verdict`) |
+| `autopilot.decided` | your decisions were kept in your profile (`decisions`, each an `AutopilotDecision`: a gate answer, finding, suggested task, message, priority change or cancel; a task you file and a file you edit fold in from `task.created` and `task.edited` with `learned`; `state.autopilotProfile`, every decision counted in recency-weighted `tallies` and a weighted `agreement`, the last 200 kept for their words) |
+| `autopilot.learned` | lessons from your answer were kept (`lessons`, each an `AutopilotLesson`; `state.autopilotLessons`, the last 50) |
+| `autopilot.seen` | you marked what Autopilot did at these gates seen (`gateIds`) |
 | `task.escalated` | Autopilot sent the urgent change to your team (`reason`, `handoff`; sets `Task.escalation`) |
+| `task.escalation_revised` | the wait ended without the merge an escalation promised (`reason`, `handoff` with `mergesAt` null and `blockedBy`; keeps `Task.escalation.at`) |
 | `gate.noted` | the open operation gate's notes were replaced (`notes`, null clears them; the same gate, no new notification) |
 | `run.started`, `run.dispatched` | a run was created; it started |
 | `run.attempted`, `run.linked` | an attempt began; it linked its session |
@@ -1230,6 +1253,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `on_behalf.acted` | a command sent on your behalf changed something (command, task, sentence, acting task) |
 | `slack.thread_linked` | a task was started from a Slack thread, by a mention or by a Slack channel automation with updates on, whose thread root is the triggering message (the whole `link`, `Task.slack`; "Started from a Slack thread") |
 | `slack.status_posted` | the task's card has this `ts` and its mention this `reaction` now |
+| `slack.escalation_sent` | an Autopilot escalation was posted in Slack, or could not be, one per contact: `Task.slackEscalations`, and "Sent to #oncall in Slack" or "Could not reach #oncall in Slack" in the activity |
+| `slack.escalation_followed_up` | the "Merged" reply in an escalation's thread was posted: its `followUpTs` on `Task.slackEscalations` |
 | `slack.decided` | a gate of the task was decided from Slack: the Slack user and what they did ("approved the plan"), shown on the card's status (`Task.slack.decided`) |
 
 ## Effects
@@ -1271,6 +1296,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `slack.post` | replay_safe | `slack:<thread key>` | none: posts a watchdog that found a problem as a new message through app.shinsa.dev |
 | `slack.status` | replay_safe | `slack:<thread key>` | `slack.record_status` for a new card or reaction; edits the card (the open gate with its buttons, else the status) at most every 5 s and moves the mention's reaction |
 | `slack.react` | replay_safe | `slack:<thread key>` | none: 👀 or 📥 on a later mention in the thread, through `/__remote/slack/react`; key `slack.react:<thread key>:<message ts>` |
+| `autopilot.judge` | replay_safe | `task:<id>` | `autopilot.judgment`: one quick call on the classifier model with the gate's facts, lessons and your profile; `forward` when no model answers; with `shadow`, a background guess that records nothing when no model answers |
+| `autopilot.weigh` | replay_safe | `task:<id>` | `autopilot.weighed`: one quick call that weighs a new suggested task with your profile; `forward` when no model answers |
+| `slack.escalate` | replay_safe | `slack-escalation:<task>` | `part` `message`: `slack.record_escalation` after posting an open escalation to one of the policy's channels or people through `/__remote/slack/notify`; once it cleared, edits that message and records nothing. `part` `follow_up`: once merged, replies in that message's thread and records it with `slack.record_escalation_follow_up`, then edits the reply; key `slack.escalate:<part>:<task>:<escalated at>:<team>:<id>:<seq>` |
 
 Any effect that gives up sends `effect.fail`; it opens a failure gate when its kind has a title in `FAILURE_TITLE`.
 
@@ -1481,7 +1509,7 @@ A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolve
 | Field | Holds |
 | --- | --- |
 | `from`, `to` | The log position the patch applies to and the one it reaches; equal for a change that is not an event (a new Home guide, `docs/engine.md` → The briefing) |
-| `fields` | `focus`, `settings`, `onBehalfActions` when they changed, each a `ValueChange` |
+| `fields` | `focus`, `settings`, `onBehalfActions`, `timeZone`, `autopilotLessons` when they changed, each a `ValueChange` |
 | `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`, `presence`, `away`, `focusHistory`, `accountPlans`, `usagePaces`), the entries that changed by id, each an `EntryChange` |
 
 An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `{ fields, unset }` (the fields whose
@@ -1699,6 +1727,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread neither sent to it nor in a channel it watches, or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when the workspace cannot show one (`not_authorized` from an app not on Agent Sessions, `feature_disabled` from a workspace without agent features), after which the engine stops asking for that workspace until it restarts; any other refusal is 502 `slack_failed`, logged, and tried again at the next change |
 | `POST /__remote/slack/react` | The engine, with its machine token | `SlackRelayReaction` (the thread, the mention's `messageTs`, the emoji name to `add` and to `remove`, at least one; `parseSlackRelayReaction`) → `SlackRelayReacted` `{ applied }`: `reactions.remove` then `reactions.add` on a message of a thread sent to that machine; `no_reaction` and `already_reacted` count as done, anything else (`missing_scope` on a workspace that added the app before `reactions:write`) is `applied: false` |
+| `POST /__remote/slack/notify` | The engine, with its machine token | `SlackRelayNotify` (`teamId`, `kind` `slack_channel` or `slack_person`, the Slack `id`, `replace` `{ channelId, ts }` or null, `reply` `{ channelId, threadTs }` or null (a reply under a message the machine posted, with no target check), `message`) → `SlackRelayNotified` `{ channelId, ts }`: `chat.postMessage` to the channel or the person's id (their direct message with the app), after `conversations.info` or `users.info` checks it is a channel (a private one only when a Slack account linked to the machine is in it) or a person who is neither a bot nor deactivated, or `chat.update` of a message it posted; 403 `slack_not_linked` in a workspace the machine is not linked in, 410 when the app was removed, 502 with Slack's reason in words (`not_in_channel`, `is_archived`, `user_disabled`…) |
+| `GET /__remote/slack/directory?teamId=` | The engine, with its machine token | `SlackDirectory` (`teamId`, `channels`: the public ones the app is in and the private ones it shares with a Slack account linked to the machine, `people` neither bots nor deactivated, each `{ id, name }` and a person's `image`, sorted by name; `conversations.list`, `users.conversations` and `users.list`, ten pages of 200 at most); 403 `slack_not_linked` as above |
 | `GET /__remote/slack/links`, `POST /__remote/slack/unlink` | The engine, with its machine token | `SlackLinks` (`teamId`, `teamName`, `userId`, `userName`, `linkedAt` each); removes every link of the machine |
 | `GET /__remote/slack/channels` | The engine, with its machine token | `SlackChannels`: the channels the bot is in (`users.conversations`, public and private, not archived, at most 1,000), in each workspace linked to the machine, a private one only when a Slack user linked to that machine is a member of it, asked with that person's own token: `teamId`, `teamName`, `channelId`, `channelName`, `private`; 502 `SlackFailed` when Slack does not list the bot's channels or does not say which private ones a linked person is in |
 | `POST /__remote/slack/watches` | The engine, with its machine token | `SlackChannelWatches` (`watches` of `teamId` and `channelId`, at most 100): replaces the channels whose messages the machine is sent, keeping only channels `GET /__remote/slack/channels` would list for it → `{ ok: true }`, or 502 `SlackFailed` with the list as it was, also when Slack does not say whether a linked person is in a private channel named in it |
@@ -1714,6 +1744,8 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `SlackDecision` (`parseSlackDecision`) | the modal's fields with `interactionId`, `teamId`, `userId` and `response` (the form's text, at most 3,000 characters, `SLACK_VIEW_LIMITS.input`, or null) |
 | `SlackDecisionReply` (`parseSlackDecisionReply`) | `{ decided: true, text }` (what the card says they did) or `{ decided: false, reason }` |
 | `SlackSnapshot` (the engine's `GET /api/slack`) | `remote`, `connectUrl`, `links`, `problem` |
+| `SlackDirectoryView` (the engine's `GET /api/slack/directory?teamId=`, feature `autopilot-slack`) | `teamId`, `channels`, `people`, `problem` (remote access off, or why the relay could not list them; the lists empty then) |
+| `SlackTestOutcome` (the engine's `POST /api/slack/test {contact}`, owner only, feature `autopilot-slack`) | `sent`, `problem` (why the sample escalation did not reach that contact) |
 
 ## The changelog
 

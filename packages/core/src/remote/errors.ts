@@ -160,6 +160,11 @@ export class ThreadNotForwarded extends RemoteFailure<ThreadNotForwarded>()('Thr
   status: 403,
 }) {}
 
+export class SlackNotLinked extends RemoteFailure<SlackNotLinked>()('SlackNotLinked', {
+  code: 'slack_not_linked',
+  status: 403,
+}) {}
+
 export class PostNotYours extends RemoteFailure<PostNotYours>()('PostNotYours', {
   code: 'post_not_yours',
   status: 403,

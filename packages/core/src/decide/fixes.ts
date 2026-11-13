@@ -204,7 +204,9 @@ export function startFix(
 }
 
 function listFindingsToFix(decider: Decider, task: Task, findings: readonly ReviewFinding[]) {
-  return findings.filter((finding) => isFindingFixedBeforeReview(decider.state.settings, task, finding));
+  return findings.filter((finding) =>
+    isFindingFixedBeforeReview(decider.state, decider.context.now, task, finding)
+  );
 }
 
 export function reuseLastReview(decider: Decider, taskId: string) {

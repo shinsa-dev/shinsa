@@ -1,82 +1,206 @@
 import {
-  type AutopilotMerge,
+  AUTOPILOT_SCORE_LIMITS,
+  type AutopilotContact,
+  type AutopilotContactKind,
+  type AutopilotDone,
+  type AutopilotGateKind,
+  type AutopilotGate,
+  type AutopilotLevel,
+  type AutopilotScore,
+  type AutoMerge,
   HOUR_MS,
+  isSameAutopilotContact,
+  listAutopilotDone,
+  MAX_AUTOPILOT_CONTACTS,
   type MergeBlock,
   MINUTE_MS,
   type AutopilotPolicy,
-  type AutopilotRisk,
-  type AutopilotUrgent,
   type Project,
   type ReviewRating,
   resolveAutopilotPolicy,
+  resolveAutopilotScore,
   type Settings,
+  type ShinsaState,
+  type SlackDirectoryView,
+  type SlackSnapshot,
   type Task,
   type TaskEscalation,
   type TeamEscalation,
   type TeamPresenceStatus,
 } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
+import type { Tone } from '@/lib/format/tone.ts';
 import { describeAgentReview } from '@/lib/review/report.ts';
 import type { SettingItem } from '@/lib/settings.ts';
 import { describeTeamTaskOwner, resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
 
 export const AUTOPILOT_TITLE = 'Autopilot';
 
-export const AUTOPILOT_DESCRIPTION =
-  'Approves and merges a change for you when the reviewer is highly confident in it. Off, every change waits for you.';
+export const AUTOPILOT_OFF =
+  'Acts for you on the plans, questions, reviews and merges it is sure about, and brings you the rest. While it is off, everything waits for you.';
+
+export const AUTOPILOT_TURN_ON = 'Turn on';
 
 export const AUTOPILOT_ENABLED_ITEMS: SettingItem<'on' | 'off'>[] = [
   { value: 'off', label: 'Off', icon: 'IconCircleX' },
   { value: 'on', label: 'On', icon: 'IconRocket' },
 ];
 
-const RISK_LABEL: Record<AutopilotRisk, string> = {
-  none: 'Never',
-  low: 'Low risk only',
-  medium: 'Up to medium risk',
-  high: 'Any risk',
+export const AUTOPILOT_LEVEL_ITEMS: SettingItem<AutopilotLevel>[] = [
+  {
+    value: 'ask_first',
+    label: 'Ask me first',
+    icon: 'IconShieldCheck',
+    hint: 'It acts alone only on small, low-risk work.',
+  },
+  {
+    value: 'balanced',
+    label: 'Balanced',
+    icon: 'IconShieldCheck',
+    hint: 'It acts alone on clear, low-risk work, and on medium risk when urgent.',
+  },
+  {
+    value: 'most',
+    label: 'Most things',
+    icon: 'IconRocket',
+    hint: 'It acts alone on medium-risk work, and on any urgent work once you are away.',
+  },
+];
+
+export const AUTOPILOT_LEVEL_DESCRIPTION: Record<AutopilotLevel, string> = {
+  ask_first: 'Autopilot acts alone only on small, low-risk work and brings you everything else.',
+  balanced: 'Autopilot acts alone on clear, low-risk work, and on medium risk when it is urgent.',
+  most: 'Autopilot acts alone on most work, and on urgent work of any risk once you are away.',
 };
 
-export const AUTOPILOT_RISK_ITEMS: SettingItem<AutopilotRisk>[] = (
-  ['none', 'low', 'medium', 'high'] as const
-).map((value) => ({
-  value,
-  label: RISK_LABEL[value],
-  icon: value === 'none' ? 'IconCircleX' : 'IconShieldCheck',
-}));
+export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string; description: string }[] = [
+  {
+    gate: 'plans',
+    title: 'Plans',
+    description: 'Approves a small, clear plan for you, so the agent starts building.',
+  },
+  {
+    gate: 'questions',
+    title: 'Agent questions',
+    description: 'Answers an agent’s question only when it is sure, otherwise the question waits for you.',
+  },
+  {
+    gate: 'reviews',
+    title: 'Reviews',
+    description: 'Approves a change the reviewer is highly confident in, so its pull request opens.',
+  },
+  {
+    gate: 'suggestions',
+    title: 'Suggested tasks',
+    description: 'Accepts or dismisses a suggested task when it is sure what you would do.',
+  },
+  {
+    gate: 'watchdogTasks',
+    title: 'Watchdog tasks',
+    description: 'Gives your OK on the fix a watchdog task proposes, which still passes every gate after.',
+  },
+];
 
-export const AUTOPILOT_MERGE_ITEMS: SettingItem<AutopilotMerge>[] = [
-  { value: 'never', label: 'Never, ask me', icon: 'IconCircleX' },
+export const AUTOPILOT_GATE_ITEMS: SettingItem<'on' | 'off'>[] = [
+  { value: 'on', label: 'Autopilot decides', icon: 'IconRocket' },
+  { value: 'off', label: 'Always ask me', icon: 'IconCircleX' },
+];
+
+export function toggleAutopilotGate(gates: readonly AutopilotGate[], gate: AutopilotGate, on: boolean) {
+  const others = gates.filter((saved) => saved !== gate);
+  return on ? [...others, gate] : others;
+}
+
+export const AUTO_MERGE_ITEMS: SettingItem<AutoMerge>[] = [
+  { value: 'off', label: 'Off, I merge', icon: 'IconCircleX' },
   { value: 'low_risk', label: 'Low risk changes', icon: 'IconMerged' },
   { value: 'approved', label: 'Every change it approved', icon: 'IconMerged' },
 ];
 
-export const AUTOPILOT_URGENT_ITEMS: SettingItem<AutopilotUrgent>[] = [
-  { value: 'wait', label: 'Keep waiting for me', icon: 'IconClock' },
-  { value: 'escalate', label: 'Send it to my team', icon: 'IconMegaphone' },
-  { value: 'merge', label: 'Merge it for me', icon: 'IconMerged' },
-  { value: 'escalate_then_merge', label: 'Send it to my team, then merge', icon: 'IconMegaphone' },
+export const AUTO_MERGE_DESCRIPTION: Record<AutoMerge, string> = {
+  off: 'You merge every pull request yourself, even ones Autopilot approved.',
+  low_risk: 'Merges a low-risk change for you once its pull request is clean.',
+  approved: 'Merges every change it approved once its pull request is clean.',
+};
+
+export const AUTOPILOT_ESCALATE_DESCRIPTION: Record<'on' | 'off', string> = {
+  on: 'Only when you are away and the change is urgent and high risk.',
+  off: 'Never asks your team; urgent work waits for you.',
+};
+
+export const AUTOPILOT_USAGE_DESCRIPTION: Record<'on' | 'off', string> = {
+  on: 'An urgent task you marked yourself keeps running past your usage and cost limits.',
+  off: 'Urgent tasks stop at your usage and cost limits like any other task.',
+};
+
+export const AUTOPILOT_ESCALATE_ITEMS: SettingItem<'on' | 'off'>[] = [
+  {
+    value: 'on',
+    label: 'Only as a last resort',
+    icon: 'IconMegaphone',
+    hint: 'Only when you are away and the change is urgent and high risk.',
+  },
+  { value: 'off', label: 'Never', icon: 'IconCircleX' },
 ];
 
+export const AUTOPILOT_BLOCKS = {
+  acting: { title: 'Acting for you', icon: 'IconShieldCheck' },
+  merging: { title: 'Merging', icon: 'IconMerged' },
+  asks: { title: 'Who it asks', icon: 'IconMegaphone' },
+  score: { title: 'How well it knows you', icon: 'IconGauge' },
+} as const;
+
+export const AUTOPILOT_SCORE_ROWS = {
+  score: 'Autopilot score',
+  suggested: 'Suggested level',
+} as const;
+
+const LEVEL_LABEL: Record<AutopilotLevel, string> = {
+  ask_first: 'Ask me first',
+  balanced: 'Balanced',
+  most: 'Most things',
+};
+
+export interface AutopilotScoreView {
+  score: { detail: string; value: number; percent: string };
+  suggested: { level: AutopilotLevel; detail: string; apply: string | null };
+}
+
+function describeScore(score: AutopilotScore) {
+  if (score.scored === 0)
+    return 'How often it guesses your plans, reviews and merges right, out of 100. It starts once you decide some.';
+  if (score.ready)
+    return `It guessed you right on ${score.agreed} of ${score.scored}, the recent ones counting most.`;
+  if (score.scored < AUTOPILOT_SCORE_LIMITS.minScored)
+    return `It guessed you right on ${score.agreed} of ${score.scored} so far and needs more to be sure.`;
+  return `It guessed you right on ${score.agreed} of ${score.scored}, but not often enough lately.`;
+}
+
+function describeSuggested(score: AutopilotScore) {
+  if (score.ready) return 'It agrees with you often enough to act alone on most work.';
+  return `Balanced while it learns. Most things once the score reaches ${AUTOPILOT_SCORE_LIMITS.agreement * 100}%.`;
+}
+
+export function resolveAutopilotScoreView(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  level: AutopilotLevel
+): AutopilotScoreView {
+  const score = resolveAutopilotScore(state);
+  return {
+    score: { detail: describeScore(score), value: score.value, percent: `${score.value}%` },
+    suggested: {
+      level: score.suggested,
+      detail: describeSuggested(score),
+      apply: score.suggested === level ? null : `Use ${LEVEL_LABEL[score.suggested]}`,
+    },
+  };
+}
+
 export const AUTOPILOT_ROWS = {
-  approve: {
-    title: 'Approve reviews for you',
-    description:
-      'A change the reviewer rated high confidence, up to this risk, goes to its pull request without you.',
-  },
-  urgentApprove: {
-    title: 'Approve urgent reviews for you',
-    description: 'The same, for a task marked urgent.',
-  },
-  merge: { title: 'Merge for you', description: 'Merges a pull request it approved once its checks pass.' },
-  urgent: {
-    title: 'When an urgent merge waits for you',
-    description: 'Send it to my team puts it in your teammates’ Needs you and notifies each of them once.',
-  },
-  wait: { title: 'How long it waits for you', description: 'How long an urgent merge waits before it acts.' },
-  usage: {
-    title: 'Ignore usage limits for urgent work',
-    description: 'An urgent task keeps going past your daily, project and task limits.',
-  },
+  level: 'On its own',
+  autoMerge: 'Auto merge',
+  escalate: 'Your team',
+  usage: 'Usage limits',
 } as const;
 
 export const AUTOPILOT_USAGE_ITEMS: SettingItem<'on' | 'off'>[] = [
@@ -84,26 +208,137 @@ export const AUTOPILOT_USAGE_ITEMS: SettingItem<'on' | 'off'>[] = [
   { value: 'off', label: 'Keep them', icon: 'IconCircleX' },
 ];
 
-export const AUTOPILOT_NO_TEAM =
-  'None of your projects is in a team yet, so only you see an urgent change it sends on.';
-
-export function isEscalationUnseen(policy: AutopilotPolicy, projects: readonly Pick<Project, 'teamIds'>[]) {
-  if (policy.urgent !== 'escalate' && policy.urgent !== 'escalate_then_merge') return false;
-  return !projects.some((project) => (project.teamIds?.length ?? 0) > 0);
+export function hasTeamProject(projects: readonly Pick<Project, 'teamIds'>[]) {
+  return projects.some((project) => (project.teamIds?.length ?? 0) > 0);
 }
 
-const WAIT_CHOICES = [15, 30, 60, 120, 240, 480];
+export const TEAM_CONTACT = {
+  title: 'Your team in Shinsa',
+  shared: 'Always on',
+  alone: 'No project shared with a team',
+} as const;
+
+export function isAskWaiting(policy: AutopilotPolicy, team: boolean) {
+  return policy.escalate && !team && policy.contacts.length === 0;
+}
+
+const SLACK_CHECKING = 'Checking Slack';
+
+export function resolveSlackUnavailable(
+  available: boolean,
+  { snapshot, failure }: { snapshot: SlackSnapshot | null; failure: string | null }
+) {
+  if (!available) return 'Update Shinsa on this machine first';
+  if (!snapshot) return failure ? 'Slack could not be checked' : SLACK_CHECKING;
+  if (!snapshot.remote || snapshot.links.length === 0) return 'Connect Slack in Settings → General first';
+  return null;
+}
+
+export function resolveContactAddBlock(contacts: readonly AutopilotContact[], unavailable: string | null) {
+  if (unavailable) return unavailable;
+  return contacts.length >= MAX_AUTOPILOT_CONTACTS ? `Up to ${MAX_AUTOPILOT_CONTACTS} in Slack` : null;
+}
+
+export function resolveContactTestBlock(contacts: readonly AutopilotContact[], unavailable: string | null) {
+  if (unavailable) return unavailable;
+  return contacts.length === 0 ? 'Add a channel or person first' : null;
+}
+
+export function resolveContactWorkspace(snapshot: SlackSnapshot | null, chosen: string | null) {
+  const links = snapshot?.links ?? [];
+  if (chosen && links.some((link) => link.teamId === chosen)) return chosen;
+  return links[0]?.teamId ?? null;
+}
+
+export function listSlackWorkspaceItems(snapshot: SlackSnapshot | null): SettingItem<string>[] {
+  const items = new Map<string, SettingItem<string>>();
+  for (const link of snapshot?.links ?? []) {
+    items.set(link.teamId, { value: link.teamId, label: link.teamName, icon: 'IconSlack' });
+  }
+  return [...items.values()];
+}
+
+interface ContactOption {
+  contact: AutopilotContact;
+  chosen: boolean;
+  disabled: boolean;
+}
+
+export interface ContactOptionGroup {
+  kind: AutopilotContactKind;
+  heading: string;
+  options: ContactOption[];
+}
+
+const CONTACT_GROUPS: { kind: AutopilotContactKind; heading: string }[] = [
+  { kind: 'slack_channel', heading: 'Channels' },
+  { kind: 'slack_person', heading: 'People' },
+];
+
+export function listContactOptions(
+  directory: SlackDirectoryView | null,
+  contacts: readonly AutopilotContact[]
+): ContactOptionGroup[] {
+  if (!directory) return [];
+  const full = contacts.length >= MAX_AUTOPILOT_CONTACTS;
+  return CONTACT_GROUPS.flatMap(({ kind, heading }) => {
+    const entries = kind === 'slack_channel' ? directory.channels : directory.people;
+    const options = entries.map((entry) => {
+      const image = kind === 'slack_person' && entry.image ? { image: entry.image } : {};
+      const contact = { kind, teamId: directory.teamId, id: entry.id, name: entry.name, ...image };
+      const chosen = contacts.some((saved) => isSameAutopilotContact(saved, contact));
+      return { contact, chosen, disabled: full && !chosen };
+    });
+    return options.length === 0 ? [] : [{ kind, heading, options }];
+  });
+}
+
+export function describeContactPickerEmpty(directory: SlackDirectoryView | null) {
+  if (!directory) return 'Loading Slack…';
+  if (directory.problem) return directory.problem;
+  return 'Nothing matches.';
+}
+
+export const CONTACT_PICKER_HINT = 'Missing a channel? Invite @Shinsa to it in Slack.';
+
+export function toggleAutopilotContact(contacts: readonly AutopilotContact[], contact: AutopilotContact) {
+  if (contacts.some((saved) => isSameAutopilotContact(saved, contact))) {
+    return contacts.filter((saved) => !isSameAutopilotContact(saved, contact));
+  }
+  return contacts.length >= MAX_AUTOPILOT_CONTACTS ? [...contacts] : [...contacts, contact];
+}
+
+export function describeAutopilotContact(contact: AutopilotContact, snapshot: SlackSnapshot | null) {
+  const workspaces = listSlackWorkspaceItems(snapshot);
+  const workspace = workspaces.find((item) => item.value === contact.teamId)?.label;
+  return {
+    title: contact.name,
+    detail: workspaces.length > 1 && workspace ? workspace : null,
+    removeLabel:
+      contact.kind === 'slack_channel'
+        ? `Stop posting in #${contact.name}`
+        : `Stop messaging ${contact.name}`,
+  };
+}
+
+export function isSlackTestSent(results: readonly { sent: boolean }[]) {
+  return results.every((result) => result.sent);
+}
+
+export function describeSlackTestResults(
+  results: readonly { contact: AutopilotContact; sent: boolean; problem: string | null }[]
+) {
+  const failed = results.find((result) => !result.sent);
+  if (!failed) return results.length === 1 ? 'Sent a test to Slack' : `Sent ${results.length} tests to Slack`;
+  const name = failed.contact.kind === 'slack_channel' ? `#${failed.contact.name}` : failed.contact.name;
+  return `Not sent to ${name}: ${failed.problem ?? 'Slack refused it.'}`;
+}
 
 function describeMinutes(minutes: number) {
   if (minutes < 60) return `${minutes} minutes`;
   const hours = minutes / 60;
   if (!Number.isInteger(hours)) return `${minutes} minutes`;
   return hours === 1 ? '1 hour' : `${hours} hours`;
-}
-
-export function listAutopilotWaitItems(policy: AutopilotPolicy): SettingItem<string>[] {
-  const values = [...new Set([...WAIT_CHOICES, policy.urgentWaitMinutes])].sort((a, b) => a - b);
-  return values.map((value) => ({ value: String(value), label: describeMinutes(value), icon: 'IconClock' }));
 }
 
 export function resolveAutopilotValue(settings: Settings) {
@@ -238,12 +473,15 @@ function describeOwnerPresence({ handoff }: TaskEscalation, { owner, presence, n
   return ago ? `${owner} was last online ${ago}.` : null;
 }
 
+function describeUrgentWait({ handoff }: TaskEscalation, owner: string) {
+  if (handoff.waitedMinutes === 0) return `It is urgent and ready for ${owner} to merge`;
+  return `It is urgent and waited ${describeMinutes(handoff.waitedMinutes)} for ${owner} to merge it`;
+}
+
 function describeWhy(escalation: TaskEscalation, viewer: HandoffViewer) {
-  const waited = describeMinutes(escalation.handoff.waitedMinutes);
-  if (!viewer.owner)
-    return `It is urgent and waited ${waited} for you to merge it, so Autopilot sent it to your team.`;
+  if (!viewer.owner) return `${describeUrgentWait(escalation, 'you')}, so Autopilot sent it to your team.`;
   const presence = describeOwnerPresence(escalation, viewer);
-  const urgent = `It is urgent and waited ${waited} for ${viewer.owner} to merge it.`;
+  const urgent = `${describeUrgentWait(escalation, viewer.owner)}.`;
   return presence ? `${urgent} ${presence}` : urgent;
 }
 
@@ -298,7 +536,9 @@ export function listHandoffParagraphs(escalation: TaskEscalation, viewer: Handof
 export function describeTeamEscalationSummary({ entry, escalation }: TeamEscalation) {
   const owner = describeTeamTaskOwner(entry);
   const found = escalation.handoff.foundBy ? ', found by a watchdog,' : '';
-  return `${owner}’s urgent fix${found} waited ${describeMinutes(escalation.handoff.waitedMinutes)} for its merge`;
+  const minutes = escalation.handoff.waitedMinutes;
+  if (minutes === 0) return `${owner}’s urgent fix${found} is ready to merge`;
+  return `${owner}’s urgent fix${found} waited ${describeMinutes(minutes)} for its merge`;
 }
 
 export interface TeamEscalationRow {
@@ -317,4 +557,59 @@ export function listTeamEscalationRows(escalations: readonly TeamEscalation[]): 
     since: item.escalation.at,
     path: resolveTeamTaskPath(resolveTeamTaskTarget(item.entry)),
   }));
+}
+
+export const DONE_FOR_YOU_TITLE = 'Handled by Autopilot';
+
+export const DONE_FOR_YOU_ALL_SEEN = 'Mark all seen';
+
+const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
+  plan: 'Autopilot approved the plan for you.',
+  question: 'Autopilot answered an agent’s question for you.',
+  review: 'Autopilot approved the review for you.',
+  merge: 'Autopilot started the merge for you.',
+  proposal: 'Autopilot gave your OK on a watchdog task’s fix.',
+};
+
+const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
+  plan: { icon: 'IconChecklist', tone: 'purple' },
+  question: { icon: 'IconBubbleCheck', tone: 'blue' },
+  review: { icon: 'IconCheckCircle2', tone: 'blue' },
+  merge: { icon: 'IconMerged', tone: 'green' },
+  proposal: { icon: 'IconCheckCircle2', tone: 'purple' },
+};
+
+export interface DoneForYouRow {
+  gateId: string;
+  taskId: string;
+  title: string;
+  summary: string;
+  reason: string;
+  at: number;
+  icon: IconName;
+  tone: Tone;
+}
+
+function describeDoneForYou(done: AutopilotDone, task: Task | undefined) {
+  if (done.gate === 'merge' && task?.stage === 'merged') return 'Autopilot merged it for you.';
+  return DONE_FOR_YOU_TEXT[done.gate];
+}
+
+export function listDoneForYouRows(state: ShinsaState): DoneForYouRow[] {
+  return listAutopilotDone(state).map((done) => {
+    const task = state.tasks[done.taskId];
+    return {
+      gateId: done.gateId,
+      taskId: done.taskId,
+      title: task?.title ?? done.title,
+      summary: describeDoneForYou(done, task),
+      reason: done.reason,
+      at: done.at,
+      ...DONE_FOR_YOU_GLYPH[done.gate],
+    };
+  });
+}
+
+export function resolveDoneForYouTag(gateId: string) {
+  return `autopilot-done:${gateId}`;
 }

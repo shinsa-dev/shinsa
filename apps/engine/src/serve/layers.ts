@@ -10,6 +10,7 @@ import { ProgramVersions } from '../agents/providers/versions/service.ts';
 import { QuickCalls, QuickFastMode } from '../agents/quick/index.ts';
 import { RunSupervisorLayer } from '../agents/supervisor/layers.ts';
 import { TeammateTasks } from '../agents/tool-calls/schema.ts';
+import { createAutopilotJudge, createAutopilotWeigher } from '../autopilot/judge.ts';
 import { BriefingWriter } from '../briefing/service.ts';
 import { BrowserLayer } from '../browser/layers.ts';
 import { resolveEngineChangelog } from '../changelog/index.ts';
@@ -40,6 +41,8 @@ import {
 } from '../instance/index.ts';
 import { ServeLock } from '../instance/lock/service.ts';
 import { createSummaryAccountSource, Onboarding, Prerequisites, SetupCommands } from '../onboarding/index.ts';
+import { IdleWatch } from '../presence/idle/service.ts';
+import { MacIdle } from '../presence/mac-idle/service.ts';
 import { ProjectChanges } from '../projects/changes/service.ts';
 import {
   Handoffs,
@@ -307,6 +310,7 @@ function createClocksLayer(options: ShinsaOptions) {
     WatchdogClock.layer,
     AutopilotClock.layer,
     ShareClock.layer,
+    IdleWatch.layer.pipe(Layer.provide(MacIdle.layer)),
     TaskRetry.layer
   ).pipe(
     Layer.provide(
@@ -399,6 +403,8 @@ function createEffectsLayer(options: ShinsaOptions, instance: ServerInstance) {
         findRepository: (yield* TriageClassifier).repository,
         wordWatch: createWatchWriter(quick.write),
         describeShare: (yield* ShareDescriber).describe,
+        judgeAutopilot: createAutopilotJudge(quick.classify),
+        weighSuggestion: createAutopilotWeigher(quick.classify),
         draftFeedback: yield* FeedbackDrafter,
         instance,
         ...(options.resolveLogin ? { resolveLogin: options.resolveLogin } : {}),

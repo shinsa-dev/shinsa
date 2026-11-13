@@ -1,8 +1,8 @@
+import type { PowerEvent } from '@shinsa/core';
 import { Effect, Layer, Logger, Option, PubSub, Queue, Stream } from 'effect';
 import { HttpClient, HttpClientError, HttpClientResponse } from 'effect/http';
 import { TestClock } from 'effect/testing';
 import { AppLifecycle } from '../../src/app/service.ts';
-import type { PowerEvent } from '../../src/away/schema.ts';
 import { AwayWatch } from '../../src/away/service.ts';
 import type { DesktopStart } from '../../src/bridge/schema.ts';
 import { PageBridge } from '../../src/bridge/service.ts';

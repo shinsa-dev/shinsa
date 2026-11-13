@@ -146,6 +146,7 @@ const FEATURE_ROUTES = {
   'usage.watchdog_limits': [],
   'share.scopes': [],
   'suggestion.bundle': [],
+  'autopilot-slack': ['GET /api/slack/directory', 'POST /api/slack/test'],
   'shared-machine': ['GET /api/github-token', 'POST /api/github-token', 'POST /api/remote/teams/share'],
   'focus.projects': [],
   browser: [
@@ -158,6 +159,7 @@ const FEATURE_ROUTES = {
     'POST /api/browser/projects/([^/]+)/sites/remove',
     'POST /api/browser/projects/([^/]+)/sign-out',
   ],
+  'active-hours': [],
   initiatives: ['GET /api/initiatives', 'GET /api/initiatives/([^/]+)'],
   'slack-channel-triggers': ['GET /api/slack/channels'],
   'models.routing': [],
@@ -203,6 +205,7 @@ const OWNER_ONLY = [
   'POST /api/remote/teams/extra',
   'POST /api/remote/teams/key/request',
   'POST /api/remote/teams/key/answer',
+  'POST /api/slack/test',
   'POST /api/slack/disconnect',
   'GET /api/slack/channels',
   'POST /api/engine/restart',

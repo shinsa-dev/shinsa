@@ -158,6 +158,7 @@ export const UserCommand = Schema.Union([
     until: NullByDefault(Time, FIELD_MESSAGES.time),
   }),
   Command('away.record', { from: Time, to: Time }),
+  Command('autopilot.seen', { gateIds: List(GateId) }),
   Command('settings.change', { patch: SettingsPatch }),
   Command('task.create', {
     request: Text(),

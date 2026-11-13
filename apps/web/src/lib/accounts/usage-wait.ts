@@ -1,7 +1,7 @@
 import {
-  type AwayHours,
+  type ActiveHours,
   CLAUDE_PROVIDER,
-  isAwayAt,
+  isActiveAt,
   type Project,
   resolveModelFamilyLabel,
   resolveProviderLabel,
@@ -47,17 +47,17 @@ export function describeUsageWaitCountdown(wait: UsageWait, now: number) {
   return wait.resetAt <= now ? 'Starts now' : formatUntil('Starts', wait.resetAt, now);
 }
 
-function describeAdmissionTitle(wait: UsageWait, now: number, away: Option.Option<AwayHours>) {
-  if (isAwayAt(away, wait.resetAt) && !isAwayAt(away, now)) return 'Builds tonight';
+function describeAdmissionTitle(wait: UsageWait, now: number, hours: Option.Option<ActiveHours>) {
+  if (!isActiveAt(hours, wait.resetAt) && isActiveAt(hours, now)) return 'Builds tonight';
   return `Builds after ${formatMoment(wait.resetAt, now)}`;
 }
 
 export function describeUsageWaitTitle(
   wait: UsageWait,
   now = Date.now(),
-  away: Option.Option<AwayHours> = Option.none()
+  hours: Option.Option<ActiveHours> = Option.none()
 ) {
-  if (isAdmissionWait(wait)) return describeAdmissionTitle(wait, now, away);
+  if (isAdmissionWait(wait)) return describeAdmissionTitle(wait, now, hours);
   if (isPaceWait(wait)) return `Held at a usage limit: starts at ${formatMoment(wait.resetAt, now)}`;
   const next = wait.autoResume ? 'continues' : 'pauses for you';
   const account = wait.account?.email ? ` on ${wait.account.email}` : '';

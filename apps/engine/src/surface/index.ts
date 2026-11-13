@@ -231,6 +231,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['sources', 'List, add or remove the data sources a project’s agents read.'],
       ['focus', 'Show only some projects’ or one initiative’s work, for a while or until you clear it.'],
       ['away', 'Record a span you were away from your Mac, which your turnaround leaves out.'],
+      ['autopilot', 'Mark what Autopilot did for you as seen.'],
       ['repos', 'List repositories, and change their checks, base branch or where agents work.'],
       ['folders', 'Choose the folders Shinsa searches for repositories.'],
       ['accounts', 'Sign in, import, refresh or remove the Claude accounts agents run on.'],

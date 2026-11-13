@@ -17,6 +17,8 @@ export const SLACK_RELAY_PATHS = {
   post: '/__remote/slack/post',
   session: '/__remote/slack/session',
   react: '/__remote/slack/react',
+  directory: '/__remote/slack/directory',
+  notify: '/__remote/slack/notify',
   channels: '/__remote/slack/channels',
   watches: '/__remote/slack/watches',
 } as const;
@@ -35,15 +37,17 @@ const withNullDefault = <S extends Schema.Top>(schema: S) =>
 
 const SlackThread = Schema.Struct({ teamId: SlackId, channelId: SlackId, threadTs: SlackId });
 
+const SlackRelayMessage = Schema.Struct({
+  text: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.text)),
+  blocks: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)).check(
+    Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.blocks)
+  ),
+});
+
 export const SlackRelayPost = Schema.Struct({
   ...SlackThread.fields,
   replaceTs: withNullDefault(SlackId),
-  message: Schema.Struct({
-    text: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.text)),
-    blocks: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)).check(
-      Schema.isMaxLength(SLACK_RELAY_MESSAGE_LIMITS.blocks)
-    ),
-  }),
+  message: SlackRelayMessage,
 });
 
 export type SlackRelayPost = typeof SlackRelayPost.Type;
@@ -51,6 +55,49 @@ export type SlackRelayPost = typeof SlackRelayPost.Type;
 export const SlackRelayPosted = Schema.Struct({ ts: Schema.String });
 
 export type SlackRelayPosted = typeof SlackRelayPosted.Type;
+
+const SlackRelayMessageRef = Schema.Struct({ channelId: SlackId, ts: SlackId });
+
+export const SLACK_CONTACT_KINDS = ['slack_channel', 'slack_person'] as const;
+
+export const SlackRelayNotify = Schema.Struct({
+  teamId: SlackId,
+  kind: Schema.Literals(SLACK_CONTACT_KINDS),
+  id: SlackId,
+  replace: withNullDefault(SlackRelayMessageRef),
+  reply: withNullDefault(Schema.Struct({ channelId: SlackId, threadTs: SlackId })),
+  message: SlackRelayMessage,
+});
+
+export type SlackRelayNotify = typeof SlackRelayNotify.Type;
+
+export const SlackRelayNotified = SlackRelayMessageRef;
+
+export type SlackRelayNotified = typeof SlackRelayNotified.Type;
+
+export const SlackDirectoryQuery = Schema.Struct({ teamId: SlackId });
+
+export type SlackDirectoryQuery = typeof SlackDirectoryQuery.Type;
+
+export const SlackDirectoryEntry = Schema.Struct({
+  id: SlackId,
+  name: Schema.String,
+  image: Schema.optionalKey(Schema.String),
+});
+
+export type SlackDirectoryEntry = typeof SlackDirectoryEntry.Type;
+
+export const SlackDirectory = Schema.Struct({
+  teamId: SlackId,
+  channels: Schema.Array(SlackDirectoryEntry),
+  people: Schema.Array(SlackDirectoryEntry),
+});
+
+export type SlackDirectory = typeof SlackDirectory.Type;
+
+export interface SlackDirectoryView extends SlackDirectory {
+  problem: string | null;
+}
 
 export const SlackSessionStatus = Schema.Literals(SLACK_SESSION_STATUSES);
 
@@ -119,6 +166,18 @@ export function resolveSlackConnectUrl(origin: string, instanceId: string) {
 
 export function resolveSlackTaskUrl(origin: string, taskId: string) {
   return `${origin}/tasks/${encodeURIComponent(taskId)}`;
+}
+
+export function resolveSlackEscalationUrl(
+  origin: string,
+  state: ShinsaState,
+  taskId: string,
+  instanceId: string
+) {
+  const projectId = state.tasks[taskId]?.projectId;
+  const teamId = projectId ? state.projects[projectId]?.teamIds?.[0] : undefined;
+  if (!teamId) return resolveSlackTaskUrl(origin, taskId);
+  return `${origin}/teams/${[teamId, instanceId, taskId].map(encodeURIComponent).join('/')}`;
 }
 
 export interface SlackNames {

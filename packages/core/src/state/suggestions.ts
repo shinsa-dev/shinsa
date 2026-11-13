@@ -36,13 +36,20 @@ export function applySuggestionSettled(state: ShinsaState, event: EventOf<'sugge
     ),
   });
   record(state, event.taskId, event.at, {
-    actor: 'you',
+    actor: event.autopilot ? 'shinsa' : 'you',
     kind: 'suggestion',
     text: describeSettled(task, suggestion.title, event),
+    ...(event.autopilot ? { detail: event.autopilot } : {}),
   });
 }
 
+const AUTOPILOT_SETTLED: Record<'accepted' | 'dismissed', string> = {
+  accepted: 'Added for you by Autopilot',
+  dismissed: 'Dismissed for you by Autopilot',
+};
+
 function describeSettled(task: Task, title: string, event: EventOf<'suggestion.settled'>) {
+  if (event.autopilot) return `${AUTOPILOT_SETTLED[event.status]}: “${title}”`;
   if (event.keptRound === undefined) return describeSuggestionSettled(event.status, title);
   if (event.keptRound === resolveCurrentRound(task).number) {
     return `Kept “${title}” in this task and sent it to the agent`;

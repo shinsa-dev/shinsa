@@ -7,7 +7,7 @@ import type { InitiativePhase } from '../domain/initiatives.ts';
 import type { MemoryEntry } from '../domain/memory.ts';
 import type { OnBehalfAction } from '../domain/on-behalf.ts';
 import type { Schedule, WatchSuggestion } from '../domain/schedules.ts';
-import type { WebhookSignature } from '../domain/schema.ts';
+import { AutopilotContactPatch, type WebhookSignature } from '../domain/schema.ts';
 import type { Settings } from '../domain/settings.ts';
 import type { Focus, Gate, Project, Repo, Run, Task, TaskSuggestion } from '../domain/types.ts';
 import type { Watchdog } from '../domain/watchdogs.ts';
@@ -40,7 +40,7 @@ import type { RemoteSnapshot } from '../remote/status.ts';
 import type { TeamFeedSnapshot } from '../remote/teams.ts';
 import type { MergeStepView } from '../report/merge-steps.ts';
 import { AccessScopes } from '../scopes/schema.ts';
-import type { SlackSnapshot } from '../slack/relay.ts';
+import type { SlackDirectoryView, SlackSnapshot } from '../slack/relay.ts';
 import type { CoverageDetection } from '../test-coverage/types.ts';
 
 export const ENGINE_BODY_LIMIT_BYTES = 8 * 1024 * 1024;
@@ -767,6 +767,21 @@ export const PlacementAnswerBody = Schema.Unknown.pipe(
 export const SlackAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is SlackSnapshot => Predicate.isObject(value))
 );
+
+export const SlackDirectoryAnswer = Schema.Unknown.pipe(
+  Schema.refine((value): value is SlackDirectoryView => Predicate.isObject(value))
+);
+
+export const SlackDirectoryParams = { teamId: Schema.String };
+
+export const SlackTestBody = Schema.Struct({ contact: AutopilotContactPatch });
+
+export const SlackTestOutcome = Schema.Struct({
+  sent: Schema.Boolean,
+  problem: Schema.NullOr(Schema.String),
+});
+
+export type SlackTestOutcome = typeof SlackTestOutcome.Type;
 
 export const SignInAnswer = Schema.Unknown.pipe(
   Schema.refine((value): value is { readonly authorizationUrl: string | null } => Predicate.isObject(value))

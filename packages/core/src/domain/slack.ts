@@ -1,3 +1,30 @@
+import { Option } from 'effect';
+import { type AutopilotContact, isSameAutopilotContact } from './settings.ts';
+
+export interface SlackEscalationPost {
+  escalatedAt: number;
+  contact: AutopilotContact;
+  channelId: string | null;
+  ts: string | null;
+  followUpTs: string | null;
+}
+
+export type SlackEscalationPart = 'message' | 'follow_up';
+
+export function selectSlackEscalationPost(
+  posts: readonly SlackEscalationPost[] | undefined,
+  escalatedAt: number,
+  contact: AutopilotContact
+) {
+  return Option.fromNullishOr(
+    posts?.find((post) => post.escalatedAt === escalatedAt && isSameAutopilotContact(post.contact, contact))
+  );
+}
+
+export function describeSlackContact(contact: AutopilotContact) {
+  return contact.kind === 'slack_channel' ? `#${contact.name}` : contact.name;
+}
+
 export interface SlackThreadRef {
   teamId: string;
   channelId: string;

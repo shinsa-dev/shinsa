@@ -2,12 +2,14 @@ import { Option } from 'effect';
 import { AGENT_ROLES, resolveAgentProvider } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
+  type ActiveDay,
+  type AutopilotContact,
   DomainError,
   HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   isProjectKey,
+  isSameAutopilotContact,
   MAX_COMPACTION_LEAD_MINUTES,
-  MAX_URGENT_WAIT_MINUTES,
   NO_FOCUS,
   normaliseFocusProjects,
   PROJECT_COLORS,
@@ -80,13 +82,12 @@ function assertSettings(patch: Partial<Settings>) {
     });
   }
   assertWatchdogSettings(patch);
-  const wait = patch.autopilot?.urgentWaitMinutes;
-  if (wait !== undefined && !isWholeBetween(wait, 1, MAX_URGENT_WAIT_MINUTES)) {
-    throw new DomainError({
-      code: 'settings_invalid',
-      message: `An urgent change waits 1 to ${MAX_URGENT_WAIT_MINUTES} minutes.`,
-    });
+  const gates = patch.autopilot?.gates;
+  if (gates && new Set(gates).size !== gates.length) {
+    throw new DomainError({ code: 'settings_invalid', message: 'Name each Autopilot gate once.' });
   }
+  assertAutopilotContacts(patch.autopilot?.contacts);
+  assertActiveHours(patch.activeHours);
   const budget = patch.taskBudgetUsd;
   if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The cost limit must be above zero.' });
@@ -98,6 +99,44 @@ function assertSettings(patch: Partial<Settings>) {
   if (!isPaceLimit(patch.dailyUsageLimit)) {
     throw new DomainError({ code: 'settings_invalid', message: 'The daily usage limit must be above zero.' });
   }
+}
+
+function isActiveDay(day: ActiveDay) {
+  return (
+    isWholeBetween(day.weekday, 0, 6) &&
+    isWholeBetween(day.from, 0, 23) &&
+    isWholeBetween(day.to, day.from + 1, 24)
+  );
+}
+
+function hasOverlap(days: readonly ActiveDay[]) {
+  return days.some((day, index) =>
+    days
+      .slice(0, index)
+      .some((earlier) => earlier.weekday === day.weekday && earlier.from < day.to && day.from < earlier.to)
+  );
+}
+
+function assertActiveHours(days: readonly ActiveDay[] | null | undefined) {
+  if (!days) return;
+  if (days.every(isActiveDay) && !hasOverlap(days)) return;
+  throw new DomainError({
+    code: 'settings_invalid',
+    message:
+      'Active hours run from 0 to 24 on weekdays 0 to 6, each span ending after it starts, without overlaps.',
+  });
+}
+
+function assertAutopilotContacts(contacts: readonly AutopilotContact[] | undefined) {
+  if (!contacts) return;
+  const repeated = contacts.some((contact, index) =>
+    contacts.slice(0, index).some((earlier) => isSameAutopilotContact(earlier, contact))
+  );
+  if (repeated)
+    throw new DomainError({
+      code: 'settings_invalid',
+      message: 'Each Slack channel or person is listed once.',
+    });
 }
 
 function isPaceLimit(limit: number | null | undefined) {

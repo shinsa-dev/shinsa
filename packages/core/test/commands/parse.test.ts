@@ -453,6 +453,33 @@ describe('parseUserCommand', () => {
     expect(() => parseCommand({ type: 'task.cancel' })).toThrow(DomainError);
   });
 
+  test('reads the Autopilot contacts, and refuses one it cannot reach', () => {
+    const channel = { kind: 'slack_channel' as const, teamId: 'T1', id: 'C9', name: 'oncall' };
+    const person = { kind: 'slack_person' as const, teamId: 'T1', id: 'U7', name: 'Kai' };
+    expect(
+      parseCommand({ type: 'settings.change', patch: { autopilot: { contacts: [channel, person] } } })
+    ).toEqual({
+      type: 'settings.change',
+      patch: { autopilot: { contacts: [channel, person] } },
+    });
+    const refused: [unknown, string][] = [
+      [[{ ...channel, id: 'C9 <!channel>' }], 'A Slack id is letters, digits, dots, dashes and underscores.'],
+      [[{ ...channel, name: '' }], 'name must not be empty.'],
+      [[{ ...channel, name: 'x'.repeat(81) }], 'name is longer than 80 characters.'],
+      [[{ kind: 'slack_person', teamId: 'T1', name: 'Kai' }], 'id'],
+      [[{ kind: 'team' }], 'kind must be one of slack_channel, slack_person.'],
+      [
+        Array.from({ length: 6 }, (_, index) => ({ ...channel, id: `C${index}` })),
+        'has more than 5 entries.',
+      ],
+    ];
+    for (const [contacts, message] of refused) {
+      expect(() => parseCommand({ type: 'settings.change', patch: { autopilot: { contacts } } })).toThrow(
+        message
+      );
+    }
+  });
+
   test('never carries prototype keys into the command', () => {
     const parsed = parseCommand(JSON.parse('{"type":"task.cancel","taskId":"t1","__proto__":{"x":1}}'));
     expect(Object.keys(parsed)).toEqual(['type', 'taskId']);

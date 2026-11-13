@@ -22,6 +22,7 @@ function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (gate.type === 'result') return 'Closed the task';
   if (event.autopilot && gate.type === 'merge')
     return `Approved the merge for you by Autopilot: ${gate.title}`;
+  if (event.autopilot && isAgentQuestion(gate)) return `Answered for you by Autopilot: ${gate.title}`;
   if (event.autopilot) return `Approved for you by Autopilot: ${gate.title}`;
   if (event.ahead) return `Approved after the fix, as you asked: ${gate.title}`;
   if (event.thenApprove) return `Asked for changes and to approve after the fix: ${gate.title}`;
@@ -67,6 +68,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
     response: event.response,
     answeredAt: event.at,
     ...(event.verdicts ? { verdicts: event.verdicts } : {}),
+    ...(event.autopilot ? { autopilotAnswer: event.autopilot } : {}),
   });
   const gate = state.gates[event.gateId];
   if (!gate) return;

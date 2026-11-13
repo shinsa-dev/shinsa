@@ -9,7 +9,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
     "default-src 'self'",
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://avatars.githubusercontent.com",
+    "img-src 'self' data: blob: https://avatars.githubusercontent.com https://avatars.slack-edge.com https://a.slack-edge.com https://secure.gravatar.com",
     "font-src 'self' data:",
     "connect-src 'self' blob: wss://*.shinsa.dev",
     "media-src 'self' blob:",
