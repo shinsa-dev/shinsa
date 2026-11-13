@@ -43,7 +43,7 @@ import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
-import { learnFromCancel, learnFromPriority, learnFromRequest } from './lessons.ts';
+import { isYours, learnFromCancel, learnFromPriority } from './lessons.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { finishMove } from './moves.ts';
@@ -74,6 +74,7 @@ interface TaskLineage {
   scheduleId?: string;
   sourceReport?: SourceReport;
   shape?: TaskShape;
+  learned?: true;
 }
 
 function resolveCreatedOwner(decider: Decider, lineage: TaskLineage) {
@@ -133,9 +134,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
 }
 
 export function createTaskAsYou(decider: Decider, command: CommandOf<'task.create'>) {
-  const taskId = createTask(decider, command);
-  learnFromRequest(decider, taskId);
-  return taskId;
+  return createTask(decider, command, isYours(decider) ? { learned: true } : {});
 }
 
 function inferDependencies(decider: Decider, taskId: string, ids: string[], stacked: string[]) {

@@ -9,7 +9,7 @@ import {
 } from '../domain/index.ts';
 import { listRunningRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
-import { learnFromEdit } from './lessons.ts';
+import { isYours } from './lessons.ts';
 
 export function recordEdit(decider: Decider, command: CommandOf<'task.record_edit'>) {
   const task = decider.task(command.taskId);
@@ -18,8 +18,14 @@ export function recordEdit(decider: Decider, command: CommandOf<'task.record_edi
   const edited = (task.editedPaths ?? []).includes(command.path);
   const untold = (task.untoldEdits ?? []).includes(command.path);
   if (command.changed ? edited && untold : !edited) return;
-  decider.emit({ type: 'task.edited', taskId: task.id, path: command.path, changed: command.changed });
-  if (command.changed && !edited) learnFromEdit(decider, task.id, command.path);
+  const learned = command.changed && !edited && isYours(decider);
+  decider.emit({
+    type: 'task.edited',
+    taskId: task.id,
+    path: command.path,
+    changed: command.changed,
+    ...(learned ? { learned: true as const } : {}),
+  });
   if (!command.changed || untold) return;
   const running = listRunningRuns(decider.state, task.id).find(
     (run) => run.status !== 'waiting' && !isDelegatedRun(run)

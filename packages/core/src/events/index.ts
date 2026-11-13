@@ -126,6 +126,7 @@ type EventBody =
       scheduleId?: string | null;
       sourceReport?: SourceReport | null;
       watchHome?: boolean;
+      learned?: true;
       forkOf?: string | null;
       teammateFork?: TeammateFork | null;
     }
@@ -234,7 +235,7 @@ type EventBody =
   | { type: 'worktree.removed'; taskId: string }
   | { type: 'task.moving'; taskId: string; repoId: string; runId: string; reason: string }
   | { type: 'task.moved'; taskId: string; repoId: string }
-  | { type: 'task.edited'; taskId: string; path: string; changed: boolean }
+  | { type: 'task.edited'; taskId: string; path: string; changed: boolean; learned?: true }
   | { type: 'task.edits_told'; taskId: string }
   | { type: 'task.overlapped'; taskId: string; otherTaskId: string; paths: string[] }
   | { type: 'task.overlaps_told'; taskId: string }

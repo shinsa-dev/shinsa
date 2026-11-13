@@ -2179,9 +2179,10 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   review finding you mark fix or dismiss, and each suggested task you accept, dismiss or keep in its task
   (`listGateDecisionDrafts`), and each message you send a task's agent (`message`, `sent`), priority you change
   (`priority`, `raised` or `lowered`), task you cancel (`cancel`, `cancelled`), task you file (`request`, `filed`,
-  its request as the note, from `task.create` sent as you: `createTaskAsYou`) and file you first change in the Code
-  tab (`edit`, `edited`, its path as the note, from `task.record_edit`), all recorded from
-  `decide/lessons.ts` as `autopilot.decided {decisions}`. An
+  its request as the note: `createTaskAsYou` marks `task.created` with `learned`) and file you first change in the
+  Code tab (`edit`, `edited`, its path as the note: `task.edited` with `learned`). The rest are recorded from
+  `decide/lessons.ts` as `autopilot.decided {decisions}`; a filed task and an edit fold into the profile from their own
+  event, so learning them adds no event to the log. An
   `AutopilotDecision` keeps its kind (`AutopilotDecisionKind`), your answer (`AutopilotDecisionAnswer`: `approved`,
   `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted`, `kept`, `sent`, `raised`, `lowered`,
   `cancelled`, `filed` or `edited`), the project, the reviewer's risk, the plan's

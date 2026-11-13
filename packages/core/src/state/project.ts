@@ -73,6 +73,8 @@ import {
   applyAutopilotScheduled,
   applyEscalationRevised,
   applyTaskEscalated,
+  applyEditLearned,
+  applyTaskRequestLearned,
 } from './autopilot.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
@@ -885,6 +887,7 @@ function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
   recordCourierTask(state, event);
   recordFork(state, event);
   applyScheduledTask(state, event);
+  applyTaskRequestLearned(state, event);
 }
 
 export function applyEvent(state: ShinsaState, event: ShinsaEvent): ShinsaState {
@@ -1137,6 +1140,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.edited':
       applyEdited(state, event);
+      applyEditLearned(state, event);
       break;
     case 'task.edits_told':
       updateTask(state, event.taskId, event.at, { untoldEdits: [] });
