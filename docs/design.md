@@ -3214,8 +3214,7 @@ Only these, and they win over anything below:
     Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'
     judgement calls are entries of the lead's Activity, among its own. Home and the queue are for tasks: they list an
     initiative's members where any task sits (Needs you, In progress, Waiting) and never its lead, which you reach from a
-    member's initiative fact or ⌘K. The composer's Kind of task stays on Auto unless you
-    pick Initiative. A member's Overview facts name its initiative and phase and open the lead task, and its menus
+    member's initiative fact or ⌘K. The composer has no kind of task to pick. A member's Overview facts name its initiative and phase and open the lead task, and its menus
     carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's
     menu carries Edit the initiative and Share with a team (a submenu of your teams, each ticked while shared). Once a
     teammate's task is in the initiative the card uses All tasks' team table (`TEAM_TASK_LIST_COLUMNS`, with Repository

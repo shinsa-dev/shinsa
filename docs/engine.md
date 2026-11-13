@@ -1532,10 +1532,10 @@ the fold in `state/initiatives.ts`, the sheet in `initiatives/`); the engine ser
 (`apps/engine/src/surface/initiatives.ts`, `http/initiative-views.ts`, `initiatives/service.ts`) and the web app draws
 it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
 
-- **Starting one.** You start one like any task: Home's composer with Kind of task set to Initiative, or `shinsa tasks
-  create --initiative` (`task.create` with `initiative: true`). The request's first line names it and the rest
-  describes it; Shinsa creates the `Initiative` record and its lead task in one command (`createInitiativeTask`), the
-  lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
+- **Starting one.** Home's composer never starts one: it leaves the kind of every task to Shinsa. An agent or the
+  command line starts one with `shinsa tasks create --initiative` (`task.create` with `initiative: true`). The
+  request's first line names it and the rest describes it; Shinsa creates the `Initiative` record and its lead task
+  in one command (`createInitiativeTask`), the lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
   either: **Make an initiative from this task** (`initiative.adopt_task`: the task's menus, ⌘K, `shinsa initiatives
   adopt`) and a plan that asks for one (below) make it for you.
 - **The record.** `Initiative { id, name, description, phases, leadTaskId, createdAt, updatedAt }`, plus the lead's
