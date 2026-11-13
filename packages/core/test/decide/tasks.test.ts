@@ -2,7 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { resolveCurrentPhase } from '../../src/decide/lifecycle.ts';
 import { findTask } from '../../src/index.ts';
 import type { TaskOwner } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, proposePlan, registerRepo, shipAndMerge } from '../harness.ts';
+import {
+  buildAll,
+  createHarness,
+  createTask,
+  proposePlan,
+  registerRepo,
+  shipAndMerge,
+  spendRetries,
+} from '../harness.ts';
 
 const KAI: TaskOwner = { login: 'kai', name: 'Kai Lee', avatarUrl: 'https://avatars.example/kai' };
 
@@ -144,7 +152,7 @@ describe('finished tasks', () => {
 });
 
 describe('system commands that arrive twice', () => {
-  test('the same failure reported again keeps the gate that is open', () => {
+  test('the same failure reported again keeps the retry that is armed, and the gate that is open', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const failure = {
@@ -154,11 +162,16 @@ describe('system commands that arrive twice', () => {
       detail: 'x',
     } as const;
     harness.send(failure);
+    expect(harness.task(taskId).autoRetry).toMatchObject({ attempt: 1, status: 'armed' });
+    expect(harness.send(failure).events).toEqual([]);
+    harness.send({ ...failure, detail: 'GitHub is down.' });
+    expect(harness.task(taskId).autoRetry).toMatchObject({ attempt: 2, detail: 'GitHub is down.' });
+
+    spendRetries(harness, taskId);
+    harness.send(failure);
     const gate = harness.openGate(taskId);
     expect(harness.send(failure).events).toEqual([]);
     expect(harness.openGate(taskId).id).toBe(gate.id);
-    harness.send({ ...failure, detail: 'GitHub is down.' });
-    expect(harness.openGate(taskId).body).toBe('GitHub is down.');
   });
 
   test('a GitHub SSO refusal opens the SSO gate instead of the raw error, once', () => {

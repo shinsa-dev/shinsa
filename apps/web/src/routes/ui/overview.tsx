@@ -14,6 +14,7 @@ import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
 import { OperationCard } from '@/components/overview/operation-card.tsx';
 import { TaskTrack } from '@/components/overview/progress-track.tsx';
 import { ResultPanel } from '@/components/overview/result-panel.tsx';
+import { RetryCard } from '@/components/overview/retry-card.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
@@ -66,7 +67,7 @@ function EscalatedReview({ state, task, gate }: { state: ShinsaState; task: Task
 
 export function OverviewSpecimens() {
   const [now] = React.useState(Date.now);
-  const [{ state, tasks, gates, runs, usageWaits, monitor, results, answered }] = React.useState(() =>
+  const [{ state, tasks, gates, runs, usageWaits, monitor, retry, results, answered }] = React.useState(() =>
     createOverviewScene(now)
   );
   const ignore = () => undefined;
@@ -127,6 +128,17 @@ export function OverviewSpecimens() {
               onToggle={acknowledgeSample}
             />
           ))}
+        </Card>
+      </Specimen>
+      <Specimen label='RetryCard · retrying a failed step on its own'>
+        <Card>
+          <RetryCard
+            state={state}
+            task={tasks.retry}
+            retry={retry}
+            onRetry={acknowledgeSample}
+            onStop={acknowledgeSample}
+          />
         </Card>
       </Specimen>
       <Specimen label='WaitCard · waiting to check in again'>

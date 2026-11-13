@@ -164,11 +164,11 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
     settleTask(decider, gate.taskId, 'cancelled', 'cancelled after a failure');
     return;
   }
+  decider.resetRecoveries(gate.taskId);
   if (gate.cause === 'push_hook') {
     retryHookFix(decider, gate.taskId, decision === 'reply' ? response : null);
     return;
   }
-  decider.resetRecoveries(gate.taskId);
   acknowledgeBudget(decider, gate);
   retryTask(decider, gate.taskId, decision === 'reply' ? response : null);
 }

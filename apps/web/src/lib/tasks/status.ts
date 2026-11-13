@@ -4,6 +4,7 @@ import {
   type GateType,
   isHeldInBacklog,
   isPausingGate,
+  isRetryArmed,
   type Run,
   type ShinsaState,
   selectLeadGate,
@@ -37,6 +38,8 @@ function resolveGlyph(type: GateType): Glyph {
 
 const RESOLVING_CONFLICTS = 'Resolving conflicts';
 
+const RETRYING: Status = { label: 'Retrying', tone: 'amber' };
+
 const WAITING_TO_CHECK_IN: Status = { label: 'Waiting to check in again', tone: 'neutral' };
 
 const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 'neutral' };
@@ -48,6 +51,7 @@ const WAITING_TO_BUILD: Status = { label: 'Waiting to build', tone: 'neutral' };
 const WAITING_FOR_DELEGATIONS: Status = { label: 'Waiting for delegations', tone: 'neutral' };
 
 const PAUSED: ReadonlySet<Status> = new Set([
+  RETRYING,
   WAITING_TO_CHECK_IN,
   WAITING_FOR_USAGE,
   HELD_AT_LIMIT,
@@ -120,6 +124,7 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (isMergingWithBundle(state, task)) return BUNDLE_MERGING_STATUS;
   if (task.duplicate) return DUPLICATE;
   if (isWatchedTask(task)) return WATCHING;
+  if (isRetryArmed(task)) return RETRYING;
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
   if (isUsageWaitArmed(task)) {
     if (isAdmissionWait(task.usageWait)) return WAITING_TO_BUILD;
@@ -170,6 +175,7 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
   if (gate) return resolveGateGlyph(gate).icon;
   if (task.duplicate) return TASK_GROUP.duplicate.icon;
   if (isWatchedTask(task)) return 'IconRadar';
+  if (isRetryArmed(task)) return 'IconArrowRotateClockwise';
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
   if (isUsageWaitArmed(task)) return 'IconGauge';
   if (isWaitingForDelegations(state, task)) return 'IconAgents';

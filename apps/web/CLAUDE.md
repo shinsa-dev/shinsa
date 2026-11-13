@@ -65,7 +65,7 @@ src/
 │                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
 │                        tasks, and BundleMark, its count beside a queue row's name, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
-│                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
+│                        frame, the wait, usage-wait, retry (an armed automatic retry: its reason, countdown, Retry now and Stop retrying), setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
@@ -306,7 +306,7 @@ src/
     │                    evidence), runs.ts (a test or check run's commands, outcomes and counts), layout.ts (the round's items grouped by kind, comparisons as one item, a check's pieces as one item, the viewer's images
     │                    numbered item by item with their parts, the count of items by kind, the folder on disk), texts.ts (the bounded text cache; /ui records its samples in it), prefetch.ts (images and texts
     │                    read ahead with the task)
-    ├── overview/        Now card titles, progress steps, activity glyphs and check details, waits,
+    ├── overview/        Now card titles, progress steps, activity glyphs and check details, waits, automatic retries (retry.ts),
     │                    questions, verdicts, plan versions, plan parameters, the operation gate and its notes
     ├── tasks/           prefetch.ts (the task under the pointer or highlighted in ⌘K, the queue's tasks read at idle),
     │                    checks.ts (the Checks list: the task's checks and the repository's baseline with their latest

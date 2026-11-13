@@ -5,6 +5,7 @@ import {
   hasBlockingCiFailure,
   hasStep,
   isFailedCiRun,
+  isRetryArmed,
   isTaskSettled,
   listInheritedCiFailures,
   type MergeQueueEntry,
@@ -148,7 +149,7 @@ function keepsMergeGate(
 }
 
 function isMerging(decider: Decider, task: Task) {
-  return task.stage === 'awaiting_merge' && !hasMergeGate(decider, task.id);
+  return task.stage === 'awaiting_merge' && !isRetryArmed(task) && !hasMergeGate(decider, task.id);
 }
 
 function holdForBlockers(decider: Decider, task: Task) {
@@ -445,7 +446,7 @@ export function recordPullRequestReadFailure(
   recordWatch(decider, task.id, { ...watch, stopped: 'unreadable' }, []);
   if (Option.isSome(sso)) {
     const gate = resolveGitHubSsoGate(sso.value);
-    decider.fail(task.id, gate.title, gate.body, null, gate.cause, { githubSso: gate.githubSso });
+    decider.hold(task.id, gate.title, gate.body, null, gate.cause, { githubSso: gate.githubSso });
     return;
   }
   decider.fail(
@@ -472,8 +473,8 @@ export function recordUploads(decider: Decider, command: CommandOf<'evidence.rec
 }
 
 function isShippingNow(decider: Decider, task: Task) {
-  if (task.stage !== 'shipping' || decider.hasOpenGate(task.id, (gate) => gate.type === 'failure'))
-    return false;
+  if (task.stage !== 'shipping' || isRetryArmed(task)) return false;
+  if (decider.hasOpenGate(task.id, (gate) => gate.type === 'failure')) return false;
   return task.pushPending === true || task.pullRequest === null;
 }
 
@@ -524,6 +525,7 @@ function isSameBundleConflict(a: BundleConflict | null, b: BundleConflict | null
 export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.record_check'>) {
   const task = decider.task(command.taskId);
   if (isTaskSettled(task) || !isShipping(task) || isMerging(decider, task)) return;
+  if (task.pullRequest?.state !== 'open') return;
   const { conflict } = command;
   const changed = !isSameBundleConflict(task.bundleConflict ?? null, conflict);
   if (changed) decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });

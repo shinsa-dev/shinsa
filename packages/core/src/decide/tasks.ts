@@ -2,6 +2,7 @@ import { Option } from 'effect';
 import type { CommandOf, TriageReasons } from '../commands/index.ts';
 import {
   copyUnreachedTeammate,
+  describeRetriesSpent,
   DomainError,
   hasStep,
   isTaskResting,
@@ -45,7 +46,7 @@ import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } f
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { finishMove } from './moves.ts';
-import { retryTask } from './retry.ts';
+import { retryArmedTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
 import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
 
@@ -295,8 +296,7 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
     }
     decider.bindNextRun(task.id, command.account);
   }
-  decider.resetRecoveries(command.taskId);
-  retryTask(decider, command.taskId, null);
+  retryArmedTask(decider, command.taskId, decider.context.onBehalf ? 'shinsa' : 'you', null);
 }
 
 export function readyWorktree(decider: Decider, command: CommandOf<'worktree.ready'>) {
@@ -344,22 +344,33 @@ export function removeWorktree(decider: Decider, command: CommandOf<'worktree.go
   finishMove(decider, command.taskId);
 }
 
-function resolveEffectFailure(decider: Decider, command: CommandOf<'effect.fail'>) {
+function isRepeatedFailure(decider: Decider, command: CommandOf<'effect.fail'>) {
+  const retry = decider.task(command.taskId).autoRetry;
+  if (retry?.status === 'armed') return retry.title === command.title && retry.detail === command.detail;
+  const bodies = [command.detail, describeRetriesSpent(command.detail)];
+  return decider.hasOpenGate(
+    command.taskId,
+    (gate) => gate.type === 'failure' && gate.title === command.title && bodies.includes(gate.body)
+  );
+}
+
+function holdGitHubSso(decider: Decider, command: CommandOf<'effect.fail'>) {
   const owner = resolveTaskGitHubOwner(decider.state, decider.task(command.taskId));
-  return Option.match(parseGitHubSso(command.detail, owner), {
-    onNone: () => ({ title: command.title, body: command.detail, cause: undefined, githubSso: null }),
-    onSome: resolveGitHubSsoGate,
-  });
+  const sso = parseGitHubSso(command.detail, owner);
+  if (Option.isNone(sso)) return false;
+  const gate = resolveGitHubSsoGate(sso.value);
+  const repeated = decider.hasOpenGate(
+    command.taskId,
+    (open) => open.type === 'failure' && open.title === gate.title && open.body === gate.body
+  );
+  if (!repeated) {
+    decider.hold(command.taskId, gate.title, gate.body, null, gate.cause, { githubSso: gate.githubSso });
+  }
+  return true;
 }
 
 export function failEffect(decider: Decider, command: CommandOf<'effect.fail'>) {
-  const failure = resolveEffectFailure(decider, command);
-  const repeated = decider.hasOpenGate(
-    command.taskId,
-    (gate) => gate.type === 'failure' && gate.title === failure.title && gate.body === failure.body
-  );
-  if (repeated) return;
-  decider.fail(command.taskId, failure.title, failure.body, null, failure.cause, {
-    githubSso: failure.githubSso,
-  });
+  if (holdGitHubSso(decider, command)) return;
+  if (isRepeatedFailure(decider, command)) return;
+  decider.fail(command.taskId, command.title, command.detail);
 }

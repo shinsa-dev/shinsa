@@ -99,6 +99,7 @@ import {
   recordUploads,
 } from './pull-requests.ts';
 import { fileReport, reportRead } from './reads.ts';
+import { autoRetryTask } from './retry.ts';
 import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
@@ -446,6 +447,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return resumeUsageWaitNow(decider, command);
     case 'usage_wait.resume':
       return resumeUsageWait(decider, command);
+    case 'task.auto_retry':
+      return autoRetryTask(decider, command);
     case 'account.signed_in':
       return recordSignedIn(decider, command);
     case 'account.removed':

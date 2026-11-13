@@ -8,6 +8,14 @@ export function requestCheckInNow(taskId: string) {
   return sendCommandWithToast({ type: 'monitor.check_in_now', taskId }, 'Checking in now.');
 }
 
+export function requestRetryNow(taskId: string) {
+  return sendCommandWithToast({ type: 'task.retry', taskId }, 'Retrying now.');
+}
+
+export function stopRetrying(taskId: string) {
+  return sendCommandWithToast({ type: 'task.pause', taskId }, 'Stopped retrying.');
+}
+
 export function snoozeSilence(runId: string, now = Date.now()) {
   return sendCommandWithToast(
     { type: 'run.snooze_silence', runId, until: now + SILENCE_MINUTES.snooze * MINUTE_MS },
