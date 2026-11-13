@@ -299,7 +299,8 @@ describe('Settings → Agents → Autopilot', () => {
     expect(screen.getByText(gauge.getAttribute('value') ?? '')).toBeTruthy();
     expect(screen.queryByText('Ready')).toBeNull();
     expect(screen.queryByRole('progressbar')).toBeNull();
-    expect(screen.getByText('94%')).toBeTruthy();
+    expect(screen.queryByText('Agrees with you')).toBeNull();
+    expect(screen.queryByText('94%')).toBeNull();
     expect(screen.queryByText('50')).toBeNull();
     expect(screen.queryByText('What it learned')).toBeNull();
     expect(listSentCommands()).toEqual([]);

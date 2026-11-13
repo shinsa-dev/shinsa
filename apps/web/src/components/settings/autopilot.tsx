@@ -17,6 +17,7 @@ import {
 } from '@shinsa/ui/components/command';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
+import { ProgressRing } from '@shinsa/ui/components/progress-ring';
 import { toast } from '@shinsa/ui/components/sonner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -74,7 +75,6 @@ import {
   SettingsGroup,
   TOKEN_TEXT,
 } from './group.tsx';
-import { ScoreGauge } from './score-gauge.tsx';
 
 function BlockHeader({
   icon,
@@ -267,11 +267,8 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
     >
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.score} description={view.score.detail}>
         <span className='pr-1'>
-          <ScoreGauge value={view.score.value} label={AUTOPILOT_SCORE_ROWS.score} ready={view.score.ready} />
+          <ProgressRing value={view.score.value} label={AUTOPILOT_SCORE_ROWS.score} done={view.score.ready} />
         </span>
-      </DescribedRow>
-      <DescribedRow title={AUTOPILOT_SCORE_ROWS.agreement} description={view.agreement.detail}>
-        {view.agreement.percent && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.agreement.percent}</span>}
       </DescribedRow>
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.suggested} description={view.suggested.detail}>
         {view.suggested.apply ? (

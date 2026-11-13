@@ -1703,6 +1703,21 @@ Do: one sentence of what will happen in the description. Don't: put a form in it
 
 **In Shinsa** the plot runs the full width of its panel: three dashed `border-border` grid lines (the top of a readable scale, its middle and 0, none stronger than the others) that fade out at both ends, the top value alone in a small label above the top right, up to five dates under it, and on hover a dashed `border-fg-1` crosshair and an 8px accent dot ringed in the card colour that glide to the next point (200ms ease-out), with a `ChartTooltip` above the point.
 
+#### ProgressRing
+
+A small round gauge for a score out of 100: a 2.5px track in `bg-a2`, the accent arc over it from the top, round at both ends, and the value in its centre.
+
+**Props:**
+
+| Prop | Default | Notes |
+| --- | --- | --- |
+| `value` | required | 0 to 100, drawn clamped. |
+| `label` | required | What it measures; a hidden `<meter>` carries it and the value. |
+| `done` | `false` | The full accent once the value means done; the accent at 60% before. |
+| `className` | | A size class to change its 32px. |
+
+**In Shinsa** it is the Autopilot score in Settings → Agents → Autopilot, at the end of its row.
+
 #### ChartTooltip
 
 **For:** the readout a chart shows under the pointer: a day in the contribution graph, a point on an area chart, a bar of a stacked chart. **Not for:** anything with a trigger element (use `Hint` or `useTooltipTrigger`, which wait `TOOLTIP_DELAY`); a chart's readout follows the pointer at once.

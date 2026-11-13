@@ -2300,10 +2300,11 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews,
   Suggested tasks, Watchdog tasks: Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
   approved). Who it asks: Your team (Only as a last resort, or Never), your team in Shinsa and the Slack contacts.
-  Usage limits (Ignore them or Keep them). How well it knows you: Autopilot score, a ring gauge with the score out of 100 in its
-  centre (`value`; a count has no maximum, so it shows a score, not how many decisions), Most things suggested at 90,
-  Agrees with you (the recency-weighted share of its guesses that matched you, with how many of how many), and the
-  suggested level with a Use button while it differs from yours.
+  Usage limits (Ignore them or Keep them). How well it knows you: Autopilot score, a small ring gauge with rounded ends and the score out
+  of 100 in its centre (`value`: the recency-weighted share of its guesses that matched you, held lower while it has
+  few; a count has no maximum, so it shows a score, not how many decisions), with how many of how many it guessed
+  right under it and Most things suggested at 90, and the suggested level with a Use button while it differs from
+  yours. There is no separate agreement row: once it has enough guesses the score is that agreement.
 - **Urgent work and usage limits.** With the policy on and `ignoreUsageLimits` set (`isUsageLimitExempt`), an urgent
   task's runs skip both holds before they start: `holdForBudget` (the task's usage and cost limits) and `holdForPace`
   (the daily and project usage limits). Marking a task urgent starts a step either hold stopped (`releasePaceHolds`

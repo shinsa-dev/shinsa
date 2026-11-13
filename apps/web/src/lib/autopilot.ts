@@ -2,7 +2,6 @@ import {
   AUTOPILOT_SCORE_LIMITS,
   type AutopilotContact,
   type AutopilotContactKind,
-  type AutopilotDecisionKind,
   type AutopilotDone,
   type AutopilotGateKind,
   type AutopilotGate,
@@ -153,24 +152,8 @@ export const AUTOPILOT_BLOCKS = {
 
 export const AUTOPILOT_SCORE_ROWS = {
   score: 'Autopilot score',
-  agreement: 'Agrees with you',
   suggested: 'Suggested level',
 } as const;
-
-const DECISION_NOUN: Record<AutopilotDecisionKind, string> = {
-  plan: 'plans',
-  question: 'questions',
-  review: 'reviews',
-  merge: 'merges',
-  proposal: 'proposals',
-  finding: 'findings',
-  suggestion: 'suggested tasks',
-  message: 'messages',
-  priority: 'priority changes',
-  cancel: 'cancelled tasks',
-  request: 'tasks you filed',
-  edit: 'your code edits',
-};
 
 const LEVEL_LABEL: Record<AutopilotLevel, string> = {
   ask_first: 'Ask me first',
@@ -180,28 +163,14 @@ const LEVEL_LABEL: Record<AutopilotLevel, string> = {
 
 export interface AutopilotScoreView {
   score: { detail: string; value: number; ready: boolean };
-  agreement: { detail: string; percent: string | null };
   suggested: { level: AutopilotLevel; detail: string; apply: string | null };
 }
 
-function joinNouns(nouns: readonly string[]) {
-  if (nouns.length < 2) return nouns.join('');
-  return `${nouns.slice(0, -1).join(', ')} and ${nouns.at(-1)}`;
-}
-
-function describeLearnedDecisions(state: Pick<ShinsaState, 'autopilotProfile'>, total: number) {
-  if (total === 0) return 'Out of 100. It learns from everything you decide, file, edit and send.';
-  const tallies = state.autopilotProfile.tallies
-    .filter((tally) => tally.projectId === null && tally.risk === null)
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 3);
-  const most = joinNouns(tallies.map((tally) => DECISION_NOUN[tally.kind]));
-  return `Out of 100, from every decision you made, the recent ones the most. Most are ${most}.`;
-}
-
-function describeAgreement(score: AutopilotScore) {
-  if (score.scored === 0) return 'Once Autopilot guesses your plans, reviews and merges and you decide them.';
-  if (score.ready) return `It guessed you right on ${score.agreed} of ${score.scored} and keeps learning.`;
+function describeScore(score: AutopilotScore) {
+  if (score.scored === 0)
+    return 'How often it guesses your plans, reviews and merges right, out of 100. It starts once you decide some.';
+  if (score.ready)
+    return `It guessed you right on ${score.agreed} of ${score.scored}, the recent ones counting most.`;
   if (score.scored < AUTOPILOT_SCORE_LIMITS.minScored)
     return `It guessed you right on ${score.agreed} of ${score.scored} so far and needs more to be sure.`;
   return `It guessed you right on ${score.agreed} of ${score.scored}, but not often enough lately.`;
@@ -218,15 +187,7 @@ export function resolveAutopilotScoreView(
 ): AutopilotScoreView {
   const score = resolveAutopilotScore(state);
   return {
-    score: {
-      detail: describeLearnedDecisions(state, score.learned),
-      value: score.value,
-      ready: score.ready,
-    },
-    agreement: {
-      detail: describeAgreement(score),
-      percent: score.agreement === null ? null : `${Math.floor(score.agreement * 100)}%`,
-    },
+    score: { detail: describeScore(score), value: score.value, ready: score.ready },
     suggested: {
       level: score.suggested,
       detail: describeSuggested(score),
