@@ -71,16 +71,27 @@ function SessionControls({ clock, attached }: { clock: string; attached: number 
   );
 }
 
+function RecordingDot() {
+  return (
+    <span aria-hidden className='grid size-5.5 shrink-0 place-items-center'>
+      <span className='koe-breathe size-2.5 rounded-full bg-red-4' />
+    </span>
+  );
+}
+
 function PromptControls({ pill }: { pill: Extract<KoePill, { kind: 'prompt' }> }) {
   return (
     <>
-      <Waveform bars={9} />
+      {pill.stage === 'recording' ? <RecordingDot /> : <Waveform bars={9} />}
       <span className='flex w-60 min-w-0 flex-col'>
         <span className='truncate text-[13px] leading-4 font-medium text-fg-4'>{pill.title}</span>
         <span className='truncate text-[11px] leading-4 text-fg-2'>{pill.detail}</span>
       </span>
       <span className='flex items-center gap-1'>
         <PillButton icon='IconCrossSmall' tone='destructive' label='Cancel' />
+        {pill.stage === 'recording' && (
+          <PillButton icon='IconCheckmark1' tone='action' label='Stop recording' />
+        )}
         {pill.stage === 'listening' && (
           <>
             <PillButton icon='IconPause' tone='neutral' label='Pause' />

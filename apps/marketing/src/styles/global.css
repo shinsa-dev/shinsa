@@ -231,6 +231,16 @@ body {
   }
 }
 
+.koe-breathe {
+  animation: koe-breathe 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes koe-breathe {
+  from {
+    opacity: 0.35;
+  }
+}
+
 .koe-draw {
   animation: koe-draw 1100ms cubic-bezier(0.3, 0, 0.2, 1) both;
 }
@@ -248,6 +258,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .koe-swap,
   .koe-wave span,
+  .koe-breathe,
   .koe-draw {
     animation: none;
   }

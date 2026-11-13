@@ -12,8 +12,8 @@ export const site = {
 
 export const koeSite = {
   path: '/koe',
-  title: 'Koe: Dictation for the Mac, on Device',
+  title: 'Koe: Talk, Point and Paste on the Mac',
   description:
-    'Hold Fn and talk. Koe writes it down on your Mac and copies one bundle: your words with the screenshots, clips and comments you added while you talked.',
+    'Hold Fn and talk. Comment on the screen, take screenshots and clips, drop in files, and Koe copies one bundle with your words and every attachment, all on your Mac.',
   downloadUrl: 'https://shinsa.dev/koe/download',
 };

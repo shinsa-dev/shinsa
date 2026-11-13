@@ -1,11 +1,12 @@
 ---
 import { Icon } from '@shinsa/ui/components/icon';
+import { KoeBundle } from '../components/demos/koe/bundle';
 import { KoeHeroDemo } from '../components/demos/koe/hero';
-import { KoeSettingsDemo } from '../components/demos/koe/settings';
+import { KoeTools } from '../components/demos/koe/tools';
 import Section from '../components/layout/Section.astro';
 import Button from '../components/ui/Button.astro';
 import Site from '../layouts/Site.astro';
-import { koe, koeFeatures, koeSections } from '../lib/content';
+import { koe, koeFeatures, koeModels, koeSections, koeSpeed } from '../lib/content';
 import { koeSite } from '../lib/site';
 ---
 
@@ -16,7 +17,7 @@ import { koeSite } from '../lib/site';
       <h1 class='font-medium text-4xl leading-[1.08] tracking-tight text-balance md:text-5xl'>
         <span class='text-fg-4'>{koe.headline}</span>{' '}<span class='text-fg-2'>{koe.headlineRest}</span>
       </h1>
-      <p class='max-w-[38rem] text-base text-fg-2 leading-relaxed text-pretty md:text-lg'>{koe.text}</p>
+      <p class='max-w-[40rem] text-base text-fg-2 leading-relaxed text-pretty md:text-lg'>{koe.text}</p>
       <div class='hidden flex-col items-center gap-1 rounded-xl border border-bg-3 bg-bg-1 px-5 py-4 group-target:flex'>
         <p class='font-medium text-fg-4 text-sm'>{koe.soonTitle}</p>
         <p class='text-fg-2 text-sm'>{koe.soonText}</p>
@@ -36,13 +37,51 @@ import { koeSite } from '../lib/site';
       <p class='text-base text-fg-2 leading-relaxed text-pretty'>{koeSections.talk.text}</p>
     </div>
   </section>
-  <Section copy={koeSections.settings}>
-    <div class='mx-auto h-[620px] w-full max-w-2xl'>
-      <KoeSettingsDemo client:visible={{ rootMargin: '400px' }} />
+  <Section copy={koeSections.tools}>
+    <KoeTools />
+  </Section>
+  <Section copy={koeSections.bundle}>
+    <KoeBundle />
+  </Section>
+  <Section copy={koeSections.speed}>
+    <div class='flex flex-col gap-4'>
+      <div class='grid gap-4 sm:grid-cols-2'>
+        {
+          koeSpeed.stats.map((stat) => (
+            <div class='koe-desktop flex flex-col items-center gap-1 rounded-2xl px-6 py-10 text-center ring-1 ring-bg-3'>
+              <span class='font-medium text-5xl text-fg-4 tracking-tight tabular-nums md:text-6xl'>{stat.value}</span>
+              <span class='text-fg-2 text-sm'>{stat.label}</span>
+            </div>
+          ))
+        }
+      </div>
+      <p class='mx-auto max-w-2xl text-center text-fg-2 text-xs leading-relaxed text-pretty'>{koeSpeed.method}</p>
     </div>
   </Section>
-  <Section copy={koeSections.features}>
-    <div class='grid w-full gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-3'>
+  <Section copy={koeSections.models}>
+    <div class='mx-auto flex max-w-2xl flex-col divide-y divide-bg-3 rounded-2xl ring-1 ring-bg-3'>
+      {
+        koeModels.map((model) => (
+          <div class='flex items-center gap-3 px-4 py-3'>
+            <div class='flex min-w-0 flex-1 flex-col'>
+              <span class='flex items-center gap-2 font-medium text-fg-4 text-sm'>
+                {model.name}
+                {model.note && (
+                  <span class='rounded-full bg-primary-a2 px-2 py-0.5 font-medium text-primary-text text-xs'>
+                    {model.note}
+                  </span>
+                )}
+              </span>
+              <span class='text-fg-2 text-sm'>{model.languages}</span>
+            </div>
+            <span class='shrink-0 text-fg-2 text-sm tabular-nums'>{model.size}</span>
+          </div>
+        ))
+      }
+    </div>
+  </Section>
+  <section class='flex flex-col px-6 py-12 md:py-16'>
+    <div class='mx-auto grid w-full max-w-5xl gap-x-10 gap-y-8 sm:grid-cols-3'>
       {
         koeFeatures.map((feature) => (
           <div class='flex flex-col gap-1'>
@@ -57,7 +96,7 @@ import { koeSite } from '../lib/site';
         ))
       }
     </div>
-  </Section>
+  </section>
   <section class='flex flex-col px-6 pt-16 pb-24'>
     <div class='mx-auto flex max-w-xl flex-col items-center gap-6 text-center'>
       <h2 class='font-medium text-3xl tracking-tight text-balance md:text-4xl'>

@@ -153,9 +153,9 @@ export const openTask = {
 };
 
 export const koe = {
-  headline: 'Hold Fn and talk.',
-  headlineRest: 'Koe writes it down.',
-  text: 'Koe is dictation for the Mac. Say what you mean, point at what you mean, and let go: Koe copies your words with the screenshots and comments you made while you talked. Everything runs on your Mac.',
+  headline: 'Talk, point, paste.',
+  headlineRest: 'Koe bundles it.',
+  text: 'Hold Fn and say what you mean. Comment on the screen, take screenshots, record clips and drop in files as you talk. Let go, and Koe copies one bundle: your words with every attachment where you said it, ready for any agent, issue or chat.',
   primary: 'Download for Mac',
   requirement: 'Free, for macOS 26 and later.',
   soonTitle: 'Koe is almost here.',
@@ -164,55 +164,93 @@ export const koe = {
   closingTitle: 'Say it once.',
   closingText: 'Koe brings the screenshots.',
   callout: 'Also from us',
-  calloutTitle: 'Koe, dictation that sees what you mean.',
+  calloutTitle: 'Koe, talk and point instead of typing.',
   calloutText:
-    'Hold Fn and talk. Take screenshots and comment on the screen as you go, and Koe copies it all as one message, ready for any agent. On your Mac, nothing sent anywhere.',
+    'Hold Fn and talk. Comment on the screen, take screenshots and clips as you go, and Koe copies it all as one bundle, ready for any agent. Fast, and on your Mac.',
   calloutLink: 'Meet Koe',
 };
 
 export const koeSections = {
   talk: {
     id: 'how',
-    title: 'Talk, point, paste.',
-    text: 'Hold Fn and say what you see. Take a screenshot or click anything to comment on it, and keep talking. Let go, and one paste brings your words and every picture, each where you said it.',
+    title: 'One session, one paste.',
+    text: 'Say what is wrong, point at it, and keep talking. When you let go, one ⌘V brings your words and every picture into the chat, each where you said it.',
   },
-  settings: {
-    id: 'settings',
-    title: 'One page of settings.',
-    text: 'Your shortcuts, the speech model and what happens when you finish. Koe can pause your music while you talk and play it again when you are done.',
+  tools: {
+    id: 'tools',
+    title: 'Point at it while you talk.',
+    text: 'Every tool is a page of the pill, and what you say next becomes its note. Nothing to type.',
   },
-  features: {
-    id: 'features',
-    title: 'Made for talking to agents.',
-    text: 'Everything Koe does fits in the pill at the bottom of your screen.',
+  bundle: {
+    id: 'bundle',
+    title: 'A bundle, not a transcript.',
+    text: 'Koe puts your words and the files on the clipboard together. Each attachment is numbered where you mentioned it, so the agent reading it knows what you meant.',
+  },
+  speed: {
+    id: 'speed',
+    title: 'Faster than you can let go.',
+    text: 'Koe is listening before you finish pressing Fn, and your words are on the clipboard before you reach for ⌘V.',
+  },
+  models: {
+    id: 'models',
+    title: 'Pick your model.',
+    text: 'Every model runs on your Mac. Switch any time in Settings; Koe downloads the one you pick.',
   },
 } satisfies Record<string, SectionCopy>;
+
+export const koeTools: { icon: IconName; title: string; text: string; trigger: string }[] = [
+  {
+    icon: 'IconBubbleAnnotation2',
+    title: 'Comment',
+    trigger: '⇧⌘-click anything',
+    text: 'Pin a comment to a button, a line or a cell. Koe captures what is under it.',
+  },
+  {
+    icon: 'IconCamera1',
+    title: 'Screenshot',
+    trigger: 'Drag a region or click a window',
+    text: 'The screenshot lands in your words at the moment you took it.',
+  },
+  {
+    icon: 'IconVideo',
+    title: 'Clip',
+    trigger: 'Record the screen',
+    text: 'Show a bug as it happens, then pick the frames that show it.',
+  },
+  {
+    icon: 'IconPaperclip1',
+    title: 'File',
+    trigger: 'Drop it on the pill',
+    text: 'A spec, a log or a design goes in the bundle beside the rest.',
+  },
+];
+
+export const koeSpeed = {
+  stats: [
+    { value: '26 ms', label: 'From pressing Fn to listening' },
+    { value: '18 ms', label: 'From finishing to the bundle on your clipboard' },
+  ],
+  method:
+    'Measured on a MacBook Pro with M4 Pro running Parakeet v3: the median of 8 sessions, from the key event to Koe recording and from the finishing key event to the clipboard changing.',
+};
+
+export const koeModels: { name: string; languages: string; size: string; note?: string }[] = [
+  { name: 'Parakeet v3', languages: '25 European languages', size: '483 MB', note: 'Recommended' },
+  { name: 'Parakeet v2', languages: 'English', size: '464 MB' },
+  { name: 'Whisper large-v3 turbo', languages: '99 languages', size: '650 MB' },
+  { name: 'Apple on-device', languages: 'Your system language', size: 'Built in' },
+];
 
 export const koeFeatures: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'IconKeyboard',
-    title: 'Hold Fn, talk, let go',
-    text: 'One key starts and finishes. Pick your own shortcut in Settings if Fn is taken.',
-  },
-  {
-    icon: 'IconCamera1',
-    title: 'Screenshots as you talk',
-    text: 'Point at what you mean. The screenshot lands in the transcript where you said it.',
-  },
-  {
-    icon: 'IconVideo',
-    title: 'Clips of what happened',
-    text: 'Record a few seconds of the screen and pick the frame that shows it.',
-  },
-  {
-    icon: 'IconBubbleText',
-    title: 'Comments on the screen',
-    text: 'Click anything to comment on it. What you say next becomes the note.',
+    title: 'One key',
+    text: 'Fn starts and finishes. Pick your own shortcut in Settings if Fn is taken.',
   },
   {
     icon: 'IconClipboard2',
-    title: 'One bundle to paste',
-    text: 'Your words and every attachment go on the clipboard together, ready for a chat, an issue or an agent.',
+    title: 'Paste anywhere',
+    text: 'Agents, issues, chats and docs take the text and the files in one ⌘V.',
   },
   {
     icon: 'IconLock',

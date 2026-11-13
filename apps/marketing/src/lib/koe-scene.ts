@@ -4,7 +4,7 @@ export type KoePill =
   | { readonly kind: 'session'; readonly clock: string; readonly attached: number }
   | {
       readonly kind: 'prompt';
-      readonly stage: 'picking' | 'listening';
+      readonly stage: 'picking' | 'listening' | 'recording';
       readonly icon: IconName;
       readonly title: string;
       readonly detail: string;

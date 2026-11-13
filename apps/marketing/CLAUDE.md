@@ -91,16 +91,18 @@ src/
   lib/design.ts             `/design.md`, the whole design system in one file (below)
   pages/koe.astro           Koe's product page (`/koe`), under its own header (layout/KoeHeader.astro: Koe's icon and
                             name, "by Shinsa" back to `/`, its section links and Download for Mac): the icon
-                            (public/koe/koe.svg), headline, Download for Mac, the hero demo, the settings demo and the
-                            feature grid. `#soon` is the "coming soon" note, shown by CSS `:target` alone: a Koe
+                            (public/koe/koe.svg), headline, Download for Mac, the hero demo, the tools, the bundle,
+                            the speed (measured numbers in `koeSpeed`; measure again before changing them), the models
+                            and a short feature row. `#soon` is the "coming soon" note, shown by CSS `:target` alone: a Koe
                             download with no release behind it redirects there. Shinsa's Header leads to it with an
                             "Also from us: Koe" chip beside the wordmark, and sections/KoeCallout.astro, an "Also from
                             us" block under Closing, with a Meet Koe button and the pill
   components/demos/koe/     Koe's demos, recreated from the Mac app (dark HUD, Koe's own copy): pill.tsx (the pill and
                             its pages), hero.tsx (a session over a sample settings page, played by useFocus: hold Fn,
                             drag a screenshot and say its note, comment on Save, finish, paste into an agent chat with
-                            both images; its steps in lib/koe-scene.ts) and settings.tsx (Koe's one page of settings,
-                            its switches live)
+                            both images; its steps in lib/koe-scene.ts), tools.tsx (each tool's pill page: comment,
+                            screenshot, clip recording, a dropped file) and bundle.tsx (what you paste beside the text
+                            and attachment list the clipboard holds, in BundleComposer's format)
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
                             own review as a page, the task page's header pinned on top (title, the two buttons, and the web's TaskSharedFacts:
                             handle, status, repository, branch, pull request, checks, coverage, started; under the title
