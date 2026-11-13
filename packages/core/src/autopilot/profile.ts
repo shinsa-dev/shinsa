@@ -204,7 +204,7 @@ const GATE_DECISION_KINDS: Record<AutopilotGateKind, readonly AutopilotDecisionK
   proposal: ['proposal'],
 };
 
-const STEERING_KINDS: readonly AutopilotDecisionKind[] = ['message', 'priority', 'cancel'];
+const STEERING_KINDS: readonly AutopilotDecisionKind[] = ['message', 'edit', 'request', 'priority', 'cancel'];
 
 const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
   plan: 'plans',
@@ -217,6 +217,8 @@ const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
   message: 'messages to agents',
   priority: 'priority changes',
   cancel: 'cancelled tasks',
+  request: 'tasks they filed',
+  edit: 'their own code edits',
 };
 
 function describeRecentLean(tally: AutopilotTally) {

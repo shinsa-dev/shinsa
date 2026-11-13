@@ -208,7 +208,7 @@ describe('Autopilot on suggested tasks', () => {
       text: 'Added for you by Autopilot: “Retry the export”',
       detail: 'A small follow-up you always add.',
     });
-    expect(harness.state.autopilotProfile?.total ?? 0).toBe(0);
+    expect(harness.state.autopilotProfile.decisions.map((entry) => entry.kind)).toEqual(['request']);
   });
 
   test('dismisses one it is sure is not worth doing, with a reason even when the model gave none', () => {

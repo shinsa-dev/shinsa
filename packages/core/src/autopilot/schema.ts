@@ -131,6 +131,8 @@ export const AUTOPILOT_DECISION_KINDS = [
   'message',
   'priority',
   'cancel',
+  'request',
+  'edit',
 ] as const;
 
 export type AutopilotDecisionKind = (typeof AUTOPILOT_DECISION_KINDS)[number];
@@ -148,6 +150,8 @@ export const AUTOPILOT_DECISION_ANSWERS = [
   'raised',
   'lowered',
   'cancelled',
+  'filed',
+  'edited',
 ] as const;
 
 export type AutopilotDecisionAnswer = (typeof AUTOPILOT_DECISION_ANSWERS)[number];
@@ -228,6 +232,7 @@ export interface AutopilotScore {
   scored: number;
   agreed: number;
   agreement: number | null;
+  value: number;
   progress: number;
   ready: boolean;
   suggested: AutopilotLevel;

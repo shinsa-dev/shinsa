@@ -152,7 +152,7 @@ export const AUTOPILOT_BLOCKS = {
 } as const;
 
 export const AUTOPILOT_SCORE_ROWS = {
-  learned: 'Your decisions',
+  score: 'Autopilot score',
   agreement: 'Agrees with you',
   suggested: 'Suggested level',
 } as const;
@@ -168,6 +168,8 @@ const DECISION_NOUN: Record<AutopilotDecisionKind, string> = {
   message: 'messages',
   priority: 'priority changes',
   cancel: 'cancelled tasks',
+  request: 'tasks you filed',
+  edit: 'your code edits',
 };
 
 const LEVEL_LABEL: Record<AutopilotLevel, string> = {
@@ -177,7 +179,7 @@ const LEVEL_LABEL: Record<AutopilotLevel, string> = {
 };
 
 export interface AutopilotScoreView {
-  learned: { detail: string; percent: number; label: string };
+  score: { detail: string; value: number; ready: boolean };
   agreement: { detail: string; percent: string | null };
   suggested: { level: AutopilotLevel; detail: string; apply: string | null };
 }
@@ -188,13 +190,13 @@ function joinNouns(nouns: readonly string[]) {
 }
 
 function describeLearnedDecisions(state: Pick<ShinsaState, 'autopilotProfile'>, total: number) {
-  if (total === 0) return 'None yet. It learns from everything you decide and every message you send.';
+  if (total === 0) return 'Out of 100. It learns from everything you decide, file, edit and send.';
   const tallies = state.autopilotProfile.tallies
     .filter((tally) => tally.projectId === null && tally.risk === null)
     .sort((a, b) => b.total - a.total)
     .slice(0, 3);
   const most = joinNouns(tallies.map((tally) => DECISION_NOUN[tally.kind]));
-  return `Every one counts, the recent ones the most. Most of them are ${most}.`;
+  return `Out of 100, from every decision you made, the recent ones the most. Most are ${most}.`;
 }
 
 function describeAgreement(score: AutopilotScore) {
@@ -207,7 +209,7 @@ function describeAgreement(score: AutopilotScore) {
 
 function describeSuggested(score: AutopilotScore) {
   if (score.ready) return 'It agrees with you often enough to act alone on most work.';
-  return 'Balanced while it learns. Most things once the bar above is full.';
+  return `Balanced while it learns. Most things once the score reaches ${AUTOPILOT_SCORE_LIMITS.agreement * 100}.`;
 }
 
 export function resolveAutopilotScoreView(
@@ -216,14 +218,14 @@ export function resolveAutopilotScoreView(
 ): AutopilotScoreView {
   const score = resolveAutopilotScore(state);
   return {
-    learned: {
+    score: {
       detail: describeLearnedDecisions(state, score.learned),
-      percent: Math.round(score.progress * 100),
-      label: score.ready ? 'Ready' : 'Learning',
+      value: score.value,
+      ready: score.ready,
     },
     agreement: {
       detail: describeAgreement(score),
-      percent: score.agreement === null ? null : `${Math.round(score.agreement * 100)}%`,
+      percent: score.agreement === null ? null : `${Math.floor(score.agreement * 100)}%`,
     },
     suggested: {
       level: score.suggested,

@@ -294,10 +294,11 @@ describe('Settings → Agents → Autopilot', () => {
     renderAgents(ESCALATING);
     await settle();
     expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
-    expect(screen.getByRole('progressbar', { name: 'Your decisions' }).getAttribute('aria-valuenow')).toBe(
-      '100'
-    );
-    expect(screen.getByText('Ready')).toBeTruthy();
+    const gauge = screen.getByRole('meter', { name: 'Autopilot score' });
+    expect(Number(gauge.getAttribute('value'))).toBeGreaterThanOrEqual(90);
+    expect(screen.getByText(gauge.getAttribute('value') ?? '')).toBeTruthy();
+    expect(screen.queryByText('Ready')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
     expect(screen.getByText('94%')).toBeTruthy();
     expect(screen.queryByText('50')).toBeNull();
     expect(screen.queryByText('What it learned')).toBeNull();
@@ -312,10 +313,8 @@ describe('Settings → Agents → Autopilot', () => {
     spyOnEngine();
     renderAgents(ESCALATING);
     await settle();
-    expect(screen.getByRole('progressbar', { name: 'Your decisions' }).getAttribute('aria-valuenow')).toBe(
-      '0'
-    );
-    expect(screen.getByText('Learning')).toBeTruthy();
+    expect(screen.getByRole('meter', { name: 'Autopilot score' }).getAttribute('value')).toBe('0');
+    expect(screen.queryByText('Learning')).toBeNull();
     expect(screen.getByText('In use')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();
   });

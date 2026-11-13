@@ -43,7 +43,7 @@ import { releaseBudgetHolds, releasePaceHolds } from './costs.ts';
 import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
-import { learnFromCancel, learnFromPriority } from './lessons.ts';
+import { learnFromCancel, learnFromPriority, learnFromRequest } from './lessons.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { finishMove } from './moves.ts';
@@ -129,6 +129,12 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
   if (command.backlog) addToBacklog(decider, taskId);
   decider.run({ kind: 'task.triage', taskId });
+  return taskId;
+}
+
+export function createTaskAsYou(decider: Decider, command: CommandOf<'task.create'>) {
+  const taskId = createTask(decider, command);
+  learnFromRequest(decider, taskId);
   return taskId;
 }
 

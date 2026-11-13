@@ -104,7 +104,9 @@ describe('suggested tasks', () => {
     harness.send({ type: 'suggestion.dismiss', taskId, suggestionId: first?.id ?? '' });
     harness.send({ type: 'suggestion.keep', taskId, suggestionId: second?.id ?? '' });
     expect(
-      harness.state.autopilotProfile.decisions.map((entry) => [entry.kind, entry.answer, entry.note])
+      harness.state.autopilotProfile.decisions
+        .filter((entry) => entry.kind === 'suggestion')
+        .map((entry) => [entry.kind, entry.answer, entry.note])
     ).toEqual([
       ['suggestion', 'dismissed', 'Cache the session'],
       ['suggestion', 'kept', 'Retry the export'],

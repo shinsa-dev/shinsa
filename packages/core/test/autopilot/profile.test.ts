@@ -33,7 +33,7 @@ function reachReview(harness: Harness, findings: ReviewFinding[] = []) {
 }
 
 function decisions(harness: Harness) {
-  return harness.state.autopilotProfile.decisions;
+  return harness.state.autopilotProfile.decisions.filter((decision) => decision.kind !== 'request');
 }
 
 function decision(overrides: Partial<AutopilotDecision>): AutopilotDecision {
@@ -78,7 +78,7 @@ describe('the decisions Autopilot learns from', () => {
       }),
     ]);
     expect(decisions(harness)[0]?.scope).toEqual({ phases: expect.any(Number), files: expect.any(Number) });
-    expect(harness.state.autopilotProfile.total).toBe(1);
+    expect(harness.state.autopilotProfile.total).toBe(2);
   });
 
   test('each finding you decide is learned beside the review answer', () => {
@@ -140,6 +140,28 @@ describe('the other things you do in Shinsa', () => {
       ['priority', 'raised', 'urgent'],
       ['priority', 'lowered', 'low'],
       ['cancel', 'cancelled', null],
+    ]);
+  });
+
+  test('the tasks you file and your own code edits are learned, not ones filed for you', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send(
+      { type: 'task.create', request: 'Filed for you.', repoId: null, projectId: null },
+      { onBehalf: true }
+    );
+    buildAll(harness, taskId);
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: false });
+    const learned = harness.state.autopilotProfile.decisions.map(({ kind, answer, note }) => [
+      kind,
+      answer,
+      note,
+    ]);
+    expect(learned).toEqual([
+      ['request', 'filed', harness.task(taskId).request],
+      ['edit', 'edited', 'src/a.ts'],
     ]);
   });
 });
@@ -228,10 +250,12 @@ describe('the profile summary for a judgment', () => {
     ]);
   });
 
-  test('adds how you steer your tasks to every kind of point, after that point’s own counts', () => {
+  test('adds how you steer and file your tasks to every kind of point, after that point’s own counts', () => {
     const state = profile([
       decision({ kind: 'plan', answer: 'approved' }),
       decision({ kind: 'message', answer: 'sent', note: 'Keep it small.' }),
+      decision({ kind: 'edit', answer: 'edited' }),
+      decision({ kind: 'request', answer: 'filed' }),
       decision({ kind: 'priority', answer: 'raised' }),
       decision({ kind: 'cancel', answer: 'cancelled' }),
     ]);
@@ -239,6 +263,8 @@ describe('the profile summary for a judgment', () => {
       '- All plans: 1 decided: approved 1; lately approved 100%',
       'How they steer their tasks:',
       '- All messages to agents: 1 decided: sent 1; lately sent 100%',
+      '- All their own code edits: 1 decided: edited 1; lately edited 100%',
+      '- All tasks they filed: 1 decided: filed 1; lately filed 100%',
       '- All priority changes: 1 decided: raised 1; lately raised 100%',
       '- All cancelled tasks: 1 decided: cancelled 1; lately cancelled 100%',
       'Their recent words:',

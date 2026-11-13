@@ -56,3 +56,14 @@ export function learnFromCancel(decider: Decider, taskId: string) {
     { task: decider.task(taskId), gate: null, kind: 'cancel', answer: 'cancelled', note: null },
   ]);
 }
+
+export function learnFromRequest(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  recordDecisions(decider, [{ task, gate: null, kind: 'request', answer: 'filed', note: task.request }]);
+}
+
+export function learnFromEdit(decider: Decider, taskId: string, path: string) {
+  recordDecisions(decider, [
+    { task: decider.task(taskId), gate: null, kind: 'edit', answer: 'edited', note: path },
+  ]);
+}

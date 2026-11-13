@@ -21,7 +21,6 @@ import { toast } from '@shinsa/ui/components/sonner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { HintButton } from '@/components/controls/hint-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -75,6 +74,7 @@ import {
   SettingsGroup,
   TOKEN_TEXT,
 } from './group.tsx';
+import { ScoreGauge } from './score-gauge.tsx';
 
 function BlockHeader({
   icon,
@@ -265,19 +265,10 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
     <SettingsBlock
       header={<BlockHeader icon={AUTOPILOT_BLOCKS.score.icon} title={AUTOPILOT_BLOCKS.score.title} />}
     >
-      <DescribedRow title={AUTOPILOT_SCORE_ROWS.learned} description={view.learned.detail}>
-        <div className='flex items-center gap-2 pr-1.5'>
-          <span
-            role='progressbar'
-            aria-label={AUTOPILOT_SCORE_ROWS.learned}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={view.learned.percent}
-          >
-            <UsageBar row={{ percent: view.learned.percent, tone: 'blue' }} className='w-32' />
-          </span>
-          <span className={TOKEN_TEXT}>{view.learned.label}</span>
-        </div>
+      <DescribedRow title={AUTOPILOT_SCORE_ROWS.score} description={view.score.detail}>
+        <span className='pr-1'>
+          <ScoreGauge value={view.score.value} label={AUTOPILOT_SCORE_ROWS.score} ready={view.score.ready} />
+        </span>
       </DescribedRow>
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.agreement} description={view.agreement.detail}>
         {view.agreement.percent && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.agreement.percent}</span>}

@@ -2178,11 +2178,13 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   Autopilot touched the gate or not, is kept: each answer on a plan, question, review, merge or your OK gate, each
   review finding you mark fix or dismiss, and each suggested task you accept, dismiss or keep in its task
   (`listGateDecisionDrafts`), and each message you send a task's agent (`message`, `sent`), priority you change
-  (`priority`, `raised` or `lowered`) and task you cancel (`cancel`, `cancelled`), all recorded from
+  (`priority`, `raised` or `lowered`), task you cancel (`cancel`, `cancelled`), task you file (`request`, `filed`,
+  its request as the note, from `task.create` sent as you: `createTaskAsYou`) and file you first change in the Code
+  tab (`edit`, `edited`, its path as the note, from `task.record_edit`), all recorded from
   `decide/lessons.ts` as `autopilot.decided {decisions}`. An
   `AutopilotDecision` keeps its kind (`AutopilotDecisionKind`), your answer (`AutopilotDecisionAnswer`: `approved`,
-  `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted`, `kept`, `sent`, `raised`, `lowered` or
-  `cancelled`), the project, the reviewer's risk, the plan's
+  `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted`, `kept`, `sent`, `raised`, `lowered`,
+  `cancelled`, `filed` or `edited`), the project, the reviewer's risk, the plan's
   scope, whether the task was urgent or filed by a watchdog, whether Autopilot had brought it to you (`touched`),
   its guess (below) and your words (280 characters). Nothing an agent or a schedule does on your behalf counts, nor
   a guest's answers on a handed-off task. Every decision counts, with no cap: the profile keeps a count per kind,
@@ -2191,8 +2193,8 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   .halfLifeDays`), so what you did lately leads and your first decisions still count. Only the words it quotes are
   bounded: the last 200 decisions are kept for their notes. Each judgment's prompt carries
   `listAutopilotProfileLines`: how you answered that kind of point overall, in the task's project and at its risk,
-  with the recent lean ("lately approved 83%, revised 17%"), then how you steer your tasks (your messages, priority
-  changes and cancellations, `STEERING_KINDS`, read by every kind of point), then up to 3 of your recent notes,
+  with the recent lean ("lately approved 83%, revised 17%"), then how you steer your tasks (your messages, code edits,
+  the tasks you file, priority changes and cancellations, `STEERING_KINDS`, read by every kind of point), then up to 3 of your recent notes,
   within 1,200 characters, the point's own counts first. This is a summary the model reads, not a model trained on you.
 - **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
   merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
@@ -2205,7 +2207,9 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   scored, how many agreed, and both weighted so each older guess counts half as much after 50 newer ones,
   `AUTOPILOT_SCORE_LIMITS.halfLife`). Approving agrees with `act`, changing or rejecting with `forward`; questions
   are not scored, since a reply has no yes or no. `resolveAutopilotScore` turns it into `progress`, from 0 to 1:
-  the lesser of how many guesses were scored against 50 and the weighted agreement against 90%. It suggests `most`
+  the lesser of how many guesses were scored against 50 and the weighted agreement against 90%, and into `value`,
+  the score out of 100 Settings shows: the weighted agreement once 50 guesses are scored, and before that at most
+  the share of 50 scored times 90, so it reaches 90 exactly when progress is full. It suggests `most`
   once progress is full and `balanced` otherwise, so a run of recent misses lowers it again; it never changes your
   level, which moves only when you choose one.
 - **Suggested tasks** (`suggestions` gate, off by default). Each new suggested task is weighed when an agent
@@ -2295,8 +2299,8 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews,
   Suggested tasks, Watchdog tasks: Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
   approved). Who it asks: Your team (Only as a last resort, or Never), your team in Shinsa and the Slack contacts.
-  Usage limits (Ignore them or Keep them). How well it knows you: Your decisions as a progress bar toward Most things
-  (`progress`, Learning or Ready; a count has no maximum, so the bar shows how far it is from ready, not how many),
+  Usage limits (Ignore them or Keep them). How well it knows you: Autopilot score, a ring gauge with the score out of 100 in its
+  centre (`value`; a count has no maximum, so it shows a score, not how many decisions), Most things suggested at 90,
   Agrees with you (the recency-weighted share of its guesses that matched you, with how many of how many), and the
   suggested level with a Use button while it differs from yours.
 - **Urgent work and usage limits.** With the policy on and `ignoreUsageLimits` set (`isUsageLimitExempt`), an urgent

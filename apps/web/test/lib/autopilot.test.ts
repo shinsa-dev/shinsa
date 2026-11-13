@@ -251,10 +251,10 @@ describe('the Autopilot settings', () => {
 
   it('scores nothing and suggests Balanced before it learned anything', () => {
     expect(resolveAutopilotScoreView({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'balanced')).toEqual({
-      learned: {
-        detail: 'None yet. It learns from everything you decide and every message you send.',
-        percent: 0,
-        label: 'Learning',
+      score: {
+        detail: 'Out of 100. It learns from everything you decide, file, edit and send.',
+        value: 0,
+        ready: false,
       },
       agreement: {
         detail: 'Once Autopilot guesses your plans, reviews and merges and you decide them.',
@@ -262,7 +262,7 @@ describe('the Autopilot settings', () => {
       },
       suggested: {
         level: 'balanced',
-        detail: 'Balanced while it learns. Most things once the bar above is full.',
+        detail: 'Balanced while it learns. Most things once the score reaches 90.',
         apply: null,
       },
     });
@@ -281,10 +281,11 @@ describe('the Autopilot settings', () => {
       ],
     });
     const view = resolveAutopilotScoreView({ autopilotProfile: few }, 'ask_first');
-    expect(view.learned).toEqual({
-      detail: 'Every one counts, the recent ones the most. Most of them are reviews, plans and merges.',
-      percent: 20,
-      label: 'Learning',
+    expect(view.score).toEqual({
+      detail:
+        'Out of 100, from every decision you made, the recent ones the most. Most are reviews, plans and merges.',
+      value: 18,
+      ready: false,
     });
     expect(view.agreement).toEqual({
       detail: 'It guessed you right on 10 of 10 so far and needs more to be sure.',
@@ -298,17 +299,18 @@ describe('the Autopilot settings', () => {
     });
     const unsureView = resolveAutopilotScoreView({ autopilotProfile: unsure }, 'balanced');
     expect(unsureView).toMatchObject({
-      learned: { detail: expect.stringMatching(/Most of them are reviews\.$/), label: 'Learning' },
+      score: { detail: expect.stringMatching(/Most are reviews\.$/), ready: false },
       agreement: { detail: 'It guessed you right on 40 of 60, but not often enough lately.', percent: '75%' },
       suggested: { level: 'balanced', apply: null },
     });
-    expect(unsureView.learned.percent).toBeLessThan(100);
+    expect(unsureView.score.value).toBeLessThan(90);
   });
 
-  it('suggests Most things once the bar is full', () => {
+  it('suggests Most things once the score reaches 90', () => {
     const sure = createAutopilotProfile({ agreed: 46, disagreed: 4 });
     const view = resolveAutopilotScoreView({ autopilotProfile: sure }, 'balanced');
-    expect(view.learned).toMatchObject({ percent: 100, label: 'Ready' });
+    expect(view.score).toMatchObject({ ready: true });
+    expect(view.score.value).toBeGreaterThanOrEqual(90);
     expect(view.agreement).toEqual({
       detail: 'It guessed you right on 46 of 50 and keeps learning.',
       percent: '94%',

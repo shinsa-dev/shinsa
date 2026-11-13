@@ -170,7 +170,7 @@ import { acceptSuggestion, dismissSuggestion, suggestTasks } from './suggestions
 import {
   cancelTask,
   completeTask,
-  createTask,
+  createTaskAsYou,
   failEffect,
   prioritizeTask,
   readyWorktree,
@@ -234,7 +234,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
     case 'settings.change':
       return changeSettings(decider, command);
     case 'task.create':
-      return createTask(decider, command);
+      return createTaskAsYou(decider, command);
     case 'task.triage':
       return triageTask(decider, command);
     case 'task.prioritize':

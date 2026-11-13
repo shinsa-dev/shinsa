@@ -52,6 +52,7 @@ describe('the Autopilot score', () => {
       scored: 0,
       agreed: 0,
       agreement: null,
+      value: 0,
       progress: 0,
       ready: false,
       suggested: 'balanced',
@@ -80,16 +81,25 @@ describe('the Autopilot score', () => {
     expect(scoreOf(agreeing)).toMatchObject({
       scored: 50,
       agreement: 1,
+      value: 100,
       progress: 1,
       ready: true,
       suggested: 'most',
     });
-    expect(scoreOf(agreeing.slice(1))).toMatchObject({ progress: 0.98, ready: false, suggested: 'balanced' });
+    expect(scoreOf(agreeing.slice(1))).toMatchObject({
+      value: 88,
+      progress: 0.98,
+      ready: false,
+      suggested: 'balanced',
+    });
+    expect(scoreOf(agreeing.slice(25)).value).toBe(45);
     const early = [...Array.from({ length: 5 }, () => decision('act', 'revised')), ...agreeing.slice(5)];
     const late = [...agreeing.slice(5), ...Array.from({ length: 5 }, () => decision('act', 'revised'))];
     expect(scoreOf(early)).toMatchObject({ scored: 50, agreed: 45, ready: true });
     expect(scoreOf(late)).toMatchObject({ scored: 50, agreed: 45, ready: false });
     expect(scoreOf(late).progress).toBeLessThan(1);
+    expect(scoreOf(late).value).toBeLessThan(90);
+    expect(scoreOf(early).value).toBeGreaterThanOrEqual(90);
   });
 
   test('counts every guess it ever made, the recent ones the most', () => {
