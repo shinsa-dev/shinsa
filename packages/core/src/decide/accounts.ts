@@ -130,7 +130,7 @@ function isModelMoved(decider: Decider, task: Task, wait: UsageWait) {
     size: task.size,
     role: wait.role,
     purpose: run?.purpose ?? null,
-    sessionModel: decider.resumableFrom(run ?? null)?.model ?? null,
+    account: run?.account?.id ?? task.account?.id ?? null,
   });
   return !isModelMarkFor(wait.model, model);
 }

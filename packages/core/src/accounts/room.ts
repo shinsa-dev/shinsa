@@ -1,6 +1,6 @@
 import { Option } from 'effect';
 import { MODEL_ROUTES } from '../agent-models/routing.ts';
-import type { ModelRoom, ModelRoomReading } from '../domain/accounts.ts';
+import type { AccountModelRoom, ModelRoom, ModelRoomReading } from '../domain/accounts.ts';
 import type { Settings } from '../domain/settings.ts';
 import type { AccountSummary } from '../protocol/accounts.ts';
 import { isUsableAccount, resolveAccountCandidate } from './pick.ts';
@@ -16,17 +16,37 @@ function resolveFamilyRoom(
   family: string,
   now: number
 ): ModelRoomReading {
-  const usable = accounts
-    .map((account) => resolveAccountCandidate(account, settings))
-    .filter((candidate) => isUsableAccount(candidate, family, now));
-  const known = usable.flatMap((candidate) => Option.toArray(resolveHeadroom(candidate.usage, family)));
-  return { family, usable: usable.length > 0, left: known.length > 0 ? Math.max(...known) : null };
+  const readings = accounts.map((account): AccountModelRoom => {
+    const candidate = resolveAccountCandidate(account, settings);
+    return {
+      account: account.id,
+      usable: isUsableAccount(candidate, family, now),
+      left: Option.getOrNull(resolveHeadroom(candidate.usage, family)),
+    };
+  });
+  const usable = readings.filter((reading) => reading.usable);
+  const known = usable.flatMap((reading) => (reading.left === null ? [] : [reading.left]));
+  return {
+    family,
+    usable: usable.length > 0,
+    left: known.length > 0 ? Math.max(...known) : null,
+    accounts: readings,
+  };
 }
 
 export function listModelRoom(accounts: readonly AccountSummary[], settings: Settings, now: number) {
   const signedIn = accounts.filter((account) => account.signIn === 'signed_in');
   if (signedIn.length === 0) return [];
   return ROUTED_FAMILIES.map((family) => resolveFamilyRoom(signedIn, settings, family, now));
+}
+
+function isReadingMoved(
+  before: AccountModelRoom | ModelRoom | undefined,
+  after: AccountModelRoom | ModelRoomReading
+) {
+  if (!before || before.usable !== after.usable) return true;
+  if (before.left === null || after.left === null) return before.left !== after.left;
+  return Math.abs(before.left - after.left) >= MODEL_ROOM_STEP;
 }
 
 export function isModelRoomMoved(
@@ -36,8 +56,13 @@ export function isModelRoomMoved(
   if (Object.keys(known).length !== models.length) return true;
   return models.some((model) => {
     const before = known[model.family];
-    if (!before || before.usable !== model.usable) return true;
-    if (before.left === null || model.left === null) return before.left !== model.left;
-    return Math.abs(before.left - model.left) >= MODEL_ROOM_STEP;
+    if (!before || isReadingMoved(before, model) || before.accounts.length !== model.accounts.length)
+      return true;
+    return model.accounts.some((reading) =>
+      isReadingMoved(
+        before.accounts.find((kept) => kept.account === reading.account),
+        reading
+      )
+    );
   });
 }

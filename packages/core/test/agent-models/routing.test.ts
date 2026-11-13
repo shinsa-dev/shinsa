@@ -20,7 +20,7 @@ function room(...spent: string[]): Record<string, ModelRoom> {
   return Object.fromEntries(
     ['fable', 'opus', 'sonnet'].map((family) => [
       family,
-      { family, usable: !spent.includes(family), left: spent.includes(family) ? 0 : 40, at: 0 },
+      { family, usable: !spent.includes(family), left: spent.includes(family) ? 0 : 40, accounts: [], at: 0 },
     ])
   );
 }
@@ -87,14 +87,44 @@ describe('the route of a step', () => {
     expect(resolveRoutedModel(build, room('opus', 'sonnet'))).toBe('opus');
   });
 
-  test('a resumed session keeps its model while it suits the step, so the cache stays on one model', () => {
+  test('the preferred model comes back as soon as it has room again', () => {
     const plan = { size: 'large' as const, role: 'agent' as const, purpose: 'plan' as const };
     const build = { ...plan, purpose: 'build' as const };
-    expect(resolveRoutedModel(plan, room(), 'opus')).toBe('opus');
-    expect(resolveRoutedModel(build, room(), 'claude-fable-5-1')).toBe('opus');
-    expect(resolveRoutedModel(build, room(), 'sonnet')).toBe('sonnet');
-    expect(resolveRoutedModel(build, room('sonnet'), 'sonnet')).toBe('opus');
-    expect(resolveRoutedModel(plan, room(), null)).toBe('fable');
+    expect(resolveRoutedModel(build, room('opus'))).toBe('sonnet');
+    expect(resolveRoutedModel(build, room())).toBe('opus');
+    expect(resolveRoutedModel(plan, room())).toBe('fable');
+  });
+
+  test('a model nearly out of room gives way to the next, or to whichever has the most left', () => {
+    const plan = { size: 'large' as const, role: 'agent' as const, purpose: 'plan' as const };
+    const low = (fable: number, opus: number) => ({
+      ...room(),
+      fable: { ...room().fable!, left: fable },
+      opus: { ...room().opus!, left: opus },
+    });
+    expect(resolveRoutedModel(plan, low(1, 40))).toBe('opus');
+    expect(resolveRoutedModel(plan, low(10, 40))).toBe('fable');
+    expect(resolveRoutedModel(plan, low(6, 3))).toBe('fable');
+    expect(resolveRoutedModel(plan, low(3, 6))).toBe('opus');
+  });
+
+  test('a task bound to an account routes on that account’s room', () => {
+    const plan = { size: 'large' as const, role: 'agent' as const, purpose: 'plan' as const };
+    const bound = {
+      ...room(),
+      fable: {
+        ...room().fable!,
+        accounts: [
+          { account: 'work', usable: false, left: 0 },
+          { account: 'home', usable: true, left: 50 },
+        ],
+      },
+    };
+    expect(resolveRoutedModel(plan, bound, 'work')).toBe('opus');
+    expect(resolveRoutedModel(plan, bound, 'home')).toBe('fable');
+    expect(resolveRoutedModel(plan, bound, 'gone')).toBe('fable');
+    expect(resolveRoutedModel(plan, bound)).toBe('fable');
+    expect(isModelUsable(bound, 'fable', 'work')).toBe(false);
   });
 
   test('a model with no recorded room counts as usable, matched by its family', () => {
@@ -109,7 +139,7 @@ describe('the model a step starts on', () => {
     role: 'agent' as const,
     purpose: 'plan' as const,
     room: room(),
-    sessionModel: null,
+    account: null,
   };
 
   test('is routed when the role’s model is Automatic', () => {

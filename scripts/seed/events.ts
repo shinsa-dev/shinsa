@@ -34,9 +34,9 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
   push(NOW - HOUR, {
     type: 'usage.models_recorded',
     models: [
-      { family: 'fable', usable: true, left: 38 },
-      { family: 'opus', usable: true, left: 61 },
-      { family: 'sonnet', usable: true, left: 80 },
+      { family: 'fable', usable: true, left: 38, accounts: [] },
+      { family: 'opus', usable: true, left: 61, accounts: [] },
+      { family: 'sonnet', usable: true, left: 80, accounts: [] },
     ],
   });
   for (const task of tasks) pushTask(task, push);

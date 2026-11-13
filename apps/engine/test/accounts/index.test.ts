@@ -684,9 +684,9 @@ describe('recording the room each model has', () => {
     await world.accounts.refresh();
     const recorded = roomCommands(world).at(-1);
     const models = recorded?.type === 'usage.models_recorded' ? recorded.models : [];
-    expect(models).toEqual([
-      { family: 'fable', usable: false, left: null },
-      { family: 'opus', usable: true, left: 70 },
+    expect(models).toMatchObject([
+      { family: 'fable', usable: false, left: null, accounts: [{ usable: false, left: 0 }] },
+      { family: 'opus', usable: true, left: 70, accounts: [{ usable: true, left: 70 }] },
       { family: 'sonnet', usable: true, left: 70 },
     ]);
     world.stub.update((state) => {

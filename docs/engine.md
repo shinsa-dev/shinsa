@@ -123,19 +123,19 @@ default provider's list, the one setup's Model step offers.
 choice and offered first in every model picker, on its own above the providers' groups with the arrow-split icon and no
 hint, on an engine that announces `models.routing`. It only ever picks Claude models for a step. `startRun` resolves
 it when the step starts (`resolveStepModel` in `packages/core/src/agent-models/routing.ts`), so `run.model` is always
-a real model and replay gives the same one: a plan on a large task takes the first usable of Fable then Opus, any
-other plan or step Opus then Sonnet (`MODEL_ROUTES`), so Fable never builds. A provider caches per model, so a
-step that resumes a session keeps the session's model while it is one of the step's choices and usable
-(`sessionModel`): Fable plans only a large task's first session, later rounds plan on the session's Opus, and a step
-that fell back to Sonnet stays there. Automatic thus moves a session to another model once, from Fable's plan to
-Opus at build phase 1, which folds to the round brief (Boundary folds), or when the model runs out. A cache written
+a real model and replay gives the same one: a plan on a large task takes Fable then Opus, any other plan or step
+Opus then Sonnet (`MODEL_ROUTES`), so Fable never builds. Each step takes the first usable choice with at least 10%
+of its room left (`LOW_ROOM_PERCENT`), or else the usable one with the most room, so the preferred model comes back
+as soon as it has room again. A step reads the room of the account its run or task is bound to, when the record
+holds that account, and the pooled room otherwise, so a task bound to an account that spent Fable plans on Opus.
+The move from Fable's plan to Opus at build phase 1 folds to the round brief (Boundary folds). A cache written
 on another model never counts as warm (`isSessionCacheWarm`), so that first step on the new model always folds and
 writes only the brief into its cache, never the planning conversation. Quick jobs, the reviewer's own session and
 delegations are separate requests and sessions, so routing never touches the Agent's cache. A model is usable unless
 `state.modelRoom` says no signed-in, unpaused account can run its family (a family never recorded counts as usable).
 The account roster records that room (`usage.models_recorded`, `listModelRoom`: per Claude family, whether any account
-can run it and the most room any one account has left) on an accounts refresh when a family turns usable or spent or
-its room moves by 5 points (`isModelRoomMoved`); recording it re-checks waits on a model's own limit, so a step on
+can run it, the most room any one account has left, and each signed-in account's own reading) on an accounts refresh
+when a family or one account's reading turns usable or spent or its room moves by 5 points (`isModelRoomMoved`); recording it re-checks waits on a model's own limit, so a step on
 Automatic waiting on Fable starts again on Opus. Everything that needs a concrete model before a step starts (the
 account list, the safe pace, delegations) reads `resolveAgentModel`, which gives the role's default for `auto`. The
 quick jobs are not routed: the classifier on Automatic answers on Sonnet, and the writer on Automatic writes with Codex

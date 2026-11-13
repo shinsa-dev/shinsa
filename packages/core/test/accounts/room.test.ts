@@ -73,8 +73,12 @@ describe('the room each routed model has', () => {
       summary('a', createUsage([{ usedPercent: 40 }, fable(100)])),
       summary('b', createUsage([{ usedPercent: 70 }, fable(20)])),
     ]);
-    expect(room.fable).toEqual({ family: 'fable', usable: true, left: 30 });
-    expect(room.opus).toEqual({ family: 'opus', usable: true, left: 60 });
+    expect(room.fable).toMatchObject({ family: 'fable', usable: true, left: 30 });
+    expect(room.opus).toMatchObject({ family: 'opus', usable: true, left: 60 });
+    expect(room.fable?.accounts).toEqual([
+      { account: 'a', usable: false, left: 0 },
+      { account: 'b', usable: true, left: 30 },
+    ]);
   });
 
   test('a model spent on every account, or marked spent for it, is not usable', () => {
@@ -82,8 +86,8 @@ describe('the room each routed model has', () => {
       summary('a', createUsage([{ usedPercent: 40 }, fable(100)])),
       summary('b', createUsage([{ usedPercent: 10 }]), { spentUntil: NOW + 60_000, spentModel: 'fable' }),
     ]);
-    expect(room.fable).toEqual({ family: 'fable', usable: false, left: null });
-    expect(room.sonnet).toEqual({ family: 'sonnet', usable: true, left: 90 });
+    expect(room.fable).toMatchObject({ family: 'fable', usable: false, left: null });
+    expect(room.sonnet).toMatchObject({ family: 'sonnet', usable: true, left: 90 });
   });
 
   test('paused and signed-out accounts give no room, and an unread account is usable with unknown room', () => {
@@ -92,6 +96,6 @@ describe('the room each routed model has', () => {
       summary('b', createUsage([{ usedPercent: 10 }]), { signIn: 'unknown' }),
       summary('c', createUsage([])),
     ]);
-    expect(room.opus).toEqual({ family: 'opus', usable: true, left: null });
+    expect(room.opus).toMatchObject({ family: 'opus', usable: true, left: null });
   });
 });

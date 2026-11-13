@@ -4,6 +4,7 @@ import {
   listActiveRuns,
   listOpenGates,
   OWNER_SIGNED_OUT_CODE,
+  type ModelRoomReading,
   type RunAccount,
   type RunFailure,
   resolveMessageEffect,
@@ -892,10 +893,13 @@ describe('recording the safe pace of each provider', () => {
 });
 
 describe('the automatic model', () => {
-  type Reading = { family: string; usable: boolean; left: number | null };
+  type Reading = Omit<ModelRoomReading, 'accounts'> & { accounts?: ModelRoomReading['accounts'] };
 
   function recordRoom(harness: Harness, models: Reading[]) {
-    return harness.send({ type: 'usage.models_recorded', models });
+    return harness.send({
+      type: 'usage.models_recorded',
+      models: models.map((model) => ({ accounts: [], ...model })),
+    });
   }
 
   function chooseAuto(harness: Harness) {
@@ -961,5 +965,45 @@ describe('the automatic model', () => {
     expect(harness.task(taskId).usageWait?.status).toBe('armed');
     recordRoom(harness, [{ family: 'fable', usable: false, left: 0 }, ROOMY[1]!]);
     expect(harness.activeRun(taskId)).toMatchObject({ model: 'opus', continues: run.id });
+  });
+
+  test('a moved account reading is recorded even when the pooled room stays the same', () => {
+    const harness = createHarness();
+    const work = { account: WORK.id, usable: true, left: 40 };
+    recordRoom(harness, [{ ...ROOMY[0]!, accounts: [work] }]);
+    expect(recordRoom(harness, [{ ...ROOMY[0]!, accounts: [{ ...work, left: 42 }] }]).events).toHaveLength(0);
+    expect(
+      recordRoom(harness, [{ ...ROOMY[0]!, accounts: [{ ...work, usable: false }] }]).events
+    ).toHaveLength(1);
+    expect(recordRoom(harness, [{ ...ROOMY[0]!, accounts: [] }]).events).toHaveLength(1);
+  });
+
+  test('a task bound to an account that spent Fable plans on Opus, and its Fable wait moves to Opus', () => {
+    const harness = createHarness();
+    chooseAuto(harness);
+    const spentOnWork = {
+      ...ROOMY[0]!,
+      accounts: [
+        { account: WORK.id, usable: false, left: 0 },
+        { account: HOME.id, usable: true, left: 40 },
+      ],
+    };
+    recordRoom(harness, [spentOnWork, ROOMY[1]!]);
+    expect(harness.activeRun(createTask(harness, { size: 'large', account: WORK })).model).toBe('opus');
+    expect(harness.activeRun(createTask(harness, { size: 'large' })).model).toBe('fable');
+
+    const waiting = createTask(harness, { size: 'large', account: HOME });
+    linkSession(harness, waiting, 'plan-session');
+    const run = fail(harness, waiting, {
+      ...limit(harness.state.seq + 1_000 + HOUR),
+      model: 'fable',
+      limitScope: 'model',
+    });
+    expect(harness.task(waiting).usageWait?.status).toBe('armed');
+    recordRoom(harness, [
+      { ...spentOnWork, accounts: [spentOnWork.accounts[0]!, { account: HOME.id, usable: false, left: 0 }] },
+      ROOMY[1]!,
+    ]);
+    expect(harness.activeRun(waiting)).toMatchObject({ model: 'opus', continues: run.id });
   });
 });
