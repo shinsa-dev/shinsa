@@ -294,13 +294,12 @@ describe('Settings → Agents → Autopilot', () => {
     renderAgents(ESCALATING);
     await settle();
     expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
-    const gauge = screen.getByRole('meter', { name: 'Autopilot score' });
-    expect(Number(gauge.getAttribute('value'))).toBeGreaterThanOrEqual(90);
-    expect(screen.getByText(gauge.getAttribute('value') ?? '')).toBeTruthy();
+    const percent = screen.getByText(/^\d+%$/).textContent ?? '';
+    expect(Number.parseInt(percent, 10)).toBeGreaterThanOrEqual(90);
+    expect(screen.queryByRole('meter')).toBeNull();
     expect(screen.queryByText('Ready')).toBeNull();
     expect(screen.queryByRole('progressbar')).toBeNull();
     expect(screen.queryByText('Agrees with you')).toBeNull();
-    expect(screen.queryByText('94%')).toBeNull();
     expect(screen.queryByText('50')).toBeNull();
     expect(screen.queryByText('What it learned')).toBeNull();
     expect(listSentCommands()).toEqual([]);
@@ -314,7 +313,7 @@ describe('Settings → Agents → Autopilot', () => {
     spyOnEngine();
     renderAgents(ESCALATING);
     await settle();
-    expect(screen.getByRole('meter', { name: 'Autopilot score' }).getAttribute('value')).toBe('0');
+    expect(screen.getByText('0%')).toBeTruthy();
     expect(screen.queryByText('Learning')).toBeNull();
     expect(screen.getByText('In use')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();

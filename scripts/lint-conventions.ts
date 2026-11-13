@@ -97,7 +97,7 @@ const COMMENT_CHECK_EXCLUDED_ROOTS = ['packages/ui'];
 
 const ALLOWED_COMMENT_PATTERN = /^\s*(oxlint-disable|@ts-)/;
 
-const SVG_DRAWERS = ['icon/index.tsx', 'spinner.tsx', 'logo.tsx', 'area-chart.tsx', 'progress-ring.tsx'].map(
+const SVG_DRAWERS = ['icon/index.tsx', 'spinner.tsx', 'logo.tsx', 'area-chart.tsx'].map(
   (name) => `packages/ui/src/components/${name}`
 );
 

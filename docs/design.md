@@ -4026,8 +4026,7 @@ always shown on touch).
   state titles.
 - Nothing on the canvas between the page title and a card is anything but
   `text-lg`.
-- The only sizes below 13px are Badge `xs` / `sm` and the Kbd legend, all 12px, and
-  the figure inside a `ProgressRing`, `text-3xs` (10px), its own type role.
+- The only sizes below 13px are Badge `xs` / `sm` and the Kbd legend, all 12px.
 - No `text-[Npx]` anywhere, with three sanctioned exceptions: the sidebar's
   15px rows; device mockups (their simulated OS type); and the hosted
   studio's shadow root (`PaywallStudio`'s `text-[0.6875rem]` /

@@ -657,10 +657,7 @@
   --font-weight-bold: 600;
 
   /* xs sits at 13px, the body size. 2xs (12px) is for meta lines, badges and
-     counts only — never for anything a person must read to decide. 3xs (10px)
-     is the figure inside a ProgressRing only. */
-  --text-3xs: 0.625rem;
-  --text-3xs--line-height: 1;
+     counts only — never for anything a person must read to decide. */
   --text-2xs: 0.75rem;
   --text-2xs--line-height: 1.25;
   --text-xs: 0.8125rem;

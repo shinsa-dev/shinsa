@@ -162,7 +162,7 @@ const LEVEL_LABEL: Record<AutopilotLevel, string> = {
 };
 
 export interface AutopilotScoreView {
-  score: { detail: string; value: number; ready: boolean };
+  score: { detail: string; value: number; percent: string };
   suggested: { level: AutopilotLevel; detail: string; apply: string | null };
 }
 
@@ -178,7 +178,7 @@ function describeScore(score: AutopilotScore) {
 
 function describeSuggested(score: AutopilotScore) {
   if (score.ready) return 'It agrees with you often enough to act alone on most work.';
-  return `Balanced while it learns. Most things once the score reaches ${AUTOPILOT_SCORE_LIMITS.agreement * 100}.`;
+  return `Balanced while it learns. Most things once the score reaches ${AUTOPILOT_SCORE_LIMITS.agreement * 100}%.`;
 }
 
 export function resolveAutopilotScoreView(
@@ -187,7 +187,7 @@ export function resolveAutopilotScoreView(
 ): AutopilotScoreView {
   const score = resolveAutopilotScore(state);
   return {
-    score: { detail: describeScore(score), value: score.value, ready: score.ready },
+    score: { detail: describeScore(score), value: score.value, percent: `${score.value}%` },
     suggested: {
       level: score.suggested,
       detail: describeSuggested(score),
