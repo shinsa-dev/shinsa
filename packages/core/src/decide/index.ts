@@ -42,7 +42,7 @@ import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting, stackOnTasks } from './dependencies.ts';
+import { releaseMergeHolds, releaseWaiting, stackOnTasks } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import {
@@ -563,6 +563,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   }
   apply(decider, command);
   releaseWaiting(decider);
+  releaseMergeHolds(decider, state);
   syncShares(decider);
   syncWatchdogs(decider);
   syncMergeSteps(decider);

@@ -25,6 +25,7 @@ import {
   pushFix,
   reachReviewGate,
   reachShipping,
+  shipAndMerge,
   spendRetries,
 } from '../harness.ts';
 
@@ -411,6 +412,32 @@ describe('waiting on other tasks after building started', () => {
     harness.send({ type: 'task.wait_on', taskId: top, waitsOn: [base] });
     expect(harness.task(top).stageReason).toBe('merging');
     expect(harness.effectsOf('pull_request.watch')).toHaveLength(watches);
+  });
+
+  test('a held task is judged again as each task it waits on merges, and only then', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    const second = createTask(harness, { request: 'Second' });
+    const top = createTask(harness, { request: 'Top' });
+    reachShipping(harness, top);
+    harness.send({ type: 'task.wait_on', taskId: top, waitsOn: [first, second] });
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(harness.task(top).stageReason).toBe('waiting for “First”, “Second” to merge');
+
+    const watches = harness.effectsOf('pull_request.watch').length;
+    harness.send({ type: 'task.prioritize', taskId: first, priority: 'high' });
+    expect(harness.effectsOf('pull_request.watch')).toHaveLength(watches);
+
+    shipAndMerge(harness, first);
+    expect(harness.task(top).stageReason).toBe('waiting for “Second” to merge');
+    expect(harness.lastEffect('pull_request.watch').taskId).toBe(top);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(listOpenGates(harness.state, top)).toHaveLength(0);
+
+    shipAndMerge(harness, second);
+    expect(harness.lastEffect('pull_request.watch').taskId).toBe(top);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(harness.openGate(top).type).toBe('merge');
   });
 
   test('cancelling the task it waits on lets its pull request be judged again', () => {

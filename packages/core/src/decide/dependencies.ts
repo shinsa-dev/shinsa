@@ -14,6 +14,7 @@ import {
   isBundleMember,
   isDependencyOf,
   isTriaged,
+  listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
   listPendingStackParents,
@@ -21,6 +22,7 @@ import {
   resolveBundleMembers,
   selectStackRefusal,
 } from '../state/queries.ts';
+import type { ShinsaState } from '../state/project.ts';
 import { type Decider, describeWaiting, quoteTitles } from './decider.ts';
 import { startWork } from './lifecycle.ts';
 import { reviewMergeHold } from './pull-requests.ts';
@@ -217,5 +219,21 @@ export function releaseWaiting(decider: Decider) {
     }
     if (holdForCheckout(decider, task.id)) continue;
     startWork(decider, task.id);
+  }
+}
+
+function countOpenBlockers(state: ShinsaState, taskId: string) {
+  const task = state.tasks[taskId];
+  return task ? listOpenBlockers(state, task).length : 0;
+}
+
+export function releaseMergeHolds(decider: Decider, before: ShinsaState) {
+  const held = Object.values(decider.state.tasks)
+    .filter((task) => task.stage === 'shipping' || task.stage === 'awaiting_merge')
+    .sort(compareTasks);
+  for (const task of held) {
+    const was = countOpenBlockers(before, task.id);
+    if (was === 0 || countOpenBlockers(decider.state, task.id) >= was) continue;
+    reviewMergeHold(decider, task.id);
   }
 }
