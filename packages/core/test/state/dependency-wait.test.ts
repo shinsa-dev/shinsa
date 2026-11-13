@@ -33,7 +33,7 @@ describe('describeDependencyWait', () => {
     expect(describeDependencyWait(queued)).toBe('has pull request #257 in the merge queue');
   });
 
-  test('says a task merged whatever it is doing now', () => {
+  test('says a task merged whatever it is doing now, until it starts its next round', () => {
     const merged = pullRequest({ number: 257, state: 'merged' });
     expect(describeDependencyWait(task('watching', { pullRequest: merged }))).toBe('has merged');
     const round: Round = {
@@ -52,7 +52,7 @@ describe('describeDependencyWait', () => {
       endedAt: 0,
       outcome: null,
     };
-    expect(describeDependencyWait(task('building', { rounds: [round] }))).toBe('has merged');
+    expect(describeDependencyWait(task('building', { rounds: [round] }))).toBe('is being built');
   });
 
   test('a cancelled task reads as cancelled even with an open pull request', () => {

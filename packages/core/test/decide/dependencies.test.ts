@@ -30,11 +30,6 @@ const MOVES_ON_AFTER_MERGE: [string, (harness: Harness, taskId: string) => void]
     'answers a follow-up',
     (harness, taskId) => harness.send({ type: 'task.message', taskId, text: 'Why this way?' }),
   ],
-  [
-    'starts its next round',
-    (harness, taskId) =>
-      harness.send({ type: 'task.message', taskId, text: 'Add retries too.', kind: 'new_round' }),
-  ],
 ];
 
 describe('a task that merged and moved on', () => {
@@ -83,6 +78,29 @@ describe('a task that merged and moved on', () => {
     moveOn(harness, first);
     const child = createTask(harness, { request: 'Child', waitsOn: [first] });
     expect(harness.task(child).waitsOn).toEqual([]);
+  });
+
+  test('is waited on again once it starts its next round, until that round merges', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    shipAndMerge(harness, first);
+    harness.send({ type: 'task.message', taskId: first, text: 'Add retries too.', kind: 'new_round' });
+    const child = createTask(harness, { request: 'Child', waitsOn: [first] });
+    expect(harness.task(child).waitsOn).toEqual([first]);
+    expect(harness.task(child).stage).toBe('waiting_on_tasks');
+    expect(harness.task(child).stageReason).toBe('waiting for “First” to finish');
+
+    readyWorktree(harness, first);
+    reachShipping(harness, first);
+    const next = { number: 43, url: 'https://github.com/o/r/pull/43' };
+    harness.send({ type: 'pull_request.record', taskId: first, pullRequest: pullRequest(next) });
+    expect(harness.task(child).stage).toBe('waiting_on_tasks');
+    harness.send({
+      type: 'pull_request.record',
+      taskId: first,
+      pullRequest: pullRequest({ ...next, state: 'merged' }),
+    });
+    expect(harness.task(child).stage).toBe('triage');
   });
 });
 

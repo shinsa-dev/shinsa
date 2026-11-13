@@ -1343,9 +1343,9 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   left from before (a task that was planning when it was told to wait) is reset onto the updated
   default branch first; it never has commits of its own at that point. Its prompts name the tasks
   it built on and say they have merged (`describeBases`). Merged means its pull request merged
-  (`hasMergedPullRequest`, any round's), not its stage: a task that merged and then checks a
-  watchdog, answers a follow-up or builds a next round still counts as merged, so nothing waits on
-  it again. A task held at the merge gate is judged again on the same command that clears its last
+  (`hasMergedPullRequest`, the current round's), not its stage: a task that merged and then checks
+  a watchdog or answers a follow-up still counts as merged. A next round clears the task's pull
+  request, so a task named after it then waits for that round's pull request to merge. A task held at the merge gate is judged again on the same command that clears its last
   blocker (`releaseMergeHolds`, after every command), never only on its next pull request read.
   While it waits, its line names what the one task it waits on is doing (`describeDependencyWait`:
   "Waits on “X”, which has pull request #257 waiting for CI").
