@@ -4,6 +4,7 @@ import {
   approve as approveGate,
   completePhase,
   createHarness,
+  createInitiative,
   PASSING,
   pullRequest,
   pushed,
@@ -478,5 +479,77 @@ describe('a plan that splits the work into other tasks', () => {
     proposePlan(harness, taskId);
     expect(approve(harness, taskId)).toEqual([]);
     expect(harness.task(taskId).splits).toBeUndefined();
+  });
+});
+
+describe('a plan that makes its split an initiative', () => {
+  test('approving it makes this task and its parts an initiative with a lead forked from it', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId, { ...SPLIT_PLAN, initiative: true });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    const initiativeId = harness.task(taskId).initiativeId ?? '';
+    const initiative = harness.state.initiatives[initiativeId];
+    const lead = harness.task(initiative?.leadTaskId ?? '');
+    expect(lead.forkOf).toBe(taskId);
+    const parts = Object.values(harness.state.tasks).filter(
+      (task) => task.forkOf === taskId && task.id !== lead.id
+    );
+    expect(parts).toHaveLength(SPLIT_PLAN.split?.length ?? 0);
+    expect(parts.every((task) => task.initiativeId === initiativeId)).toBe(true);
+  });
+
+  test('a task already in an initiative keeps it, and its parts join it', () => {
+    const harness = createHarness();
+    const { initiativeId } = createInitiative(harness);
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.join_initiative', taskId, initiativeId, phaseId: null });
+    proposePlan(harness, taskId, { ...SPLIT_PLAN, initiative: true });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    expect(Object.keys(harness.state.initiatives)).toEqual([initiativeId]);
+    const parts = Object.values(harness.state.tasks).filter((task) => task.forkOf === taskId);
+    expect(parts.every((task) => task.initiativeId === initiativeId)).toBe(true);
+  });
+});
+
+describe('a task filed by a member of an initiative', () => {
+  function inInitiative() {
+    const { harness, taskId } = building();
+    const { initiativeId: createdId } = createInitiative(harness, { phases: ['Dock'] });
+    const initiative = harness.state.initiatives[createdId];
+    const phaseId = initiative?.phases[0]?.id ?? null;
+    harness.send({ type: 'task.join_initiative', taskId, initiativeId: initiative?.id ?? '', phaseId });
+    return { harness, taskId, initiativeId: initiative?.id, phaseId };
+  }
+
+  test('joins the same initiative and phase through create_task', () => {
+    const { harness, taskId, initiativeId, phaseId } = inInitiative();
+    const [task] = courier(harness, harness.activeRun(taskId).id);
+    expect(task).toMatchObject({ initiativeId, initiativePhaseId: phaseId });
+  });
+
+  test('joins the same initiative and phase through split_task', () => {
+    const { harness, taskId, initiativeId, phaseId } = inInitiative();
+    const tasks = split(harness, harness.activeRun(taskId).id, ['Port the header.', 'Port the footer.']);
+    expect(tasks.map((task) => [task.initiativeId, task.initiativePhaseId])).toEqual([
+      [initiativeId, phaseId],
+      [initiativeId, phaseId],
+    ]);
+  });
+
+  test('a task outside any initiative files tasks outside one', () => {
+    const { harness, taskId } = building();
+    const [task] = courier(harness, harness.activeRun(taskId).id);
+    expect(task?.initiativeId).toBeUndefined();
   });
 });

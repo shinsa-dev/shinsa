@@ -185,6 +185,8 @@ src/
 │                        EngineClock, the start, stop and fireDue every clock service has, in schema.ts),
 │                        monitors/ (MonitorClock) and watchdogs/ (WatchdogClock: a watchdog's next check), each a
 │                        Context.Service on makeEngineClock with its ClockTimings reference in schema.ts
+├── tasks/               retry/ (TaskRetry: a failed task's automatic retry, task.auto_retry when its autoRetry is
+│                        due, keyed `auto-retry:<task>:<attempt>:<at>` by command.ts; TaskRetryTimings in schema.ts)
 ├── agents/              RunSupervisor (supervisor/: service.ts (the RunSupervisor service: its layer provides LiveRuns
 │   │                    to ToolCallsLayer and builds IdleCompaction, RunWorld and RunHost; the run limits and the
 │   │                    session, rejection and notice hooks are the RunLimits and RunHooks references in schema.ts;
@@ -670,6 +672,9 @@ src/
 │                        of task is shaped first (TriageClassifier.shape); TriageClassifier.repository finds the
 │                        repository a task with none needs once its work needs one (the setup check calls it);
 │                        a dispatch that breaks is InboxDispatchFailed or CommandRouteFailed; index.ts the re-exports
+├── initiatives/         LeadWakes (service.ts): an initiative.wake effect waits LeadWakeDebounce (schema.ts, 30 s) on
+│                        one fiber per initiative in a FiberMap, then sends initiative.wake_lead; recover reschedules
+│                        every initiative with milestones queued on start (docs/engine.md → Initiatives)
 ├── briefing/            The Home guide, written beside the log through EngineCore.writeBriefing: service.ts
 │                        (BriefingWriter over EngineCore and QuickCalls' writer: waits BriefingDebounce, schema.ts,
 │                        on a fiber in a FiberHandle that each new request interrupts and stop cancels, the write
@@ -769,6 +774,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `FeedbackIssues` (`feedback/issues/service.ts`) | `FeedbackIssues.layer`, needs `GitHubLayer` | opening a feedback issue and reading your issues' states through `GitHubCli` (`FeedbackAnswerInvalid` for an answer without a link or a list) |
   | `FeedbackDrafter`, `FeedbackEffects` (`feedback/draft/`, `feedback/effects/`) | `FeedbackDrafter.layer`, needs `QuickCalls`; `FeedbackEffects.layer({ environment })`, needs `EngineCore`, `EngineConfig`, `FeedbackIssues` and `FeedbackDrafter` | the issue drafted by the writer; the feedback effects (draft, file, a failure for good, recovery, the issues' states every `FeedbackSync`), each reporting back as a command |
   | `EunoeServer` (`eunoe/service.ts`) | `EunoeServer.layer`, scoped, needs `EngineConfig` and `JsonFile` | Eunoe's forwarder for the Claude sessions (`EunoeSettings` for its upstream, port, window and tuning) |
+  | `LeadWakes` (`initiatives/service.ts`) | `LeadWakes.layer`, needs `EngineCore` | an initiative lead's wakes, debounced |
   | `BriefingWriter` (`briefing/service.ts`) | `BriefingWriter.layer`, scoped, needs `EngineCore` and `QuickCalls` | the Home guide, debounced |
   | `EngineRestarter` (`instance/restart/service.ts`) | `EngineRestarter.layer(createServiceRestart(…))`, scoped, needs `EngineCore` | restarting now or after draining, and the engine's activity for /api/health |
   | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |
@@ -811,8 +817,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Every command the server sends gets a fixed id from its cause** (`EngineCore.dispatch(command, { id })`), unique for
   distinct causes and identical for a repeat, naming everything the decision depends on; the list is
   `docs/engine.md` → Command receipts → Deterministic server ids.
-- **Timers that fire from state run `makeStateClock`** (`runtime/clock/`): `MonitorClock`, `WatchdogClock`, `ShareClock`
-  and `ScheduleClock` are services whose layer runs `makeEngineClock` (`runtime/clock/engine.ts`) over a list of what is
+- **Timers that fire from state run `makeStateClock`** (`runtime/clock/`): `MonitorClock`, `WatchdogClock`, `ShareClock`,
+  `ScheduleClock` and `TaskRetry` are services whose layer runs `makeEngineClock` (`runtime/clock/engine.ts`) over a list of what is
   due, and `UsageResume` runs `makeStateClock` from its layer the same way; start and stop are Effects on the service,
   and the layer's scope stops it. The clock keeps one timer fiber for the
   earliest (`runtime/clock/service.ts`), re-armed on every state change and kept when the earliest due time stays

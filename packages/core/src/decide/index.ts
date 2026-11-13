@@ -13,6 +13,7 @@ import {
   bindAccount,
   changeUsageWait,
   recordAccountPlan,
+  recordModelRoom,
   recordUsagePace,
   recordAccountRemoved,
   recordProviderSignIn,
@@ -42,7 +43,7 @@ import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting, stackOnTasks } from './dependencies.ts';
+import { releaseMergeHolds, releaseWaiting, stackOnTasks } from './dependencies.ts';
 import { clearDuplicate, markDuplicate } from './duplicates.ts';
 import { commitEdits, recordEdit } from './edits.ts';
 import {
@@ -67,6 +68,21 @@ import {
   recordHandoff,
   removeHandoff,
 } from './handoffs.ts';
+import {
+  addInitiativeToTeam,
+  joinInitiative,
+  removeInitiativeFromTeam,
+  writeInitiative,
+} from './initiatives.ts';
+import {
+  adoptTask,
+  createInitiativeTask,
+  reportInitiative,
+  syncCancelledLeads,
+  syncInitiativeMilestones,
+  recordTeamMembers,
+  wakeLead,
+} from './leads.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -89,6 +105,7 @@ import { pauseTask } from './pause.ts';
 import { recordAway } from './presence.ts';
 import {
   recordBundleCheck,
+  recordBundleMergeConflict,
   recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
@@ -100,6 +117,7 @@ import {
   recordUploads,
 } from './pull-requests.ts';
 import { fileReport, reportRead } from './reads.ts';
+import { autoRetryTask } from './retry.ts';
 import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
@@ -187,6 +205,7 @@ import {
 
 export type { DecideContext, Decision } from './decider.ts';
 export { describeFeedbackLeaks } from './feedback.ts';
+export { listTaskDescendants } from './initiatives.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
 export { type RoundRelease, resolveRoundRelease } from './rounds.ts';
 export { isTaskPausable, PAUSED_TITLE } from './pause.ts';
@@ -223,7 +242,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
     case 'settings.change':
       return changeSettings(decider, command);
     case 'task.create':
-      return createTask(decider, command);
+      return command.initiative ? createInitiativeTask(decider, command) : createTask(decider, command);
     case 'task.triage':
       return triageTask(decider, command);
     case 'task.prioritize':
@@ -306,6 +325,20 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return suggestTasks(decider, command);
     case 'agent.remember':
       return rememberRule(decider, command);
+    case 'initiative.write':
+      return writeInitiative(decider, command);
+    case 'initiative.adopt_task':
+      return adoptTask(decider, command);
+    case 'initiative.add_to_team':
+      return addInitiativeToTeam(decider, command);
+    case 'initiative.remove_from_team':
+      return removeInitiativeFromTeam(decider, command);
+    case 'initiative.wake_lead':
+      return wakeLead(decider, command);
+    case 'initiative.record_team_members':
+      return recordTeamMembers(decider, command);
+    case 'task.join_initiative':
+      return joinInitiative(decider, command);
     case 'memory.write':
       return writeMemory(decider, command);
     case 'memory.accept':
@@ -400,6 +433,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordUpdateConflict(decider, command);
     case 'bundle.record_check':
       return recordBundleCheck(decider, command);
+    case 'bundle.record_merge_conflict':
+      return recordBundleMergeConflict(decider, command);
     case 'pull_request.record_hook_failure':
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
@@ -450,6 +485,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return resumeUsageWaitNow(decider, command);
     case 'usage_wait.resume':
       return resumeUsageWait(decider, command);
+    case 'task.auto_retry':
+      return autoRetryTask(decider, command);
     case 'account.signed_in':
       return recordSignedIn(decider, command);
     case 'account.removed':
@@ -458,6 +495,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordAccountPlan(decider, command);
     case 'usage.pace_recorded':
       return recordUsagePace(decider, command);
+    case 'usage.models_recorded':
+      return recordModelRoom(decider, command);
     case 'provider.record_sign_in':
       return recordProviderSignIn(decider, command);
     case 'agent.delegate':
@@ -514,6 +553,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return writeWatchSource(decider, command);
     case 'watch_source.remove':
       return removeWatchSource(decider, command);
+    case 'agent.report_initiative':
+      return reportInitiative(decider, command);
     case 'agent.report_read':
       return reportRead(decider, command);
     case 'agent.file_report':
@@ -567,6 +608,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   }
   apply(decider, command);
   releaseWaiting(decider);
+  releaseMergeHolds(decider, state);
   syncShares(decider);
   syncWatchdogs(decider);
   syncMergeSteps(decider);
@@ -574,6 +616,8 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   reviewBundles(decider);
   syncMergeSteps(decider);
   enforceLiveness(decider);
+  syncCancelledLeads(decider, state);
+  syncInitiativeMilestones(decider, state);
   dispatchRuns(decider);
   syncSlackThreads(decider);
   syncSlackEscalations(decider, state);

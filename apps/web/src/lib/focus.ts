@@ -5,6 +5,7 @@ import {
   type RemoteSnapshot,
   resolveFocusProject,
   resolveFocusProjects,
+  resolveFocusInitiative,
   resolveFocusTeam,
   selectSingleFocusProject,
   serializeNames,
@@ -30,6 +31,7 @@ export interface FocusTeam {
 export interface FocusTarget {
   projectId: string | null;
   teamId: string | null;
+  initiativeId?: string;
   projectIds?: string[];
   except?: boolean;
 }
@@ -99,4 +101,9 @@ export function selectFocusTeam(
 
 export function resolveFocusUntil(keep: 'hours' | 'tonight', now = Date.now()) {
   return keep === 'hours' ? now + FOCUS_HOURS * HOUR_MS : resolveEndOfDay(now);
+}
+
+export function selectFocusInitiative(state: ShinsaState, now = Date.now()) {
+  const initiativeId = Option.getOrNull(resolveFocusInitiative(state, now));
+  return initiativeId === null ? null : (state.initiatives[initiativeId] ?? null);
 }

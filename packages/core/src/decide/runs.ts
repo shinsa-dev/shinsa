@@ -38,16 +38,19 @@ const MAX_CONTINUATIONS = 3;
 
 const CONTINUATION_WINDOW_MS = 5 * MINUTE_MS;
 
-type FailureRecovery = { mode: 'resume' } | { mode: 'fresh' } | { mode: 'pause'; title: string };
+type FailureRecovery =
+  | { mode: 'resume' }
+  | { mode: 'fresh' }
+  | { mode: 'pause'; title: string; retries: boolean };
 
 const RESUME: FailureRecovery = { mode: 'resume' };
 
 const FRESH: FailureRecovery = { mode: 'fresh' };
 
 const FAILURE_RECOVERY: Record<RunFailureClass, FailureRecovery> = {
-  usage_limit: { mode: 'pause', title: 'The agent hit its usage limit' },
-  auth: { mode: 'pause', title: 'The agent needs you to sign in' },
-  setup_failed: { mode: 'pause', title: 'The agent could not start' },
+  usage_limit: { mode: 'pause', title: 'The agent hit its usage limit', retries: false },
+  auth: { mode: 'pause', title: 'The agent needs you to sign in', retries: false },
+  setup_failed: { mode: 'pause', title: 'The agent could not start', retries: true },
   context_window_full: FRESH,
   image_error: FRESH,
   session_lost: FRESH,
@@ -68,6 +71,7 @@ const PURPOSE_REFUSAL: Record<RunPurpose, string> = {
   watch:
     'You are checking a watchdog: file what you found with `file_report` and end the check with `report_read`.',
   intake: 'You are reading a data source for an automation: report what you read with `report_read`.',
+  lead: 'You are leading an initiative: end your turn with `report_initiative`.',
 };
 
 const ROLE_REFUSAL: Partial<Record<RunRole, string>> = {
@@ -144,7 +148,9 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   const givesUp = recovery.mode === 'pause' || task.recoveries >= MAX_RECOVERIES;
   if (givesUp && missRead(decider, run.id, why)) return;
   if (recovery.mode === 'pause') {
-    decider.fail(task.id, recovery.title, `${why} Retry starts the step again.`, run.id);
+    const detail = `${why} Retry starts the step again.`;
+    if (recovery.retries) decider.fail(task.id, recovery.title, detail, run.id);
+    else decider.hold(task.id, recovery.title, detail, run.id);
     return;
   }
   if (task.recoveries >= MAX_RECOVERIES) {
@@ -171,9 +177,14 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   moveWatchCheck(decider, run.id, next.id);
 }
 
-function describeStop(outcome: RunOutcome, summary: string | null) {
+function describeStop(outcome: RunOutcome, summary: string | null, backgroundWork: boolean) {
   if (outcome === 'failed') return summary ?? 'it stopped with an error';
+  if (backgroundWork) return 'it ended its turn while its background work was still running';
   return 'it ended its turn without calling the hand-over tool';
+}
+
+function isRecoveredStage(task: Task, run: Run) {
+  return RUN_STAGES.has(task.stage) || (task.stage === 'leading' && run.purpose === 'lead');
 }
 
 function finishRun(
@@ -181,7 +192,8 @@ function finishRun(
   run: Run,
   outcome: RunOutcome,
   summary: string | null,
-  failure: RunFailure | null
+  failure: RunFailure | null,
+  backgroundWork = false
 ) {
   if (outcome === 'completed' && hasOutstandingDelegations(decider.state, run)) {
     waitForDelegations(decider, run);
@@ -195,8 +207,8 @@ function finishRun(
   if (held) decider.holdDelegations(run.id);
   decider.endRun(run, outcome, summary, failure);
   const task = decider.task(run.taskId);
-  if (!isTaskSettled(task) && outcome !== 'cancelled' && RUN_STAGES.has(task.stage)) {
-    recover(decider, run, failure?.message ?? describeStop(outcome, summary), failure);
+  if (!isTaskSettled(task) && outcome !== 'cancelled' && isRecoveredStage(task, run)) {
+    recover(decider, run, failure?.message ?? describeStop(outcome, summary, backgroundWork), failure);
   }
   if (held) decider.releaseDelegations(run.id);
 }
@@ -206,7 +218,14 @@ export function endRun(decider: Decider, command: CommandOf<'run.end'>) {
   if (!run || run.endedAt !== null || isStaleAttempt(run, command.attemptId)) return;
   if (command.cacheExpiresAt)
     decider.emit({ type: 'run.cached', runId: run.id, cacheExpiresAt: command.cacheExpiresAt });
-  finishRun(decider, run, command.outcome, command.summary, command.failure ?? null);
+  finishRun(
+    decider,
+    run,
+    command.outcome,
+    command.summary,
+    command.failure ?? null,
+    command.backgroundWork ?? false
+  );
 }
 
 export function linkRun(decider: Decider, command: CommandOf<'run.link'>) {

@@ -9,6 +9,7 @@ import { findRemoteStylesheet, listSandboxSections, listSharedMachineLinks, resp
 import { upgradePreview } from './previews.ts';
 import {
   seedProject,
+  joinTeammateInitiative,
   seedTeammateDuplicate,
   selectBusiestProject,
   shareMachine,
@@ -86,6 +87,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
   yield* shareProjectWithTeam(teammate.engine, paywalls.projectId ?? undefined);
   const studioProject = yield* selectBusiestProject(studio.engine);
   yield* shareProjectWithTeam(studio.engine, studioProject);
+  yield* joinTeammateInitiative(teammate.engine, studio.engine);
   const [teamTask] = Object.values((yield* teammate.engine.core.state).tasks);
   yield* seedTeammateWork(teammate, teammateData, teamTask);
   const keptOver = yield* seedTeammateDuplicate(studio.engine, studioProject, teamTask);

@@ -300,7 +300,7 @@ Every task agent's tool: `tasks_diff` (reads).
 Create a task. Shinsa classifies it, plans it and builds it.
 
 ```
-shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--backlog] [--ask] [--after <list>] [--fork-from <text>] [--account <text>] [--json]
+shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--backlog] [--ask] [--initiative] [--after <list>] [--fork-from <text>] [--account <text>] [--json]
 ```
 
 Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create`.
@@ -314,13 +314,14 @@ Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create
 | `--plan-first` | boolean, optional | Wait for you to approve the plan before building. |
 | `--backlog` | boolean, optional | Plan it now and keep it in the backlog until you start building it. |
 | `--ask` | boolean, optional | Only answer a question: no changes, branch or pull request. |
+| `--initiative` | boolean, optional | Start an initiative: a task whose agent leads a group of tasks, files and orders them, and reports where they stand. The first line names it. |
 | `--after` | list, optional | Tasks it waits on before it starts. |
 | `--fork-from` | text, optional | A task to fork: the new task’s agent starts from a copy of its conversation. |
 | `--account` | text, optional | Run it on this Claude account (id or email). |
 
 #### shinsa tasks message
 
-Send a message to a task's agent. At an open decision it is your feedback, never an approval.
+Send a message to a task's agent, or to the lead of an initiative a teammate shared with your team. At an open decision it is your feedback, never an approval.
 
 ```
 shinsa tasks message <task> <text...> [--as <feedback|acknowledge|new_round|separate_task>] [--json]
@@ -727,6 +728,36 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<in>` | choice, optional | editor (the default), terminal or finder. |
 
+#### shinsa tasks join-initiative
+
+Add a task to an initiative, yours or one a teammate shared with your team, or move it to another phase. Tasks it files later join the same initiative and phase.
+
+```
+shinsa tasks join-initiative <task> <initiative> [--phase <text>] [--json]
+```
+
+Every task agent's tool: `tasks_join_initiative`. Sends `task.join_initiative`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `--phase` | text, optional | The phase, by name or id. Left out, no phase. |
+
+#### shinsa tasks leave-initiative
+
+Take a task out of its initiative.
+
+```
+shinsa tasks leave-initiative <task> [--json]
+```
+
+Every task agent's tool: `tasks_leave_initiative`. Sends `task.join_initiative`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 ### rounds
 
 #### shinsa rounds ship
@@ -790,6 +821,93 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
+
+### initiatives
+
+#### shinsa initiatives list
+
+List the initiatives: groups of tasks above projects, each with its phases and progress.
+
+```
+shinsa initiatives list [--json]
+```
+
+Every task agent's tool: `initiatives_list` (reads).
+
+#### shinsa initiatives show
+
+Show an initiative’s sheet: what needs you, what is being worked on, what comes next by phase, what shipped or was dropped, and the decisions made.
+
+```
+shinsa initiatives show <initiative> [--json]
+```
+
+Every task agent's tool: `initiatives_show` (reads).
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+
+#### shinsa initiatives write
+
+Change an initiative’s name, description or phases. Start one with `shinsa tasks create --initiative`.
+
+```
+shinsa initiatives write <initiative> [--name <text>] [--description <text>] [--phases <list>] [--json]
+```
+
+Every task agent's tool: `initiatives_write`. Sends `initiative.write`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `--name` | text, optional | Its new name. Left out, it keeps the one it has. |
+| `--description` | text, optional | What the initiative is for. Left out, it keeps the one it has. |
+| `--phases` | list, optional | Its phases in order, replacing the ones it has. A phase keeps its tasks while its name stays; tasks in a phase you leave out keep no phase. Left out, it keeps them. |
+
+#### shinsa initiatives adopt
+
+Make an initiative from a task: named after it, holding the task and every task it filed, split off or forked, and theirs in turn, with a lead forked from its conversation.
+
+```
+shinsa initiatives adopt <task> [--json]
+```
+
+Every task agent's tool: `initiatives_adopt`. Sends `initiative.adopt_task`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
+#### shinsa initiatives add-to-team
+
+Show an initiative to a team: its lead task and its sheet, read-only. Teammates’ own tasks can then join it.
+
+```
+shinsa initiatives add-to-team <initiative> <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `initiative.add_to_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
+
+#### shinsa initiatives remove-from-team
+
+Stop showing an initiative to a team. Teammates’ tasks in it leave its sheet.
+
+```
+shinsa initiatives remove-from-team <initiative> <team> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `initiative.remove_from_team`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
+| `<team>` | text, required | The team’s name or id, from `shinsa teams list`. |
 
 ### gates
 
@@ -1609,7 +1727,7 @@ Every task agent's tool: `projects_add_folder`.
 
 #### shinsa focus show
 
-Show the projects you are focused on.
+Show the projects or the initiative you are focused on.
 
 ```
 shinsa focus show [--json]
@@ -1631,6 +1749,21 @@ Every task agent's tool: `focus_set`. Sends `focus.change`.
 | --- | --- | --- |
 | `<projects>` | list, required | The projects: each one’s key, name or id. |
 | `--except` | boolean, optional | Show everything but these projects. |
+| `--hours` | number, optional | Only for this many hours. |
+
+#### shinsa focus initiative
+
+Focus on one initiative: Home, the queue and the guide show only its tasks.
+
+```
+shinsa focus initiative <initiative> [--hours <number>] [--json]
+```
+
+Every task agent's tool: `focus_initiative`. Sends `focus.change`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<initiative>` | text, required | The initiative: its name, its id or the start of its id. |
 | `--hours` | number, optional | Only for this many hours. |
 
 #### shinsa focus clear

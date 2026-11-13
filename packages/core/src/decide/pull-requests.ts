@@ -5,6 +5,7 @@ import {
   hasBlockingCiFailure,
   hasStep,
   isFailedCiRun,
+  isRetryArmed,
   isTaskSettled,
   listInheritedCiFailures,
   type MergeQueueEntry,
@@ -19,6 +20,7 @@ import {
   type ShippingStepKind,
   type Task,
 } from '../domain/index.ts';
+import { parseGitHubSso, resolveGitHubSsoGate, resolveTaskGitHubOwner } from '../github/index.ts';
 import {
   resolveCodeFence,
   resolvePullRequestFixPrompt,
@@ -32,6 +34,7 @@ import {
   clearBundleReady,
   describeBundleMerge,
   holdInBundle,
+  releaseBundleMerge,
   keepsBundleReady,
   startBundleMerge,
   startBundleUpdate,
@@ -148,7 +151,7 @@ function keepsMergeGate(
 }
 
 function isMerging(decider: Decider, task: Task) {
-  return task.stage === 'awaiting_merge' && !hasMergeGate(decider, task.id);
+  return task.stage === 'awaiting_merge' && !isRetryArmed(task) && !hasMergeGate(decider, task.id);
 }
 
 function holdForBlockers(decider: Decider, task: Task) {
@@ -440,9 +443,15 @@ export function recordPullRequestReadFailure(
   if (failures !== task.pullRequestReadFailures) {
     decider.emit({ type: 'pull_request.read_failed', taskId: task.id, failures, detail: command.detail });
   }
-  if (failures < PULL_REQUEST_READ_FAILURE_LIMIT || !isShipping(task)) return;
+  const sso = parseGitHubSso(command.detail, resolveTaskGitHubOwner(decider.state, task));
+  if ((failures < PULL_REQUEST_READ_FAILURE_LIMIT && Option.isNone(sso)) || !isShipping(task)) return;
   if (hasMergeGate(decider, task.id) || listActiveRuns(decider.state, task.id).length > 0) return;
   recordWatch(decider, task.id, { ...watch, stopped: 'unreadable' }, []);
+  if (Option.isSome(sso)) {
+    const gate = resolveGitHubSsoGate(sso.value);
+    decider.hold(task.id, gate.title, gate.body, null, gate.cause, { githubSso: gate.githubSso });
+    return;
+  }
   decider.fail(
     task.id,
     'Could not read the pull request',
@@ -467,8 +476,8 @@ export function recordUploads(decider: Decider, command: CommandOf<'evidence.rec
 }
 
 function isShippingNow(decider: Decider, task: Task) {
-  if (task.stage !== 'shipping' || decider.hasOpenGate(task.id, (gate) => gate.type === 'failure'))
-    return false;
+  if (task.stage !== 'shipping' || isRetryArmed(task)) return false;
+  if (decider.hasOpenGate(task.id, (gate) => gate.type === 'failure')) return false;
   return task.pushPending === true || task.pullRequest === null;
 }
 
@@ -516,16 +525,7 @@ function isSameBundleConflict(a: BundleConflict | null, b: BundleConflict | null
   return a?.taskId === b?.taskId && a?.behindTaskId === b?.behindTaskId && a?.base === b?.base;
 }
 
-export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.record_check'>) {
-  const task = decider.task(command.taskId);
-  if (isTaskSettled(task) || !isShipping(task) || isMerging(decider, task)) return;
-  const { conflict } = command;
-  const changed = !isSameBundleConflict(task.bundleConflict ?? null, conflict);
-  if (changed) decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
-  if (!conflict) {
-    if (changed) recheckPullRequest(decider, task.id);
-    return;
-  }
+function applyBundleConflict(decider: Decider, task: Task, conflict: BundleConflict, changed: boolean) {
   if (!conflict.behindTaskId) {
     if (!changed) return;
     decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
@@ -540,6 +540,37 @@ export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.r
   holdInBundle(decider, decider.task(task.id), task.pullRequest?.headSha ?? null);
   const behind = startBundleUpdate(decider, conflict);
   if (Option.isSome(behind)) requestPush(decider, behind.value);
+}
+
+export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.record_check'>) {
+  const task = decider.task(command.taskId);
+  if (isTaskSettled(task) || !isShipping(task) || isMerging(decider, task)) return;
+  if (task.pullRequest?.state !== 'open') return;
+  const { conflict } = command;
+  const changed = !isSameBundleConflict(task.bundleConflict ?? null, conflict);
+  if (changed) decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
+  if (!conflict) {
+    if (changed) recheckPullRequest(decider, task.id);
+    return;
+  }
+  applyBundleConflict(decider, task, conflict, changed);
+}
+
+export function recordBundleMergeConflict(
+  decider: Decider,
+  command: CommandOf<'bundle.record_merge_conflict'>
+) {
+  const task = decider.task(command.taskId);
+  if (isTaskSettled(task) || !isMerging(decider, task) || task.pullRequest?.state !== 'open') return;
+  const { conflict } = command;
+  if (!releaseBundleMerge(decider, task)) {
+    recheckPullRequest(decider, task.id);
+    return;
+  }
+  if (!isSameBundleConflict(task.bundleConflict ?? null, conflict)) {
+    decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
+  }
+  applyBundleConflict(decider, decider.task(task.id), conflict, true);
 }
 
 export function recordUpdateConflict(

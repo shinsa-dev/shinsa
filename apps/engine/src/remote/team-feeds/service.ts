@@ -18,6 +18,7 @@ import {
   serializeShareMessage,
   type TeamFeedMachine,
   type TeamFeedSnapshot,
+  type TeamFeedInitiative,
   type TeamFeedTask,
   type TeamId,
   TEAM_KEY_IV_BYTES,
@@ -27,6 +28,7 @@ import {
   type TeamMachine,
   type TeamPresence,
   type TeamSnapshot,
+  type TeamInitiative,
   type TeamTask,
   type TeamViewTarget,
   verifyTeamKeyRequest,
@@ -213,6 +215,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           instanceId: feed.machine.id,
           keyDigest: feed.keyDigest,
           tasks: feed.tasks,
+          ...(feed.initiatives.length > 0 ? { initiatives: feed.initiatives } : {}),
           updatedAt,
           snapshot: feed.snapshot,
         });
@@ -221,6 +224,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         const feed = yield* updateFeed(id, token, (before) => ({
           ...before,
           tasks: [],
+          initiatives: [],
           updatedAt: null,
           snapshot: null,
         }));
@@ -461,6 +465,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           const next = yield* updateFeed(feed.id, feed.token, (before) => ({
             ...before,
             tasks: body.tasks,
+            initiatives: body.initiatives ?? [],
             updatedAt: body.updatedAt,
             snapshot,
           }));
@@ -480,6 +485,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
         const feed = yield* updateFeed(id, token, (before) => ({
           ...before,
           tasks: list.tasks as TeamTask[],
+          initiatives: (list.initiatives ?? []) as TeamInitiative[],
           presence: (list.presence ?? []) as TeamPresence[],
           updatedAt: list.updatedAt,
           snapshot: (list.snapshot as TeamSnapshot | undefined) ?? null,
@@ -652,6 +658,7 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
           status: 'connecting',
           reason: null,
           tasks: held?.tasks ?? [],
+          initiatives: held?.initiatives ?? [],
           presence: [],
           updatedAt: held?.updatedAt ?? null,
           snapshot: held?.snapshot ?? null,
@@ -795,7 +802,20 @@ export class TeamFeeds extends Context.Service<TeamFeeds, TeamFeedsHandle>()(
             ? []
             : feed.tasks.map((task) => ({ ...task, teamId: feed.teamId, instanceId: feed.machine.id }))
         );
-        const answer: TeamFeedSnapshot = { machines, tasks };
+        const initiatives: TeamFeedInitiative[] = all.flatMap((feed) =>
+          isExpired(feed, now)
+            ? []
+            : feed.initiatives.map((initiative) => ({
+                ...initiative,
+                teamId: feed.teamId,
+                instanceId: feed.machine.id,
+              }))
+        );
+        const answer: TeamFeedSnapshot = {
+          machines,
+          tasks,
+          ...(initiatives.length > 0 ? { initiatives } : {}),
+        };
         return answer;
       });
 

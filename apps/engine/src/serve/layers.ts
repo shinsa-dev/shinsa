@@ -28,6 +28,8 @@ import { GitHubLayer } from '../github/layers.ts';
 import { EngineModels, ServedChangelog, ServedInstance } from '../http/schema.ts';
 import { EngineServer } from '../http/server/service.ts';
 import { resolveServerUrl } from '../http/server/url.ts';
+import { LeadWakes } from '../initiatives/service.ts';
+import { TeamMembers } from '../initiatives/team-members/service.ts';
 import {
   BUNDLE,
   createServiceRestart,
@@ -83,6 +85,7 @@ import { Slack } from '../slack/service.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES, Evidence } from '../store/index.ts';
 import { StoreLayer } from '../store/layers.ts';
 import { resolveStateVersion } from '../store/snapshot/version.ts';
+import { TaskRetry } from '../tasks/index.ts';
 import { TerminalsLayer } from '../terminals/layers.ts';
 import { ServiceRefiner } from '../terminals/refine/service.ts';
 import { Terminals } from '../terminals/service.ts';
@@ -188,6 +191,7 @@ function createAgentsLayer(options: ShinsaOptions) {
   return Layer.mergeAll(
     RemoteQuickLayer,
     BriefingWriter.layer,
+    LeadWakes.layer,
     FeedbackDrafter.layer,
     Layer.unwrap(
       Effect.gen(function* () {
@@ -302,7 +306,8 @@ function createClocksLayer(options: ShinsaOptions) {
     MonitorClock.layer,
     WatchdogClock.layer,
     AutopilotClock.layer,
-    ShareClock.layer
+    ShareClock.layer,
+    TaskRetry.layer
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -464,7 +469,7 @@ function createServeLayer(
     Layer.provideMerge(createServedLayer(options, instance, stop)),
     Layer.provideMerge(createEffectsLayer(options, instance)),
     Layer.provideMerge(createRunsLayer(options)),
-    Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer)),
+    Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer, TeamMembers.layer)),
     Layer.provideMerge(
       Layer.mergeAll(createTriageLayer(), createClocksLayer(options), createTerminalsLayer(instance))
     ),

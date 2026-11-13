@@ -19,7 +19,7 @@ import { EffectWorld } from '../world/service.ts';
 export class Merging extends Context.Service<
   Merging,
   {
-    merge(effect: EffectOf<'pull_request.merge'>): Effect.Effect<void, EffectFailure>;
+    merge(effect: EffectOf<'pull_request.merge'>, attempt: EffectAttempt): Effect.Effect<void, EffectFailure>;
     close(effect: EffectOf<'pull_request.close'>, attempt: EffectAttempt): Effect.Effect<void, EffectFailure>;
   }
 >()('shinsa/engine/runtime/effects/merging/Merging') {
@@ -127,28 +127,35 @@ export class Merging extends Context.Service<
         return true;
       });
 
-      const assertBundleMerges = Effect.fn('Merging.assertBundleMerges')(function* (taskId: string) {
+      const isBundleConflicting = Effect.fn('Merging.isBundleConflicting')(function* (
+        taskId: string,
+        attempt: EffectAttempt
+      ) {
         const { task, repo } = yield* world.findTask(taskId);
         const branches = yield* pullRequests.listBundleBranches(repo, task);
         const conflict = yield* Effect.mapError(
           remote.checkBundleMerge(repo, branches),
           resolveEffectFailure
         );
-        if (!conflict) return;
-        const title = (yield* world.state).tasks[conflict.taskId]?.title ?? 'A task';
-        return yield* createEffectFailed(
-          `“${title}” conflicts with ${repo.defaultBranch} once the bundle merges, so nothing was merged. Retry to bring the bundle up to date first.`
+        if (!conflict) return false;
+        yield* world.dispatch(
+          { type: 'bundle.record_merge_conflict', taskId, conflict },
+          { id: `${attempt.key}:bundle.record_merge_conflict` }
         );
+        return true;
       });
 
-      const merge = Effect.fn('Merging.merge')(function* (effect: EffectOf<'pull_request.merge'>) {
+      const merge = Effect.fn('Merging.merge')(function* (
+        effect: EffectOf<'pull_request.merge'>,
+        attempt: EffectAttempt
+      ) {
         const bundle = effect.bundle ?? [];
         if (bundle.length === 0) {
           yield* mergeTask(effect.taskId, effect.headSha);
           return;
         }
         if (yield* isRootMoved(effect.taskId, effect.headSha)) return;
-        yield* assertBundleMerges(effect.taskId);
+        if (yield* isBundleConflicting(effect.taskId, attempt)) return;
         for (const member of bundle) {
           if (!(yield* mergeTask(member.taskId, null))) return;
         }

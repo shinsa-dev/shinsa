@@ -116,6 +116,7 @@ export const SHAPE_NOUN: Record<TaskShape, string> = {
   change: 'a change',
   fix: 'a fix',
   operation: 'an operation',
+  lead: 'the lead of an initiative',
 };
 
 export const UNCLASSIFIED = 'Shinsa could not classify the request, so';

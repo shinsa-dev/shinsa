@@ -607,6 +607,7 @@ describe('resolveTurns', () => {
         ),
         createNoticeEntry({ kind: 'fast_mode', status: 'unavailable', reason: 'free' }, 2, 'fast'),
         createCallEntry('1', readTool('a.ts'), 3),
+        createNoticeEntry({ kind: 'background_wait', tasks: 1 }, 3, 'wait'),
         createNoticeEntry(
           { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
           4,
@@ -620,6 +621,7 @@ describe('resolveTurns', () => {
     expect(turn?.notices).toEqual([
       { kind: 'proxy', key: 'proxy', at: 1, detail: 'down' },
       { kind: 'fast_mode', key: 'fast', at: 2, status: 'unavailable', reason: 'free' },
+      { kind: 'background_wait', key: 'wait', at: 3, tasks: 1 },
       { kind: 'compaction', key: 'fold', at: 4, trigger: 'fold', by: 'eunoe' },
     ]);
   });

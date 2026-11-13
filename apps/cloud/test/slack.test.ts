@@ -1046,6 +1046,23 @@ describe('a mention from someone', () => {
     warnings.mockRestore();
   });
 
+  test('whose machine beats without joining the relay is told it is offline, with a warning that it has not joined', async () => {
+    const { harness, slack, machine, forwards } = await setUp({ online: false });
+    await harness.post(
+      REMOTE_PATHS.heartbeat,
+      { localUrl: 'http://127.0.0.1:7446', features: ['sealed-pairing'] },
+      { bearer: machine.machineToken }
+    );
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    await sendEvent(harness, mentionEnvelope());
+    expect(String(slack.callsTo('chat.postMessage')[0]?.body.text)).toContain('Studio is offline');
+    expect(forwards).toHaveLength(0);
+    expect(warnings.mock.calls).toEqual([
+      ['[Cloud] Machine offline', expect.objectContaining({ surface: 'slack', reason: 'not_joined' })],
+    ]);
+    warnings.mockRestore();
+  });
+
   test('that fails part way is logged, and Slack still gets its answer at once', async () => {
     const { harness, slack } = await setUp();
     slack.answers['chat.postEphemeral'] = () => ({ ok: false, error: 'channel_not_found' });

@@ -3,6 +3,7 @@ import {
   type PipelineStep,
   type PlanDocument,
   type PullRequest,
+  type RunPurpose,
   type RunRole,
   type TaskStage,
   isDecisionGate,
@@ -179,8 +180,9 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
   }
 }
 
-function resolveRunModel(task: SeedTask, role: RunRole) {
+function resolveRunModel(task: SeedTask, role: RunRole, purpose: RunPurpose | null) {
   if (task.provider === 'codex') return 'gpt-6-astra';
+  if (purpose === 'plan' && task.size === 'large') return 'claude-fable-5-1';
   return role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
 }
 
@@ -319,7 +321,8 @@ function pushPlanProposal(task: SeedTask, progress: SeedProgress, push: Push, cl
 function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
   const index = progress.built;
   const phase = progress.plan?.phases[index];
-  push(clock.step(2), {
+  const at = clock.step(2);
+  push(at, {
     type: 'phase.completed',
     taskId: task.id,
     report: {
@@ -329,7 +332,7 @@ function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock
       judgementCalls: index === 0 ? (task.report?.judgementCalls ?? []) : [],
       walkthrough:
         index === (progress.plan?.phases.length ?? 1) - 1 ? (task.report?.walkthrough ?? null) : null,
-      at: 0,
+      at,
     },
   });
   push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
@@ -372,7 +375,7 @@ function pushTaskRun(task: SeedTask, index: number, progress: SeedProgress, push
       ...(run.purpose ? { purpose: run.purpose } : {}),
       ...resolveRunPhase(progress, run),
       provider: task.provider ?? 'claude',
-      model: resolveRunModel(task, run.role),
+      model: resolveRunModel(task, run.role, run.purpose ?? null),
       sessionId: agent ? resolveAgentSession(task.id) : `session-${runId}`,
       sessionProvider: task.provider ?? 'claude',
       ...(agent && progress.agentRuns > 0 ? { resume: true } : {}),

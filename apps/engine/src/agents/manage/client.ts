@@ -6,12 +6,15 @@ import type { ProjectChanges } from '../../projects/changes.ts';
 import type { DispatchOptions } from '../../runtime/engine/schema.ts';
 import type { EngineCore } from '../../runtime/engine/service.ts';
 import { SurfaceCallFailed, type SurfaceClient, type SurfaceHookSecrets } from '../../surface/index.ts';
+import { createCommandRelay, createLocalRelay, type TeammateRelay } from '../../surface/relay.ts';
 import type { RouteFailure } from '../../triage/index.ts';
 
 export type CommandRouter = (
   command: UserCommand,
   options: DispatchOptions
 ) => Effect.Effect<ShinsaEvent[], RouteFailure>;
+
+export type { TeammateRelay } from '../../surface/relay.ts';
 
 export class ManageAccess extends Context.Service<
   ManageAccess,
@@ -20,6 +23,7 @@ export class ManageAccess extends Context.Service<
     readonly projects: ProjectChanges['Service'];
     readonly route: CommandRouter;
     readonly hookSecrets?: (taskId: string) => SurfaceHookSecrets;
+    readonly relay?: TeammateRelay;
   }
 >()('shinsa/engine/agents/manage/ManageAccess') {}
 
@@ -31,6 +35,15 @@ interface ManageClientOptions {
   projects?: ProjectChanges['Service'];
   route?: CommandRouter;
   hookSecrets?: SurfaceHookSecrets;
+  relay?: TeammateRelay;
+}
+
+function createRelay(engine: EngineCore['Service'], byTask: string, relay: TeammateRelay) {
+  const sender = Effect.map(engine.state, (state) => {
+    const task = state.tasks[byTask];
+    return task ? { fromTeammateTask: { handle: task.handle ?? null, title: task.title } } : {};
+  });
+  return createCommandRelay(relay, sender);
 }
 
 function refuse(error: unknown) {
@@ -55,6 +68,7 @@ export function createManageClient(options: ManageClientOptions): SurfaceClient 
         }
       : {}),
     ...(hookSecrets ? { hookSecrets } : {}),
+    relay: createRelay(engine, byTask, options.relay ?? createLocalRelay(base)),
     send: Effect.fn('ManageClient.send')(function* (command) {
       sent += 1;
       const id = key === null ? {} : { id: `${key}:${sent}` };

@@ -225,6 +225,15 @@ export function resolveNoticeLine(item: TimelineItemOf<QuietNoticeKind>): Notice
   if (item.kind === 'handoff') return resolveHandoffLine(item);
   if (item.kind === 'extensions') return resolveExtensionsLine(item);
   if (item.kind === 'fast_mode') return resolveFastModeLine(item);
+  if (item.kind === 'background_wait') {
+    return {
+      icon: 'IconHourglass',
+      label: 'Waiting for its background work to finish',
+      meta: describeCount(item.tasks, 'task'),
+      detail:
+        'The agent ended its turn while its own commands or subagents were still running. It carries on in the same session when they finish, and Shinsa stops them after 30 minutes.',
+    };
+  }
   if (item.kind === 'proxy') {
     return {
       icon: 'IconCloudSimpleDisconnected',

@@ -1,5 +1,6 @@
 import {
   compareTasks,
+  describeDependencyWait,
   type Gate,
   type GateType,
   isAgentQuestion,
@@ -148,6 +149,8 @@ export function resolveTaskGroup(state: ShinsaState, task: Task): TaskGroupKey {
 export function describeWaitsOn(waitsOn: Task[]) {
   const cancelled = waitsOn.find((task) => task.stage === 'cancelled');
   if (cancelled) return `“${cancelled.title}” was cancelled`;
+  const [only] = waitsOn;
+  if (waitsOn.length === 1 && only) return `Waits on “${only.title}”, which ${describeDependencyWait(only)}`;
   const titles = waitsOn.map((task) => `“${task.title}”`);
   if (titles.length <= 2) return `Waits on ${titles.join(' and ')}`;
   return `Waits on ${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`;

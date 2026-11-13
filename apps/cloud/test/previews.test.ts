@@ -187,6 +187,21 @@ describe('a preview link', () => {
     errors.mockRestore();
   });
 
+  test('says the machine is offline when it beats without joining the relay, and warns it has not joined', async () => {
+    const harness = createHarness();
+    const { credentials, origin } = await shareMachine(harness);
+    await heartbeat(harness, credentials, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    const logged = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const answer = await visit(harness, `${origin}/`, withKey());
+    expect(answer.status).toBe(503);
+    expect(await answer.text()).toContain(PREVIEW_OFFLINE.slice(0, 40));
+    expect(logged.mock.calls).toEqual([
+      ['[Cloud] Machine offline', expect.objectContaining({ surface: 'preview', reason: 'not_joined' })],
+    ]);
+    expect(harness.calls.some((call) => new URL(call.url).hostname.endsWith('.relay.test'))).toBe(false);
+    logged.mockRestore();
+  });
+
   test('passes on the machine’s own page for a stopped service and warns that the service stopped', async () => {
     const harness = createHarness();
     const { origin } = await shareMachine(harness);

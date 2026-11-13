@@ -28,7 +28,9 @@ export const ENGINE_FEATURES = [
   'shared-machine',
   'focus.projects',
   'browser',
+  'initiatives',
   'slack-channel-triggers',
+  'models.routing',
   'accounts.provider_choice',
 ] as const;
 

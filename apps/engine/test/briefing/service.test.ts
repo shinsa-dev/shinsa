@@ -113,6 +113,7 @@ function entry(task: Task, type: GateType, unblocks = 0, ageHours = 3) {
 const queue: Queue = {
   focus: NO_FOCUS_PROJECTS,
   focusTeamId: null,
+  focusInitiativeId: null,
   ready: [entry(chat, 'review', 1), entry(dup, 'merge')],
   upNow: [],
   later: [],

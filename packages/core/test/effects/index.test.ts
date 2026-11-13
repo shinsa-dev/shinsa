@@ -35,6 +35,7 @@ describe('resolveEffectKey', () => {
     ).toBe('checks.run:t:2:4');
     expect(resolveEffectKey({ kind: 'briefing.request', projectId: null }, 4)).toBe('briefing.request:*:4');
     expect(resolveEffectKey({ kind: 'briefing.request', projectId: 'a' }, 4)).toBe('briefing.request:a:4');
+    expect(resolveEffectKey({ kind: 'initiative.wake', initiativeId: 'i' }, 4)).toBe('initiative.wake:i:4');
     expect(
       resolveEffectKey({ kind: 'watch.suggest', projectId: 'a', server: 'slack', data: 'Bugs' }, 4)
     ).toBe('watch.suggest:a:slack:4');
@@ -51,6 +52,7 @@ describe('resolveEffectLane', () => {
     expect(resolveEffectLane({ kind: 'run.steer', runId: 'r', text: 'x' })).toBe('steer:r');
     expect(resolveEffectLane({ kind: 'question.resolve', gateId: 'g' })).toBe('gate:g');
     expect(resolveEffectLane({ kind: 'briefing.request', projectId: 'a' })).toBe('briefing');
+    expect(resolveEffectLane({ kind: 'initiative.wake', initiativeId: 'i' })).toBe('initiative:i');
     expect(resolveEffectLane({ kind: 'watch.suggest', projectId: 'a', server: 'slack', data: 'Bugs' })).toBe(
       'suggest:a'
     );

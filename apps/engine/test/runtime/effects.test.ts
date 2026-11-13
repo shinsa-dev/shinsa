@@ -2163,17 +2163,22 @@ describe('merging a bundle of tasks', () => {
     expect(records(dispatched).map((record) => record.taskId)).toEqual(['task-1']);
   });
 
-  test('a branch that conflicts with the default branch once the bundle merges stops the merge before anything merges', async () => {
+  test('a branch that conflicts with the default branch once the bundle merges records the conflict and merges nothing', async () => {
     const readGitHub = useFakeGitHub(bundlePulls());
-    const { runner, created } = await setupBundle();
+    const { runner, created, dispatched } = await setupBundle();
     await moveMain(created.origin, created.root, { 'top.txt': 'main\n' });
-    await expect(
-      runner.apply(
-        { kind: 'pull_request.merge', taskId: 'task-1', headSha: null, bundle: BUNDLE },
-        createContext()
-      )
-    ).rejects.toThrow('“Top” conflicts with main once the bundle merges, so nothing was merged.');
+    await runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null, bundle: BUNDLE },
+      createContext()
+    );
     expect(listMerged(readGitHub().calls)).toEqual([]);
+    expect(dispatched.filter((command) => command.type === 'bundle.record_merge_conflict')).toEqual([
+      {
+        type: 'bundle.record_merge_conflict',
+        taskId: 'task-1',
+        conflict: { taskId: 'task-3', behindTaskId: 'task-1', base: 'main' },
+      },
+    ]);
   });
 
   test('a task above that GitHub leaves open fails the merge, and the failure goes to the root', async () => {

@@ -1,4 +1,10 @@
-import type { UsagePaceScope, UsageWait } from '../domain/index.ts';
+import {
+  type AutoRetry,
+  MAX_AUTO_RETRIES,
+  MINUTE_MS,
+  type UsagePaceScope,
+  type UsageWait,
+} from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
@@ -12,7 +18,9 @@ type WaitEvent = Extract<
       | 'monitor.ended'
       | 'usage_wait.armed'
       | 'usage_wait.ended'
-      | 'task.pace_limits_ignored';
+      | 'task.pace_limits_ignored'
+      | 'task.retry_scheduled'
+      | 'task.retry_cleared';
   }
 >;
 
@@ -97,6 +105,31 @@ function applyUsageWaitEnded(state: ShinsaState, event: EventOf<'usage_wait.ende
   });
 }
 
+function describeRetryDelay(ms: number) {
+  const minutes = Math.round(ms / MINUTE_MS);
+  if (minutes >= 60) return 'an hour';
+  return minutes === 1 ? 'a minute' : `${minutes} minutes`;
+}
+
+function applyRetryScheduled(state: ShinsaState, event: EventOf<'task.retry_scheduled'>) {
+  updateTask(state, event.taskId, event.at, { autoRetry: event.retry, approveAfterFix: false });
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'failure',
+    text: `${event.retry.title}; retrying in ${describeRetryDelay(event.retry.at - event.at)} (${event.retry.attempt} of ${MAX_AUTO_RETRIES})`,
+    detail: event.retry.detail,
+    runId: event.retry.runId,
+  });
+}
+
+function applyRetryCleared(state: ShinsaState, event: EventOf<'task.retry_cleared'>) {
+  const retry: AutoRetry | null | undefined = state.tasks[event.taskId]?.autoRetry;
+  if (!retry) return;
+  updateTask(state, event.taskId, event.at, {
+    autoRetry: event.streak === 'reset' ? null : { ...retry, status: 'spent' },
+  });
+}
+
 export function applyWaitEvent(state: ShinsaState, event: WaitEvent) {
   switch (event.type) {
     case 'monitor.armed':
@@ -128,6 +161,12 @@ export function applyWaitEvent(state: ShinsaState, event: WaitEvent) {
         kind: 'account',
         text: 'Ignoring the daily and project usage limits for this task',
       });
+      return;
+    case 'task.retry_scheduled':
+      applyRetryScheduled(state, event);
+      return;
+    case 'task.retry_cleared':
+      applyRetryCleared(state, event);
       return;
   }
 }

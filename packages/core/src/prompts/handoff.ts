@@ -104,6 +104,7 @@ function resolveNoticeBlock(entry: ChatEntry & { type: 'notice' }, path: string)
     case 'delegation':
     case 'proxy':
     case 'fast_mode':
+    case 'background_wait':
     case 'extensions':
       return null;
   }

@@ -2,6 +2,7 @@ import { Option } from 'effect';
 import { describeList } from '../chat/text.ts';
 import {
   type Activity,
+  hasMergedPullRequest,
   isTaskSettled,
   listPhaseChecks,
   listRepoChecks,
@@ -34,8 +35,12 @@ export function describeTaskLink(task: Task) {
   return `This task: ${handle}[${task.title}](shinsa://task/${task.id}).`;
 }
 
+function hasMerged(base: Task) {
+  return base.stage === 'merged' || hasMergedPullRequest(base);
+}
+
 export function isStacked(base: Task) {
-  return base.stage !== 'merged' && base.stage !== 'done';
+  return base.stage !== 'done' && !hasMerged(base);
 }
 
 function listQuotedTitles(tasks: Task[]) {
@@ -56,7 +61,7 @@ export function describeBases(bases: Task[]) {
   if (built.length > 1) {
     return `This task builds on ${listQuotedTitles(built)}, which are all finished. Their work is in the base branch now.`;
   }
-  if (only.stage === 'merged') {
+  if (hasMerged(only)) {
     return `This task builds on "${only.title}", which has merged. Its work is in the base branch now.`;
   }
   return `This task builds on "${only.title}", which is finished. Build on what it left in the base branch.`;

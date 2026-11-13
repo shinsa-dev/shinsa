@@ -56,7 +56,9 @@ describe('resolveNowTitle', () => {
   it('says what the task waits on first', () => {
     const task = createTask({ id: 'task-1', stage: 'waiting_on_tasks' });
     const base = createTask({ id: 'task-0', title: 'Add the export API' });
-    expect(resolveNowTitle(task, [base], phase({}), undefined)).toBe('Waits on “Add the export API”');
+    expect(resolveNowTitle(task, [base], phase({}), undefined)).toBe(
+      'Waits on “Add the export API”, which is being built'
+    );
   });
 
   it('names the planned phase being built', () => {
@@ -340,6 +342,8 @@ describe('what the now card shows', () => {
     expect(resolveNowKind(state, usage, undefined)).toBe('usage_wait');
     const monitor = createTask({ id: 't', stage: 'building', monitor: { status: 'armed' } as never });
     expect(resolveNowKind(state, monitor, undefined)).toBe('wait');
+    const retrying = createTask({ id: 't', stage: 'fixing', autoRetry: { status: 'armed' } as never });
+    expect(resolveNowKind(state, retrying, undefined)).toBe('retry');
     const postMerge = createGate({ id: 'a', taskId: 't', type: 'post_merge' });
     expect(resolveNowKind(state, done, postMerge)).toBe('gate');
     expect(resolveNowKind(running, done, postMerge)).toBe('work');

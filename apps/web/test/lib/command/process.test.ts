@@ -75,6 +75,28 @@ describe('process commands', () => {
     ]);
   });
 
+  it('offers retry now while an automatic retry is pending, and nothing once it is spent', () => {
+    const autoRetry = {
+      at: NOW + 60_000,
+      attempt: 3,
+      title: 'The agent paused',
+      detail: 'd',
+      runId: null,
+      cause: null,
+      milestone: 'm',
+      status: 'armed' as const,
+    };
+    const task = createTask({ id: 't', autoRetry });
+    const commands = listProcessCommands(createShinsaState({ tasks: [task] }), task, NOW);
+    expect(commands.map((command) => [command.label, command.kind === 'run' ? command.hint : null])).toEqual([
+      ['Retry now', 'Retry 3 of 10'],
+    ]);
+    run(commands[0]);
+    expect(spies.sent.mock.calls.map(([command]) => command)).toEqual([{ type: 'task.retry', taskId: 't' }]);
+    const spent = createTask({ id: 't', autoRetry: { ...autoRetry, status: 'spent' } });
+    expect(listProcessCommands(createShinsaState({ tasks: [spent] }), spent, NOW)).toEqual([]);
+  });
+
   it('names each quiet run of a task in its own warning commands', () => {
     const task = createTask({ id: 't' });
     const silence = { since: NOW - 10 * 60_000, snoozedUntil: null, dismissed: false };

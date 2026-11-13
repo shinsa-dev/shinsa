@@ -20,6 +20,7 @@ import {
   reachShipping,
   registerRepo,
   shipAndMerge,
+  spendRetries,
 } from '../harness.ts';
 
 describe('attention', () => {
@@ -115,6 +116,7 @@ describe('ranking decisions', () => {
     const planned = createTask(harness, { request: 'Plan me', size: 'large' });
     proposePlan(harness, planned);
     const paused = createTask(harness, { request: 'Pause me' });
+    spendRetries(harness, paused);
     harness.send({ type: 'effect.fail', taskId: paused, title: 'Broke', detail: 'x' });
     const reasons = resolveQueue(harness.state, 0).ready.map((entry) => entry.reason);
     expect(reasons).toEqual([

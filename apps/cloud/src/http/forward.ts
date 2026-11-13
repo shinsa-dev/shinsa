@@ -1,9 +1,15 @@
 import { Effect, Option } from 'effect';
-import type { RelayUnreachable } from '../integrations/relays/schema.ts';
+import { RELAY_NOT_JOINED, type RelayUnreachable } from '../integrations/relays/schema.ts';
 
 const TUNNEL_OFFLINE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504, 530]);
 
-export type OfflineSurface = 'webhook' | 'slack' | 'preview';
+export type OfflineSurface = 'webhook' | 'slack' | 'preview' | 'relay';
+
+export type OfflineCause =
+  | { readonly status: number }
+  | { readonly error: string }
+  | { readonly lastSeenAt: number | null }
+  | { readonly joined: false };
 
 const DROPPED_HEADERS = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'cdn-loop']);
 
@@ -26,7 +32,7 @@ export function isTunnelOffline(response: Response) {
 export const recordMachineOffline = Effect.fn('recordMachineOffline')(function* (
   surface: OfflineSurface,
   instanceId: string,
-  cause: { readonly status: number } | { readonly error: string } | { readonly lastSeenAt: number | null }
+  cause: OfflineCause
 ) {
   yield* Effect.logWarning('[Cloud] Machine offline').pipe(
     Effect.annotateLogs({
@@ -36,7 +42,9 @@ export const recordMachineOffline = Effect.fn('recordMachineOffline')(function* 
         ? { reason: 'status', status: cause.status }
         : 'error' in cause
           ? { reason: 'unreachable', error: cause.error }
-          : { reason: 'stale', lastSeenAt: cause.lastSeenAt }),
+          : 'joined' in cause
+            ? { reason: 'not_joined' }
+            : { reason: 'stale', lastSeenAt: cause.lastSeenAt }),
     })
   );
 });
@@ -57,7 +65,13 @@ export const requestOnlineMachine = Effect.fn('requestOnlineMachine')(function* 
   request: Effect.Effect<Response, RelayUnreachable, R>
 ) {
   const answer = yield* request.pipe(
-    Effect.tapError((error) => recordMachineOffline(surface, instanceId, { error: error.message })),
+    Effect.tapError((error) =>
+      recordMachineOffline(
+        surface,
+        instanceId,
+        error.message === RELAY_NOT_JOINED ? { joined: false } : { error: error.message }
+      )
+    ),
     Effect.option
   );
   if (Option.isNone(answer)) return Option.none<Response>();

@@ -24,6 +24,7 @@ import {
   reachReviewGate,
   reachShipping,
   registerRepo,
+  spendRetries,
 } from '../harness.ts';
 
 const KEPT_NOTE = [
@@ -325,6 +326,7 @@ describe('acting for the human', () => {
     const taskId = createTask(harness);
     buildAll(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
+    spendRetries(harness, taskId);
     for (let attempt = 0; attempt < 5 && listOpenGates(harness.state, taskId).length === 0; attempt += 1) {
       harness.send({
         type: 'run.end',

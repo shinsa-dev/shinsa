@@ -4,10 +4,12 @@ import {
   completePhase,
   createHarness,
   createTask,
+  fireRetry,
   type Harness,
   linkSession,
   proposePlan,
   registerRepo,
+  spendRetries,
 } from '../harness.ts';
 
 describe('recovery', () => {
@@ -24,7 +26,42 @@ describe('recovery', () => {
     expect(harness.task(taskId).recoveries).toBe(1);
   });
 
-  test('a second stop opens a failure gate, and retry starts the step again', () => {
+  test('a turn that ends while its background work still runs is resumed with that cause', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    linkSession(harness, taskId, 'plan-1');
+    const first = harness.activeRun(taskId);
+    harness.send({
+      type: 'run.end',
+      runId: first.id,
+      outcome: 'completed',
+      summary: null,
+      backgroundWork: true,
+    });
+    const second = harness.activeRun(taskId);
+    expect(second).toMatchObject({ role: 'agent', purpose: 'plan', continues: first.id });
+    expect(second.sessionId).toBe('plan-1');
+    expect(second.prompt).toContain('ended its turn while its background work was still running');
+    expect(second.prompt).not.toContain('without calling the hand-over tool');
+  });
+
+  test('a run that failed while background work ran keeps its own error as the cause', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const first = harness.activeRun(taskId);
+    harness.send({
+      type: 'run.end',
+      runId: first.id,
+      outcome: 'failed',
+      summary: 'Overloaded',
+      backgroundWork: true,
+    });
+    const second = harness.activeRun(taskId);
+    expect(second.prompt).toContain('Overloaded');
+    expect(second.prompt).not.toContain('background work');
+  });
+
+  test('a second stop retries the step on its own a minute later, as Retry does', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
@@ -40,12 +77,16 @@ describe('recovery', () => {
       outcome: 'failed',
       summary: 'Overloaded',
     });
-    const gate = harness.openGate(taskId);
-    expect(gate.type).toBe('failure');
-    expect(gate.title).toBe('The agent paused');
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId).autoRetry).toMatchObject({
+      title: 'The agent paused',
+      attempt: 1,
+      at: harness.now + 60_000,
+      status: 'armed',
+    });
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
 
-    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    fireRetry(harness, taskId);
     const run = harness.activeRun(taskId);
     expect(run).toMatchObject({ role: 'agent', purpose: 'build' });
     expect(run.phaseIndex).toBe(0);
@@ -109,6 +150,7 @@ describe('recovery', () => {
   test('rejecting a failure gate cancels the task', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
+    spendRetries(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Worktree failed', detail: 'disk full' });
     harness.send({
       type: 'gate.answer',
@@ -180,7 +222,7 @@ describe('the project a recovered agent is told about', () => {
 });
 
 describe('links to the chat', () => {
-  test('a failure gate points at the run that stopped, and its activity links there too', () => {
+  test('a retry points at the run that stopped, and its activity links there too', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
@@ -192,9 +234,12 @@ describe('links to the chat', () => {
     });
     const second = harness.activeRun(taskId);
     harness.send({ type: 'run.end', runId: second.id, outcome: 'failed', summary: 'Overloaded' });
-    const gate = harness.openGate(taskId);
-    expect(gate.runId).toBe(second.id);
-    expect(harness.task(taskId).activity.at(-1)).toMatchObject({ kind: 'failure', runId: second.id });
+    expect(harness.task(taskId).autoRetry?.runId).toBe(second.id);
+    expect(harness.task(taskId).activity.at(-1)).toMatchObject({
+      kind: 'failure',
+      runId: second.id,
+      text: 'The agent paused; retrying in a minute (1 of 10)',
+    });
   });
 
   test('phase summaries and review results link to the run that wrote them', () => {
@@ -361,10 +406,10 @@ describe('failure classes', () => {
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
 
-  test('a signed-out agent and an agent that cannot start pause the task too', () => {
-    for (const [failureClass, title] of [
-      ['auth', 'The agent needs you to sign in'],
-      ['setup_failed', 'The agent could not start'],
+  test('a signed-out agent pauses the task too, and an agent that cannot start retries on its own', () => {
+    for (const [failureClass, title, retries] of [
+      ['auth', 'The agent needs you to sign in', false],
+      ['setup_failed', 'The agent could not start', true],
     ] as const) {
       const harness = createHarness();
       const taskId = createTask(harness);
@@ -376,7 +421,9 @@ describe('failure classes', () => {
         summary: null,
         failure: reason,
       });
-      expect(harness.openGate(taskId).title).toBe(title);
+      const pending = harness.task(taskId).autoRetry?.title;
+      expect(retries ? pending : harness.openGate(taskId).title).toBe(title);
+      expect(listOpenGates(harness.state, taskId)).toHaveLength(retries ? 0 : 1);
     }
   });
 
@@ -443,7 +490,7 @@ describe('restart continuation', () => {
     expect(harness.activeRun(taskId).id).toBe(run.id);
   });
 
-  test('a second crash without progress opens the failure gate instead of resuming again', () => {
+  test('a second crash without progress retries the step later instead of resuming again', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
@@ -451,9 +498,9 @@ describe('restart continuation', () => {
     harness.advance(10 * 60 * 1000);
     harness.send({ type: 'run.continue', runId: run.id });
     expect(harness.state.runs[run.id]?.failure).toMatchObject({ class: 'aborted', code: 'crash_loop' });
-    const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ type: 'failure', title: 'The agent paused' });
-    expect(gate.body).toContain('Shinsa stopped unexpectedly while this step ran');
+    const retry = harness.task(taskId).autoRetry;
+    expect(retry).toMatchObject({ title: 'The agent paused', status: 'armed' });
+    expect(retry?.detail).toContain('Shinsa stopped unexpectedly while this step ran');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
 

@@ -29,6 +29,14 @@ export function applyAccountPlan(state: ShinsaState, event: EventOf<'account.pla
   });
 }
 
+export function applyModelRoom(state: ShinsaState, event: EventOf<'usage.models_recorded'>) {
+  const recorded = new Set(event.models.map((model) => model.family));
+  for (const family of Object.keys(state.modelRoom)) {
+    if (!recorded.has(family)) removeEntry(state, 'modelRoom', family);
+  }
+  for (const model of event.models) writeEntry(state, 'modelRoom', model.family, { ...model, at: event.at });
+}
+
 export function applyUsagePace(state: ShinsaState, event: EventOf<'usage.pace_recorded'>) {
   if (event.pace === null || event.resetPace === null || event.endingPace === null) {
     removeEntry(state, 'usagePaces', event.provider);

@@ -277,6 +277,7 @@ export class ToolCalls extends Context.Service<
           projects: managed.projects,
           route: managed.route,
           ...(managed.hookSecrets ? { hookSecrets: managed.hookSecrets(task.id) } : {}),
+          ...(managed.relay ? { relay: managed.relay } : {}),
         });
         const { text } = yield* Effect.mapError(spec.run(client, values), fail);
         return isTaskSettled((yield* engine.state).tasks[task.id] ?? task)
