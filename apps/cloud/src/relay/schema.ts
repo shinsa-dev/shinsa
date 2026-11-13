@@ -47,6 +47,7 @@ export type RelayTag = { readonly role: 'machine' } | { readonly role: 'browser'
 
 export interface RelayPeer {
   readonly tag: RelayTag;
+  readonly isOpen: () => boolean;
   readonly send: (message: string | Bytes) => void;
   readonly close: (code: number, reason: string) => void;
 }

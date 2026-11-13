@@ -40,6 +40,7 @@ function createPeer(tag: RelayTag): FakePeer {
     tag,
     sent: [],
     closed: null,
+    isOpen: () => !peer.closed,
     send: (message) => {
       if (peer.closed) throw new Error('The socket is closed.');
       peer.sent.push(message);
@@ -55,7 +56,7 @@ function createPeer(tag: RelayTag): FakePeer {
 function createRoom() {
   const peers: FakePeer[] = [];
   const room: RelayRoom = {
-    listPeers: () => peers.filter((peer) => !peer.closed),
+    listPeers: () => peers,
     accept: (tag, protocol) => {
       peers.push(createPeer(tag));
       return new Response(null, {
@@ -480,6 +481,27 @@ describe('the relay hub', () => {
     expect(machine.closed).toEqual({ code: RELAY_CLOSE.replaced, reason: 'The machine connected again.' });
     expect(browser.closed?.code).toBe(RELAY_CLOSE.machineGone);
     expect(body.text()).rejects.toBeDefined();
+  });
+
+  test('sends nothing to a replaced machine socket its peer never closed, only to the new one', async () => {
+    const { hub, peers, run } = await createHub();
+    const replaced = await connectMachine(hub, peers);
+    const machine = await connectMachine(hub, peers);
+    expect(peers).toContain(replaced);
+    const pending = run(hub.fetch(roomRequest('http', '/api/hooks/a/b')));
+    const open = await waitForOpen(machine);
+    await run(
+      hub.receive(machine, control({ type: 'response', stream: open.stream, status: 204, headers: [] }))
+    );
+    expect((await pending).status).toBe(204);
+    expect(replaced.sent).toEqual([]);
+    await run(hub.closed(replaced, RELAY_CLOSE.replaced, 'gone'));
+    const next = run(hub.fetch(roomRequest('http', '/api/hooks/a/c')));
+    const reopened = await waitForOpen(machine, 1);
+    await run(
+      hub.receive(machine, control({ type: 'response', stream: reopened.stream, status: 204, headers: [] }))
+    );
+    expect((await next).status).toBe(204);
   });
 
   test('evicts a removed machine, closing its socket and every stream, and is a no-op with none', async () => {

@@ -196,7 +196,8 @@ test/                gates.test.ts reads every RemoteApi route with HttpApi.refl
   machine that names `relay` in its heartbeat is sent anything (`Relays.request`; any other is offline, with no
   object touched), so the object is always first made by the machine's own connect and lives near the machine, never
   near a webhook sender or a browser far from it. A newer machine socket replaces the older one, and a closing machine socket closes every
-  stream. The socket hibernates: the object sleeps while nothing flows, and the machine's 30-second `ping` is answered
+  stream; the hub sends only to sockets still open (`RelayPeer.isOpen`, the socket's `readyState`), so a replaced
+  socket whose peer never answers its close gets nothing. The socket hibernates: the object sleeps while nothing flows, and the machine's 30-second `ping` is answered
   `pong` by the runtime's auto-response, so liveness never wakes it. An idle machine costs storage and nothing else.
   `MachineRelay` runs in a Worker of its own, `shinsa-relay` (`wrangler.relay.jsonc`, `src/relay/worker.ts`), which
   the app's Worker binds by `script_name`: deploying the app restarts no relay object, so no machine socket and no

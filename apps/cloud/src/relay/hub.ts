@@ -53,16 +53,22 @@ export function createRelayHub(room: RelayRoom): RelayHub {
 
   const resolveCloseCode = (code: number) => (code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000);
 
+  const listOpenPeers = () => room.listPeers().filter((peer) => peer.isOpen());
+
   const selectMachine = () =>
-    Option.fromNullishOr(room.listPeers().find((peer) => peer.tag.role === 'machine'));
+    Option.fromNullishOr(
+      listOpenPeers()
+        .filter((peer) => peer.tag.role === 'machine')
+        .at(-1)
+    );
 
   const selectBrowser = (stream: number) =>
     Option.fromNullishOr(
-      room.listPeers().find((peer) => peer.tag.role === 'browser' && peer.tag.stream === stream)
+      listOpenPeers().find((peer) => peer.tag.role === 'browser' && peer.tag.stream === stream)
     );
 
   const countStreams = () =>
-    answers.size + bodies.size + room.listPeers().filter((peer) => peer.tag.role === 'browser').length;
+    answers.size + bodies.size + listOpenPeers().filter((peer) => peer.tag.role === 'browser').length;
 
   const isStreamUsed = (stream: number) =>
     answers.has(stream) || bodies.has(stream) || Option.isSome(selectBrowser(stream));
@@ -107,7 +113,7 @@ export function createRelayHub(room: RelayRoom): RelayHub {
   });
 
   const dropStreams = Effect.fn('RelayHub.dropStreams')(function* () {
-    for (const peer of room.listPeers())
+    for (const peer of listOpenPeers())
       if (peer.tag.role === 'browser')
         yield* close(peer, RELAY_CLOSE.machineGone, RELAY_CLOSE_REASONS.machineGone);
     for (const answer of answers.values()) yield* Deferred.succeed(answer, Option.none());
@@ -237,14 +243,14 @@ export function createRelayHub(room: RelayRoom): RelayHub {
   });
 
   const connectMachine = Effect.fn('RelayHub.connectMachine')(function* () {
-    const earlier = room.listPeers().filter((peer) => peer.tag.role === 'machine');
+    const earlier = listOpenPeers().filter((peer) => peer.tag.role === 'machine');
     for (const peer of earlier) yield* close(peer, RELAY_CLOSE.replaced, RELAY_CLOSE_REASONS.replaced);
     yield* dropStreams();
     return room.accept({ role: 'machine' }, null);
   });
 
   const evictMachine = Effect.fn('RelayHub.evictMachine')(function* () {
-    for (const peer of room.listPeers())
+    for (const peer of listOpenPeers())
       if (peer.tag.role === 'machine') yield* close(peer, RELAY_CLOSE.refused, RELAY_CLOSE_REASONS.removed);
     yield* dropStreams();
     return new Response(null, { status: 204 });
@@ -339,7 +345,7 @@ export function createRelayHub(room: RelayRoom): RelayHub {
 
   const closed = Effect.fn('RelayHub.closed')(function* (peer: RelayPeer, code: number, reason: string) {
     if (peer.tag.role === 'machine') {
-      const others = room.listPeers().some((other) => other !== peer && other.tag.role === 'machine');
+      const others = listOpenPeers().some((other) => other !== peer && other.tag.role === 'machine');
       if (!others) yield* dropStreams();
       return;
     }

@@ -4,6 +4,7 @@ import { createRelayHub } from './hub.ts';
 import type { RelayPeer, RelayTag } from './schema.ts';
 
 interface RelaySocket {
+  readonly readyState: number;
   send(message: string | ArrayBufferLike | ArrayBufferView): void;
   close(code: number, reason: string): void;
   serializeAttachment(value: unknown): void;
@@ -22,6 +23,8 @@ interface WorkerGlobals {
 }
 
 const workers = globalThis as unknown as WorkerGlobals;
+
+const SOCKET_OPEN = 1;
 
 export class MachineRelay {
   private readonly peers = new WeakMap<RelaySocket, RelayPeer>();
@@ -56,6 +59,7 @@ export class MachineRelay {
     if (known) return known;
     const peer: RelayPeer = {
       tag: socket.deserializeAttachment() as RelayTag,
+      isOpen: () => socket.readyState === SOCKET_OPEN,
       send: (message) => socket.send(message),
       close: (code, reason) => socket.close(code, reason),
     };

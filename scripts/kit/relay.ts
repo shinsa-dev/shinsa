@@ -85,6 +85,7 @@ export function startLocalRelay() {
       open(socket) {
         socket.data.peer = {
           tag: socket.data.tag,
+          isOpen: () => socket.readyState === WebSocket.OPEN,
           send: (message) => void socket.send(message),
           close: (code, reason) => socket.close(code, reason),
         };
