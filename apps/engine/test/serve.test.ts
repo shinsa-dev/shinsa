@@ -157,7 +157,7 @@ describe('startShinsa', () => {
     expect(Object.values(second.engine.state.tasks).map((task) => task.request)).toEqual(['Keep me']);
   });
 
-  test('a task with nowhere to work stops at the "Could not start the task" gate', async () => {
+  test('a task with nowhere to work arms a retry for "Could not start the task"', async () => {
     const config = createTestConfig(createTempDir(), { roots: [createTempDir()] });
     const shinsa = await startShinsa(config, {
       models,
@@ -169,8 +169,9 @@ describe('startShinsa', () => {
     });
     started.push(shinsa);
     await shinsa.engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
-    await until('a gate to open', () => Object.keys(shinsa.engine.state.gates).length > 0);
-    expect(Object.values(shinsa.engine.state.gates)[0]?.title).toBe('Could not start the task');
+    const armed = () => Object.values(shinsa.engine.state.tasks).find((task) => task.autoRetry);
+    await until('a retry to be armed', () => armed() !== undefined);
+    expect(armed()?.autoRetry?.title).toBe('Could not start the task');
   });
 
   test('work that needs a repository on a task triaged with none asks for one at the setup gate', async () => {
