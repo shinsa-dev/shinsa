@@ -3,15 +3,16 @@ import type { Revoked } from '@shinsa/core/remote/errors';
 import { Context, Effect, FiberHandle, Layer, Redacted, Ref } from 'effect';
 import { describeError } from '../../log/redact.ts';
 import { RemoteClient } from '../client/service.ts';
-import { TunnelConnector } from '../connector/service.ts';
-import { TunnelHealth } from '../health/service.ts';
+import { RelayConnector } from '../relay/service.ts';
 import { readAccess, readGuests, readTeams } from '../store/decode.ts';
 import {
   FAILED_PINGS_BEFORE_RESTART,
-  HEARTBEAT_EVERY_PINGS,
+  HEARTBEAT_INTERVAL,
+  HEARTBEAT_SCHEDULE,
   PING_INTERVAL,
   PING_SCHEDULE,
   QUICK_RESTART,
+  REFUSED_STATUS,
   RESTART_SCHEDULE,
   TunnelDropped,
   TunnelMachine,
@@ -30,8 +31,7 @@ export class TunnelSupervisor extends Context.Service<
     TunnelSupervisor,
     Effect.gen(function* () {
       const machine = yield* TunnelMachine;
-      const connector = yield* TunnelConnector;
-      const health = yield* TunnelHealth;
+      const connector = yield* RelayConnector;
       const client = yield* RemoteClient;
       const status = yield* Ref.make<TunnelStatus>('off');
       const current = yield* Ref.make<MachineCredentials | null>(null);
@@ -77,45 +77,55 @@ export class TunnelSupervisor extends Context.Service<
       });
 
       const session = Effect.fn('TunnelSupervisor.session')(function* (credentials: MachineCredentials) {
-        const connection = yield* connector
-          .open(Redacted.make(credentials.tunnelToken), yield* machine.localUrl)
+        const link = yield* connector
+          .open({
+            instanceId: credentials.instanceId,
+            machineToken: Redacted.make(credentials.machineToken),
+            localUrl: yield* machine.localUrl,
+          })
           .pipe(
             Effect.tapError((error) =>
-              Effect.logWarning('[Remote] The tunnel did not connect').pipe(
+              Effect.logWarning('[Remote] The relay did not connect').pipe(
                 Effect.annotateLogs({ error: error.message })
               )
             ),
-            Effect.mapError((error) => new TunnelDropped({ healthy: false, message: error.message }))
+            Effect.tapError((error) => (error.status === REFUSED_STATUS ? beat(credentials) : Effect.void)),
+            Effect.catchTag('RelayConnectFailed', (error) =>
+              Effect.fail(new TunnelDropped({ healthy: false, message: error.message }))
+            )
           );
         yield* beat(credentials);
         yield* updateStatus('connected');
         const healthy = yield* Ref.make(false);
         const failed = yield* Ref.make(0);
-        const pings = yield* Ref.make(0);
         const ping = Effect.gen(function* () {
-          const ok = yield* health.check(`https://${credentials.tunnelHost}/health`);
-          if (!ok) {
-            const failures = yield* Ref.updateAndGet(failed, (count) => count + 1);
-            if (failures < FAILED_PINGS_BEFORE_RESTART) return;
-            return yield* new TunnelDropped({
-              healthy: yield* Ref.get(healthy),
-              message: 'The tunnel stopped answering its health check.',
-            });
+          if (yield* link.ping) {
+            yield* Ref.set(failed, 0);
+            return yield* Ref.set(healthy, true);
           }
-          yield* Ref.set(failed, 0);
-          yield* Ref.set(healthy, true);
-          const count = yield* Ref.updateAndGet(pings, (total) => total + 1);
-          if (count % HEARTBEAT_EVERY_PINGS === 0) yield* beat(credentials);
+          const failures = yield* Ref.updateAndGet(failed, (count) => count + 1);
+          if (failures < FAILED_PINGS_BEFORE_RESTART) return;
+          return yield* new TunnelDropped({
+            healthy: yield* Ref.get(healthy),
+            message: 'The relay stopped answering pings.',
+          });
         });
-        const exited = connection.exited.pipe(
-          Effect.andThen(Effect.logWarning('[Remote] The tunnel stopped; starting it again')),
+        const closed = link.closed.pipe(
+          Effect.tap((reason) =>
+            Effect.logWarning('[Remote] The relay connection closed; connecting again').pipe(
+              Effect.annotateLogs({ reason })
+            )
+          ),
           Effect.andThen(Ref.get(healthy)),
           Effect.flatMap((wasHealthy) =>
-            Effect.fail(new TunnelDropped({ healthy: wasHealthy, message: 'cloudflared stopped.' }))
+            Effect.fail(new TunnelDropped({ healthy: wasHealthy, message: 'The relay connection closed.' }))
           )
         );
-        const watch = Effect.sleep(PING_INTERVAL).pipe(Effect.andThen(Effect.repeat(ping, PING_SCHEDULE)));
-        yield* Effect.raceFirst(watch, exited);
+        const pings = Effect.sleep(PING_INTERVAL).pipe(Effect.andThen(Effect.repeat(ping, PING_SCHEDULE)));
+        const beats = Effect.sleep(HEARTBEAT_INTERVAL).pipe(
+          Effect.andThen(Effect.repeat(beat(credentials), HEARTBEAT_SCHEDULE))
+        );
+        yield* Effect.raceAllFirst([pings, beats, closed]);
       }, Effect.scoped);
 
       const supervise = (credentials: MachineCredentials) =>

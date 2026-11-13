@@ -1,11 +1,16 @@
 export type { RemoteSnapshot } from '@shinsa/core';
 export { RemoteOrigin } from './client/schema.ts';
-export { createInstalledConnector } from './connector/installed.ts';
-export { createRefusedConnector } from './connector/refused.ts';
-export { TunnelConnectFailed } from './connector/schema.ts';
-export { TunnelConnector } from './connector/service.ts';
+export { createRefusedConnector } from './relay/refused.ts';
+export { RelayConnectFailed } from './relay/schema.ts';
+export { RelayConnector } from './relay/service.ts';
 export { Handoffs } from './handoffs/service.ts';
-export { RemoteEdgeLayer, RemoteLayer, RemoteMachineLayer, RemoteQuickLayer } from './layers.ts';
+export {
+  RelayConnectorLayer,
+  RemoteEdgeLayer,
+  RemoteLayer,
+  RemoteMachineLayer,
+  RemoteQuickLayer,
+} from './layers.ts';
 export { resolveMachineName } from './machine/name.ts';
 export { Remote } from './machine/service.ts';
 export { BrowserCommand } from './opener/schema.ts';

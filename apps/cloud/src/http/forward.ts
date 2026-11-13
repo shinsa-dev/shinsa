@@ -1,5 +1,5 @@
 import { Effect, Option } from 'effect';
-import type { TunnelUnreachable } from '../integrations/tunnels/schema.ts';
+import type { RelayUnreachable } from '../integrations/relays/schema.ts';
 
 const TUNNEL_OFFLINE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504, 530]);
 
@@ -54,7 +54,7 @@ export const recordPreviewStopped = Effect.fn('recordPreviewStopped')(function* 
 export const requestOnlineMachine = Effect.fn('requestOnlineMachine')(function* <R>(
   surface: OfflineSurface,
   instanceId: string,
-  request: Effect.Effect<Response, TunnelUnreachable, R>
+  request: Effect.Effect<Response, RelayUnreachable, R>
 ) {
   const answer = yield* request.pipe(
     Effect.tapError((error) => recordMachineOffline(surface, instanceId, { error: error.message })),

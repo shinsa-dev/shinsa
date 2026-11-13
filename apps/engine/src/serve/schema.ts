@@ -10,8 +10,8 @@ import type {
 import type { FetchLike } from '../extensions/oauth/schema.ts';
 import type { Env } from '../extensions/schema.ts';
 import type { AccountSource } from '../onboarding/index.ts';
-import type { TunnelConnectorLayer } from '../remote/connector/schema.ts';
 import type { PlacementAsker } from '../remote/placement/service.ts';
+import type { RelayConnectorLayer } from '../remote/relay/schema.ts';
 import type { Discoverer, LoginResolver } from '../repos/index.ts';
 import type { ClockTimings } from '../runtime/clock/schema.ts';
 import type { Shell } from '../shell/service.ts';
@@ -38,7 +38,7 @@ export interface ShinsaOptions {
   idle?: IdleReleaseOptions;
   extensions?: { env?: Env; fetch?: FetchLike };
   versions?: Layer.Layer<ProgramInstalls | NpmRegistry | UpdaterRunner>;
-  remoteConnector?: TunnelConnectorLayer;
+  remoteConnector?: RelayConnectorLayer;
   byService?: boolean;
   exit?: (code: number) => void;
 }

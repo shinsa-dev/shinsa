@@ -100,7 +100,9 @@ describe('a preview link', () => {
     expect(answer.headers.getSetCookie()).toEqual(['a=1', 'b=2; Path=/; Secure', 'domain=foo; Path=/']);
     expect(answer.headers.get('x-robots-tag')).toBe('noindex, nofollow, noarchive');
     const call = harness.calls.at(-1);
-    expect(call?.url).toBe(`https://${credentials.tunnelHost}/__preview/${PREVIEW_ID}/app/page?x=1`);
+    expect(call?.url).toBe(
+      `https://${credentials.instanceId}.relay.test/__preview/${PREVIEW_ID}/app/page?x=1`
+    );
     expect(call?.headers.get(PREVIEW_KEY_HEADER)).toBe(KEY);
     expect(call?.headers.get('cookie')).toBe('theme=dark');
     expect(call?.headers.get('accept')).toBe('text/html');
@@ -387,7 +389,7 @@ describe('a private address', () => {
     const forged = { [PREVIEW_ACCESS_HEADER]: 'forged', [PREVIEW_KEY_HEADER]: 'forged' };
     await visit(harness, `${origin}/page`, withAccess('signed', { headers: forged }));
     const sent = harness.calls.at(-1);
-    expect(sent?.url).toBe(`https://${credentials.tunnelHost}/__preview/${PREVIEW_ID}/page`);
+    expect(sent?.url).toBe(`https://${credentials.instanceId}.relay.test/__preview/${PREVIEW_ID}/page`);
     expect(sent?.headers.get(PREVIEW_ACCESS_HEADER)).toBe('signed');
     expect(sent?.headers.has(PREVIEW_KEY_HEADER)).toBe(false);
     expect(sent?.headers.get('cookie')).toBe('theme=dark');

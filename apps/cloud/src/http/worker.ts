@@ -10,6 +10,11 @@ export class Assets extends Context.Service<
   { readonly fetch: (request: Request) => Promise<Response> }
 >()('shinsa/cloud/http/Assets') {}
 
+export class RelayRooms extends Context.Service<
+  RelayRooms,
+  { readonly fetch: (instanceId: string, request: Request) => Promise<Response> }
+>()('shinsa/cloud/http/RelayRooms') {}
+
 export const deferWork = Effect.fn('deferWork')(function* <R>(work: Effect.Effect<void, never, R>) {
   const services = yield* Effect.context<R>();
   const worker = yield* WorkerContext;

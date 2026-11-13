@@ -19,8 +19,6 @@ const START = {
 const CREDENTIALS = {
   instanceId: 'k3x9',
   machineToken: 'm',
-  tunnelToken: 't',
-  tunnelHost: 't-k3x9.shinsa.dev',
   connectKey: 'c',
 };
 
