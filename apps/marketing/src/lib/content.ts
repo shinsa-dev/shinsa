@@ -157,12 +157,18 @@ export const koe = {
   headlineRest: 'Koe bundles it.',
   text: 'Hold Fn and say what you mean. Comment on the screen, take screenshots, record clips and drop in files as you talk. Let go, and Koe copies one bundle: your words with every attachment where you said it, ready for any agent, issue or chat.',
   primary: 'Download for Mac',
-  requirement: 'Free, for macOS 26 and later.',
+  secondary: 'View on GitHub',
+  requirement: 'Free and open source, for macOS 26 and later.',
   soonTitle: 'Koe is almost here.',
   soonText: 'There is no release to download yet. Check back soon.',
   byline: 'by Shinsa',
   sessionLabel:
-    'A Koe session: talk, pin a comment on Save, screenshot the plan cards, then finish and Koe copies the bundle',
+    'A Koe session on Shinsa’s home: talk, pin a comment on the Start button, screenshot the greeting, then finish and Koe copies the bundle',
+  sessionCaptions: [
+    { start: 0.85, end: 3.4, text: 'The new task box feels a bit flat.' },
+    { start: 4.85, end: 6.8, text: 'Make this button stand out.' },
+    { start: 11.75, end: 13.9, text: 'Give these lines a little more room.' },
+  ],
   pillLabel: 'Koe’s pill while it listens',
   closingTitle: 'Say it once.',
   closingText: 'Koe brings the screenshots.',
@@ -201,37 +207,60 @@ export const koeSections = {
   },
 } satisfies Record<string, SectionCopy>;
 
+export interface KoeCaption {
+  start: number;
+  end: number;
+  text: string;
+}
+
 export const koeTools: {
+  id: string;
   icon: IconName;
   title: string;
   text: string;
   trigger: string;
   video: string;
   label: string;
+  captions: KoeCaption[];
 }[] = [
   {
+    id: 'comment',
     icon: 'IconBubbleAnnotation2',
-    title: 'Comment',
-    trigger: '⇧⌘-click anything',
-    text: 'Pin a comment to a button, a line or a cell. Koe captures what is under it.',
+    title: 'Comment on anything.',
+    trigger: '⇧⌘-click',
+    text: 'Pin a comment to a button, a line or a cell, then the next one. Koe captures what is under each, and the pins join into one picture.',
     video: 'koe-comment',
-    label: 'Koe pinning a comment to a Save button while you say what to change',
+    label: 'Koe pinning two comments in a row on Shinsa, one on the Start button and one on a menu',
+    captions: [
+      { start: 2.85, end: 4.8, text: 'Make this button stand out.' },
+      { start: 7.85, end: 10.1, text: 'This menu needs a clearer label.' },
+    ],
   },
   {
+    id: 'screenshot',
     icon: 'IconCamera1',
-    title: 'Screenshot',
+    title: 'Screenshot as you talk.',
     trigger: 'Drag a region or click a window',
-    text: 'The screenshot lands in your words at the moment you took it.',
+    text: 'The screenshot lands in your words at the moment you took it, and what you say next becomes its note.',
     video: 'koe-screenshot',
-    label: 'Koe taking a screenshot of a region while you describe it',
+    label: 'Koe taking a screenshot of Shinsa’s task box while you describe it',
+    captions: [
+      { start: 0.55, end: 3.1, text: 'The options under the box feel cramped.' },
+      { start: 5.95, end: 7.7, text: 'Give them a little more room.' },
+    ],
   },
   {
+    id: 'clip',
     icon: 'IconVideo',
-    title: 'Clip',
+    title: 'Record a clip.',
     trigger: 'Record the screen',
-    text: 'Show a bug as it happens, then pick the frames that show it.',
+    text: 'Show a bug as it happens, then step through the frames and pick the one that shows it.',
     video: 'koe-clip',
-    label: 'Koe recording a clip of the screen, then playing it back to pick frames',
+    label: 'Koe recording a clip of hovering over Shinsa’s task list, then playing it back to pick a frame',
+    captions: [
+      { start: 0.55, end: 2.5, text: 'Watch these rows when I hover.' },
+      { start: 10.05, end: 11.8, text: 'The hover is too faint.' },
+    ],
   },
 ];
 
@@ -239,27 +268,33 @@ export const koeBundle = {
   attachedLabel: 'What Koe attached',
   clipboardLabel: 'What the clipboard holds',
   said: [
-    { text: 'Move the save button to the right, next to cancel.' },
-    { marker: '1', note: 'Make this one blue' },
-    { marker: '2', note: 'And give the plans a little more room.' },
+    { text: 'The new task box feels a bit flat.' },
+    { marker: '1', note: 'Make this button stand out.' },
+    { marker: '2', note: 'Give these lines a little more room.' },
   ],
   attachments: [
-    '[1] Comment on Google Chrome, "Acme", at the blue pin numbered 1, 37% across and 74% down: ~/Library/Application Support/Koe/Sessions/2026-11-13-170409-F517/attachments/screenshot-1.png',
-    '[2] Image of Google Chrome, "Acme": ~/Library/Application Support/Koe/Sessions/2026-11-13-170409-F517/attachments/screenshot-2.png',
+    {
+      label: '[1] Comment on Google Chrome, "Shinsa", at the blue pin numbered 1, 75% across and 63% down:',
+      path: '~/Library/Application Support/Koe/Sessions/2026-11-13-181914-7361/attachments/screenshot-1.png',
+    },
+    {
+      label: '[2] Image of Google Chrome, "Shinsa":',
+      path: '~/Library/Application Support/Koe/Sessions/2026-11-13-181914-7361/attachments/screenshot-2.png',
+    },
   ],
   files: [
     {
       src: '/koe/koe-attachment-comment.webp',
       width: 1600,
-      height: 881,
-      alt: 'The window Koe captured for comment 1, with a blue pin numbered 1 on the Save button',
-      caption: '[1] The window, with comment 1 pinned on Save.',
+      height: 970,
+      alt: 'The Shinsa window Koe captured for comment 1, with a blue pin numbered 1 on the Start button',
+      caption: '[1] The window, with comment 1 pinned on Start.',
     },
     {
       src: '/koe/koe-attachment-screenshot.webp',
-      width: 1460,
-      height: 186,
-      alt: 'The region Koe captured for screenshot 2: the three plan cards',
+      width: 1458,
+      height: 558,
+      alt: 'The region Koe captured for screenshot 2: the greeting on Shinsa’s home',
       caption: '[2] The region you dragged over.',
     },
   ],

@@ -1,25 +1,29 @@
 ---
 import { Icon } from '@shinsa/ui/components/icon';
-import { koeTools } from '../../lib/content';
+import { koeSections, koeTools } from '../../lib/content';
 import KoeVideo from './KoeVideo.astro';
 ---
 
-<div class='grid gap-4 md:grid-cols-3'>
-  {
-    koeTools.map((tool) => (
-      <div class='flex flex-col gap-3'>
-        <KoeVideo name={tool.video} width={1200} height={762} label={tool.label} />
-        <div class='flex flex-col gap-1 px-1'>
-          <span class='flex items-center gap-2 font-medium text-fg-4 text-sm [--icon-size:var(--icon-size-md)]'>
-            <span class='text-fg-2'>
-              <Icon name={tool.icon} />
-            </span>
-            {tool.title}
-            <span class='font-normal text-fg-2'>· {tool.trigger}</span>
-          </span>
-          <p class='text-fg-2 text-sm leading-relaxed text-pretty'>{tool.text}</p>
-        </div>
+<section id={koeSections.tools.id} class='flex flex-col px-6 pt-12 md:pt-16'>
+  <div class='mx-auto flex max-w-2xl flex-col items-center gap-3 text-center'>
+    <h2 class='font-medium text-2xl text-fg-4 tracking-tight text-balance md:text-3xl'>{koeSections.tools.title}</h2>
+    <p class='text-base text-fg-2 leading-relaxed text-pretty'>{koeSections.tools.text}</p>
+  </div>
+</section>
+{
+  koeTools.map((tool) => (
+    <section id={tool.id} class='flex flex-col px-6 py-10 md:py-14'>
+      <div class='mx-auto flex max-w-2xl flex-col items-center gap-2 text-center'>
+        <span class='flex items-center gap-2 text-fg-2 text-sm [--icon-size:var(--icon-size-md)]'>
+          <Icon name={tool.icon} />
+          {tool.trigger}
+        </span>
+        <h3 class='font-medium text-fg-4 text-xl tracking-tight text-balance md:text-2xl'>{tool.title}</h3>
+        <p class='text-base text-fg-2 leading-relaxed text-pretty'>{tool.text}</p>
       </div>
-    ))
-  }
-</div>
+      <div class='mx-auto mt-6 w-full max-w-5xl md:mt-8' data-chip>
+        <KoeVideo name={tool.video} width={1600} height={960} label={tool.label} captions={tool.captions} />
+      </div>
+    </section>
+  ))
+}

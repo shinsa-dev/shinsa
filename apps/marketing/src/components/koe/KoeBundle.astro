@@ -1,10 +1,11 @@
 ---
 import { koeBundle } from '../../lib/content';
 
+const splitPath = (path: string) => path.split('/').map((part, index, parts) => (index < parts.length - 1 ? `${part}/` : part));
 const said = koeBundle.said.map((part) => ('text' in part ? part.text : `[${part.marker}: ${part.note}]`)).join(' ');
 ---
 
-<div class='grid items-start gap-4 lg:grid-cols-[1.15fr_1fr]'>
+<div class='grid gap-4 lg:grid-cols-2'>
   <div class='flex flex-col gap-3 rounded-2xl bg-bg-1 p-4 ring-1 ring-bg-3'>
     <span class='font-medium text-fg-2 text-xs'>{koeBundle.attachedLabel}</span>
     <div class='grid gap-3'>
@@ -29,11 +30,25 @@ const said = koeBundle.said.map((part) => ('text' in part ? part.text : `[${part
     <span class='font-medium text-fg-2 text-xs'>{koeBundle.clipboardLabel}</span>
     <div class='flex flex-col gap-3 font-mono text-fg-3 text-xs leading-relaxed'>
       <p class='text-fg-4'>{said}</p>
-      <div class='flex flex-col'>
+      <div class='flex flex-col gap-2'>
         <span>Attachments:</span>
-        {koeBundle.attachments.map((line) => <span class='break-all'>{line}</span>)}
+        {
+          koeBundle.attachments.map((attachment) => (
+            <p class='flex flex-col'>
+              <span class='text-pretty'>{attachment.label}</span>
+              <span class='text-fg-2 [overflow-wrap:anywhere]'>
+                {splitPath(attachment.path).map((part) => (
+                  <>
+                    {part}
+                    <wbr />
+                  </>
+                ))}
+              </span>
+            </p>
+          ))
+        }
       </div>
     </div>
-    <p class='text-fg-2 text-xs'>{koeBundle.note}</p>
+    <p class='mt-auto text-fg-2 text-xs'>{koeBundle.note}</p>
   </div>
 </div>

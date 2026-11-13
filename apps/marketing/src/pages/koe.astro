@@ -23,7 +23,12 @@ import { koeSite } from '../lib/site';
         <p class='text-fg-2 text-sm'>{koe.soonText}</p>
       </div>
       <div class='mt-1 flex flex-col items-center gap-2'>
-        <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+        <div class='flex flex-wrap items-center justify-center gap-2'>
+          <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+          <Button href={koeSite.githubUrl} variant='secondary' icon='IconGithub' iconSize='md' external>
+            {koe.secondary}
+          </Button>
+        </div>
         <p class='text-fg-2 text-sm'>{koe.requirement}</p>
       </div>
     </div>
@@ -32,8 +37,9 @@ import { koeSite } from '../lib/site';
     <KoeVideo
       name='koe-session'
       width={2048}
-      height={1266}
+      height={1206}
       label={koe.sessionLabel}
+      captions={koe.sessionCaptions}
       class='mx-auto w-full max-w-5xl shadow-lg'
     />
     <div class='mx-auto mt-10 flex max-w-2xl flex-col items-center gap-3 text-center'>
@@ -41,32 +47,30 @@ import { koeSite } from '../lib/site';
       <p class='text-base text-fg-2 leading-relaxed text-pretty'>{koeSections.talk.text}</p>
     </div>
   </section>
-  <Section copy={koeSections.tools}>
-    <KoeTools />
-  </Section>
+  <KoeTools />
   <Section copy={koeSections.bundle}>
     <KoeBundle />
   </Section>
   <Section copy={koeSections.speed}>
-    <div class='flex flex-col gap-4'>
-      <div class='grid gap-4 sm:grid-cols-2'>
-        {
-          koeSpeed.stats.map((stat) => (
-            <div class='koe-desktop flex flex-col items-center gap-1 rounded-2xl px-6 py-10 text-center ring-1 ring-bg-3'>
-              <span class='font-medium text-5xl text-fg-4 tracking-tight tabular-nums md:text-6xl'>{stat.value}</span>
-              <span class='text-fg-2 text-sm'>{stat.label}</span>
-            </div>
-          ))
-        }
-      </div>
-      <p class='mx-auto max-w-2xl text-center text-fg-2 text-xs leading-relaxed text-pretty'>{koeSpeed.method}</p>
+    <div class='grid gap-4 sm:grid-cols-2'>
+      {
+        koeSpeed.stats.map((stat) => (
+          <div class='koe-speed flex flex-col items-center gap-1 rounded-2xl px-6 py-12 text-center ring-1 ring-bg-3'>
+            <span class='font-medium text-5xl text-fg-4 tracking-tight tabular-nums md:text-6xl'>{stat.value}</span>
+            <span class='text-fg-2 text-sm'>{stat.label}</span>
+          </div>
+        ))
+      }
     </div>
+    <p slot='after' class='mx-auto max-w-2xl text-center text-fg-2 text-xs leading-relaxed text-pretty'>
+      {koeSpeed.method}
+    </p>
   </Section>
   <Section copy={koeSections.models}>
-    <div class='mx-auto flex max-w-2xl flex-col divide-y divide-bg-3 rounded-2xl ring-1 ring-bg-3'>
+    <div class='grid gap-px overflow-hidden rounded-2xl bg-bg-3 ring-1 ring-bg-3 sm:grid-cols-2'>
       {
         koeModels.map((model) => (
-          <div class='flex items-center gap-3 px-4 py-3'>
+          <div class='flex items-center gap-3 bg-background px-5 py-4'>
             <div class='flex min-w-0 flex-1 flex-col'>
               <span class='flex items-center gap-2 font-medium text-fg-4 text-sm'>
                 {model.name}
@@ -107,7 +111,12 @@ import { koeSite } from '../lib/site';
         <span class='text-fg-4'>{koe.closingTitle}</span>{' '}<span class='text-fg-2'>{koe.closingText}</span>
       </h2>
       <div class='flex flex-col items-center gap-2'>
-        <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+        <div class='flex flex-wrap items-center justify-center gap-2'>
+          <Button href={koeSite.downloadUrl}>{koe.primary}</Button>
+          <Button href={koeSite.githubUrl} variant='secondary' icon='IconGithub' iconSize='md' external>
+            {koe.secondary}
+          </Button>
+        </div>
         <p class='text-fg-2 text-sm'>{koe.requirement}</p>
       </div>
     </div>

@@ -68,14 +68,20 @@ function countLanes(side: Side, edge: number, width: number) {
   return 0;
 }
 
+export function resolveInsets(chip: ChipRect, lanes: number) {
+  const needed = ENTRY_INSET + EXIT_INSET + 2 * lanes * PIN_GAP;
+  const scale = Math.min(1, (chip.bottom - chip.top) / needed);
+  return { entry: ENTRY_INSET * scale, exit: EXIT_INSET * scale };
+}
+
 function routeLane(side: Side, from: ChipRect, to: ChipRect, lane: number, lanes: number) {
   const direction = side === 'left' ? -1 : 1;
   const fromEdge = side === 'left' ? from.left : from.right;
   const toEdge = side === 'left' ? to.left : to.right;
   const edge = side === 'left' ? Math.min(fromEdge, toEdge) : Math.max(fromEdge, toEdge);
   const x = resolveLaneX(side, edge, lane);
-  const exit = from.bottom - EXIT_INSET - lane * PIN_GAP;
-  const entry = to.top + ENTRY_INSET + (lanes - 1 - lane) * PIN_GAP;
+  const exit = from.bottom - resolveInsets(from, lanes).exit - lane * PIN_GAP;
+  const entry = to.top + resolveInsets(to, lanes).entry + (lanes - 1 - lane) * PIN_GAP;
   const turn = -direction * CHAMFER;
   return {
     d: [
