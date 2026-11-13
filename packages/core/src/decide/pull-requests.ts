@@ -553,8 +553,11 @@ export function recordBundleMergeConflict(
 ) {
   const task = decider.task(command.taskId);
   if (isTaskSettled(task) || !isMerging(decider, task) || task.pullRequest?.state !== 'open') return;
-  if (!releaseBundleMerge(decider, task)) return;
   const { conflict } = command;
+  if (!releaseBundleMerge(decider, task)) {
+    recheckPullRequest(decider, task.id);
+    return;
+  }
   if (!isSameBundleConflict(task.bundleConflict ?? null, conflict)) {
     decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
   }

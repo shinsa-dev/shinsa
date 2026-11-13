@@ -776,20 +776,35 @@ describe('a bundle that conflicts with the default branch when it merges', () =>
     expect(harness.task(top).stageReason).toBe(READY);
   });
 
-  test('a lead that is not merging, or a task with no bundle, ignores it', () => {
+  test('a lead that is not merging ignores it', () => {
     const harness = createHarness();
     const { root, top } = createBundle(harness);
     const before = harness.state;
     recordMergeConflict(harness, root, { taskId: top, behindTaskId: root });
     expect(harness.state).toBe(before);
+  });
+
+  test('a lead whose followers left while it merged checks its pull request again instead of staying merging', () => {
+    const harness = createHarness();
+    const { root, middle, top } = createBundle(harness);
+    approve(harness, root);
+    harness.send({ type: 'task.cancel', taskId: top });
+    harness.send({ type: 'task.cancel', taskId: middle });
+    expect(harness.task(root).stage).toBe('awaiting_merge');
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: null });
+    expect(harness.task(root).stage).toBe('shipping');
+    expect(harness.task(root).stageReason).toBe('checking the pull request');
+    expect(harness.task(root).bundleConflict ?? null).toBeNull();
+    expect(harness.lastEffect('pull_request.watch').taskId).toBe(root);
+    recordClean(harness, root, 1);
+    expect(harness.openGate(root).type).toBe('merge');
 
     const lone = createHarness();
     const task = createTask(lone, { request: 'Lone' });
     reachReady(lone, task, 1);
     approve(lone, task);
-    const merging = lone.state;
     recordMergeConflict(lone, task, { taskId: task, behindTaskId: task });
-    expect(lone.state).toBe(merging);
+    expect(lone.task(task).stageReason).toBe('checking the pull request');
   });
 });
 

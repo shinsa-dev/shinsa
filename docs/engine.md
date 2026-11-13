@@ -1463,7 +1463,8 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   "The bundle conflicts with main". The engine runs the same check again right before the merge and merges nothing
   when it fails: it records the conflict (`bundle.record_merge_conflict`), which moves the lead and its followers back
   to ready and starts the same update, so the bundle is brought up to date without a Retry and the gate opens again
-  for the new heads.
+  for the new heads. A lead whose followers all left while it merged checks its pull request again instead, which
+  opens its own merge gate.
 - **Leaving and losing a bundle.** When a task with nothing stacked on it is cancelled or turns out to ship no pull
   request, the bundle is one task smaller; a lead with no followers left gets its own merge gate. A task below merged
   outside Shinsa drops out of the bundle: it leaves the bases of each task above, a task whose first base it was
