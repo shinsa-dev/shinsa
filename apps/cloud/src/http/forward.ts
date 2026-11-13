@@ -1,5 +1,5 @@
 import { Effect, Option } from 'effect';
-import type { TunnelUnreachable } from '../integrations/tunnels/schema.ts';
+import type { RelayUnreachable } from '../integrations/relays/schema.ts';
 
 const TUNNEL_OFFLINE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504, 530]);
 
@@ -26,7 +26,7 @@ export function isTunnelOffline(response: Response) {
 export const recordMachineOffline = Effect.fn('recordMachineOffline')(function* (
   surface: OfflineSurface,
   instanceId: string,
-  cause: { readonly status: number } | { readonly error: string }
+  cause: { readonly status: number } | { readonly error: string } | { readonly lastSeenAt: number | null }
 ) {
   yield* Effect.logWarning('[Cloud] Machine offline').pipe(
     Effect.annotateLogs({
@@ -34,15 +34,27 @@ export const recordMachineOffline = Effect.fn('recordMachineOffline')(function* 
       instanceId,
       ...('status' in cause
         ? { reason: 'status', status: cause.status }
-        : { reason: 'unreachable', error: cause.error }),
+        : 'error' in cause
+          ? { reason: 'unreachable', error: cause.error }
+          : { reason: 'stale', lastSeenAt: cause.lastSeenAt }),
     })
+  );
+});
+
+export const recordPreviewStopped = Effect.fn('recordPreviewStopped')(function* (
+  instanceId: string,
+  previewId: string,
+  status: number
+) {
+  yield* Effect.logWarning('[Cloud] Preview service stopped').pipe(
+    Effect.annotateLogs({ instanceId, previewId, status })
   );
 });
 
 export const requestOnlineMachine = Effect.fn('requestOnlineMachine')(function* <R>(
   surface: OfflineSurface,
   instanceId: string,
-  request: Effect.Effect<Response, TunnelUnreachable, R>
+  request: Effect.Effect<Response, RelayUnreachable, R>
 ) {
   const answer = yield* request.pipe(
     Effect.tapError((error) => recordMachineOffline(surface, instanceId, { error: error.message })),

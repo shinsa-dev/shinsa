@@ -31,7 +31,6 @@ describe('POST /api/commands', () => {
     const remote = {
       isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
       resolveActor: () => Effect.succeed(null),
-      tunnelHost: Effect.succeed(null),
       isEnabled: Effect.succeed(true),
     };
     const { send, context } = startRoutes({ remote: remote as never });
@@ -95,7 +94,6 @@ describe('who sent a command', () => {
   const remote = {
     isOwner: (userId: string | null) => Effect.succeed(userId === 'u-owner'),
     resolveActor: (userId: string | null) => Effect.succeed(people[userId ?? 'u-owner'] ?? null),
-    tunnelHost: Effect.succeed(null),
     isEnabled: Effect.succeed(true),
   };
 
@@ -163,5 +161,17 @@ describe('GET /api/providers', () => {
       providers: { listProviders: Effect.succeed(providers) } as never,
     });
     expect(await (await send('/api/providers')).json()).toEqual(providers);
+  });
+
+  test('leaves out a provider you removed or never signed in to', async () => {
+    const providers = [
+      { id: 'claude', label: 'Claude' },
+      { id: 'codex', label: 'Codex' },
+    ];
+    const { send } = startRoutes({
+      providers: { listProviders: Effect.succeed(providers) } as never,
+      accounts: { listHiddenProviders: Effect.succeed(new Set(['codex'])) } as never,
+    });
+    expect(await (await send('/api/providers')).json()).toEqual([{ id: 'claude', label: 'Claude' }]);
   });
 });

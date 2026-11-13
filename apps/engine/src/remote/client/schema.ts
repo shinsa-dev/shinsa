@@ -31,7 +31,6 @@ import {
 import type {
   BodyInvalid,
   BodyTooLarge,
-  CloudflareFailed,
   ContentTypeInvalid,
   GuestsFull,
   InviteInvalid,
@@ -104,12 +103,9 @@ export interface PairingCalls {
 }
 
 export interface MachineCalls {
-  heartbeat(
-    token: Token,
-    request: HeartbeatRequest
-  ): MachineCall<HeartbeatResponse, NotFound | CloudflareFailed>;
+  heartbeat(token: Token, request: HeartbeatRequest): MachineCall<HeartbeatResponse, NotFound>;
   offline(token: Token): MachineCall<void>;
-  remove(token: Token): MachineCall<void, CloudflareFailed>;
+  remove(token: Token): MachineCall<void>;
   createInvite(token: Token): MachineCall<InviteCreateResponse>;
   removeInvite(token: Token): MachineCall<void>;
   findRequester(token: Token, userId: RemoteUserId): MachineCall<RemoteUser, NotFound>;

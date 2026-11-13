@@ -95,13 +95,10 @@ function createConnects() {
 
 const OWNER_ACCESS = { owner: { id: OWNER_ID }, members: [] };
 
-function createRemote(overrides: { isEnabled?: boolean; tunnelHost?: string | null } = {}) {
+function createRemote(overrides: { isEnabled?: boolean } = {}) {
   return {
     ...createConnects(),
     isEnabled: Effect.succeed(overrides.isEnabled ?? true),
-    tunnelHost: Effect.succeed(
-      overrides.tunnelHost === undefined ? 't-k3x9.shinsa.dev' : overrides.tunnelHost
-    ),
   } as unknown as HttpContext['remote'];
 }
 
@@ -231,18 +228,14 @@ async function upgrade(
 }
 
 describe('what counts as the tunnel', () => {
-  test('a request Cloudflare forwarded or one naming the tunnel host, and nothing without remote access', () => {
+  test('only a request the relay connector marked, and nothing without remote access', () => {
     expect(
       readGate((gate) => gate.isTunnel(request('/', { headers: { 'cf-connecting-ip': '1.2.3.4' } })))
     ).toBe(true);
-    expect(
-      readGate((gate) => gate.isTunnel(request('/', { headers: { host: 'T-K3X9.shinsa.dev:443' } })))
-    ).toBe(true);
     expect(readGate((gate) => gate.isTunnel(request('/')))).toBe(false);
-    const noHost = createGateContext({ remote: createRemote({ tunnelHost: null }) });
-    expect(
-      readGate((gate) => gate.isTunnel(request('/', { headers: { host: 't-k3x9.shinsa.dev' } })), noHost)
-    ).toBe(false);
+    expect(readGate((gate) => gate.isTunnel(request('/', { headers: { host: 't-k3x9.shinsa.dev' } })))).toBe(
+      false
+    );
     const off = createGateContext({ remote: undefined });
     expect(
       readGate((gate) => gate.isTunnel(request('/', { headers: { 'cf-connecting-ip': '1.2.3.4' } })), off)

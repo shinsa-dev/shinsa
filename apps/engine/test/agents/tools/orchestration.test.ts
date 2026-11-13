@@ -694,6 +694,37 @@ describe('create_task and split_task', () => {
     expect(await handleOrchestrationTool('split_task', { tasks: [{ request: 'Other.' }] }, call)).toBe(reply);
   });
 
+  test("split_task in a later round returns that round's tasks, not the first round's", async () => {
+    const { core, run, taskId } = await building();
+    await handleOrchestrationTool(
+      'split_task',
+      { tasks: [{ request: 'Port the header.' }] },
+      createCall(core, run.id).call
+    );
+    await core.dispatch({
+      type: 'task.create',
+      request: 'Add dark mode',
+      repoId: core.state.tasks[taskId]?.repoId ?? '',
+    });
+    const original =
+      Object.values(core.state.tasks).find((task) => task.request === 'Add dark mode')?.id ?? '';
+    await core.dispatch({ type: 'task.mark_duplicate', taskId, duplicateOf: original });
+    await core.dispatch({ type: 'task.clear_duplicate', taskId });
+    await core.dispatch({ type: 'config.record', taskId, problems: [] });
+    await core.dispatch({ type: 'worktree.ready', taskId, path: '/wt/scroll', branch: 'fix/scroll' });
+    const planning = Object.values(core.state.runs).find((candidate) => candidate.endedAt === null) as Run;
+    await core.dispatch({ type: 'agent.propose_plan', runId: planning.id, document: SPEC });
+    expect(core.state.tasks[taskId]?.plan?.version).toBe(1);
+    const second = Object.values(core.state.runs).find((candidate) => candidate.endedAt === null) as Run;
+    const reply = await handleOrchestrationTool(
+      'split_task',
+      { tasks: [{ request: 'Port the footer.' }] },
+      createCall(core, second.id).call
+    );
+    expect(reply).toContain('- [Port the footer.](shinsa://task/');
+    expect(reply).not.toContain('Port the header.');
+  });
+
   test('split_task with stacked chains the parts as a bundle on this task', async () => {
     const { core, run } = await building();
     const { call } = createCall(core, run.id);

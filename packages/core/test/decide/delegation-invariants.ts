@@ -214,8 +214,10 @@ export function assertDelegationProgress(before: ShinsaState, after: ShinsaState
     );
   }
   for (const task of Object.values(after.tasks)) {
-    const versions = (task.splits ?? []).map((split) => split.planVersion);
-    expect(new Set(versions).size, `${context}: a plan version split twice`).toBe(versions.length);
+    const versions = (task.splits ?? []).map((split) => `${split.round ?? 1}:${split.planVersion}`);
+    expect(new Set(versions).size, `${context}: a plan version split twice in one round`).toBe(
+      versions.length
+    );
   }
 }
 

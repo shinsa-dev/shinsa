@@ -267,6 +267,28 @@ describe('splitting the accepted plan', () => {
     expect(harness.task(taskId).splits).toHaveLength(1);
   });
 
+  test('splits the plan of a new round once more, keyed by its round, after the task starts again', () => {
+    const { harness, taskId } = building();
+    const original = createTask(harness, { request: 'Add dark mode' });
+    const first = harness.activeRun(taskId);
+    const [header] = split(harness, first.id, ['Port the header.']);
+    harness.send({ type: 'task.mark_duplicate', taskId, duplicateOf: original });
+    harness.send({ type: 'task.clear_duplicate', taskId });
+    readyWorktree(harness, taskId);
+    proposePlan(harness, taskId);
+    expect(harness.task(taskId).plan?.version).toBe(1);
+    const second = harness.activeRun(taskId);
+    const [footer] = split(harness, second.id, ['Port the footer.']);
+    expect(footer?.createdBy?.requestKey).toBe('plan:2:1');
+    expect(header?.createdBy?.requestKey).toBe('plan:1:1');
+    expect(harness.task(taskId).splits).toEqual([
+      { planVersion: 1, runId: first.id, taskIds: [header?.id ?? ''], at: expect.any(Number) },
+      { planVersion: 1, round: 2, runId: second.id, taskIds: [footer?.id ?? ''], at: expect.any(Number) },
+    ]);
+    expect(split(harness, second.id, ['Port the sidebar.'])).toEqual([]);
+    expect(harness.task(taskId).splits).toHaveLength(2);
+  });
+
   test('can make this task wait on its sub-tasks, so it merges after them', () => {
     const { harness, taskId } = building();
     const [task] = split(harness, harness.activeRun(taskId).id, ['Port the footer.'], true);

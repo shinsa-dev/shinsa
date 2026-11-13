@@ -145,7 +145,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
         new_repository: {
           type: 'boolean',
           description:
-            'With repository: when no repository by that name exists yet, create it as a new folder in the project’s folder, start it with an empty first commit and register it. An existing one is used as it is.',
+            'With repository: when no repository by that name exists yet, create it as a new folder in the project’s folder, start it with an empty first commit, register it and connect it to a private GitHub repository of the same name. An existing one is used as it is.',
         },
         project: {
           type: 'string',

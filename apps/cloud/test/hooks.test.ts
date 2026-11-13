@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import {} from '@shinsa/core';
 import { HOOK_BODY_LIMIT_BYTES } from '../src/routes/hooks/schema.ts';
-import { createHarness, type Harness, pairMachine } from './harness.ts';
+import { createHarness, type Harness, heartbeat, pairMachine } from './harness.ts';
 
 async function pairInstance(harness: Harness) {
   return (await pairMachine(harness, await harness.signIn())).instanceId;
@@ -9,7 +9,7 @@ async function pairInstance(harness: Harness) {
 
 function answerTunnel(harness: Harness, answer: () => Response | Promise<Response>) {
   harness.handlers.push((call) =>
-    call.url.includes('.shinsa.dev/api/hooks/') ? answer() : new Response('', { status: 599 })
+    call.url.includes('.relay.test/api/hooks/') ? answer() : new Response('', { status: 599 })
   );
 }
 
@@ -31,9 +31,7 @@ describe('webhooks through app.shinsa.dev', () => {
     expect(delivered.status).toBe(202);
     expect(await delivered.json()).toEqual({ delivery: 'd1' });
     const forwarded = harness.calls.at(-1);
-    expect(forwarded?.url).toBe(
-      `https://t-${instanceId}.shinsa.dev/api/hooks/schedule-1/token-1?source=maple`
-    );
+    expect(forwarded?.url).toBe(`https://${instanceId}.relay.test/api/hooks/schedule-1/token-1?source=maple`);
     expect(forwarded?.method).toBe('POST');
     expect(forwarded?.body).toBe('{"alert":"down"}');
     expect(forwarded?.headers.get('x-maple-signature')).toBe('sig');
@@ -54,7 +52,7 @@ describe('webhooks through app.shinsa.dev', () => {
       const refused = await harness.call(`/hooks/${instanceId}/${path}`, { method: 'POST', body: 'x' });
       expect([path, refused.status]).toEqual([path, 404]);
     }
-    expect(harness.calls.filter((call) => call.url.includes('.shinsa.dev/'))).toEqual([]);
+    expect(harness.calls.filter((call) => call.url.includes('.relay.test/'))).toEqual([]);
   });
 
   test('passes a GET through without a body', async () => {
@@ -89,6 +87,29 @@ describe('webhooks through app.shinsa.dev', () => {
     expect(errors).not.toHaveBeenCalled();
     warnings.mockRestore();
     errors.mockRestore();
+  });
+
+  test('answers offline for an engine that has not joined the relay, without opening its relay', async () => {
+    const harness = createHarness();
+    const credentials = await pairMachine(harness, await harness.signIn());
+    await heartbeat(harness, credentials, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    const warnings = spyOn(console, 'warn').mockImplementation(() => undefined);
+    answerTunnel(harness, () => new Response('ok'));
+    const offline = await harness.call(`/hooks/${credentials.instanceId}/s/t`, { method: 'POST', body: 'x' });
+    expect(offline.status).toBe(503);
+    expect(harness.calls.filter((call) => call.url.includes('.relay.test/'))).toEqual([]);
+    expect(warnings.mock.calls).toEqual([
+      [
+        '[Cloud] Machine offline',
+        {
+          surface: 'webhook',
+          instanceId: credentials.instanceId,
+          reason: 'unreachable',
+          error: 'This machine has not connected to the relay yet.',
+        },
+      ],
+    ]);
+    warnings.mockRestore();
   });
 
   test('refuses an unknown machine or a body over 1 MB', async () => {

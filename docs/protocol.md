@@ -95,11 +95,11 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
 | pace hold | A step held before it starts because the last 24 hours reached the daily or a project's usage limit; it starts when older usage drops out | `UsageWait` with `cause: pace`, `UsagePace` | "Held at a usage limit" |
 | usage forecast | The highest steady daily pace the accounts allow without all of them running out, with each account's timeline | `UsageForecast` (`resolveUsageForecast`) | forecast |
-| usage reset | A reset of usage limits Claude grants an account, which you claim in the Claude app; Shinsa shows it and never claims it | `UsageResetGrant`, `AccountUsage.resetGrants` | "Usage reset", "1 usage reset available" |
+| usage reset | A reset of usage limits Claude grants an account, which you claim in the Claude app; Shinsa shows it and never claims it | `UsageResetGrant` (`givesBackWeekly`, `weeklyShare`), `AccountUsage.resetGrants` | "Weekly reset", "Fable reset", "1 usage reset available", "1 usage reset ends in 2 days" |
 | extra usage | Paid usage past a plan's limits, on or off per account, with the credit left | `ExtraUsage`, `UsageMoney`, `AccountUsage.extraUsage` | "Extra usage", "credit left" |
 | rate pool | The accounts that learn one usage rate together: every account on one provider and plan, or one account whose plan is unknown | `resolveRatePool`, `plan:<provider>:<plan>`, `state.accountPlans`, `STARTING_RATES` | "an estimate from its plan's usual rate" |
 | build estimate | What a task's build will cost, from the nearest past builds or a measured table, corrected after each phase | `BuildEstimate` (`resolveBuildEstimate`) | "About 6% to build", Build estimate |
-| Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, "Waiting to build", "Builds tonight", Build now |
+| Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `autoPaceResets`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, Count on usage resets, "Waiting to build", "Builds tonight", Build now |
 | night shift | What Auto pace does in your away hours: queued builds run, and the Agent records judgement calls instead of asking | `AwayHours` (`resolveAwayHours`), `NightShift`, `resolveNightShiftTold` | "built overnight" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
@@ -354,7 +354,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `teammateFork?` | `TeammateFork` \| null | the teammate's task this one was forked from, as a brief (`instanceId`, `taskId`, `handle`, `title`, `owner`, `request`, `rounds`, `branch`, `pullRequest`): its first Agent run starts fresh from it (`docs/engine.md` → Forking a teammate's task) |
 | `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskIds` its checks filed (forks of this task), the `linkedTaskIds` they found already filed by a watch or another watchdog, `endedAt` (`docs/engine.md` → Watchdogs) |
-| `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`); each of them shows Split from |
+| `splits?` | `TaskSplit[]` | tasks `split_task` made, once per round and plan version (`round`, absent in round 1, and `planVersion`, which starts again at 1 each round); each of them shows Split from |
 | `scheduleId?` | string \| null | the schedule that started it, or whose read filed it |
 | `watchHome?` | boolean | the home a watch reads in: no handle, no triage, on no list, takes no messages (`docs/engine.md` → Schedules and webhooks) |
 | `slack?` | `SlackThreadLink` \| null | the Slack thread it was started from: `teamId`, `channelId`, `threadTs`, the author's `userId`, the mention's `messageTs`, the `permalink`, `statusTs`, the status message edited in place, and `reaction`, the one reaction on the mention (`docs/engine.md` → Slack) |
@@ -915,7 +915,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, or `initiativeId`, one kind at a time (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
 | `away.record` | records a span you were away from your Mac (`from`, `to`), sent by the Mac app's page; refused when it ends before it starts, after now or lasts over 30 days (`away_refused`) | none | **human** |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `autoPace`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`) |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`, `watchdogsIgnoreUsageLimits`, `autoPace`, `autoPaceResets`, `sharedTeams` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -1058,7 +1058,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `feedback.record_failure` | either feedback effect, and the start after a restart | fails a `drafting` or `filing` entry with `detail` |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `account.plan_recorded` | the account roster, when an account's plan differs from `state.accountPlans` | records the account's `provider` and `plan` under its plan key, or forgets it with `plan: null`; nothing when unchanged |
-| `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast with usable reset grants), or clears it with null; nothing when unchanged |
+| `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast without usage resets), `resetPace` (with each usable reset as a budget ending at its `endsAt`), `endingPace` (with only the resets that end within 3 days) and `resetEndsAt` (when the soonest of them ends), or clears them with a null pace; nothing when unchanged |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries/service.ts` | a delivery claim was taken, or released |
@@ -1386,7 +1386,7 @@ or `browser` (a tab, Floaty).
 | `attention { where }` | To a page that sent `presence`, and again whenever its answer changes: `here` (it is the owner's page used last), `elsewhere` (another of the owner's pages is) or `nowhere` (none was used in the last five minutes, or the page is a member's) (`AttentionPlace`, `ATTENTION_PLACES`) |
 | `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 | `resources { resources }` | On connect once sampled, then every 5 s while a page is connected: `MachineResources` (core's `remote/resources.ts`: the machine's cores, CPU percent, memory used and total, disk free and total, and each open task's agent, services and checks as CPU percent and memory, its process count and its worktree's size). An engine samples only while a socket listens, so a page that never reads it costs nothing; an older engine never sends it and an older page ignores it |
-| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the tunnel's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
+| `remote { remote }` | On connect and after every change to remote access (a device added or forgotten, pausing, resuming, removing, the relay's status, a pairing, a team): `RemoteSnapshot` (Remote access, below) |
 | `teams { teams }` | On connect and after every change to what the machine watches of its teammates: `TeamFeedSnapshot` (Teams, below) |
 
 Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/protocol/terminals.ts`, `docs/engine.md`
@@ -1480,7 +1480,7 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | --- | --- | --- |
 | `POST /__remote/pair/start` | The engine | `{ name, publicKey, version }` → `{ claimCode, pollSecret, url, expiresAt }` |
 | `POST /__remote/pair/poll` | The engine | `{ claimCode, pollSecret }` → `pending`, `expired` or `claimed` with `MachineCredentials` and the owner's GitHub login, once |
-| `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance and its tunnel |
+| `GET /__remote/pairs/<code>`, `POST …/approve` | The pairing page | The machine's name and key fingerprint; approving creates the instance |
 | `POST /__remote/machine/heartbeat`, `offline`, `remove` | The engine, with its machine token | `{ localUrl, version, signingKey? }` (`HeartbeatRequest`; `signingKey` the machine's ECDSA P-256 public key, raw and base64url, kept when left out, else 400 `body_invalid`) keeps the instance online and its ingress on the engine's port and answers `{ ok, owner, members, guests }` (`HeartbeatResponse`, a `RemoteAccess` and the machine's guests as `RemoteMember`s), which the engine reads leniently; a 401 means revoked |
 | `POST /__remote/machine/invites`, `POST /__remote/machine/invites/remove` | The engine, with its machine token | The machine's one reusable invite token, replacing the one before (`InviteCreateResponse`: `token`); removing it turns the invite off |
 | `POST /__remote/machine/requesters/find`, `POST /__remote/machine/members/add`, `POST /__remote/machine/members/remove` | The engine, with its machine token | `{ userId }` (`MemberRequest`): the GitHub user of an account that opened this machine's invite, a member, the owner or someone in a team with the owner (a `RemoteUser`, else 404); making such an account a member when you accept its request or give a teammate this machine (a `RemoteMember`, 409 `members_full` past 20); taking a member's access away |
@@ -1491,17 +1491,17 @@ on merge, so a path or field is never renamed or removed, only optional fields a
 | `GET /__remote/session`, `/__remote/sign-in`, `POST /__remote/sign-out` | The page | GitHub sign-in (`RemoteSession`) |
 | `GET /__remote/sign-in?client=native&redirect=…&code_challenge=…`, `POST /__remote/sign-in/token` | The iPhone app | GitHub sign-in that ends at `shinsa://` (or `shinsa-dev://`, `REMOTE_NATIVE_REDIRECT_SCHEMES`) with `?code=`, a one-time code bound to the app's S256 challenge, traded once within 60 s for `{ token, user }` (`NativeSignInTokenRequest`, `NativeSignInTokenResponse`); a failed sign-in ends at `?error=` |
 | `GET /__remote/instances`, `POST …/<id>/connect`, `POST …/<id>/remove`, `POST …/<id>/leave` | The page | The instances you own or are a member of (`RemoteInstance`, with its `owner` and your `role`, `owner`, `member` or `guest`), a connect token and the channel's URL (`ConnectResponse`), removal (the owner only), leaving (a member or a guest) |
-| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded to the tunnel's `/api/hooks/<schedule>/<token>` (`apps/cloud/src/routes/hooks/`) |
-| `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://t-<instance>.shinsa.dev`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
+| `/hooks/<instance>/<schedule>/<token>` | Anyone | A webhook, forwarded through the machine's relay to `/api/hooks/<schedule>/<token>` (`apps/cloud/src/routes/hooks/`) |
+| `POST /__remote/shares/<instance>/connect` | Anyone with a share link | `ShareConnectResponse` (`url`: `wss://app.shinsa.dev/__relay/<instance>`, `online`), no session, `X-Robots-Tag: noindex`; 404 when the instance does not exist (`resolveShareConnectPath`) |
 | `POST /__remote/machine/teams` | The engine, with its machine token | `{ name }` (`TeamCreateRequest`) makes a team its owner owns (409 `teams_full` past `MAX_OWNED_TEAMS`) and answers `TeamCreateResponse` (`team`, a `RemoteTeam`, and `invite`) |
 | `POST /__remote/machine/teams/join`, `POST /__remote/teams/join` | The engine, with its machine token; the join page | `{ invite }` (`TeamJoinRequest`) records that the account asked, unless it is in the team already, and answers `TeamJoinResponse` (`teamId`, `name`, `owner`, `status`: `requested` or `member`); 404 `invite_invalid` for a link turned off |
 | `POST /__remote/teams/preview` | The join page, signed in | `{ invite }` answers `TeamPreviewResponse` (`name`, `owner`) so the page names the team before anyone asks; records nothing; 404 `invite_invalid` for a link turned off |
 | `POST /__remote/machine/teams/<team>/<action>` | The engine, with its machine token | `TeamAction`: `invite` (a new invite, `TeamInviteResponse`), `invite/remove`, `members/add` and `requests/decline` (`{ userId }`, of an account that asked), `members/remove`, `remove` (the owner only, else 403 `not_owner`), `leave` (a member; 409 `owner_cannot_leave`), `connect` (`TeamConnectRequest`, below); 404 for a team the account is not in |
 | `GET /__remote/teams`, `POST /__remote/teams/<team>/leave`, `POST /__remote/teams/<team>/connect` | The page | Your teams (`RemoteTeam[]`), leaving one, and a team connect token |
-| any path on `<label>.shinsa.page` | Anyone with a preview link | A shared preview (`previews.ts`): `?key=` set as the `__Host-shinsa_preview` cookie and a 303 to the same path without it; with the cookie, forwarded with `x-shinsa-preview-key` (`PREVIEW_KEY_HEADER`) to the tunnel's `/__preview/<id><path>` (`resolvePreviewTunnelPath`), WebSockets included; `PREVIEW_GONE` (404) or `PREVIEW_OFFLINE` (503) otherwise |
+| any path on `<label>.shinsa.page` | Anyone with a preview link | A shared preview (`previews.ts`): `?key=` set as the `__Host-shinsa_preview` cookie and a 303 to the same path without it; with the cookie, forwarded with `x-shinsa-preview-key` (`PREVIEW_KEY_HEADER`) through the relay to `/__preview/<id><path>` (`resolvePreviewTunnelPath`), WebSockets included; `PREVIEW_GONE` (404) or `PREVIEW_OFFLINE` (503) otherwise |
 
 A **team connect token** (`connect`, `{ instanceId }`) is answered only for the team's owner or a member and a
-machine of one of them, as `ConnectResponse` with `url` `wss://t-<instance>.shinsa.dev/team?token=…`
+machine of one of them, as `ConnectResponse` with `url` `wss://app.shinsa.dev/__relay/<instance>/team?token=…`
 (`resolveTeamChannelUrl`), the token signed with that machine's connect key for the GitHub account that asked. The
 heartbeat's answer also carries `teams` (`RemoteTeam[]`: `id`, `name`, `owner`, your `role`, `members`, `requests`
 (the owner's only), `machines` (`TeamMachine`: `id`, `name`, `userId`, `online`, `lastSeenAt`, `signingKey` when the machine sent one, every member's), and
@@ -1512,7 +1512,7 @@ Every signed-in route above takes the session as the `__Host-shinsa_session` coo
 
 **Teams** (`teams.ts` here, `share/teams.ts` for the list): the join link is `https://app.shinsa.dev/share/team#<team>.<invite>.<key>`
 (`TeamJoinFragment`, `resolveTeamJoinUrl`, `parseTeamJoinUrl`, `REMOTE_PATHS.teamJoinPage`), the key `TEAM_KEY_BYTES`
-(32) as base64url (`isTeamKey`), never sent to a server. The tunnel's `TEAM_CHANNEL_PATH` (`/team?token=…`) takes one
+(32) as base64url (`isTeamKey`), never sent to a server. The relay's `TEAM_CHANNEL_PATH` (`/team?token=…`) takes one
 `TeamHello` (`team`, `view`: `TeamView`, `{ kind: 'list' }` or `{ kind: 'task', taskId }`, a fresh `ephemeral`, and
 `proof`, an HMAC with the team key over the team, the view and the key), answered by a welcome with the machine's
 fresh key and a proof over all of it or by `refused`; both derive the session key with the view in it
@@ -1537,7 +1537,7 @@ newline and `body`, as base64url (`signTeamSnapshot`, `verifyTeamSnapshot` with 
 `PREVIEW_ID_BYTES`, `key` of `PREVIEW_KEY_BYTES`, base64url), written `https://<label>.shinsa.page/?key=<key>`
 (`PREVIEW_ORIGIN`; `serializePreviewUrl`, `parsePreviewUrl`), the label lowercase base32 of the preview id's bytes
 followed by the instance id's (`serializePreviewLabel`, `parsePreviewLabel`, `parsePreviewHost`), one DNS label of 63
-characters at most. The engine's tunnel route is `PREVIEW_TUNNEL_PREFIX` (`/__preview/<id><path>`,
+characters at most. The engine's relay route is `PREVIEW_TUNNEL_PREFIX` (`/__preview/<id><path>`,
 `parsePreviewTunnelPath`); its pages are `serializePreviewPage('gone' | 'stopped' | 'offline')` (`preview-page.ts`,
 `PREVIEW_PAGES`), one self-contained page each in the app's empty-state look. Nothing is sealed: the key is checked on every request (`docs/engine.md` → Sharing a preview).
 
@@ -1552,7 +1552,7 @@ stands: `planning`, `working`, `ready`, `deploying`, `live`, `looking_into`, `an
 code; its card dates itself by the task's `stageChangedAt`), the same for a public or a private repository (`docs/engine.md` → Sharing a
 task has the table). A link is `ShareLink` (`instanceId`, `shareId` of `SHARE_ID_BYTES`, `key` of `SHARE_KEY_BYTES`),
 written `https://app.shinsa.dev/share/t/<token>#<key>`, the token the share id's bytes followed by the instance id's, as
-base64url (`serializeShareUrl`, `resolveSharePagePath`, `parseShareUrl`, `parseShareLocation`). Its channel is the tunnel's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,
+base64url (`serializeShareUrl`, `resolveSharePagePath`, `parseShareUrl`, `parseShareLocation`). Its channel is the relay's `SHARE_CHANNEL_PATH` (`/share?id=<share id>`,
 `resolveShareChannelUrl`): the page sends one `ShareHello` (`share`, a fresh P-256 `ephemeral`, `proof`: an HMAC with
 the key), the machine answers `ShareWelcome` (`welcome` with its fresh key and a proof over both, or `refused`), both
 derive one AES-GCM key (`deriveShareSessionKey`: HKDF over the ECDH and the key), and from then on only the machine
@@ -1563,18 +1563,32 @@ sends, sealed frames of `ShareMessage`: `view` (a `ShareLiveView`: `shared`, `fi
 Standard or Full access share's run, `transcript-<run id>-<page>` (`resolveShareTranscriptFile`: one page of 200 of the run's
 `ChatEntry[]` after `redactTranscriptPage`, versioned by its entry count, so a full page is sent once).
 
-`MachineCredentials` is `instanceId`, `machineToken`, `tunnelToken`, `tunnelHost` (`t-<instance>.shinsa.dev`,
-`resolveTunnelHost`), `connectKey`. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
+`MachineCredentials` is `instanceId`, `machineToken`, `connectKey`; a machine reaches the relay at
+`resolveRelayMachineUrl(instance)` and a browser at `resolveRelayUrl(instance)` followed by its channel's path. The enrollment link is `https://app.shinsa.dev/enroll#<instance>.<machine
 key>.<secret>`, with `.<invite token>` after it for an invite (`EnrollFragment`, `resolveEnrollUrl`,
 `parseEnrollFragment`): everything after `#` stays in the browser. A hand-off link is the same fragment at `/claim` with a hand-off token in place of the invite token (`resolveClaimUrl`). A GitHub account is a `RemoteUser` everywhere
 (`id`, `login`, `name`, `avatarUrl`); a machine's people are a `RemoteAccess` (`owner`, and `members`, each a
 `RemoteMember`: `user`, `addedAt`).
 
+**The relay** (`relay/schema.ts`, `relay/codec.ts`): one WebSocket per machine to `/__relay/<instance>/machine`, the
+machine token as a bearer, carrying streams. Control frames are JSON text: `open` (`stream`, `kind` `http` or
+`socket`, `method`, `path`, `headers` as pairs, `address`), `response` (`stream`, `status`, `headers`; 101 accepts a
+socket), `end`, `close` (`stream`, `code`, `reason` of at most 120 characters), `pause` and `resume` (`stream`: the
+relay holds more than `RELAY_BODY_WATERMARKS.high`, 1 MiB, of an answer its reader has not taken, so the machine stops
+sending that stream's body until it is down to `low`, 256 KiB), and `ping` and `pong`, whose
+exact texts (`RELAY_PING`, `RELAY_PONG`) the Durable Object answers by auto-response, so a ping never wakes it.
+Data frames are binary: a 5-byte header
+(`RELAY_DATA_HEADER_BYTES`: the stream id as a 32-bit integer and a kind byte, `binary` 1 or `text` 2) and the
+payload: an HTTP body chunk of at most `RELAY_CHUNK_BYTES` (64 KiB), or one whole socket message of at most
+`RELAY_MAX_MESSAGE_BYTES` (32 MiB). A side opens at most `RELAY_MAX_STREAMS` (1,024) at once; `RELAY_CLOSE` names the
+close codes (`normal`, `replaced`, `machineGone`, `refused`, `tooLarge`). `serializeRelayControl`,
+`parseRelayControl`, `serializeRelayData`, `parseRelayData` and `listRelayBodyFrames` write and read them; a frame that does not decode is dropped.
+
 **Connect tokens** (`connect-token.ts`): `<payload>.<signature>`, base64url, the payload `{ i: instance, u: GitHub
 user, e: expiry }` and the signature an HMAC-SHA256 with the instance's connect key. `verifyConnectToken` refuses
 another instance, an expired token and one that lives longer than `CONNECT_TOKEN_TTL_MS` (60 s).
 
-**The handshake** (`handshake.ts`, `REMOTE_PROTOCOL_VERSION` 1), on `wss://<tunnel host>/remote?token=…`, as text frames:
+**The handshake** (`handshake.ts`, `REMOTE_PROTOCOL_VERSION` 1), on `wss://app.shinsa.dev/__relay/<instance>/remote?token=…`, as text frames:
 
 | Message | From | Fields |
 | --- | --- | --- |
@@ -1612,7 +1626,7 @@ padding means a guess that saves a few bytes changes the length on the wire only
 a 4 MB state), so each guess first costs a search for that edge, over frames the attacker must also cause, while
 every other change to the state moves the length too. It narrows the leak and does not close it: what is at stake is
 task content, since the channel's keys and connect tokens are never in a message. The gain is the first state through
-the tunnel in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/engine.md` → Remote access).
+the relay in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/engine.md` → Remote access).
 
 **Inside the channel** (`channel.ts`, `ChannelMessage`, JSON in each sealed frame):
 
@@ -1659,15 +1673,15 @@ What the engine, the Worker on app.shinsa.dev and the web share for the Slack bo
 | `GET /slack/connect/callback`, `/slack/install/callback` | Slack | Writes the link with the user token sealed, adding the app to the workspace first when it has none; then `/slack/linked?team=` or `?error=` (`resolveSlackLinkedPath`) |
 | `POST /slack/events` | Slack | Events API, checked against Slack's signature; a mention is answered at once and forwarded after |
 | `POST /slack/interactions` | Slack | Interactivity (`payload` form field), checked against Slack's signature and answered at once; a `shinsa.decide.*` click, or a `shinsa.decision` form sent after a `shinsa.write.*` click opened it (`views.open`), from the owner or a member of the machine that posted the card is forwarded as a `SlackDecision`; the click's `response_url` (on `hooks.slack.com`) gets the decided card or a private refusal, a form's refusal comes as `chat.postEphemeral`; anything else is dropped |
-| `POST https://t-<instance>.shinsa.dev/api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
-| `POST https://t-<instance>.shinsa.dev/api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
+| `POST /api/slack/interactions` | app.shinsa.dev | The `SlackDecision` (`SLACK_ENGINE_INTERACTIONS_PATH`), signed as a mention is → `SlackDecisionReply`: `{ decided: true, text }` or `{ decided: false, reason }` |
+| `POST /api/slack/events` | app.shinsa.dev | The `SlackMention`, with `x-shinsa-slack-signature` (`v1=<hex>`, an HMAC-SHA256 over `v1:<ms>:<body>` keyed by `slack:<connect key>`) and `x-shinsa-slack-timestamp` (`SLACK_FORWARD_HEADERS`), good for five minutes (`SLACK_FORWARD_WINDOW_MS`) |
 | `POST /__remote/slack/post` | The engine, with its machine token | `SlackRelayPost` (`teamId`, `channelId`, `threadTs`, `replaceTs`, `message` of `text` and Block Kit `blocks`; `parseSlackRelayPost`) → `SlackRelayPosted` `{ ts }`; 403 for a thread neither sent to it nor in a channel it watches, or a message it did not post, 410 when the app was removed, 502 when Slack refused |
 | `POST /__remote/slack/session` | The engine, with its machine token | `SlackRelaySession` (the thread and a `status` of `SLACK_SESSION_STATUSES`: `processing`, `suspended`, `active`, `closed`; `parseSlackRelaySession`) → `SlackRelaySessionSet` `{ applied }`: `agents.sessions.setStatus`, `applied: false` when the workspace cannot show one (`not_authorized` from an app not on Agent Sessions, `feature_disabled` from a workspace without agent features), after which the engine stops asking for that workspace until it restarts; any other refusal is 502 `slack_failed`, logged, and tried again at the next change |
 | `POST /__remote/slack/react` | The engine, with its machine token | `SlackRelayReaction` (the thread, the mention's `messageTs`, the emoji name to `add` and to `remove`, at least one; `parseSlackRelayReaction`) → `SlackRelayReacted` `{ applied }`: `reactions.remove` then `reactions.add` on a message of a thread sent to that machine; `no_reaction` and `already_reacted` count as done, anything else (`missing_scope` on a workspace that added the app before `reactions:write`) is `applied: false` |
 | `GET /__remote/slack/links`, `POST /__remote/slack/unlink` | The engine, with its machine token | `SlackLinks` (`teamId`, `teamName`, `userId`, `userName`, `linkedAt` each); removes every link of the machine |
 | `GET /__remote/slack/channels` | The engine, with its machine token | `SlackChannels`: the channels the bot is in (`users.conversations`, public and private, not archived, at most 1,000), in each workspace linked to the machine, a private one only when a Slack user linked to that machine is a member of it, asked with that person's own token: `teamId`, `teamName`, `channelId`, `channelName`, `private`; 502 `SlackFailed` when Slack does not list the bot's channels or does not say which private ones a linked person is in |
 | `POST /__remote/slack/watches` | The engine, with its machine token | `SlackChannelWatches` (`watches` of `teamId` and `channelId`, at most 100): replaces the channels whose messages the machine is sent, keeping only channels `GET /__remote/slack/channels` would list for it → `{ ok: true }`, or 502 `SlackFailed` with the list as it was, also when Slack does not say whether a linked person is in a private channel named in it |
-| `POST https://t-<instance>.shinsa.dev/api/slack/messages` | app.shinsa.dev | A `SlackChannelMessage` (`SLACK_ENGINE_MESSAGES_PATH`: `eventId`, `teamId`, `channelId`, `messageTs`, `userId`, `userName`, `bot`, `text`, `permalink`, `channelName`; `parseSlackChannelMessage`), signed as a mention is, only to a machine that names `slack-channel-triggers` → 202 `{ ok: true, delivered }`, the number of schedules it ran |
+| `POST /api/slack/messages` | app.shinsa.dev | A `SlackChannelMessage` (`SLACK_ENGINE_MESSAGES_PATH`: `eventId`, `teamId`, `channelId`, `messageTs`, `userId`, `userName`, `bot`, `text`, `permalink`, `channelName`; `parseSlackChannelMessage`), signed as a mention is, only to a machine that names `slack-channel-triggers` → 202 `{ ok: true, delivered }`, the number of schedules it ran |
 
 | Shape | Fields |
 | --- | --- |

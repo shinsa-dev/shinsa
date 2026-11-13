@@ -109,8 +109,6 @@ function credentials(instanceId: string) {
   return {
     instanceId,
     machineToken: `${instanceId}-token`,
-    tunnelToken: 'tunnel',
-    tunnelHost: `t-${instanceId}.shinsa.dev`,
     connectKey: 'key',
   };
 }

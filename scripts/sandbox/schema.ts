@@ -43,7 +43,7 @@ export const HANDOFF_FRESH = new RegExp(`^${SANDBOX_PATH}/handoff/([A-Z]+-\\d+)$
 
 export const SIGN_IN_AS = new RegExp(`^${SANDBOX_PATH}/as/([a-z]+)$`);
 
-export const TUNNEL = new RegExp(`^${SANDBOX_PATH}/tunnel/([a-z]+)(/share|/team)?$`);
+export const RELAY = new RegExp(`^${SANDBOX_PATH}/relay/([a-z]+)(/share|/team)?$`);
 
 export const SHARE_CONNECT = new RegExp(`^${REMOTE_PATHS.shares}/([a-z]+)/connect$`);
 
@@ -166,7 +166,7 @@ export interface SandboxPageModule {
   serializeSandboxPage: (sections: SandboxSection[], stylesheet: string) => string;
 }
 
-export interface TunnelData {
+export interface RelayData {
   machine: Machine;
   path: string;
   upstream: WebSocket | null;

@@ -1,4 +1,10 @@
-import { type ProviderLogin, resolvePlanLabel } from '@shinsa/core';
+import {
+  type AccountsSnapshot,
+  CLAUDE_PROVIDER,
+  KNOWN_AGENT_PROVIDERS,
+  type ProviderLogin,
+  resolvePlanLabel,
+} from '@shinsa/core';
 import { Option } from 'effect';
 import { resolveAccountProvider } from '@/lib/accounts/account.ts';
 import { resolveProviderStatus, type UsageAccountHeader } from '@/lib/accounts/usage.ts';
@@ -57,4 +63,32 @@ export function resolveProviderHeader(login: ProviderLogin, now: number): UsageA
     retryAt: login.usage?.retryAt ?? null,
     reason: login.usage?.detail ?? null,
   };
+}
+
+export type ProviderChoice = 'added' | 'removed';
+
+export interface AddableProvider {
+  id: string;
+  label: string;
+}
+
+export function listAddableProviders(snapshot: Pick<AccountsSnapshot, 'providers'>): AddableProvider[] {
+  const shown = new Set((snapshot.providers ?? []).map((login) => login.provider));
+  return KNOWN_AGENT_PROVIDERS.filter(
+    (provider) => provider.id !== CLAUDE_PROVIDER && !shown.has(provider.id)
+  ).map(({ id, label }) => ({ id, label }));
+}
+
+export function describeProviderRemoval(login: Pick<ProviderLogin, 'label'>) {
+  return {
+    menu: `Remove ${login.label}`,
+    title: `Remove ${login.label} from Shinsa?`,
+    body: `Shinsa forgets ${login.label}, and your ${login.label} CLI stays signed in.`,
+    action: `Remove ${login.label}`,
+    done: `${login.label} removed.`,
+  };
+}
+
+export function describeProviderAdded(provider: Pick<AddableProvider, 'label'>) {
+  return `${provider.label} added.`;
 }

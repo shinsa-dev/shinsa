@@ -47,8 +47,6 @@ function readCredentials(value: unknown): { credentials: MachineCredentials | nu
     credentials: {
       instanceId: fields.instanceId,
       machineToken: fields.machineToken,
-      tunnelToken: fields.tunnelToken,
-      tunnelHost: fields.tunnelHost,
       connectKey: fields.connectKey,
     },
     incomplete: false,

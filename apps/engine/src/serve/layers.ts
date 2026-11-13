@@ -42,11 +42,11 @@ import { ServeLock } from '../instance/lock/service.ts';
 import { createSummaryAccountSource, Onboarding, Prerequisites, SetupCommands } from '../onboarding/index.ts';
 import { ProjectChanges } from '../projects/changes/service.ts';
 import {
-  createInstalledConnector,
   Handoffs,
   PlacementAsker,
   Previews,
   Remote,
+  RelayConnectorLayer,
   RemoteEdgeLayer,
   RemoteLayer,
   RemoteOrigin,
@@ -63,6 +63,7 @@ import { CurrentLogin } from '../repos/current-login/service.ts';
 import { RepoFolders } from '../repos/folders/service.ts';
 import { Roots } from '../repos/index.ts';
 import { GitHubLogins } from '../repos/login/service.ts';
+import { RepoOrigins } from '../repos/origin/service.ts';
 import { RepoRegistry } from '../repos/registry/service.ts';
 import { RepoSetup } from '../repos/setup/service.ts';
 import { ProcessLedger, ResourceMachine, ResourceMonitor } from '../resources/index.ts';
@@ -109,7 +110,7 @@ export function createMachineLayer({
   const login = resolveLogin
     ? Layer.succeed(CurrentLogin, CurrentLogin.of({ lookup: Effect.promise(resolveLogin) }))
     : CurrentLogin.layer;
-  const repos = Layer.mergeAll(folders, RepoSetup.layer, GitHubLogins.layer);
+  const repos = Layer.mergeAll(folders, RepoSetup.layer, RepoOrigins.layer, GitHubLogins.layer);
   const stores = Layer.mergeAll(
     ConfigStore.layer,
     SecretStore.layer.pipe(Layer.provide(SecretFiles.layer)),
@@ -217,10 +218,8 @@ function createRemoteLayer(config: ServerConfig, options: ShinsaOptions, instanc
   );
   return remote.pipe(
     Layer.provide(
-      Layer.mergeAll(
-        options.remoteConnector ?? createInstalledConnector(config.dataDir),
-        RemoteEdgeLayer,
-        Layer.succeed(RemoteOrigin, config.remoteOrigin)
+      Layer.mergeAll(options.remoteConnector ?? RelayConnectorLayer, RemoteEdgeLayer).pipe(
+        Layer.provideMerge(Layer.succeed(RemoteOrigin, config.remoteOrigin))
       )
     )
   );

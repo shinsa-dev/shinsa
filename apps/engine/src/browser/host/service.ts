@@ -4,6 +4,7 @@ import { constant, constFalse } from 'effect/Function';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { EngineConfig } from '../../config/service.ts';
 import { sendCdpCommand } from '../cdp/command.ts';
+import { profileInUse, reclaimProfile, sweepOrphans } from './holder.ts';
 import {
   ACTIVE_PORT_FILE,
   type BrowserEndpoint,
@@ -16,6 +17,7 @@ import {
   LAUNCH_POLL,
   NOT_INSTALLED_MESSAGE,
   NOT_READY_MESSAGE,
+  PROFILE_IN_USE_CODE,
   type RunningBrowser,
   SHARED_ARGS,
   SIGNING_IN_MESSAGE,
@@ -97,15 +99,24 @@ export class BrowserHost extends Context.Service<
         return yield* new BrowserUnavailable({ reason: 'not_installed', message: NOT_INSTALLED_MESSAGE });
       });
 
-      const launch = Effect.fn('BrowserHost.launch')(function* (
+      const withPlatform = <A, E>(
+        effect: Effect.Effect<A, E, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner>
+      ) =>
+        effect.pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)
+        );
+
+      const reclaim = (folder: string) => withPlatform(reclaimProfile(folder, settings.stopTimeout));
+
+      const start = Effect.fn('BrowserHost.start')(function* (
         profile: BrowserProfile,
         mode: RunningBrowser['mode'],
-        args: ReadonlyArray<string>
+        args: ReadonlyArray<string>,
+        executable: string
       ) {
-        const executable = yield* findExecutable;
         const folder = resolveProfilePath(profile);
         const portFile = join(folder, ACTIVE_PORT_FILE);
-        yield* fs.makeDirectory(folder, { recursive: true }).pipe(Effect.mapError(failLaunch));
         yield* Effect.ignore(fs.remove(portFile, { force: true }));
         const scope = yield* Scope.make();
         const closeScope = () => Scope.close(scope, Exit.void);
@@ -136,7 +147,9 @@ export class BrowserHost extends Context.Service<
                 Effect.raceFirst(
                   Effect.flatMap(exited, (code) =>
                     Effect.fail(
-                      failLaunch({ message: `Chrome stopped with code ${code} before it was ready.` })
+                      code === PROFILE_IN_USE_CODE
+                        ? profileInUse(null)
+                        : failLaunch({ message: `Chrome stopped with code ${code} before it was ready.` })
                     )
                   )
                 ),
@@ -149,6 +162,21 @@ export class BrowserHost extends Context.Service<
         const started: RunningBrowser = { mode, generation, scope, exited, webSocketUrl, leases: 0, uses: 0 };
         yield* write(profile, started);
         return started;
+      });
+
+      const launch = Effect.fn('BrowserHost.launch')(function* (
+        profile: BrowserProfile,
+        mode: RunningBrowser['mode'],
+        args: ReadonlyArray<string>
+      ) {
+        const executable = yield* findExecutable;
+        const folder = resolveProfilePath(profile);
+        yield* fs.makeDirectory(folder, { recursive: true }).pipe(Effect.mapError(failLaunch));
+        const attempt = Effect.andThen(reclaim(folder), start(profile, mode, args, executable));
+        yield* reclaim(folder);
+        return yield* start(profile, mode, args, executable).pipe(
+          Effect.catchIf((error) => error.reason === 'profile_in_use', constant(attempt))
+        );
       });
 
       const reveal = Effect.fn('BrowserHost.reveal')(function* (
@@ -260,6 +288,12 @@ export class BrowserHost extends Context.Service<
         Effect.map(selectRunning(profile), (current): BrowserMode =>
           Option.isSome(current) ? current.value.mode : 'stopped'
         );
+
+      yield* lock.take(1);
+      yield* Effect.forkIn(
+        withPlatform(sweepOrphans(root, settings.stopTimeout)).pipe(Effect.ensuring(lock.release(1))),
+        layerScope
+      );
 
       yield* Effect.addFinalizer(() =>
         Effect.flatMap(Ref.get(running), (all) =>

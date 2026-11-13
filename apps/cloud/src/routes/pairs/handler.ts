@@ -1,20 +1,13 @@
-import {
-  ClaimCode,
-  hasMachineFeature,
-  type MachineCredentials,
-  resolveKeyFingerprint,
-  resolveTunnelHost,
-} from '@shinsa/core';
+import { ClaimCode, hasMachineFeature, type MachineCredentials, resolveKeyFingerprint } from '@shinsa/core';
 import { CurrentUser, RemoteApi } from '@shinsa/core/remote/api';
 import { InstancesFull, PairClaimed, PairExpired, ServiceFull } from '@shinsa/core/remote/errors';
 import { Clock, Effect, Option, Redacted } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import { CloudConfig } from '../../config/service.ts';
 import { CloudCrypto } from '../../crypto/service.ts';
-import { Cloudflare } from '../../integrations/cloudflare/service.ts';
 import { Machines } from '../../store/machines/service.ts';
 import { Pairings } from '../../store/pairings/service.ts';
-import { DEFAULT_LOCAL_URL, MAX_INSTANCES_PER_USER } from './schema.ts';
+import { MAX_INSTANCES_PER_USER } from './schema.ts';
 export const PairsHandlers = HttpApiBuilder.group(
   RemoteApi,
   'pairs',
@@ -33,15 +26,12 @@ export const PairsHandlers = HttpApiBuilder.group(
     const crypto = yield* CloudCrypto;
     const pairings = yield* Pairings;
     const machines = yield* Machines;
-    const cloudflare = yield* Cloudflare;
 
     const createMachine = Effect.fn('pairs.createMachine')(function* (
       pairing: Effect.Success<ReturnType<typeof findLivePairing>>,
       userId: CurrentUser['Service']['id']
     ) {
       const instanceId = yield* crypto.createInstanceId;
-      const tunnelHost = resolveTunnelHost(instanceId);
-      const tunnel = yield* cloudflare.createTunnel(`shinsa-${instanceId}`, tunnelHost, DEFAULT_LOCAL_URL);
       const machineToken = yield* crypto.createToken();
       const connectKey = yield* crypto.createToken();
       yield* machines.create({
@@ -49,8 +39,6 @@ export const PairsHandlers = HttpApiBuilder.group(
         ownerId: userId,
         name: pairing.name,
         fingerprint: yield* resolveKeyFingerprint(pairing.publicKey),
-        tunnelId: tunnel.tunnelId,
-        dnsRecordId: tunnel.dnsRecordId,
         machineTokenHash: yield* crypto.hashToken(machineToken),
         connectKey,
         features: pairing.features,
@@ -58,8 +46,6 @@ export const PairsHandlers = HttpApiBuilder.group(
       const credentials: MachineCredentials = {
         instanceId,
         machineToken: Redacted.value(machineToken),
-        tunnelToken: Redacted.value(tunnel.tunnelToken),
-        tunnelHost,
         connectKey: Redacted.value(connectKey),
       };
       const stored = hasMachineFeature(pairing.features, 'sealed-pairing')
