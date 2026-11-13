@@ -1,13 +1,15 @@
 import { Option } from 'effect';
-import type {
-  CiRun,
-  PullRequest,
-  PullRequestCi,
-  PullRequestRemark,
-  PullRequestWatch,
-  PullRequestWatchChange,
-  RepoCi,
-  Task,
+import {
+  type CiRun,
+  isBlockingCiFailure,
+  isFailedCiRun,
+  type PullRequest,
+  type PullRequestCi,
+  type PullRequestRemark,
+  type PullRequestWatch,
+  type PullRequestWatchChange,
+  type RepoCi,
+  type Task,
 } from '../domain/index.ts';
 import { MINUTE_MS } from '../domain/time.ts';
 
@@ -59,10 +61,6 @@ function isCiAbsent(ci: PullRequestCi | null) {
   return ci.repo === 'none' || ci.now - ci.since >= CI_GRACE_MS;
 }
 
-function isFailedCheck(check: CiRun) {
-  return check.status === 'failure' || check.status === 'cancelled' || check.status === 'action_required';
-}
-
 function resolveRemarkTime(remark: PullRequestRemark) {
   return remark.bot ? remark.createdAt : (remark.editedAt ?? remark.createdAt);
 }
@@ -77,14 +75,14 @@ function evaluateChecks(watch: PullRequestWatch, checks: CiRun[], headMoved: boo
   let passed = headMoved ? false : watch.passed;
   let passedChecks = headMoved ? [] : watch.passedChecks;
   if (checks.length > 0) {
-    const failed = checks.filter(isFailedCheck);
+    const failed = checks.filter(isBlockingCiFailure);
     const newlyFailed = failed.filter((check) => !failedChecks.includes(check.name));
     if (newlyFailed.length > 0) changes.push({ kind: 'checks_failed', failed: newlyFailed });
     failedChecks = failed.map((check) => check.name);
 
     const required = checks.filter((check) => check.required === true);
     const gate = required.length > 0 ? required : checks;
-    const passedNow = gate.every((check) => check.status !== 'pending' && !isFailedCheck(check));
+    const passedNow = gate.every((check) => check.status !== 'pending' && !isFailedCiRun(check));
     const gateNames = gate.map((check) => check.name);
     const told = passed && passedChecks.length === 0 ? gateNames : passedChecks;
     const gateGrew = required.length > 0 && gateNames.some((name) => !told.includes(name));
@@ -218,7 +216,9 @@ function isUnnamed(pullRequest: PullRequest) {
 }
 
 function resolveSignatureParts(pullRequest: PullRequest, watch: PullRequestWatch) {
-  const checks = (pullRequest.checkRuns ?? []).filter(isFailedCheck).map((check) => `check:${check.name}`);
+  const checks = (pullRequest.checkRuns ?? [])
+    .filter(isBlockingCiFailure)
+    .map((check) => `check:${check.name}`);
   const threads = (pullRequest.unresolvedThreads ?? []).map((id) => `thread:${id}`);
   const conflict = watch.conflicting || pullRequest.mergeable === false ? 'conflict' : '';
   return [...checks, ...threads, conflict].filter(Boolean);
