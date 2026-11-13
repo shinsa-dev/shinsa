@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   AUTOPILOT_JUDGE_SYSTEM,
   AUTOPILOT_JUDGMENT_LIMITS,
   type AutopilotFacts,
   type Gate,
   resolveAutopilotJudgePrompt,
-  resolveAutopilotJudgeRequest,
-  resolveJudgedGateKind,
+  selectAutopilotJudgeRequest,
+  selectJudgedGateKind,
 } from '../../src/index.ts';
 import { createHarness, createTask, proposePlan } from '../harness.ts';
 
@@ -125,14 +126,14 @@ describe('the judge request', () => {
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
-    const request = resolveAutopilotJudgeRequest(harness.state, gate.id, harness.now);
+    const request = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now));
     expect(request?.system).toBe(AUTOPILOT_JUDGE_SYSTEM);
     expect(request?.prompt).toStartWith('Decision: Approve the plan');
-    expect(resolveAutopilotJudgeRequest(harness.state, 'gone', harness.now)).toBeNull();
+    expect(Option.isNone(selectAutopilotJudgeRequest(harness.state, 'gone', harness.now))).toBe(true);
     const quiet = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotJudging: false } } };
-    expect(resolveAutopilotJudgeRequest(quiet, gate.id, harness.now)).toBeNull();
+    expect(Option.isNone(selectAutopilotJudgeRequest(quiet, gate.id, harness.now))).toBe(true);
     const other = { ...harness.state, gates: { [gate.id]: { ...gate, type: 'failure' as const } } };
-    expect(resolveAutopilotJudgeRequest(other, gate.id, harness.now)).toBeNull();
-    expect(resolveJudgedGateKind({ ...gate, type: 'secret' })).toBeNull();
+    expect(Option.isNone(selectAutopilotJudgeRequest(other, gate.id, harness.now))).toBe(true);
+    expect(Option.isNone(selectJudgedGateKind({ ...gate, type: 'secret' }))).toBe(true);
   });
 });

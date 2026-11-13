@@ -1,7 +1,8 @@
+import { Option } from 'effect';
 import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
 import { resolveLessonLimit } from '../autopilot/lessons.ts';
 import { isUrgentTask, resolveAutopilotFacts, resolveAutopilotLimits } from '../autopilot/limits.ts';
-import { resolveJudgedGateKind } from '../autopilot/prompt.ts';
+import { selectJudgedGateKind } from '../autopilot/prompt.ts';
 import {
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LIMITS,
@@ -169,7 +170,7 @@ function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): 
 
 export function askAutopilot(decider: Decider, gate: Gate) {
   if (!resolveAutopilotPolicy(decider.state.settings).enabled) return;
-  const kind = resolveJudgedGateKind(gate);
+  const kind = Option.getOrNull(selectJudgedGateKind(gate));
   if (!kind) return;
   const refusal = resolveRefusal(decider, gate, kind);
   if (refusal !== null) forward(decider, gate.id, refusal);
@@ -185,7 +186,7 @@ function selectJudgedGate(decider: Decider, command: CommandOf<'autopilot.judgme
   const task = decider.state.tasks[command.taskId];
   if (!gate || !task || gate.taskId !== task.id || gate.status !== 'open') return null;
   if (gate.autopilotJudging !== true || isTaskClosed(task)) return null;
-  const kind = resolveJudgedGateKind(gate);
+  const kind = Option.getOrNull(selectJudgedGateKind(gate));
   return kind ? { gate, kind } : null;
 }
 

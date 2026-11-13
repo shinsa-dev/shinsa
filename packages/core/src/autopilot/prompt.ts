@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Gate, GateType, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listAutopilotLessonLines } from './lessons.ts';
@@ -99,17 +100,20 @@ const JUDGED_GATES: Partial<Record<GateType, AutopilotGateKind>> = {
   merge: 'merge',
 };
 
-export function resolveJudgedGateKind(gate: Gate) {
-  return JUDGED_GATES[gate.type] ?? null;
+export function selectJudgedGateKind(gate: Gate): Option.Option<AutopilotGateKind> {
+  return Option.fromNullishOr(JUDGED_GATES[gate.type]);
 }
 
-export function resolveAutopilotJudgeRequest(state: ShinsaState, gateId: string, now: number) {
+export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, now: number) {
   const gate = state.gates[gateId];
   const task = gate ? state.tasks[gate.taskId] : undefined;
-  if (!gate || !task || gate.status !== 'open' || gate.autopilotJudging !== true) return null;
-  const kind = resolveJudgedGateKind(gate);
-  if (!kind) return null;
-  const facts = resolveAutopilotFacts(state, task, kind, gate.openedAt, now);
-  const lessons = listAutopilotLessonLines(state, kind);
-  return { system: AUTOPILOT_JUDGE_SYSTEM, prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons) };
+  if (!gate || !task || gate.status !== 'open' || gate.autopilotJudging !== true) return Option.none();
+  return Option.map(selectJudgedGateKind(gate), (kind) => {
+    const facts = resolveAutopilotFacts(state, task, kind, gate.openedAt, now);
+    const lessons = listAutopilotLessonLines(state, kind);
+    return {
+      system: AUTOPILOT_JUDGE_SYSTEM,
+      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons),
+    };
+  });
 }

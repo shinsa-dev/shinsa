@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   AUTOPILOT_LESSON_LIMITS,
   type AutopilotLesson,
   type AutopilotPolicy,
   describeAutopilotLesson,
   listAutopilotLessons,
-  resolveAutopilotJudgeRequest,
+  selectAutopilotJudgeRequest,
   resolveAutopilotLessonSummary,
   resolveLessonLimit,
   MINUTE_MS,
@@ -274,7 +275,7 @@ describe('what Autopilot does with what it learned', () => {
     answer(harness, reachReview(harness, MEDIUM), 'approve');
     const taskId = reachReview(harness);
     const gate = judgedGate(harness, taskId);
-    const request = resolveAutopilotJudgeRequest(harness.state, gate?.id ?? '', harness.now);
+    const request = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate?.id ?? '', harness.now));
     const prompt = request?.prompt ?? '';
     expect(prompt).toContain('What the developer taught you at earlier ones, most recent first:');
     const first = prompt.indexOf('You brought a review to them');

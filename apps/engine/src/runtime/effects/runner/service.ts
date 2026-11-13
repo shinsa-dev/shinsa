@@ -1,5 +1,5 @@
-import { resolveAutopilotJudgeRequest, type ShinsaEffect } from '@shinsa/core';
-import { Clock, Context, Effect, Layer } from 'effect';
+import { selectAutopilotJudgeRequest, type ShinsaEffect } from '@shinsa/core';
+import { Clock, Context, Effect, Layer, Option } from 'effect';
 import { provideTaskGitHub } from '../../../github/identity/resolve.ts';
 import { MachineGitHub } from '../../../github/identity/schema.ts';
 import type { Slack, SlackRefusal, SlackRelayFailure } from '../../../slack/index.ts';
@@ -75,8 +75,9 @@ export class EffectHandlers extends Context.Service<
         attempt: EffectAttempt
       ) {
         const now = yield* Clock.currentTimeMillis;
-        const request = resolveAutopilotJudgeRequest(yield* world.state, effect.gateId, now);
-        if (!request) return;
+        const selected = selectAutopilotJudgeRequest(yield* world.state, effect.gateId, now);
+        if (Option.isNone(selected)) return;
+        const request = selected.value;
         const judgment = (yield* world.judgeAutopilot(request.system, request.prompt)) ?? {
           verdict: 'forward' as const,
           reason: 'Autopilot could not reach a model, so this waits for you.',

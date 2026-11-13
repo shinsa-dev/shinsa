@@ -40,6 +40,6 @@ export {
 export {
   AUTOPILOT_JUDGE_SYSTEM,
   resolveAutopilotJudgePrompt,
-  resolveAutopilotJudgeRequest,
-  resolveJudgedGateKind,
+  selectAutopilotJudgeRequest,
+  selectJudgedGateKind,
 } from './prompt.ts';

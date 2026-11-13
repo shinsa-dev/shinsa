@@ -2119,7 +2119,7 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   or `slack_person` with its workspace `teamId`, Slack `id` and `name`, listed once, `isSameAutopilotContact`;
   Escalating in Slack, below). `settings.change` takes a partial `autopilot` and merges it into the current policy,
   `gates` and `contacts` replaced whole.
-- **The facts.** For a plan, question, review or merge gate (`resolveJudgedGateKind`), `resolveAutopilotFacts`
+- **The facts.** For a plan, question, review or merge gate (`selectJudgedGateKind`), `resolveAutopilotFacts`
   gathers what a colleague would weigh: urgency (`isUrgentTask`: urgent and not set on your behalf), whether a
   watchdog filed it, the reviewer's confidence and risk, the plan's size (phases and files), whether the plan asks
   for you (it runs an operation, splits, is in the backlog, was created plan first or asks for `approval`), whether
@@ -2145,7 +2145,7 @@ you answer it later ──► lesson (autopilot.learned) ──► next judgment
   confidence is medium.") and whether a setting made it.
 - **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
   and asks for `autopilot.judge {taskId, gateId}`, a replay-safe effect on lane `task:<id>`: the engine builds the
-  prompt from the state (`resolveAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
+  prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
   task's request, plan goal or question, the facts and the last 8 lessons of that kind of gate in the user prompt)
   and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
   'forward', reason, reply}`. It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
