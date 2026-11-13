@@ -14,6 +14,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import type { Tone } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { type BundleRow, describeBundleProgress, listBundleRows } from '@/lib/tasks/bundles.ts';
@@ -64,7 +65,7 @@ const WAITING_GROUP = { title: 'Waiting on another task', icon: 'IconHourglass',
 
 function selectGroupInitiative(state: ShinsaState, task: Task) {
   const initiative = task.initiativeId ? state.initiatives[task.initiativeId] : undefined;
-  return initiative && selectInitiativeLead(state, initiative) ? initiative : null;
+  return initiative && Option.isSome(selectInitiativeLead(state, initiative)) ? initiative : null;
 }
 
 function resolveGroupKey(state: ShinsaState, task: Task) {
@@ -86,7 +87,7 @@ function createInitiativeGroup(state: ShinsaState, initiative: Initiative, items
     key: `initiative:${initiative.id}`,
     title: initiative.name,
     progress: describeInitiativeGroupProgress(state, initiative),
-    opens: selectInitiativeLead(state, initiative),
+    opens: Option.getOrNull(selectInitiativeLead(state, initiative)),
     root: null,
     members: items,
   };
