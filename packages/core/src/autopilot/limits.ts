@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { type Gate, HOUR_MS, MINUTE_MS, hasStep } from '../domain/index.ts';
 import { type AutopilotGate, type AutopilotPolicy } from '../domain/settings.ts';
 import type { Task } from '../domain/types.ts';
@@ -49,7 +50,7 @@ export function resolveAutopilotPresence(state: ShinsaState, now: number): Autop
   const awayMinutes = lastSeenAt === null ? null : Math.floor((now - lastSeenAt) / MINUTE_MS);
   const active = awayMinutes !== null && awayMinutes <= AUTOPILOT_LIMITS.activeMinutes;
   return {
-    inHours: hours === null ? null : isActiveAt(hours, now),
+    inHours: Option.isNone(hours) ? null : isActiveAt(hours, now),
     active,
     awayMinutes: active ? 0 : awayMinutes,
   };
