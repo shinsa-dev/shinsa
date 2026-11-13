@@ -53,7 +53,7 @@ On a chip too short for the full insets (`resolveInsets`), the incoming traces e
 src/
   pages/index.astro         The page: hero, then one Section per feature, then Closing
   layouts/Site.astro        Meta, the theme class from the system setting, Header (no footer); every image, video
-                            and SVG on the site is unselectable and undraggable (`global.css` and a `dragstart` guard)
+                            and SVG on the site can be neither selected nor dragged (`global.css`, and a script that cancels a drag)
   components/layout/        Header (solid, with a fade under it once you scroll; its links point at `/#section`, so they work from every page), Section (centred title, text, then the
                             demo), Backdrop (the circuit board and its scroll signal)
   components/sections/      Hero, Closing (principles and the last call)
