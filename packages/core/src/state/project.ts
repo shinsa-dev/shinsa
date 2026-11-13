@@ -2,6 +2,7 @@ import { Result, Option } from 'effect';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
   type AccountPlan,
+  type ModelRoom,
   type RecordedPace,
   type BacklogCause,
   copyTeammateOriginal,
@@ -49,7 +50,7 @@ import { resolveMergeStepKey } from '../report/merge-steps.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
 import { createTesting } from '../report/testing.ts';
 import type { ReportCheck, ReportWalkthroughRevision } from '../report/types.ts';
-import { applyAccountBound, applyAccountPlan, applyUsagePace } from './accounts.ts';
+import { applyAccountBound, applyAccountPlan, applyModelRoom, applyUsagePace } from './accounts.ts';
 import {
   describeCheckChange,
   describeChecks,
@@ -112,6 +113,7 @@ export interface ShinsaState {
   focusHistory: Record<string, FocusSpan>;
   accountPlans: Record<string, AccountPlan>;
   usagePaces: Record<string, RecordedPace>;
+  modelRoom: Record<string, ModelRoom>;
   onBehalfActions: OnBehalfAction[];
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
@@ -144,6 +146,7 @@ export function createState(): ShinsaState {
     focusHistory: {},
     accountPlans: {},
     usagePaces: {},
+    modelRoom: {},
     onBehalfActions: [],
   };
 }
@@ -904,6 +907,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'usage.pace_recorded':
       applyUsagePace(state, event);
+      break;
+    case 'usage.models_recorded':
+      applyModelRoom(state, event);
       break;
     case 'task.created':
       applyTaskCreated(state, event);

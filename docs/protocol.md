@@ -100,6 +100,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | rate pool | The accounts that learn one usage rate together: every account on one provider and plan, or one account whose plan is unknown | `resolveRatePool`, `plan:<provider>:<plan>`, `state.accountPlans`, `STARTING_RATES` | "an estimate from its plan's usual rate" |
 | build estimate | What a task's build will cost, from the nearest past builds or a measured table, corrected after each phase | `BuildEstimate` (`resolveBuildEstimate`) | "About 6% to build", Build estimate |
 | Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `autoPaceResets`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, Count on usage resets, "Waiting to build", "Builds tonight", Build now |
+| Automatic | The model choice that picks each step's Claude model from the task's size, the step and each model's room, and writes the Home guide with Codex first | `auto` (`AUTO_MODEL`) in `agentModels`, `resolveStepModel`, `MODEL_ROUTES`, `resolveQuickProvider`, `usage.models_recorded`, `state.modelRoom`, `models.routing` | Automatic |
 | night shift | What Auto pace does in your away hours: queued builds run, and the Agent records judgement calls instead of asking | `AwayHours` (`resolveAwayHours`), `NightShift`, `resolveNightShiftTold` | "built overnight" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
@@ -1043,6 +1044,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `account.plan_recorded` | the account roster, when an account's plan differs from `state.accountPlans` | records the account's `provider` and `plan` under its plan key, or forgets it with `plan: null`; nothing when unchanged |
 | `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast without usage resets), `resetPace` (with each usable reset as a budget ending at its `endsAt`), `endingPace` (with only the resets that end within 3 days) and `resetEndsAt` (when the soonest of them ends), or clears them with a null pace; nothing when unchanged |
+| `usage.models_recorded` | the account roster, on an accounts refresh | records each Claude family's room (`models`: `{ family, usable, left, accounts }`, each account's own `{ account, usable, left }`, `listModelRoom`); nothing unless a family or one account's reading turned usable or spent or moved by 5 points; re-checks model waits under Automatic |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries/service.ts` | a delivery claim was taken, or released |
@@ -1167,6 +1169,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared (a pace hold's `pace.scope` is `daily`, `project` or `admission`, the last with the build's estimate as `need`) |
 | `account.plan_recorded` | an account's plan was recorded or forgotten, folded into `state.accountPlans` |
 | `usage.pace_recorded` | a provider's safe pace was recorded or cleared, folded into `state.usagePaces` |
+| `usage.models_recorded` | each Claude family's room was recorded, folded into `state.modelRoom` (a family left out is removed) |
 | `task.pace_limits_ignored` | you resumed a pace hold, so the daily and project usage limits no longer hold the task |
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |

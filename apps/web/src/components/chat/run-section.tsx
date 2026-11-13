@@ -14,7 +14,7 @@ import { CHAT_INSET, CHAT_PROSE_INSET } from '@/components/layout/surface/card.t
 import { SKIPPED_OFFSCREEN } from '@/components/layout/surface/offscreen.ts';
 import { Duration } from '@/components/text/time-ago.tsx';
 import { RunEvidence, TaskEvidence } from '@/lib/chat/run-evidence.ts';
-import { RUN_ROLE, resolveRunHeadline } from '@/lib/chat/run-role.ts';
+import { RUN_ROLE, resolveRunHeadline, resolveRunModelLabel } from '@/lib/chat/run-role.ts';
 import { type HumanMessage, type RunTurn, resolveTimeline, resolveTurns } from '@/lib/chat/timeline.ts';
 import { resolveClosing } from '@/lib/chat/turns.ts';
 import { useTranscript } from '@/lib/connection/socket.ts';
@@ -151,6 +151,7 @@ function RunLabel({
   rerun: boolean;
 }) {
   const role = RUN_ROLE[run.role];
+  const model = resolveRunModelLabel(run);
   return (
     <ChatLine
       className={cn('mt-2 mb-3 w-full', CHAT_INSET)}
@@ -162,7 +163,8 @@ function RunLabel({
           <Truncate className='min-w-0 max-sm:line-clamp-2 max-sm:whitespace-normal'>{headline}</Truncate>
           <span className='shrink-0 max-sm:whitespace-pre'>
             {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
-            {run.outcome === 'cancelled' && ' · Stopped'} <RunAccount task={task} run={run} rerun={rerun} />
+            {run.outcome === 'cancelled' && ' · Stopped'}
+            {model && ` · ${model}`} <RunAccount task={task} run={run} rerun={rerun} />
           </span>
         </span>
       }

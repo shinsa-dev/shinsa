@@ -4,6 +4,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useAgentProviders } from '@/lib/connection/models.ts';
+import { useEngineFeature } from '@/lib/connection/socket.ts';
 import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   AGENT_GROUPS,
@@ -57,7 +58,12 @@ interface ModelsContext {
   settings: Settings;
   providers: AgentProviderInfo[];
   accounts: AccountsSnapshot | null;
+  automatic: boolean;
   update: SettingsUpdate;
+}
+
+export function useAutomaticModel() {
+  return useEngineFeature('models.routing');
 }
 
 function AgentSelects({
@@ -111,7 +117,7 @@ function RoleRow({ context, entry }: { context: ModelsContext; entry: AgentRoleE
       <AgentSelects
         variant='ghost'
         labels={describeRoleSelects(entry)}
-        modelItems={listAgentModelItems(providers, model)}
+        modelItems={listAgentModelItems(providers, model, context.automatic)}
         model={model}
         speedItems={listSpeedItems(availability)}
         speed={resolveSpeedValue(settings, role, availability)}
@@ -173,7 +179,7 @@ function AgentGroupBlock({ context, group }: { context: ModelsContext; group: Ag
       >
         <AgentSelects
           labels={describeGroupSelects(group)}
-          modelItems={listGroupModelItems(providers, settings, group)}
+          modelItems={listGroupModelItems(providers, settings, group, context.automatic)}
           model={model}
           speedItems={listGroupSpeedItems(settings, group, availability)}
           speed={speed}
@@ -229,7 +235,7 @@ function DelegationLimitField({ settings }: { settings: Settings }) {
   );
 }
 
-export function AgentSettings({ settings }: { settings: Settings }) {
+export function AgentSettings({ settings, automatic }: { settings: Settings; automatic: boolean }) {
   const providers = useAgentProviders();
   const accounts = useAccounts();
   return (
@@ -238,6 +244,7 @@ export function AgentSettings({ settings }: { settings: Settings }) {
         settings={settings}
         providers={providers}
         accounts={accounts}
+        automatic={automatic}
         update={(patch) => void updateSettings(patch)}
       />
       <SettingsGroup title='Engine'>

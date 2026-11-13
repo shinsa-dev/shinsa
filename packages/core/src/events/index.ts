@@ -16,6 +16,7 @@ import type {
   Gate,
   GateDecision,
   MessageKind,
+  ModelRoomReading,
   Monitor,
   PhaseReport,
   PhaseStatus,
@@ -103,6 +104,7 @@ type EventBody =
       endingPace: number | null;
       resetEndsAt: number | null;
     }
+  | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'settings.changed'; settings: Settings }
   | {
       type: 'task.created';
