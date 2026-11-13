@@ -241,6 +241,7 @@ type SystemCommand =
       attemptId?: string | null;
       failure?: RunFailure | null;
       cacheExpiresAt?: number | null;
+      backgroundWork?: boolean;
     }
   | {
       type: 'run.attempt';

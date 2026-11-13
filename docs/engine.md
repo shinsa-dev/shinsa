@@ -5498,7 +5498,10 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
 ## Recovery
 
 - A run that ends without handing over, or fails, is resumed once on its own session with a
-  nudge. A second stop fails the step, which arms an automatic retry (Gates → Automatic retries) and opens the
+  nudge. A Claude turn that ends with the agent's own background work still running is not such an end: the session
+  waits for it (The Claude session, below). When a run still ends with that work pending (the 30-minute limit ran
+  out), `run.end`'s `backgroundWork` makes the nudge say it ended its turn while its background work was still
+  running. A second stop fails the step, which arms an automatic retry (Gates → Automatic retries) and opens the
   failure gate only once 10 retries at the same milestone are spent. Any progress resets that budget. How a failed run
   recovers depends on its failure class, in the table in The agent loop (below): another account, a
   usage wait, a Sign in gate, a fresh session told to read the worktree, a resume of the same
@@ -6080,7 +6083,7 @@ names: a provider adapter maps into it, and the web renders only it. Each entry 
 | `tool_result` | `callId`, `status` (`ok` or `error`), `output`, `images` | Linked to its call by `callId`; images are `/api/evidence/…` URLs |
 | `status` | `status`, `outcome` | `started`, `waiting` (on your answer), `working`, `ended` (with the run outcome). Written by the run supervisor (`agents/supervisor/`), so every provider gets them |
 | `error` | `text` | The session failed |
-| `notice` | `notice` (keyed by `kind`) | Something about the run rather than the conversation: `interrupted`, `compaction` (`trigger`: `auto`, `manual` or `fold`, `preTokens`, the `summary` once the agent writes it, and `by: 'eunoe'` when eunoe compacted or folded on the wire), `proxy` (`proxy: 'eunoe'`, `status: 'unavailable'`, `detail`: eunoe could not be reached, so the run went direct), `fast_mode` (`status`: `unavailable` or `cooldown`, `reason`: fast mode was asked for and is not running), `extensions` (what the run loaded and what the optimizer left out; MCP servers, plugins and skills, below), `context` (`usedTokens`, `maxTokens`, `totalProcessedTokens`), `account` (`email`, `organization`, `plan`), `rate_limit` (`status`, `limit`, `resetsAt`, `utilization`), `account_switched` (`email`, `previous`, `reason`: `usage_limit`, `signed_out`, `headroom` or `bound`; written by the supervisor when an attempt runs on another account than the task's last one), `delegation` (`event`: `started` or `reported`, `runIds`; written when the step delegates a task and when reports reach it) and `handoff` (`reason`, `fromProvider`, `toProvider`, entry counts) |
+| `notice` | `notice` (keyed by `kind`) | Something about the run rather than the conversation: `interrupted`, `compaction` (`trigger`: `auto`, `manual` or `fold`, `preTokens`, the `summary` once the agent writes it, and `by: 'eunoe'` when eunoe compacted or folded on the wire), `proxy` (`proxy: 'eunoe'`, `status: 'unavailable'`, `detail`: eunoe could not be reached, so the run went direct), `fast_mode` (`status`: `unavailable` or `cooldown`, `reason`: fast mode was asked for and is not running), `background_wait` (`tasks`: a Claude turn ended while that many of the agent's own background shells or subagents still ran, so the session waits for them, "Waiting for its background work to finish"), `extensions` (what the run loaded and what the optimizer left out; MCP servers, plugins and skills, below), `context` (`usedTokens`, `maxTokens`, `totalProcessedTokens`), `account` (`email`, `organization`, `plan`), `rate_limit` (`status`, `limit`, `resetsAt`, `utilization`), `account_switched` (`email`, `previous`, `reason`: `usage_limit`, `signed_out`, `headroom` or `bound`; written by the supervisor when an attempt runs on another account than the task's last one), `delegation` (`event`: `started` or `reported`, `runIds`; written when the step delegates a task and when reports reach it) and `handoff` (`reason`, `fromProvider`, `toProvider`, entry counts) |
 
 ### Attachments
 
@@ -7557,6 +7560,15 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   SDK's `query()` as a `Stream`, takes prompts and steers from an Effect `Queue`, and runs the folded-turn
   (`FOLDED_TURN`, 60 s), context-read (`CONTEXT_TIMEOUT`, 5 s), exit-grace (`EXIT_GRACE`, 10 s) and interrupt
   (`INTERRUPT_TIMEOUT`, 5 s) timers as fibers. Releasing it interrupts the query and kills `claude`'s process tree.
+  A turn that ends while the SDK's `background_tasks_changed` set lists work that is not `ambient` (a shell started
+  with `run_in_background`, a background subagent) does not close the session: it records a `background_wait`
+  notice and keeps the process, so the run stays active and nothing pauses. The turn Claude Code starts by itself
+  when that work finishes (origin `task-notification`) continues the run; once the set is empty and no such turn
+  started within `BACKGROUND_GRACE` (10 s), the session sends a follow-up naming what finished
+  (`resolveBackgroundFollowUp`). `BACKGROUND_WAIT` (30 min, across the whole run) bounds it: the session stops the
+  remaining tasks (`stopTask`) and tells the agent so in the same session. A step that already handed over never
+  waits and is never followed up: the supervisor marks the session's `handedOver` once a hand-over tool is accepted,
+  so a dev server left running after `complete_phase` closes the session as before.
   `ClaudeProvider.startSession` hands it to the supervisor as its `AgentSession`, in the attempt's scope.
 - **One app layer, run once.** `main.ts` runs the CLI's program with `BunRuntime.runMain`, the only run in the
   engine's source (`bun lint:conventions` fails `ManagedRuntime`, a `run*` call and any exported class that is not a

@@ -55,12 +55,16 @@ import {
 } from './options.ts';
 import {
   createUserMessage,
+  describeFinishedTask,
   isOtherOrigin,
   listEchoedPromptIds,
   listUndeliveredSteers,
+  resolveBackgroundFollowUp,
   takeAnsweredPrompts,
 } from './prompts.ts';
 import {
+  BACKGROUND_GRACE,
+  BACKGROUND_WAIT,
   CONTEXT_TIMEOUT,
   ClaudeCallFailed,
   type ClaudeSessionHandle,
@@ -96,6 +100,8 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
   const contextTimeout = within(options.contextTimeoutMs, CONTEXT_TIMEOUT);
   const exitGrace = within(options.exitGraceMs, EXIT_GRACE);
   const interruptTimeout = within(options.interruptTimeoutMs, INTERRUPT_TIMEOUT);
+  const backgroundWait = within(options.backgroundWaitMs, BACKGROUND_WAIT);
+  const backgroundGrace = within(options.backgroundGraceMs, BACKGROUND_GRACE);
   const callFailed = (error: unknown) => new ClaudeCallFailed({ message: describeError(error) });
   const startFailed = (error: unknown) => new ClaudeStartFailed({ message: describeError(error) });
   const recorder = createClaudeRecorder(input.onEntry, input.storeImage);
@@ -111,6 +117,8 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
   const result = yield* Deferred.make<AgentSessionResult>();
   const folded = yield* FiberHandle.make<void>();
   const exiting = yield* FiberHandle.make<void>();
+  const waitLimit = yield* FiberHandle.make<void>();
+  const followUp = yield* FiberHandle.make<void>();
   const query = yield* Ref.make<Query | null>(null);
   const links = yield* Ref.make<{
     unwatch: Effect.Effect<void> | null;
@@ -135,6 +143,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     contextWindow: null,
     cacheExpiresAt: null,
     background: new Set(),
+    waiting: null,
     connected: { [input.tools.name]: serializeToolServer(input.tools), ...extensions.servers },
   });
 
@@ -167,6 +176,8 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     yield* Queue.end(prompts);
     yield* awaitExit;
     yield* FiberHandle.clear(folded);
+    yield* FiberHandle.clear(followUp);
+    yield* FiberHandle.clear(waitLimit);
   });
 
   const closeFolded = Effect.andThen(
@@ -199,6 +210,87 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     if (!stopped) yield* terminate;
   });
 
+  const resume = Effect.gen(function* () {
+    const current = yield* Ref.get(state);
+    const wait = current.waiting;
+    if (!wait || current.closed || current.cancelled || current.ledger.pending.length > 0) return;
+    if (input.handedOver?.()) return yield* Effect.forkIn(detach(close), scope);
+    yield* Ref.update(state, (latest) => ({ ...latest, waiting: { ...wait, finished: [] } }));
+    const text = resolveBackgroundFollowUp(wait);
+    input.onEntry({ type: 'user', from: 'shinsa', text, attachments: [] });
+    yield* send(text, text, false);
+  });
+
+  const stopBackground = Effect.gen(function* () {
+    const active = yield* Ref.get(query);
+    const { background } = yield* Ref.get(state);
+    if (!active || typeof active.stopTask !== 'function') return;
+    yield* Effect.forEach(background, (taskId) =>
+      Effect.tryPromise({ try: () => active.stopTask(taskId), catch: callFailed }).pipe(
+        detach,
+        Effect.timeoutOption(interruptTimeout),
+        Effect.catchTag('ClaudeCallFailed', (failure) =>
+          Effect.logWarning('[Claude] Could not stop a background task').pipe(
+            Effect.annotateLogs({ cwd: input.cwd, taskId, error: failure.message })
+          )
+        )
+      )
+    );
+  });
+
+  const markTimedOut = Ref.update(state, (current) =>
+    current.waiting ? { ...current, waiting: { ...current.waiting, timedOut: true } } : current
+  );
+
+  const awaitBackground = Effect.gen(function* () {
+    yield* FiberHandle.clear(followUp);
+    const current = yield* Ref.get(state);
+    if (!current.waiting) {
+      yield* Ref.update(state, (latest) => ({ ...latest, waiting: { finished: [], timedOut: false } }));
+    }
+    yield* FiberHandle.run(
+      waitLimit,
+      detach(Effect.sleep(backgroundWait)).pipe(
+        Effect.andThen(
+          Effect.uninterruptible(Effect.andThen(Effect.andThen(markTimedOut, stopBackground), resume))
+        )
+      ),
+      { onlyIfMissing: true }
+    );
+  });
+
+  const armFollowUp = FiberHandle.run(
+    followUp,
+    detach(Effect.sleep(backgroundGrace)).pipe(Effect.andThen(Effect.uninterruptible(resume))),
+    { onlyIfMissing: true }
+  );
+
+  const recordBackground = Effect.fn('ClaudeSession.recordBackground')(function* (
+    background: ReadonlySet<string>
+  ) {
+    const current = yield* Ref.updateAndGet(state, (latest) => ({ ...latest, background }));
+    if (!current.waiting) return;
+    if (background.size === 0) yield* armFollowUp;
+    else yield* FiberHandle.clear(followUp);
+  });
+
+  const recordFinished = Effect.fn('ClaudeSession.recordFinished')(function* (line: string) {
+    yield* Ref.update(state, (current) =>
+      current.waiting
+        ? { ...current, waiting: { ...current.waiting, finished: [...current.waiting.finished, line] } }
+        : current
+    );
+  });
+
+  const endTurn = Effect.gen(function* () {
+    const current = yield* Ref.get(state);
+    if (current.background.size > 0 && !current.waiting?.timedOut && !input.handedOver?.()) {
+      recorder.notify({ kind: 'background_wait', tasks: current.background.size });
+      return yield* awaitBackground;
+    }
+    yield* close;
+  });
+
   const stopStuck = Effect.gen(function* () {
     const current = yield* Ref.get(state);
     if (current.stuck || current.cancelled) return;
@@ -229,9 +321,12 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     input.onActivity?.();
     if (message.type === 'system' && message.subtype === 'init') yield* recordInit(message);
     if (message.type === 'system' && message.subtype === 'background_tasks_changed') {
-      const background = listBackgroundWork(message.tasks);
-      yield* Ref.update(state, (current) => ({ ...current, background }));
+      yield* recordBackground(listBackgroundWork(message.tasks));
     }
+    if (message.type === 'system' && message.subtype === 'task_notification') {
+      yield* recordFinished(describeFinishedTask(message.status, message.summary));
+    }
+    if (message.type === 'assistant') yield* FiberHandle.clear(followUp);
     const { evidence } = yield* Ref.get(state);
     if (message.type === 'assistant') recordAssistantError(evidence, message);
     if (message.type === 'rate_limit_event') recordRateLimit(evidence, message.rate_limit_info);
@@ -319,7 +414,8 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
     const next = resolveClaudeVerdict(message, before.evidence, now());
     yield* Ref.update(state, (current) => ({ ...current, usage }));
     const answered = yield* answer(message, next);
-    if (answered.length === 0) return;
+    const awaited = before.waiting !== null && before.ledger.pending.length === 0;
+    if (answered.length === 0 && !awaited) return;
     const after = yield* Ref.updateAndGet(state, (current) => ({
       ...current,
       evidence: createTurnEvidence(),
@@ -337,7 +433,7 @@ export const makeClaudeSession = Effect.fn('ClaudeSession.make')(function* (
       verdict: next,
       summary: resolveSummary(message, next),
     }));
-    if (settled.ledger.pending.length === 0) yield* close;
+    if (settled.ledger.pending.length === 0) yield* endTurn;
     else if (!settled.ledger.echoes) {
       yield* FiberHandle.run(
         folded,
