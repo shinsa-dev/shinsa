@@ -1,4 +1,11 @@
-import type { AutopilotContact, AutopilotPolicy, Settings, SlackSnapshot } from '@shinsa/core';
+import {
+  type AutopilotContact,
+  type AutopilotLevel,
+  type AutopilotPolicy,
+  EMPTY_AUTOPILOT_PROFILE,
+  type Settings,
+  type SlackSnapshot,
+} from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   Command,
@@ -46,6 +53,8 @@ import {
   listAutopilotLearnedRows,
   listContactOptions,
   listSlackWorkspaceItems,
+  AUTOPILOT_SCORE_ROWS,
+  resolveAutopilotScoreView,
   resolveAutopilotValue,
   resolveContactAddBlock,
   resolveContactTestBlock,
@@ -250,6 +259,32 @@ function AskBlock({
   );
 }
 
+function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: AutopilotLevel) => void }) {
+  const profile = useShinsaSelector((state) => state.autopilotProfile);
+  const view = resolveAutopilotScoreView({ autopilotProfile: profile ?? EMPTY_AUTOPILOT_PROFILE }, level);
+  return (
+    <SettingsBlock
+      header={<BlockHeader icon={AUTOPILOT_BLOCKS.score.icon} title={AUTOPILOT_BLOCKS.score.title} />}
+    >
+      <DescribedRow title={AUTOPILOT_SCORE_ROWS.learned} description={view.learned.detail}>
+        {view.learned.count && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.learned.count}</span>}
+      </DescribedRow>
+      <DescribedRow title={AUTOPILOT_SCORE_ROWS.agreement} description={view.agreement.detail}>
+        {view.agreement.percent && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.agreement.percent}</span>}
+      </DescribedRow>
+      <DescribedRow title={AUTOPILOT_SCORE_ROWS.suggested} description={view.suggested.detail}>
+        {view.suggested.apply ? (
+          <Button variant='secondary' size='sm' onClick={() => onUse(view.suggested.level)}>
+            {view.suggested.apply}
+          </Button>
+        ) : (
+          <span className={cn(TOKEN_TEXT, 'pr-1.5')}>In use</span>
+        )}
+      </DescribedRow>
+    </SettingsBlock>
+  );
+}
+
 function LearnedBlock() {
   const lessons = useShinsaSelector((state) => state.autopilotLessons);
   const rows = listAutopilotLearnedRows({ autopilotLessons: lessons ?? [] });
@@ -384,6 +419,7 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
             team={team}
             onContactsChange={(contacts) => updateAutopilot({ contacts })}
           />
+          <ScoreBlock level={policy.level} onUse={(level) => updateAutopilot({ level })} />
           <LearnedBlock />
         </>
       )}

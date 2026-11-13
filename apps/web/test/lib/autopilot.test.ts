@@ -3,6 +3,7 @@ import {
   AUTOPILOT_DEFAULTS,
   type AutopilotContact,
   createSettings,
+  EMPTY_AUTOPILOT_PROFILE,
   type MergeBlock,
   type SlackDirectoryView,
   type SlackSnapshot,
@@ -14,6 +15,7 @@ import {
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
   listAutopilotLearnedRows,
+  resolveAutopilotScoreView,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
   describeContactPickerEmpty,
@@ -38,7 +40,14 @@ import {
   resolveEscalationFact,
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
-import { createGate, createLesson, createShinsaState, createTask, NOW } from '../support/state.ts';
+import {
+  createAutopilotProfile,
+  createGate,
+  createLesson,
+  createShinsaState,
+  createTask,
+  NOW,
+} from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
@@ -271,6 +280,66 @@ describe('the Autopilot settings', () => {
         paused: 'You changed its last few reviews, so it brings reviews to you for now.',
       },
     ]);
+  });
+
+  it('scores nothing and suggests Balanced before it learned anything', () => {
+    expect(resolveAutopilotScoreView({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'balanced')).toEqual({
+      learned: {
+        detail: 'None yet. It learns from every plan, question, review, merge and suggested task you decide.',
+        count: null,
+      },
+      agreement: { detail: 'It has not guessed at any of your plans, reviews or merges yet.', percent: null },
+      suggested: {
+        level: 'balanced',
+        detail: 'Balanced while it learns, until 9 in 10 of at least 50 guesses match you.',
+        apply: null,
+      },
+    });
+  });
+
+  it('keeps suggesting Balanced while it agrees with you too rarely or over too few decisions', () => {
+    const few = createAutopilotProfile({
+      agreed: 10,
+      disagreed: 0,
+      unscored: 2,
+      tallies: [
+        { kind: 'plan', total: 3 },
+        { kind: 'review', total: 8 },
+        { kind: 'finding', total: 1 },
+        { kind: 'merge', total: 2 },
+      ],
+    });
+    const view = resolveAutopilotScoreView({ autopilotProfile: few }, 'ask_first');
+    expect(view.learned).toEqual({
+      detail:
+        'Learned from your answers, whether or not Autopilot touched them, most of them reviews, plans and merges.',
+      count: '12',
+    });
+    expect(view.agreement).toEqual({
+      detail: 'It guessed what you did on 10 of the last 10 it could check.',
+      percent: '100%',
+    });
+    expect(view.suggested).toMatchObject({ level: 'balanced', apply: 'Use Balanced' });
+    const unsure = createAutopilotProfile({
+      agreed: 40,
+      disagreed: 20,
+      tallies: [{ kind: 'review', total: 60 }],
+    });
+    expect(resolveAutopilotScoreView({ autopilotProfile: unsure }, 'balanced')).toMatchObject({
+      learned: { detail: expect.stringMatching(/most of them reviews\.$/) },
+      agreement: { percent: '67%' },
+      suggested: { level: 'balanced', apply: null },
+    });
+  });
+
+  it('suggests Most things once it agrees with you on 9 in 10 of at least 50 guesses', () => {
+    const sure = createAutopilotProfile({ agreed: 46, disagreed: 4 });
+    expect(resolveAutopilotScoreView({ autopilotProfile: sure }, 'balanced').suggested).toEqual({
+      level: 'most',
+      detail: 'It agrees with you often enough to act alone on most work.',
+      apply: 'Use Most things',
+    });
+    expect(resolveAutopilotScoreView({ autopilotProfile: sure }, 'most').suggested.apply).toBeNull();
   });
 
   it('adds or drops one gate and keeps the others', () => {

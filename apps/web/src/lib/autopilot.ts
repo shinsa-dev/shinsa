@@ -1,11 +1,14 @@
 import {
+  AUTOPILOT_SCORE_LIMITS,
   type AutopilotContact,
   type AutopilotContactKind,
+  type AutopilotDecisionKind,
   type AutopilotDone,
   type AutopilotGateKind,
   type AutopilotGateLessons,
   type AutopilotGate,
   type AutopilotLevel,
+  type AutopilotScore,
   type AutoMerge,
   HOUR_MS,
   isSameAutopilotContact,
@@ -18,6 +21,7 @@ import {
   type ReviewRating,
   resolveAutopilotLessonSummary,
   resolveAutopilotPolicy,
+  resolveAutopilotScore,
   type Settings,
   type ShinsaState,
   type SlackDirectoryView,
@@ -88,6 +92,16 @@ export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string; descript
     title: 'Reviews',
     description: 'Approves a change the reviewer is highly confident in, so its pull request opens.',
   },
+  {
+    gate: 'suggestions',
+    title: 'Suggested tasks',
+    description: 'Accepts or dismisses a suggested task when it is sure what you would do.',
+  },
+  {
+    gate: 'watchdogTasks',
+    title: 'Watchdog tasks',
+    description: 'Gives your OK on the fix a watchdog task proposes, which still passes every gate after.',
+  },
 ];
 
 export const AUTOPILOT_GATE_ITEMS: SettingItem<'on' | 'off'>[] = [
@@ -136,8 +150,86 @@ export const AUTOPILOT_BLOCKS = {
   acting: { title: 'Acting for you', icon: 'IconShieldCheck' },
   merging: { title: 'Merging', icon: 'IconMerged' },
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
+  score: { title: 'How well it knows you', icon: 'IconGauge' },
   learned: { title: 'What it learned', icon: 'IconLightbulbGlow' },
 } as const;
+
+export const AUTOPILOT_SCORE_ROWS = {
+  learned: 'Your decisions',
+  agreement: 'Agrees with you',
+  suggested: 'Suggested level',
+} as const;
+
+const DECISION_NOUN: Record<AutopilotDecisionKind, string> = {
+  plan: 'plans',
+  question: 'questions',
+  review: 'reviews',
+  merge: 'merges',
+  proposal: 'proposals',
+  finding: 'findings',
+  suggestion: 'suggested tasks',
+};
+
+const LEVEL_LABEL: Record<AutopilotLevel, string> = {
+  ask_first: 'Ask me first',
+  balanced: 'Balanced',
+  most: 'Most things',
+};
+
+export interface AutopilotScoreView {
+  learned: { detail: string; count: string | null };
+  agreement: { detail: string; percent: string | null };
+  suggested: { level: AutopilotLevel; detail: string; apply: string | null };
+}
+
+function joinNouns(nouns: readonly string[]) {
+  if (nouns.length < 2) return nouns.join('');
+  return `${nouns.slice(0, -1).join(', ')} and ${nouns.at(-1)}`;
+}
+
+function describeLearnedDecisions(state: Pick<ShinsaState, 'autopilotProfile'>, total: number) {
+  if (total === 0)
+    return 'None yet. It learns from every plan, question, review, merge and suggested task you decide.';
+  const tallies = state.autopilotProfile.tallies
+    .filter((tally) => tally.projectId === null && tally.risk === null)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 3);
+  const most = joinNouns(tallies.map((tally) => DECISION_NOUN[tally.kind]));
+  return `Learned from your answers, whether or not Autopilot touched them, most of them ${most}.`;
+}
+
+function describeAgreement(score: AutopilotScore) {
+  if (score.scored === 0) return 'It has not guessed at any of your plans, reviews or merges yet.';
+  return `It guessed what you did on ${score.agreed} of the last ${score.scored} it could check.`;
+}
+
+function describeSuggested(score: AutopilotScore) {
+  if (score.ready) return 'It agrees with you often enough to act alone on most work.';
+  const { minScored, agreement } = AUTOPILOT_SCORE_LIMITS;
+  return `Balanced while it learns, until ${Math.round(agreement * 10)} in 10 of at least ${minScored} guesses match you.`;
+}
+
+export function resolveAutopilotScoreView(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  level: AutopilotLevel
+): AutopilotScoreView {
+  const score = resolveAutopilotScore(state);
+  return {
+    learned: {
+      detail: describeLearnedDecisions(state, score.learned),
+      count: score.learned === 0 ? null : String(score.learned),
+    },
+    agreement: {
+      detail: describeAgreement(score),
+      percent: score.agreement === null ? null : `${Math.round(score.agreement * 100)}%`,
+    },
+    suggested: {
+      level: score.suggested,
+      detail: describeSuggested(score),
+      apply: score.suggested === level ? null : `Use ${LEVEL_LABEL[score.suggested]}`,
+    },
+  };
+}
 
 export const AUTOPILOT_LEARNED_EMPTY =
   'Nothing yet. It learns each time you approve, change or reject what it did or brought to you.';

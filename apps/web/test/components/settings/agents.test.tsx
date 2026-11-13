@@ -26,7 +26,12 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createLesson, createProject, createShinsaState } from '../../support/state.ts';
+import {
+  createAutopilotProfile,
+  createLesson,
+  createProject,
+  createShinsaState,
+} from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -283,6 +288,33 @@ describe('Settings → Agents → Autopilot', () => {
       },
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, autoMerge: 'off' } } },
     ]);
+  });
+
+  it('shows how well it knows you and uses the level it suggests only when you click', async () => {
+    spyOnEngine();
+    pushState(
+      createShinsaState({
+        patch: { autopilotProfile: createAutopilotProfile({ agreed: 46, disagreed: 4 }) },
+      })
+    );
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
+    expect(screen.getByText('92%')).toBeTruthy();
+    expect(screen.getByText('50')).toBeTruthy();
+    expect(listSentCommands()).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
+    ]);
+  });
+
+  it('says the suggested level is in use once you already chose it', async () => {
+    spyOnEngine();
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText('In use')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();
   });
 
   it('shows what it learned, or that it has learned nothing yet', async () => {

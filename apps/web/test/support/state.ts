@@ -1,5 +1,8 @@
 import {
+  type AutopilotDecision,
   type AutopilotLesson,
+  type AutopilotProfile,
+  type AutopilotTally,
   createState,
   type Evidence,
   type Gate,
@@ -130,6 +133,45 @@ export function createLesson(overrides: Partial<AutopilotLesson> & { id: string 
     note: null,
     facts: { urgent: false, watchdog: false, confidence: 'high', risk: 'low', scope: null },
     ...overrides,
+  };
+}
+
+export function createAutopilotProfile(parts: {
+  agreed: number;
+  disagreed: number;
+  unscored?: number;
+  tallies?: Pick<AutopilotTally, 'kind' | 'total'>[];
+}): AutopilotProfile {
+  const decision = (answer: AutopilotDecision['answer'], guess: AutopilotDecision['guess']) => ({
+    at: NOW,
+    taskId: 'task-1',
+    gateId: null,
+    kind: 'review' as const,
+    answer,
+    projectId: null,
+    risk: null,
+    scope: null,
+    urgent: false,
+    watchdog: false,
+    touched: false,
+    guess,
+    note: null,
+  });
+  const decisions = [
+    ...Array.from({ length: parts.agreed }, () => decision('approved', 'act')),
+    ...Array.from({ length: parts.disagreed }, () => decision('revised', 'act')),
+    ...Array.from({ length: parts.unscored ?? 0 }, () => decision('approved', null)),
+  ];
+  return {
+    total: decisions.length,
+    decisions,
+    tallies: (parts.tallies ?? []).map((tally) => ({
+      ...tally,
+      key: tally.kind,
+      projectId: null,
+      risk: null,
+      answers: {},
+    })),
   };
 }
 
