@@ -32,6 +32,7 @@ import {
   clearBundleReady,
   describeBundleMerge,
   holdInBundle,
+  releaseBundleMerge,
   keepsBundleReady,
   startBundleMerge,
   startBundleUpdate,
@@ -515,17 +516,7 @@ function isSameBundleConflict(a: BundleConflict | null, b: BundleConflict | null
   return a?.taskId === b?.taskId && a?.behindTaskId === b?.behindTaskId && a?.base === b?.base;
 }
 
-export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.record_check'>) {
-  const task = decider.task(command.taskId);
-  if (isTaskSettled(task) || !isShipping(task) || isMerging(decider, task)) return;
-  if (task.pullRequest?.state !== 'open') return;
-  const { conflict } = command;
-  const changed = !isSameBundleConflict(task.bundleConflict ?? null, conflict);
-  if (changed) decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
-  if (!conflict) {
-    if (changed) recheckPullRequest(decider, task.id);
-    return;
-  }
+function applyBundleConflict(decider: Decider, task: Task, conflict: BundleConflict, changed: boolean) {
   if (!conflict.behindTaskId) {
     if (!changed) return;
     decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
@@ -540,6 +531,34 @@ export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.r
   holdInBundle(decider, decider.task(task.id), task.pullRequest?.headSha ?? null);
   const behind = startBundleUpdate(decider, conflict);
   if (Option.isSome(behind)) requestPush(decider, behind.value);
+}
+
+export function recordBundleCheck(decider: Decider, command: CommandOf<'bundle.record_check'>) {
+  const task = decider.task(command.taskId);
+  if (isTaskSettled(task) || !isShipping(task) || isMerging(decider, task)) return;
+  if (task.pullRequest?.state !== 'open') return;
+  const { conflict } = command;
+  const changed = !isSameBundleConflict(task.bundleConflict ?? null, conflict);
+  if (changed) decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
+  if (!conflict) {
+    if (changed) recheckPullRequest(decider, task.id);
+    return;
+  }
+  applyBundleConflict(decider, task, conflict, changed);
+}
+
+export function recordBundleMergeConflict(
+  decider: Decider,
+  command: CommandOf<'bundle.record_merge_conflict'>
+) {
+  const task = decider.task(command.taskId);
+  if (isTaskSettled(task) || !isMerging(decider, task) || task.pullRequest?.state !== 'open') return;
+  if (!releaseBundleMerge(decider, task)) return;
+  const { conflict } = command;
+  if (!isSameBundleConflict(task.bundleConflict ?? null, conflict)) {
+    decider.emit({ type: 'task.bundle_conflict', taskId: task.id, conflict });
+  }
+  applyBundleConflict(decider, decider.task(task.id), conflict, true);
 }
 
 export function recordUpdateConflict(

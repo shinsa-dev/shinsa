@@ -89,6 +89,7 @@ import { pauseTask } from './pause.ts';
 import { recordAway } from './presence.ts';
 import {
   recordBundleCheck,
+  recordBundleMergeConflict,
   recordClosedPullRequests,
   recordHookFailure,
   recordPullRequest,
@@ -398,6 +399,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordUpdateConflict(decider, command);
     case 'bundle.record_check':
       return recordBundleCheck(decider, command);
+    case 'bundle.record_merge_conflict':
+      return recordBundleMergeConflict(decider, command);
     case 'pull_request.record_hook_failure':
       return recordHookFailure(decider, command);
     case 'pull_request.read_failed':

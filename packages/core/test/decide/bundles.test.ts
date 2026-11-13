@@ -724,6 +724,75 @@ describe('a bundle that conflicts with the default branch', () => {
   });
 });
 
+function recordMergeConflict(
+  harness: Harness,
+  taskId: string,
+  conflict: { taskId: string; behindTaskId: string | null }
+) {
+  harness.send({ type: 'bundle.record_merge_conflict', taskId, conflict: { ...conflict, base: 'main' } });
+}
+
+describe('a bundle that conflicts with the default branch when it merges', () => {
+  test('the merge sends the bundle back to update the lowest branch behind, then the gate opens again', () => {
+    const harness = createHarness();
+    const { root, middle, top } = createBundle(harness);
+    approve(harness, root);
+    expect(harness.task(middle).stage).toBe('awaiting_merge');
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: middle });
+    expect(harness.task(root).stage).toBe('shipping');
+    expect(harness.task(root).stageReason).toBe(
+      '“Top” conflicts with main once the bundle merges; updating “Middle” first'
+    );
+    expect(listOpenGates(harness.state, root)).toHaveLength(0);
+    expect(harness.task(root).autoRetry ?? null).toBeNull();
+    expect(harness.task(top).stage).toBe('shipping');
+    expect(harness.task(top).stageReason).toBe(READY);
+    expect(harness.task(middle).stageReason).toBe('updating the branch onto main');
+    expect(harness.lastEffect('pull_request.push').taskId).toBe(middle);
+
+    pushed(harness, middle);
+    recordClean(harness, middle, 2);
+    recordCheck(harness, root, null);
+    recordClean(harness, root, 1);
+    expect(harness.openGate(root).type).toBe('merge');
+  });
+
+  test('the lead itself behind is updated first', () => {
+    const harness = createHarness();
+    const { root, top } = createBundle(harness);
+    approve(harness, root);
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: root });
+    expect(harness.task(root).stageReason).toBe('updating the branch onto main');
+    expect(harness.lastEffect('pull_request.push').taskId).toBe(root);
+  });
+
+  test('a conflict with no branch behind pauses the lead and releases its followers', () => {
+    const harness = createHarness();
+    const { root, middle, top } = createBundle(harness);
+    approve(harness, root);
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: null });
+    expect(harness.task(root).autoRetry).toMatchObject({ title: 'The bundle conflicts with main' });
+    expect(harness.task(middle).stageReason).toBe(READY);
+    expect(harness.task(top).stageReason).toBe(READY);
+  });
+
+  test('a lead that is not merging, or a task with no bundle, ignores it', () => {
+    const harness = createHarness();
+    const { root, top } = createBundle(harness);
+    const before = harness.state;
+    recordMergeConflict(harness, root, { taskId: top, behindTaskId: root });
+    expect(harness.state).toBe(before);
+
+    const lone = createHarness();
+    const task = createTask(lone, { request: 'Lone' });
+    reachReady(lone, task, 1);
+    approve(lone, task);
+    const merging = lone.state;
+    recordMergeConflict(lone, task, { taskId: task, behindTaskId: task });
+    expect(lone.state).toBe(merging);
+  });
+});
+
 function createDiamond(harness: Harness) {
   const a = createTask(harness, { request: 'A' });
   const b = createTask(harness, { request: 'B', stacksOn: [a] });
