@@ -1,9 +1,10 @@
+import { learnAutopilotDecisions } from '../autopilot/model/learn.ts';
 import {
   createAutopilotDecision,
   type DecisionDraft,
   recordAutopilotDecisions,
 } from '../autopilot/profile.ts';
-import { AUTOPILOT_LESSON_LIMITS } from '../autopilot/schema.ts';
+import { AUTOPILOT_LESSON_LIMITS, type AutopilotDecision } from '../autopilot/schema.ts';
 import type { EventOf } from '../events/index.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateGate, updateTask } from './write.ts';
@@ -46,8 +47,15 @@ export function applyAutopilotLearned(state: ShinsaState, event: EventOf<'autopi
     if (lesson.kind === 'acted') updateGate(state, lesson.gateId, { autopilotLearned: true });
 }
 
+function recordDecisions(state: ShinsaState, decisions: readonly AutopilotDecision[]) {
+  const { model, learned } = learnAutopilotDecisions(state.autopilotModel, decisions);
+  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, decisions);
+  state.autopilotModel = model;
+  state.autopilotHistory = [...(state.autopilotHistory ?? []), ...learned];
+}
+
 export function applyAutopilotDecided(state: ShinsaState, event: EventOf<'autopilot.decided'>) {
-  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, event.decisions);
+  recordDecisions(state, event.decisions);
 }
 
 function learnOne(
@@ -59,7 +67,7 @@ function learnOne(
   const task = state.tasks[taskId];
   if (!task) return;
   const decision = createAutopilotDecision(state, { ...draft, task, gate: null }, at);
-  state.autopilotProfile = recordAutopilotDecisions(state.autopilotProfile, [decision]);
+  recordDecisions(state, [decision]);
 }
 
 export function applyTaskRequestLearned(state: ShinsaState, event: EventOf<'task.created'>) {

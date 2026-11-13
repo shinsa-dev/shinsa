@@ -36,7 +36,23 @@ function serializeRuns(runs: Record<string, Run>) {
   return result;
 }
 
+const WIRE_STATES = new WeakMap<ShinsaState, WireState>();
+
+function isWireShaped(state: ShinsaState, runs: Record<string, WireRun>) {
+  return (
+    runs === state.runs &&
+    !Object.hasOwn(state, 'autopilotModel') &&
+    !Object.hasOwn(state, 'autopilotHistory')
+  );
+}
+
 export function serializeState(state: ShinsaState): WireState {
   const runs = serializeRuns(state.runs);
-  return runs === state.runs ? state : { ...state, runs };
+  if (isWireShaped(state, runs)) return state;
+  const known = WIRE_STATES.get(state);
+  if (known) return known;
+  const { autopilotModel: _model, autopilotHistory: _history, ...rest } = state;
+  const wire: WireState = { ...rest, runs };
+  WIRE_STATES.set(state, wire);
+  return wire;
 }

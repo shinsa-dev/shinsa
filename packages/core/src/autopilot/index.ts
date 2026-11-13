@@ -9,6 +9,17 @@ export {
 } from './profile.ts';
 export { isAutopilotAgreement, resolveAutopilotScore } from './score.ts';
 export {
+  AUTOPILOT_MODEL_HEADS,
+  AUTOPILOT_MODEL_LIMITS,
+  type AutopilotLearnedDecision,
+  type AutopilotModel,
+  type AutopilotModelGuess,
+  type AutopilotModelHead,
+  createAutopilotModel,
+  learnAutopilotDecisions,
+  selectAutopilotModelGuess,
+} from './model/index.ts';
+export {
   isUrgentTask,
   isWatchdogTask,
   resolveAutopilotFacts,
