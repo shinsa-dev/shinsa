@@ -1085,7 +1085,7 @@ folds in `state/shapes.ts`).
   starts a lead, for an initiative.`) and it is never one of the presets below (`PresetShape`).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
-  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it, but for Initiative, which only you start). `task.create`
+  Overview's facts, the All tasks row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
   takes no `shape`: only triage and the Agent, while it plans, shape a task. The Agent of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with
@@ -1532,10 +1532,10 @@ the fold in `state/initiatives.ts`, the sheet in `initiatives/`); the engine ser
 (`apps/engine/src/surface/initiatives.ts`, `http/initiative-views.ts`, `initiatives/service.ts`) and the web app draws
 it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
 
-- **Starting one.** You start one like any task: Home's composer with Kind of task set to Initiative, or `shinsa tasks
-  create --initiative` (`task.create` with `initiative: true`). The request's first line names it and the rest
-  describes it; Shinsa creates the `Initiative` record and its lead task in one command (`createInitiativeTask`), the
-  lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
+- **Starting one.** Home's composer never starts one: it leaves the kind of every task to Shinsa. An agent or the
+  command line starts one with `shinsa tasks create --initiative` (`task.create` with `initiative: true`). The
+  request's first line names it and the rest describes it; Shinsa creates the `Initiative` record and its lead task
+  in one command (`createInitiativeTask`), the lead joins it, and an initiative, phase or stack named on the request is ignored. Nobody has to set one up by hand
   either: **Make an initiative from this task** (`initiative.adopt_task`: the task's menus, ⌘K, `shinsa initiatives
   adopt`) and a plan that asks for one (below) make it for you.
 - **The record.** `Initiative { id, name, description, phases, leadTaskId, createdAt, updatedAt }`, plus the lead's
