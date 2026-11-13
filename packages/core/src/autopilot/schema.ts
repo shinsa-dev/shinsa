@@ -144,6 +144,9 @@ export const AUTOPILOT_DECISION_KINDS = [
   'proposal',
   'finding',
   'suggestion',
+  'message',
+  'priority',
+  'cancel',
 ] as const;
 
 export type AutopilotDecisionKind = (typeof AUTOPILOT_DECISION_KINDS)[number];
@@ -157,6 +160,10 @@ export const AUTOPILOT_DECISION_ANSWERS = [
   'dismissed',
   'accepted',
   'kept',
+  'sent',
+  'raised',
+  'lowered',
+  'cancelled',
 ] as const;
 
 export type AutopilotDecisionAnswer = (typeof AUTOPILOT_DECISION_ANSWERS)[number];
@@ -184,24 +191,45 @@ export interface AutopilotTally {
   risk: ReviewRating | null;
   total: number;
   answers: Partial<Record<AutopilotDecisionAnswer, number>>;
+  recent: Partial<Record<AutopilotDecisionAnswer, number>>;
+  at: number;
+}
+
+export interface AutopilotAgreement {
+  scored: number;
+  agreed: number;
+  weight: number;
+  agreedWeight: number;
 }
 
 export interface AutopilotProfile {
   total: number;
   decisions: AutopilotDecision[];
-  scored: AutopilotDecision[];
+  agreement: AutopilotAgreement;
   tallies: AutopilotTally[];
 }
 
 export const AUTOPILOT_PROFILE_LIMITS = {
-  kept: 200,
-  tallies: 300,
+  words: 200,
   note: 280,
   notes: 3,
   summary: 1200,
+  halfLifeDays: 30,
 } as const;
 
-export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = { total: 0, decisions: [], scored: [], tallies: [] };
+export const EMPTY_AUTOPILOT_AGREEMENT: AutopilotAgreement = {
+  scored: 0,
+  agreed: 0,
+  weight: 0,
+  agreedWeight: 0,
+};
+
+export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = {
+  total: 0,
+  decisions: [],
+  agreement: EMPTY_AUTOPILOT_AGREEMENT,
+  tallies: [],
+};
 
 export const AUTOPILOT_SCORED_KINDS = [
   'plan',
@@ -216,12 +244,13 @@ export interface AutopilotScore {
   scored: number;
   agreed: number;
   agreement: number | null;
+  progress: number;
   ready: boolean;
   suggested: AutopilotLevel;
 }
 
 export const AUTOPILOT_SCORE_LIMITS = {
-  window: 100,
+  halfLife: 50,
   minScored: 50,
   agreement: 0.9,
 } as const;

@@ -19,20 +19,17 @@ export function isAutopilotAgreement(guess: AutopilotVerdict, answer: AutopilotD
 
 export function resolveAutopilotScore(state: Pick<ShinsaState, 'autopilotProfile'>): AutopilotScore {
   const profile = state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE;
-  const { scored } = profile;
-  const agreed = scored.filter(
-    (decision) => decision.guess !== null && isAutopilotAgreement(decision.guess, decision.answer)
-  ).length;
-  const agreement = scored.length === 0 ? null : agreed / scored.length;
-  const ready =
-    scored.length >= AUTOPILOT_SCORE_LIMITS.minScored &&
-    agreement !== null &&
-    agreement >= AUTOPILOT_SCORE_LIMITS.agreement;
+  const { scored, agreed, weight, agreedWeight } = profile.agreement;
+  const agreement = weight === 0 ? null : agreedWeight / weight;
+  const { minScored, agreement: bar } = AUTOPILOT_SCORE_LIMITS;
+  const progress = agreement === null ? 0 : Math.min(1, scored / minScored, agreement / bar);
+  const ready = progress >= 1;
   return {
     learned: profile.total,
-    scored: scored.length,
+    scored,
     agreed,
     agreement,
+    progress,
     ready,
     suggested: ready ? 'most' : 'balanced',
   };

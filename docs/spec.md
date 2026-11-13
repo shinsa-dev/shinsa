@@ -206,8 +206,9 @@ not chat text.
   for you only within hard limits you set (Ask me first, Balanced or Most things, the gates it may act on, Auto
   merge, Suggested tasks, Watchdog tasks); everything else comes to you. It learns from every decision you make, kept
   as a profile of how you answer each kind of point by project and risk, guesses in the background at what it leaves
-  to you, and shows How well it knows you: your decisions learned, how often it agreed, and a suggested level you can
-  take with one click. It pauses a kind of gate you keep correcting and shows what it learned. It can also accept
+  to you, and shows How well it knows you: your decisions learned, a progress bar toward Most things, and a suggested
+  level you can take with one click. Every decision counts, the recent ones the most, and so do your messages to
+  agents, priority changes and cancellations. It pauses a kind of gate you keep correcting. It can also accept
   or dismiss suggested tasks and give your OK on a watchdog task's fix. Everything it did is in Handled by Autopilot on Home and notifies
   until you mark it seen. Only an urgent, high-risk change, after you have been away an hour, goes to your team's
   Needs you, and to Slack channels and on-call teammates you choose, up to five; never while you are active. The

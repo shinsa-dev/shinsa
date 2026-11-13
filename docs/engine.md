@@ -2174,20 +2174,26 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   gate, that kind is paused, a hard limit, not the model's choice (`resolveLessonLimit`): "You changed what
   Autopilot did at your last few reviews, so it brings them to you for now." A later approval of what it brought
   you ends the pause. `resolveAutopilotLessonSummary` counts, per gate, what it did, what you kept, changed or let
-  through as it was, and Settings shows it as What it learned.
+  through as it was.
 - **Your decision profile** (`autopilot/profile.ts`, `state.autopilotProfile`). Every decision you make, whether
   Autopilot touched the gate or not, is kept: each answer on a plan, question, review, merge or your OK gate, each
   review finding you mark fix or dismiss, and each suggested task you accept, dismiss or keep in its task
-  (`listGateDecisionDrafts`, recorded from `decide/lessons.ts` as `autopilot.decided {decisions}`). An
+  (`listGateDecisionDrafts`), and each message you send a task's agent (`message`, `sent`), priority you change
+  (`priority`, `raised` or `lowered`) and task you cancel (`cancel`, `cancelled`), all recorded from
+  `decide/lessons.ts` as `autopilot.decided {decisions}`. An
   `AutopilotDecision` keeps its kind (`AutopilotDecisionKind`), your answer (`AutopilotDecisionAnswer`: `approved`,
-  `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted` or `kept`), the project, the reviewer's risk, the plan's
+  `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted`, `kept`, `sent`, `raised`, `lowered` or
+  `cancelled`), the project, the reviewer's risk, the plan's
   scope, whether the task was urgent or filed by a watchdog, whether Autopilot had brought it to you (`touched`),
   its guess (below) and your words (280 characters). Nothing an agent or a schedule does on your behalf counts, nor
-  a guest's answers on a handed-off task. The profile keeps the last 200 decisions, their total and counts per kind,
-  per kind and project and per kind and risk (`AUTOPILOT_PROFILE_LIMITS`: 300 counts, the most recently used kept).
-  Each judgment's prompt carries `listAutopilotProfileLines`: how you answered that kind of point overall, in the
-  task's project and at its risk, then up to 3 of your recent notes on it, within 1,200 characters. This is a
-  summary the model reads, not a model trained on you.
+  a guest's answers on a handed-off task. Every decision counts, with no cap: the profile keeps a count per kind,
+  per kind and project and per kind and risk (`AutopilotTally`), each with its all-time `answers` and a
+  recency-weighted `recent` share, where a decision's weight halves every 30 days (`AUTOPILOT_PROFILE_LIMITS
+  .halfLifeDays`), so what you did lately leads and your first decisions still count. Only the words it quotes are
+  bounded: the last 200 decisions are kept for their notes. Each judgment's prompt carries
+  `listAutopilotProfileLines`: how you answered that kind of point overall, in the task's project and at its risk,
+  with the recent lean ("lately approved 83%, revised 17%"), then up to 3 of your recent notes on it, within 1,200
+  characters. This is a summary the model reads, not a model trained on you.
 - **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
   merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
   (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
@@ -2195,11 +2201,13 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
-  (`AutopilotDecision.guess`), and the profile keeps the last 100 scored decisions apart from the other 200
-  (`AutopilotProfile.scored`), so findings and questions never push them out; `resolveAutopilotScore` reads them
-  (`AUTOPILOT_SCORE_LIMITS`): approving agrees with `act`, changing or rejecting with `forward`;
-  questions are not scored, since a reply has no yes or no. It suggests `most` once at least 50 are scored and 9 in
-  10 agree, `balanced` otherwise; it never changes your level, which moves only when you choose one.
+  (`AutopilotDecision.guess`) and folded into a running agreement (`AutopilotProfile.agreement`: every guess ever
+  scored, how many agreed, and both weighted so each older guess counts half as much after 50 newer ones,
+  `AUTOPILOT_SCORE_LIMITS.halfLife`). Approving agrees with `act`, changing or rejecting with `forward`; questions
+  are not scored, since a reply has no yes or no. `resolveAutopilotScore` turns it into `progress`, from 0 to 1:
+  the lesser of how many guesses were scored against 50 and the weighted agreement against 90%. It suggests `most`
+  once progress is full and `balanced` otherwise, so a run of recent misses lowers it again; it never changes your
+  level, which moves only when you choose one.
 - **Suggested tasks** (`suggestions` gate, off by default). Each new suggested task is weighed when an agent
   suggests it (`weighSuggestion`, `resolveAutopilotSuggestionLimit`: Autopilot on, the gate on, any level but Ask
   me first, never one you split off yourself or one that would stack on this task) through `autopilot.weigh
@@ -2287,9 +2295,9 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews,
   Suggested tasks, Watchdog tasks: Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
   approved). Who it asks: Your team (Only as a last resort, or Never), your team in Shinsa and the Slack contacts.
-  Usage limits (Ignore them or Keep them). How well it knows you: your decisions learned, how often its guesses
-  agreed, and the suggested level with a Use button while it differs from yours. What it learned: the summary per gate, a paused gate with why, and its
-  latest lessons, or "Nothing yet" before the first.
+  Usage limits (Ignore them or Keep them). How well it knows you: your decisions learned, Ready for Most things as a
+  progress bar (`progress`, Learning or Ready, with how many of its guesses matched you), and the suggested level
+  with a Use button while it differs from yours.
 - **Urgent work and usage limits.** With the policy on and `ignoreUsageLimits` set (`isUsageLimitExempt`), an urgent
   task's runs skip both holds before they start: `holdForBudget` (the task's usage and cost limits) and `holdForPace`
   (the daily and project usage limits). Marking a task urgent starts a step either hold stopped (`releasePaceHolds`

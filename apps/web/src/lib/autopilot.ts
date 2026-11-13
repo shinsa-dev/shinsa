@@ -5,7 +5,6 @@ import {
   type AutopilotDecisionKind,
   type AutopilotDone,
   type AutopilotGateKind,
-  type AutopilotGateLessons,
   type AutopilotGate,
   type AutopilotLevel,
   type AutopilotScore,
@@ -19,7 +18,6 @@ import {
   type AutopilotPolicy,
   type Project,
   type ReviewRating,
-  resolveAutopilotLessonSummary,
   resolveAutopilotPolicy,
   resolveAutopilotScore,
   type Settings,
@@ -151,12 +149,11 @@ export const AUTOPILOT_BLOCKS = {
   merging: { title: 'Merging', icon: 'IconMerged' },
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
   score: { title: 'How well it knows you', icon: 'IconGauge' },
-  learned: { title: 'What it learned', icon: 'IconLightbulbGlow' },
 } as const;
 
 export const AUTOPILOT_SCORE_ROWS = {
   learned: 'Your decisions',
-  agreement: 'Agrees with you',
+  progress: 'Ready for Most things',
   suggested: 'Suggested level',
 } as const;
 
@@ -168,6 +165,9 @@ const DECISION_NOUN: Record<AutopilotDecisionKind, string> = {
   proposal: 'proposals',
   finding: 'findings',
   suggestion: 'suggested tasks',
+  message: 'messages',
+  priority: 'priority changes',
+  cancel: 'cancelled tasks',
 };
 
 const LEVEL_LABEL: Record<AutopilotLevel, string> = {
@@ -178,7 +178,7 @@ const LEVEL_LABEL: Record<AutopilotLevel, string> = {
 
 export interface AutopilotScoreView {
   learned: { detail: string; count: string | null };
-  agreement: { detail: string; percent: string | null };
+  progress: { detail: string; value: number; label: string };
   suggested: { level: AutopilotLevel; detail: string; apply: string | null };
 }
 
@@ -188,25 +188,27 @@ function joinNouns(nouns: readonly string[]) {
 }
 
 function describeLearnedDecisions(state: Pick<ShinsaState, 'autopilotProfile'>, total: number) {
-  if (total === 0)
-    return 'None yet. It learns from every plan, question, review, merge and suggested task you decide.';
+  if (total === 0) return 'None yet. It learns from everything you decide and every message you send.';
   const tallies = state.autopilotProfile.tallies
     .filter((tally) => tally.projectId === null && tally.risk === null)
     .sort((a, b) => b.total - a.total)
     .slice(0, 3);
   const most = joinNouns(tallies.map((tally) => DECISION_NOUN[tally.kind]));
-  return `Learned from your answers, whether or not Autopilot touched them, most of them ${most}.`;
+  return `Every one counts, the recent ones the most. Most of them are ${most}.`;
 }
 
-function describeAgreement(score: AutopilotScore) {
-  if (score.scored === 0) return 'It has not guessed at any of your plans, reviews or merges yet.';
-  return `It guessed what you did on ${score.agreed} of the last ${score.scored} it could check.`;
+function describeProgress(score: AutopilotScore) {
+  if (score.scored === 0)
+    return 'It fills as Autopilot guesses your plans, reviews and merges and you decide them.';
+  if (score.ready) return `It guessed you right on ${score.agreed} of ${score.scored} and keeps learning.`;
+  if (score.scored < AUTOPILOT_SCORE_LIMITS.minScored)
+    return `It guessed you right on ${score.agreed} of ${score.scored} so far and needs more to be sure.`;
+  return `It guessed you right on ${score.agreed} of ${score.scored}, but not often enough lately.`;
 }
 
 function describeSuggested(score: AutopilotScore) {
   if (score.ready) return 'It agrees with you often enough to act alone on most work.';
-  const { minScored, agreement } = AUTOPILOT_SCORE_LIMITS;
-  return `Balanced while it learns, until ${Math.round(agreement * 10)} in 10 of at least ${minScored} guesses match you.`;
+  return 'Balanced while it learns. Most things once the bar above is full.';
 }
 
 export function resolveAutopilotScoreView(
@@ -219,9 +221,10 @@ export function resolveAutopilotScoreView(
       detail: describeLearnedDecisions(state, score.learned),
       count: score.learned === 0 ? null : String(score.learned),
     },
-    agreement: {
-      detail: describeAgreement(score),
-      percent: score.agreement === null ? null : `${Math.round(score.agreement * 100)}%`,
+    progress: {
+      detail: describeProgress(score),
+      value: score.progress,
+      label: score.ready ? 'Ready' : 'Learning',
     },
     suggested: {
       level: score.suggested,
@@ -229,58 +232,6 @@ export function resolveAutopilotScoreView(
       apply: score.suggested === level ? null : `Use ${LEVEL_LABEL[score.suggested]}`,
     },
   };
-}
-
-export const AUTOPILOT_LEARNED_EMPTY =
-  'Nothing yet. It learns each time you approve, change or reject what it did or brought to you.';
-
-const LEARNED_TITLE: Record<AutopilotGateKind, string> = {
-  plan: 'Plans',
-  question: 'Agent questions',
-  review: 'Reviews',
-  merge: 'Merges',
-  proposal: 'Watchdog tasks',
-};
-
-const LEARNED_PAUSED: Record<AutopilotGateKind, string> = {
-  plan: 'You changed its last few plans, so it brings plans to you for now.',
-  question: 'You changed its last few answers, so it brings questions to you for now.',
-  review: 'You changed its last few reviews, so it brings reviews to you for now.',
-  merge: 'You changed its last few merges, so it brings merges to you for now.',
-  proposal: 'You changed its last few watchdog tasks, so it brings them to you for now.',
-};
-
-export interface AutopilotLearnedRow {
-  gate: AutopilotGateKind;
-  title: string;
-  detail: string;
-  paused: string | null;
-}
-
-function describeLearned(lessons: AutopilotGateLessons) {
-  const parts = [];
-  if (lessons.acted > 0) {
-    const changed = lessons.corrected > 0 ? `, you changed ${lessons.corrected}` : '';
-    parts.push(`Did ${lessons.acted} for you: you kept ${lessons.kept}${changed}.`);
-  }
-  if (lessons.forwarded > 0) {
-    const could = lessons.couldHaveActed > 0 ? `, you approved ${lessons.couldHaveActed} as they were` : '';
-    parts.push(`Brought you ${lessons.forwarded}${could}.`);
-  }
-  return parts.join(' ');
-}
-
-export function listAutopilotLearnedRows(
-  state: Pick<ShinsaState, 'autopilotLessons'>
-): AutopilotLearnedRow[] {
-  return resolveAutopilotLessonSummary(state)
-    .gates.filter((lessons) => lessons.acted + lessons.forwarded > 0)
-    .map((lessons) => ({
-      gate: lessons.gate,
-      title: LEARNED_TITLE[lessons.gate],
-      detail: describeLearned(lessons),
-      paused: lessons.paused ? LEARNED_PAUSED[lessons.gate] : null,
-    }));
 }
 
 export const AUTOPILOT_ROWS = {

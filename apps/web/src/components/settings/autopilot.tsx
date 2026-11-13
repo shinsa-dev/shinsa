@@ -34,7 +34,6 @@ import {
   AUTOPILOT_ESCALATE_ITEMS,
   AUTOPILOT_GATE_ITEMS,
   AUTOPILOT_GATE_ROWS,
-  AUTOPILOT_LEARNED_EMPTY,
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
   AUTOPILOT_OFF,
@@ -50,7 +49,6 @@ import {
   hasTeamProject,
   isAskWaiting,
   isSlackTestSent,
-  listAutopilotLearnedRows,
   listContactOptions,
   listSlackWorkspaceItems,
   AUTOPILOT_SCORE_ROWS,
@@ -269,8 +267,23 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.learned} description={view.learned.detail}>
         {view.learned.count && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.learned.count}</span>}
       </DescribedRow>
-      <DescribedRow title={AUTOPILOT_SCORE_ROWS.agreement} description={view.agreement.detail}>
-        {view.agreement.percent && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.agreement.percent}</span>}
+      <DescribedRow title={AUTOPILOT_SCORE_ROWS.progress} description={view.progress.detail}>
+        <div className='flex items-center gap-2 pr-1.5'>
+          <span
+            role='progressbar'
+            aria-label={AUTOPILOT_SCORE_ROWS.progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(view.progress.value * 100)}
+            className='relative block h-1.5 w-32 overflow-hidden rounded-full bg-bg-a2'
+          >
+            <span
+              className='absolute inset-y-0 start-0 rounded-full bg-primary-4'
+              style={{ width: `${view.progress.value * 100}%` }}
+            />
+          </span>
+          <span className={TOKEN_TEXT}>{view.progress.label}</span>
+        </div>
       </DescribedRow>
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.suggested} description={view.suggested.detail}>
         {view.suggested.apply ? (
@@ -281,23 +294,6 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
           <span className={cn(TOKEN_TEXT, 'pr-1.5')}>In use</span>
         )}
       </DescribedRow>
-    </SettingsBlock>
-  );
-}
-
-function LearnedBlock() {
-  const lessons = useShinsaSelector((state) => state.autopilotLessons);
-  const rows = listAutopilotLearnedRows({ autopilotLessons: lessons ?? [] });
-  return (
-    <SettingsBlock
-      header={<BlockHeader icon={AUTOPILOT_BLOCKS.learned.icon} title={AUTOPILOT_BLOCKS.learned.title} />}
-    >
-      {rows.length === 0 && <SettingsEmpty>{AUTOPILOT_LEARNED_EMPTY}</SettingsEmpty>}
-      {rows.map((row) => (
-        <DescribedRow key={row.gate} title={row.title} description={row.paused ?? row.detail}>
-          {row.paused && <span className={cn(TOKEN_TEXT, 'pr-1.5')}>Paused</span>}
-        </DescribedRow>
-      ))}
     </SettingsBlock>
   );
 }
@@ -420,7 +416,6 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
             onContactsChange={(contacts) => updateAutopilot({ contacts })}
           />
           <ScoreBlock level={policy.level} onUse={(level) => updateAutopilot({ level })} />
-          <LearnedBlock />
         </>
       )}
     </SettingsGroup>

@@ -52,6 +52,7 @@ describe('the Autopilot score', () => {
       scored: 0,
       agreed: 0,
       agreement: null,
+      progress: 0,
       ready: false,
       suggested: 'balanced',
     });
@@ -59,6 +60,7 @@ describe('the Autopilot score', () => {
       learned: 2,
       scored: 0,
       agreement: null,
+      progress: 0,
     });
   });
 
@@ -75,26 +77,31 @@ describe('the Autopilot score', () => {
 
   test('suggests Most things once it agrees often enough over enough decisions', () => {
     const agreeing = Array.from({ length: AUTOPILOT_SCORE_LIMITS.minScored }, () => decision('act'));
-    expect(scoreOf(agreeing)).toMatchObject({ scored: 50, agreement: 1, ready: true, suggested: 'most' });
-    expect(scoreOf(agreeing.slice(1))).toMatchObject({ ready: false, suggested: 'balanced' });
-    const missing = [...agreeing.slice(6), ...Array.from({ length: 6 }, () => decision('act', 'revised'))];
-    expect(scoreOf(missing)).toMatchObject({ scored: 50, agreed: 44, ready: false });
-    const enough = [...agreeing.slice(5), ...Array.from({ length: 5 }, () => decision('act', 'revised'))];
-    expect(scoreOf(enough)).toMatchObject({ agreed: 45, agreement: 0.9, ready: true });
-  });
-
-  test('scores only the most recent guesses', () => {
-    const old = Array.from({ length: 50 }, () => decision('act', 'revised'));
-    const recent = Array.from({ length: AUTOPILOT_SCORE_LIMITS.window }, () => decision('act'));
-    expect(scoreOf([...old, ...recent])).toMatchObject({
-      learned: 150,
-      scored: 100,
-      agreed: 100,
+    expect(scoreOf(agreeing)).toMatchObject({
+      scored: 50,
+      agreement: 1,
+      progress: 1,
       ready: true,
+      suggested: 'most',
     });
+    expect(scoreOf(agreeing.slice(1))).toMatchObject({ progress: 0.98, ready: false, suggested: 'balanced' });
+    const early = [...Array.from({ length: 5 }, () => decision('act', 'revised')), ...agreeing.slice(5)];
+    const late = [...agreeing.slice(5), ...Array.from({ length: 5 }, () => decision('act', 'revised'))];
+    expect(scoreOf(early)).toMatchObject({ scored: 50, agreed: 45, ready: true });
+    expect(scoreOf(late)).toMatchObject({ scored: 50, agreed: 45, ready: false });
+    expect(scoreOf(late).progress).toBeLessThan(1);
   });
 
-  test('keeps scored guesses apart, so findings and questions never push them out', () => {
+  test('counts every guess it ever made, the recent ones the most', () => {
+    const old = Array.from({ length: 200 }, () => decision('act', 'revised'));
+    const recent = Array.from({ length: 300 }, () => decision('act'));
+    const score = scoreOf([...old, ...recent]);
+    expect(score).toMatchObject({ learned: 500, scored: 500, agreed: 300, ready: true });
+    expect(score.agreement).toBeGreaterThan(0.9);
+    expect(scoreOf([...recent, ...old])).toMatchObject({ scored: 500, ready: false });
+  });
+
+  test('keeps scoring apart from the words it keeps, so findings and questions never push guesses out', () => {
     const unscored = (kind: AutopilotDecision['kind']) => ({ ...decision(null), kind });
     let profile = recordAutopilotDecisions(undefined, []);
     for (let review = 0; review < 100; review += 1) {
@@ -104,7 +111,6 @@ describe('the Autopilot score', () => {
         unscored('question'),
       ]);
     }
-    expect(profile.decisions.length).toBeLessThan(600);
     expect(resolveAutopilotScore({ autopilotProfile: profile })).toMatchObject({
       learned: 600,
       scored: 100,

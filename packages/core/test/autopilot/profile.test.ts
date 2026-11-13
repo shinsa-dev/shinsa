@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   AUTOPILOT_PROFILE_LIMITS,
   type AutopilotDecision,
+  DAY_MS,
   EMPTY_AUTOPILOT_PROFILE,
   listAutopilotProfileLines,
   listAutopilotTallies,
@@ -124,41 +125,41 @@ describe('the decisions Autopilot learns from', () => {
   });
 });
 
+describe('the other things you do in Shinsa', () => {
+  test('your messages, priority changes and cancellations are learned, not ones sent for you', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.message', taskId, text: 'Keep the old copy.' });
+    harness.send({ type: 'task.message', taskId, text: 'Sent for you.' }, { onBehalf: true });
+    harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' });
+    harness.send({ type: 'task.prioritize', taskId, priority: 'urgent' });
+    harness.send({ type: 'task.prioritize', taskId, priority: 'low' });
+    harness.send({ type: 'task.cancel', taskId });
+    expect(decisions(harness).map(({ kind, answer, note }) => [kind, answer, note])).toEqual([
+      ['message', 'sent', 'Keep the old copy.'],
+      ['priority', 'raised', 'urgent'],
+      ['priority', 'lowered', 'low'],
+      ['cancel', 'cancelled', null],
+    ]);
+  });
+});
+
 describe('the profile', () => {
-  test('counts each kind overall, per project and per risk, and keeps counting past the kept decisions', () => {
-    const many = Array.from({ length: AUTOPILOT_PROFILE_LIMITS.kept + 5 }, (_, index) =>
+  test('counts every decision overall, per project and per risk, past the words it keeps', () => {
+    const many = Array.from({ length: AUTOPILOT_PROFILE_LIMITS.words + 5 }, (_, index) =>
       decision({ at: index, projectId: 'p1', risk: 'low', answer: index % 2 ? 'revised' : 'approved' })
     );
     const profile = recordAutopilotDecisions(undefined, many);
-    expect(profile.total).toBe(AUTOPILOT_PROFILE_LIMITS.kept + 5);
-    expect(profile.decisions).toHaveLength(AUTOPILOT_PROFILE_LIMITS.kept);
+    expect(profile.total).toBe(AUTOPILOT_PROFILE_LIMITS.words + 5);
+    expect(profile.decisions).toHaveLength(AUTOPILOT_PROFILE_LIMITS.words);
     expect(profile.decisions[0]?.at).toBe(5);
-    expect(listAutopilotTallies({ autopilotProfile: profile }, 'review')).toEqual([
-      {
-        key: 'review||',
-        kind: 'review',
-        projectId: null,
-        risk: null,
-        total: 205,
-        answers: { approved: 103, revised: 102 },
-      },
-      {
-        key: 'review|p1|',
-        kind: 'review',
-        projectId: 'p1',
-        risk: null,
-        total: 205,
-        answers: { approved: 103, revised: 102 },
-      },
-      {
-        key: 'review||low',
-        kind: 'review',
-        projectId: null,
-        risk: 'low',
-        total: 205,
-        answers: { approved: 103, revised: 102 },
-      },
+    const tallies = listAutopilotTallies({ autopilotProfile: profile }, 'review');
+    expect(tallies.map(({ key, total, answers }) => [key, total, answers])).toEqual([
+      ['review||', 205, { approved: 103, revised: 102 }],
+      ['review|p1|', 205, { approved: 103, revised: 102 }],
+      ['review||low', 205, { approved: 103, revised: 102 }],
     ]);
+    expect(tallies[0]?.at).toBe(204);
     expect(listAutopilotTallies({ autopilotProfile: profile }, 'plan')).toEqual([]);
   });
 
@@ -167,17 +168,28 @@ describe('the profile', () => {
     expect(profile.tallies.map((tally) => tally.key)).toEqual(['proposal||']);
   });
 
-  test('keeps the most recently used tallies when there are too many', () => {
-    const spread = Array.from({ length: AUTOPILOT_PROFILE_LIMITS.tallies + 1 }, (_, index) =>
+  test('keeps a tally for every project, however many there are', () => {
+    const spread = Array.from({ length: 500 }, (_, index) =>
       decision({ kind: 'plan', projectId: `p${index}` })
     );
+    const profile = recordAutopilotDecisions(undefined, spread);
+    expect(profile.tallies).toHaveLength(501);
+  });
+
+  test('weighs recent decisions more: one from a month ago counts half', () => {
+    const month = AUTOPILOT_PROFILE_LIMITS.halfLifeDays * DAY_MS;
     const profile = recordAutopilotDecisions(undefined, [
-      ...spread,
-      decision({ kind: 'plan', projectId: 'p0' }),
+      decision({ at: 0, answer: 'revised' }),
+      decision({ at: 0, answer: 'revised' }),
+      decision({ at: month, answer: 'approved' }),
     ]);
-    expect(profile.tallies).toHaveLength(AUTOPILOT_PROFILE_LIMITS.tallies);
-    expect(profile.tallies.slice(-2).map((tally) => tally.key)).toEqual(['plan||', 'plan|p0|']);
-    expect(profile.tallies.some((tally) => tally.key === 'plan|p1|')).toBe(false);
+    const [tally] = listAutopilotTallies({ autopilotProfile: profile }, 'review');
+    expect(tally?.answers).toEqual({ revised: 2, approved: 1 });
+    expect(tally?.recent.revised).toBeCloseTo(1);
+    expect(tally?.recent.approved).toBe(1);
+    expect(recordAutopilotDecisions(profile, [decision({ at: 0, answer: 'approved' })]).tallies[0]?.at).toBe(
+      month
+    );
   });
 });
 
@@ -203,12 +215,12 @@ describe('the profile summary for a judgment', () => {
       decision({ kind: 'merge', answer: 'approved', note: 'not a review' }),
     ]);
     expect(listAutopilotProfileLines(state, 'review', { projectId: 'p1', risk: 'low' })).toEqual([
-      '- All reviews: 2 decided: approved 1, revised 1',
-      '- In this project: 1 decided: approved 1',
-      '- At low risk: 1 decided: approved 1',
-      '- All review findings: 2 decided: fixed 1, dismissed 1',
-      '- In this project: 2 decided: fixed 1, dismissed 1',
-      '- At low risk: 2 decided: fixed 1, dismissed 1',
+      '- All reviews: 2 decided: approved 1, revised 1; lately approved 50%, revised 50%',
+      '- In this project: 1 decided: approved 1; lately approved 100%',
+      '- At low risk: 1 decided: approved 1; lately approved 100%',
+      '- All review findings: 2 decided: fixed 1, dismissed 1; lately fixed 50%, dismissed 50%',
+      '- In this project: 2 decided: fixed 1, dismissed 1; lately fixed 50%, dismissed 50%',
+      '- At low risk: 2 decided: fixed 1, dismissed 1; lately fixed 50%, dismissed 50%',
       'Their recent words:',
       '- review findings, fixed: “fourth”',
       '- review findings, dismissed: “third”',
@@ -219,7 +231,7 @@ describe('the profile summary for a judgment', () => {
   test('leaves out a project or risk you never decided at, and words when there are none', () => {
     const state = profile([decision({ kind: 'plan', answer: 'approved', projectId: 'p1', risk: 'low' })]);
     expect(listAutopilotProfileLines(state, 'plan', { projectId: 'p9', risk: 'high' })).toEqual([
-      '- All plans: 1 decided: approved 1',
+      '- All plans: 1 decided: approved 1; lately approved 100%',
     ]);
   });
 
@@ -231,6 +243,6 @@ describe('the profile summary for a judgment', () => {
     const lines = listAutopilotProfileLines(state, 'question', NO_CONTEXT);
     expect(lines.join('\n').length).toBeLessThanOrEqual(AUTOPILOT_PROFILE_LIMITS.summary);
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toBe('- All agent questions: 6 decided: replied 6');
+    expect(lines[0]).toBe('- All agent questions: 6 decided: replied 6; lately replied 100%');
   });
 });

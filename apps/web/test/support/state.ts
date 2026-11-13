@@ -1,6 +1,5 @@
 import {
   type AutopilotDecision,
-  type AutopilotLesson,
   type AutopilotProfile,
   type AutopilotTally,
   createState,
@@ -8,6 +7,7 @@ import {
   type Gate,
   type Project,
   type Repo,
+  recordAutopilotDecisions,
   type Run,
   type ShinsaState,
   type Task,
@@ -121,21 +121,6 @@ function byId<T extends { id: string }>(items: T[] = []) {
   return Object.fromEntries(items.map((item) => [item.id, item]));
 }
 
-export function createLesson(overrides: Partial<AutopilotLesson> & { id: string }): AutopilotLesson {
-  return {
-    at: NOW,
-    taskId: 'task-1',
-    gateId: `gate-${overrides.id}`,
-    gate: 'review',
-    kind: 'acted',
-    answer: 'approved',
-    reason: 'Clear and small.',
-    note: null,
-    facts: { urgent: false, watchdog: false, confidence: 'high', risk: 'low', scope: null },
-    ...overrides,
-  };
-}
-
 export function createAutopilotProfile(parts: {
   agreed: number;
   disagreed: number;
@@ -158,20 +143,20 @@ export function createAutopilotProfile(parts: {
     note: null,
   });
   const decisions = [
-    ...Array.from({ length: parts.agreed }, () => decision('approved', 'act')),
     ...Array.from({ length: parts.disagreed }, () => decision('revised', 'act')),
+    ...Array.from({ length: parts.agreed }, () => decision('approved', 'act')),
     ...Array.from({ length: parts.unscored ?? 0 }, () => decision('approved', null)),
   ];
   return {
-    total: decisions.length,
-    decisions,
-    scored: decisions.filter((entry) => entry.guess !== null),
+    ...recordAutopilotDecisions(undefined, decisions),
     tallies: (parts.tallies ?? []).map((tally) => ({
       ...tally,
       key: tally.kind,
       projectId: null,
       risk: null,
       answers: {},
+      recent: {},
+      at: NOW,
     })),
   };
 }

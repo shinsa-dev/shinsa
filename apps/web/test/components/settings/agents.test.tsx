@@ -6,7 +6,6 @@ import { AgentSettings } from '@/components/settings/agents.tsx';
 import {
   AUTO_MERGE_DESCRIPTION,
   AUTOPILOT_BLOCKS,
-  AUTOPILOT_LEARNED_EMPTY,
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_OFF,
   AUTOPILOT_ROWS,
@@ -26,12 +25,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import {
-  createAutopilotProfile,
-  createLesson,
-  createProject,
-  createShinsaState,
-} from '../../support/state.ts';
+import { createAutopilotProfile, createProject, createShinsaState } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -300,7 +294,11 @@ describe('Settings → Agents → Autopilot', () => {
     renderAgents(ESCALATING);
     await settle();
     expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
-    expect(screen.getByText('92%')).toBeTruthy();
+    expect(
+      screen.getByRole('progressbar', { name: 'Ready for Most things' }).getAttribute('aria-valuenow')
+    ).toBe('100');
+    expect(screen.getByText('Ready')).toBeTruthy();
+    expect(screen.queryByText('What it learned')).toBeNull();
     expect(screen.getByText('50')).toBeTruthy();
     expect(listSentCommands()).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
@@ -315,31 +313,6 @@ describe('Settings → Agents → Autopilot', () => {
     await settle();
     expect(screen.getByText('In use')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();
-  });
-
-  it('shows what it learned, or that it has learned nothing yet', async () => {
-    spyOnEngine();
-    const { unmount } = renderAgents(ESCALATING);
-    await settle();
-    expect(screen.getByText(AUTOPILOT_LEARNED_EMPTY)).toBeTruthy();
-    unmount();
-    pushState(
-      createShinsaState({
-        patch: {
-          autopilotLessons: [
-            createLesson({ id: 'a', answer: 'revised' }),
-            createLesson({ id: 'b', answer: 'rejected' }),
-          ],
-        },
-      })
-    );
-    renderAgents(ESCALATING);
-    await settle();
-    expect(screen.queryByText(AUTOPILOT_LEARNED_EMPTY)).toBeNull();
-    expect(
-      screen.getByText('You changed its last few reviews, so it brings reviews to you for now.')
-    ).toBeTruthy();
-    expect(screen.getByText('Paused')).toBeTruthy();
   });
 
   it('warns when nobody can be asked, and stops warning once your team is never contacted', async () => {

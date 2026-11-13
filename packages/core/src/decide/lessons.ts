@@ -1,5 +1,6 @@
 import { listAutopilotLessonsToLearn, type LessonAnswer } from '../autopilot/lessons.ts';
 import { createAutopilotDecision, type DecisionDraft, listGateDecisionDrafts } from '../autopilot/profile.ts';
+import { TASK_PRIORITIES, type TaskPriority } from '../domain/index.ts';
 import type { FindingVerdict } from '../domain/schema.ts';
 import type { Decider } from './decider.ts';
 
@@ -29,4 +30,29 @@ export function learnFromAnswer(
     decider.context.newId
   );
   if (lessons.length > 0) decider.emit({ type: 'autopilot.learned', lessons });
+}
+
+export function learnFromMessage(decider: Decider, taskId: string, text: string) {
+  recordDecisions(decider, [
+    { task: decider.task(taskId), gate: null, kind: 'message', answer: 'sent', note: text },
+  ]);
+}
+
+export function learnFromPriority(decider: Decider, taskId: string, from: TaskPriority, to: TaskPriority) {
+  const raised = TASK_PRIORITIES.indexOf(to) < TASK_PRIORITIES.indexOf(from);
+  recordDecisions(decider, [
+    {
+      task: decider.task(taskId),
+      gate: null,
+      kind: 'priority',
+      answer: raised ? 'raised' : 'lowered',
+      note: to,
+    },
+  ]);
+}
+
+export function learnFromCancel(decider: Decider, taskId: string) {
+  recordDecisions(decider, [
+    { task: decider.task(taskId), gate: null, kind: 'cancel', answer: 'cancelled', note: null },
+  ]);
 }

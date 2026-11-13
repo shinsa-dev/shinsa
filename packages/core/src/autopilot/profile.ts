@@ -1,4 +1,5 @@
 import { Option } from 'effect';
+import { DAY_MS } from '../domain/index.ts';
 import type { FindingVerdict } from '../domain/schema.ts';
 import type { Gate, GateDecision, Task } from '../domain/types.ts';
 import type { ReviewRating } from '../report/types.ts';
@@ -7,7 +8,9 @@ import { isUrgentTask } from './limits.ts';
 import {
   AUTOPILOT_DECISION_ANSWERS,
   AUTOPILOT_PROFILE_LIMITS,
+  AUTOPILOT_SCORE_LIMITS,
   AUTOPILOT_SCORED_KINDS,
+  type AutopilotAgreement,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
   type AutopilotDecisionKind,
@@ -15,9 +18,9 @@ import {
   type AutopilotProfile,
   type AutopilotScoredKind,
   type AutopilotTally,
-  AUTOPILOT_SCORE_LIMITS,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
+import { isAutopilotAgreement } from './score.ts';
 
 const GATE_KIND: Partial<Record<Gate['type'], AutopilotDecisionKind>> = {
   plan: 'plan',
@@ -124,17 +127,51 @@ function listTallyScopes(decision: AutopilotDecision) {
   return scopes;
 }
 
+function resolveDecay(halfLife: number, elapsed: number) {
+  return elapsed <= 0 ? 1 : 0.5 ** (elapsed / halfLife);
+}
+
+function decayAnswers(answers: AutopilotTally['recent'], factor: number) {
+  return Object.fromEntries(
+    Object.entries(answers).map(([answer, weight]) => [answer, (weight ?? 0) * factor])
+  ) as AutopilotTally['recent'];
+}
+
 function countDecision(tallies: Map<string, AutopilotTally>, decision: AutopilotDecision) {
+  const halfLife = AUTOPILOT_PROFILE_LIMITS.halfLifeDays * DAY_MS;
   for (const { projectId, risk } of listTallyScopes(decision)) {
     const key = resolveTallyKey(decision.kind, projectId, risk);
-    const tally = tallies.get(key) ?? { key, kind: decision.kind, projectId, risk, total: 0, answers: {} };
-    tallies.delete(key);
+    const tally = tallies.get(key) ?? {
+      key,
+      kind: decision.kind,
+      projectId,
+      risk,
+      total: 0,
+      answers: {},
+      recent: {},
+      at: decision.at,
+    };
+    const recent = decayAnswers(tally.recent, resolveDecay(halfLife, decision.at - tally.at));
     tallies.set(key, {
       ...tally,
       total: tally.total + 1,
       answers: { ...tally.answers, [decision.answer]: (tally.answers[decision.answer] ?? 0) + 1 },
+      recent: { ...recent, [decision.answer]: (recent[decision.answer] ?? 0) + 1 },
+      at: Math.max(tally.at, decision.at),
     });
   }
+}
+
+function scoreDecision(agreement: AutopilotAgreement, decision: AutopilotDecision): AutopilotAgreement {
+  if (decision.guess === null) return agreement;
+  const factor = resolveDecay(AUTOPILOT_SCORE_LIMITS.halfLife, 1);
+  const agreed = isAutopilotAgreement(decision.guess, decision.answer);
+  return {
+    scored: agreement.scored + 1,
+    agreed: agreement.agreed + (agreed ? 1 : 0),
+    weight: agreement.weight * factor + 1,
+    agreedWeight: agreement.agreedWeight * factor + (agreed ? 1 : 0),
+  };
 }
 
 export function recordAutopilotDecisions(
@@ -146,11 +183,9 @@ export function recordAutopilotDecisions(
   for (const decision of decisions) countDecision(tallies, decision);
   return {
     total: current.total + decisions.length,
-    decisions: [...current.decisions, ...decisions].slice(-AUTOPILOT_PROFILE_LIMITS.kept),
-    scored: [...current.scored, ...decisions.filter((decision) => decision.guess !== null)].slice(
-      -AUTOPILOT_SCORE_LIMITS.window
-    ),
-    tallies: [...tallies.values()].slice(-AUTOPILOT_PROFILE_LIMITS.tallies),
+    decisions: [...current.decisions, ...decisions].slice(-AUTOPILOT_PROFILE_LIMITS.words),
+    agreement: decisions.reduce(scoreDecision, current.agreement),
+    tallies: [...tallies.values()],
   };
 }
 
@@ -177,13 +212,26 @@ const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
   proposal: 'proposals for your OK',
   finding: 'review findings',
   suggestion: 'suggested tasks',
+  message: 'messages to agents',
+  priority: 'priority changes',
+  cancel: 'cancelled tasks',
 };
+
+function describeRecentLean(tally: AutopilotTally) {
+  const weights = AUTOPILOT_DECISION_ANSWERS.map((answer) => [answer, tally.recent[answer] ?? 0] as const);
+  const sum = weights.reduce((total, [, weight]) => total + weight, 0);
+  return weights
+    .filter(([, weight]) => weight > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([answer, weight]) => `${answer} ${Math.round((weight / sum) * 100)}%`)
+    .join(', ');
+}
 
 function describeTally(tally: AutopilotTally) {
   const answers = AUTOPILOT_DECISION_ANSWERS.filter((answer) => (tally.answers[answer] ?? 0) > 0)
     .map((answer) => `${answer} ${tally.answers[answer]}`)
     .join(', ');
-  return `${tally.total} decided: ${answers}`;
+  return `${tally.total} decided: ${answers}; lately ${describeRecentLean(tally)}`;
 }
 
 function selectTally(

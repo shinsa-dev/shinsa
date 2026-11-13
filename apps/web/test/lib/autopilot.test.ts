@@ -14,7 +14,6 @@ import {
   AUTOPILOT_GATE_ROWS,
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
-  listAutopilotLearnedRows,
   resolveAutopilotScoreView,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
@@ -40,14 +39,7 @@ import {
   resolveEscalationFact,
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
-import {
-  createAutopilotProfile,
-  createGate,
-  createLesson,
-  createShinsaState,
-  createTask,
-  NOW,
-} from '../support/state.ts';
+import { createAutopilotProfile, createGate, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
@@ -257,41 +249,20 @@ describe('the Autopilot settings', () => {
     for (const sentence of sentences) expect(sentence).toMatch(/^[A-Z][^.]*\.$/);
   });
 
-  it('says what it learned per gate, and which gates it paused after your corrections', () => {
-    expect(listAutopilotLearnedRows({ autopilotLessons: [] })).toEqual([]);
-    const lessons = [
-      createLesson({ id: 'a', gate: 'plan', kind: 'acted', answer: 'approved' }),
-      createLesson({ id: 'b', gate: 'plan', kind: 'forwarded', answer: 'approved' }),
-      createLesson({ id: 'c', gate: 'plan', kind: 'forwarded', answer: 'revised' }),
-      createLesson({ id: 'd', gate: 'review', kind: 'acted', answer: 'revised' }),
-      createLesson({ id: 'e', gate: 'review', kind: 'acted', answer: 'rejected' }),
-    ];
-    expect(listAutopilotLearnedRows({ autopilotLessons: lessons })).toEqual([
-      {
-        gate: 'plan',
-        title: 'Plans',
-        detail: 'Did 1 for you: you kept 1. Brought you 2, you approved 1 as they were.',
-        paused: null,
-      },
-      {
-        gate: 'review',
-        title: 'Reviews',
-        detail: 'Did 2 for you: you kept 0, you changed 2.',
-        paused: 'You changed its last few reviews, so it brings reviews to you for now.',
-      },
-    ]);
-  });
-
   it('scores nothing and suggests Balanced before it learned anything', () => {
     expect(resolveAutopilotScoreView({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'balanced')).toEqual({
       learned: {
-        detail: 'None yet. It learns from every plan, question, review, merge and suggested task you decide.',
+        detail: 'None yet. It learns from everything you decide and every message you send.',
         count: null,
       },
-      agreement: { detail: 'It has not guessed at any of your plans, reviews or merges yet.', percent: null },
+      progress: {
+        detail: 'It fills as Autopilot guesses your plans, reviews and merges and you decide them.',
+        value: 0,
+        label: 'Learning',
+      },
       suggested: {
         level: 'balanced',
-        detail: 'Balanced while it learns, until 9 in 10 of at least 50 guesses match you.',
+        detail: 'Balanced while it learns. Most things once the bar above is full.',
         apply: null,
       },
     });
@@ -311,13 +282,13 @@ describe('the Autopilot settings', () => {
     });
     const view = resolveAutopilotScoreView({ autopilotProfile: few }, 'ask_first');
     expect(view.learned).toEqual({
-      detail:
-        'Learned from your answers, whether or not Autopilot touched them, most of them reviews, plans and merges.',
+      detail: 'Every one counts, the recent ones the most. Most of them are reviews, plans and merges.',
       count: '12',
     });
-    expect(view.agreement).toEqual({
-      detail: 'It guessed what you did on 10 of the last 10 it could check.',
-      percent: '100%',
+    expect(view.progress).toEqual({
+      detail: 'It guessed you right on 10 of 10 so far and needs more to be sure.',
+      value: 0.2,
+      label: 'Learning',
     });
     expect(view.suggested).toMatchObject({ level: 'balanced', apply: 'Use Balanced' });
     const unsure = createAutopilotProfile({
@@ -325,16 +296,27 @@ describe('the Autopilot settings', () => {
       disagreed: 20,
       tallies: [{ kind: 'review', total: 60 }],
     });
-    expect(resolveAutopilotScoreView({ autopilotProfile: unsure }, 'balanced')).toMatchObject({
-      learned: { detail: expect.stringMatching(/most of them reviews\.$/) },
-      agreement: { percent: '67%' },
+    const unsureView = resolveAutopilotScoreView({ autopilotProfile: unsure }, 'balanced');
+    expect(unsureView).toMatchObject({
+      learned: { detail: expect.stringMatching(/Most of them are reviews\.$/) },
+      progress: {
+        detail: 'It guessed you right on 40 of 60, but not often enough lately.',
+        label: 'Learning',
+      },
       suggested: { level: 'balanced', apply: null },
     });
+    expect(unsureView.progress.value).toBeLessThan(1);
   });
 
-  it('suggests Most things once it agrees with you on 9 in 10 of at least 50 guesses', () => {
+  it('suggests Most things once the bar is full', () => {
     const sure = createAutopilotProfile({ agreed: 46, disagreed: 4 });
-    expect(resolveAutopilotScoreView({ autopilotProfile: sure }, 'balanced').suggested).toEqual({
+    const view = resolveAutopilotScoreView({ autopilotProfile: sure }, 'balanced');
+    expect(view.progress).toEqual({
+      detail: 'It guessed you right on 46 of 50 and keeps learning.',
+      value: 1,
+      label: 'Ready',
+    });
+    expect(view.suggested).toEqual({
       level: 'most',
       detail: 'It agrees with you often enough to act alone on most work.',
       apply: 'Use Most things',
