@@ -1342,7 +1342,13 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with
   fetched default branch, which now holds every parent's work, and planning starts. A worktree
   left from before (a task that was planning when it was told to wait) is reset onto the updated
   default branch first; it never has commits of its own at that point. Its prompts name the tasks
-  it built on and say they have merged (`describeBases`).
+  it built on and say they have merged (`describeBases`). Merged means its pull request merged
+  (`hasMergedPullRequest`, any round's), not its stage: a task that merged and then checks a
+  watchdog, answers a follow-up or builds a next round still counts as merged, so nothing waits on
+  it again. A task held at the merge gate is judged again on the same command that clears its last
+  blocker (`releaseMergeHolds`, after every command), never only on its next pull request read.
+  While it waits, its line names what the one task it waits on is doing (`describeDependencyWait`:
+  "Waits on “X”, which has pull request #257 waiting for CI").
 - **Chains and diamonds.** MCP v2 → embedded chat → paywall editing in the chat: each link waits for
   the one before it, so they start one after another as each merges. A diamond (B and C wait on
   A, D waits on B and C) starts B and C together when A merges, and D only after both. Cycles

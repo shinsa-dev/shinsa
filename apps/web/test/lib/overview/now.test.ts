@@ -56,7 +56,9 @@ describe('resolveNowTitle', () => {
   it('says what the task waits on first', () => {
     const task = createTask({ id: 'task-1', stage: 'waiting_on_tasks' });
     const base = createTask({ id: 'task-0', title: 'Add the export API' });
-    expect(resolveNowTitle(task, [base], phase({}), undefined)).toBe('Waits on “Add the export API”');
+    expect(resolveNowTitle(task, [base], phase({}), undefined)).toBe(
+      'Waits on “Add the export API”, which is being built'
+    );
   });
 
   it('names the planned phase being built', () => {
