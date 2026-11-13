@@ -90,7 +90,7 @@ describe('a task’s GitHub identity', () => {
     expect((await Effect.runPromise(Effect.service(TaskGitHub))).identity).toBeNull();
   });
 
-  test('git gets the token as a GitHub header and the owner as the author, and nothing without one', () => {
+  test('git gets the token as a GitHub header and the owner as the author, and the machine login through gh', () => {
     const basic = Buffer.from('x-access-token:ghp_kai').toString('base64');
     expect(resolveGitTokenEnv(KAI_TOKEN)).toEqual({
       GIT_CONFIG_COUNT: '1',
@@ -101,7 +101,13 @@ describe('a task’s GitHub identity', () => {
       GIT_AUTHOR_NAME: 'Kai Lane',
       GIT_AUTHOR_EMAIL: '7+kai@users.noreply.github.com',
     });
-    expect(resolveGitTokenEnv(null)).toBeUndefined();
+    expect(resolveGitTokenEnv(null)).toEqual({
+      GIT_CONFIG_COUNT: '2',
+      GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
+      GIT_CONFIG_VALUE_0: '',
+      GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
+      GIT_CONFIG_VALUE_1: '!gh auth git-credential',
+    });
     expect(resolveAuthorEnv(null)).toBeUndefined();
   });
 

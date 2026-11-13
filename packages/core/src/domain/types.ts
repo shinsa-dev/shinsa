@@ -169,7 +169,7 @@ export type GateType =
   | 'post_merge'
   | 'result';
 
-export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused' | 'owner_account';
+export type GateCause = 'budget' | 'monitor' | 'push_hook' | 'paused' | 'owner_account' | 'github_sso';
 
 export type EditsApproval = 'review' | 'merge';
 
@@ -771,6 +771,11 @@ export interface GateBrowserSignIn {
   site: string;
 }
 
+export interface GateGitHubSso {
+  organization: string | null;
+  url: string;
+}
+
 export interface Gate {
   id: string;
   taskId: string;
@@ -794,6 +799,7 @@ export interface Gate {
   account?: RunAccount | null;
   secret?: GateSecret | null;
   browserSignIn?: GateBrowserSignIn | null;
+  githubSso?: GateGitHubSso | null;
   commit?: string | null;
   notes?: string | null;
   round?: number;
