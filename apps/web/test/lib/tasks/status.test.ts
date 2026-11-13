@@ -231,6 +231,17 @@ describe('resolveTaskStatus', () => {
     });
   });
 
+  it('shows a task waiting for its automatic retry as retrying, in a queue row too', () => {
+    const task = createTask({ id: 't', stage: 'fixing', autoRetry: { status: 'armed' } as never });
+    const state = createShinsaState({ tasks: [task] });
+    const status = resolveTaskStatus(state, task);
+    expect(status).toEqual({ label: 'Retrying', tone: 'amber' });
+    expect(isPausedStatus(status)).toBe(true);
+    expect(resolveRowStatus(state, task)).toBe(status);
+    const spent = createTask({ id: 't', stage: 'fixing', autoRetry: { status: 'spent' } as never });
+    expect(resolveTaskStatus(createShinsaState({ tasks: [spent] }), spent).label).toBe('Fixing');
+  });
+
   it('names the stage in a queue row while the agent waits to check in, and the status otherwise', () => {
     const monitor = {
       id: 'm',
@@ -410,6 +421,7 @@ describe('resolveTaskStatusIcon', () => {
       maxAttempts: 1,
     };
     expect(iconOf({ monitor })).toBe('IconClockSnooze');
+    expect(iconOf({ autoRetry: { status: 'armed' } as never })).toBe('IconArrowRotateClockwise');
     expect(iconOf({ usageWait: { ...ARMED, id: 'w', account: null, resetAt: 2, autoResume: true } })).toBe(
       'IconGauge'
     );

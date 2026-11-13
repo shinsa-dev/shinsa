@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import {
   isDecisionGate,
+  isRetryArmed,
   isTaskClosed,
   isTaskSettled,
   listActiveRuns,
@@ -133,7 +134,8 @@ function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand
     const result = listOpenGates(state, task.id).find((gate) => gate.type === 'result');
     if (result) return [{ type: 'gate.answer', gateId: result.id, decision: 'approve', response: null }];
     if (task.stage !== 'shipping' && task.stage !== 'awaiting_merge') return [];
-    const merging = task.stage === 'awaiting_merge' && listOpenGates(state, task.id).length === 0;
+    const merging =
+      task.stage === 'awaiting_merge' && !isRetryArmed(task) && listOpenGates(state, task.id).length === 0;
     const pullRequest = readPullRequest(task, random);
     return [
       {

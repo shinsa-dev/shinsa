@@ -119,6 +119,30 @@ empty answer is not kept, so the next read asks again; meanwhile the read serves
 list until the answer comes; readers that open at once share one request. `GET /api/models` still serves the
 default provider's list, the one setup's Model step offers.
 
+**Automatic.** A Claude role's model can be `auto` (`AUTO_MODEL`, "Automatic"), saved in `agentModels` like any other
+choice and offered first in every model picker, on its own above the providers' groups with the arrow-split icon and no
+hint, on an engine that announces `models.routing`. It only ever picks Claude models for a step. `startRun` resolves
+it when the step starts (`resolveStepModel` in `packages/core/src/agent-models/routing.ts`), so `run.model` is always
+a real model and replay gives the same one: a plan on a large task takes Fable then Opus, any other plan or step
+Opus then Sonnet (`MODEL_ROUTES`), so Fable never builds. Each step takes the first usable choice with at least 10%
+of its room left (`LOW_ROOM_PERCENT`), or else the usable one with the most room, so the preferred model comes back
+as soon as it has room again. A step reads the room of the account its run or task is bound to, when the record
+holds that account, and the pooled room otherwise, so a task bound to an account that spent Fable plans on Opus.
+The move from Fable's plan to Opus at build phase 1 folds to the round brief (Boundary folds). A cache written
+on another model never counts as warm (`isSessionCacheWarm`), so that first step on the new model always folds and
+writes only the brief into its cache, never the planning conversation. Quick jobs, the reviewer's own session and
+delegations are separate requests and sessions, so routing never touches the Agent's cache. A model is usable unless
+`state.modelRoom` says no signed-in, unpaused account can run its family (a family never recorded counts as usable).
+The account roster records that room (`usage.models_recorded`, `listModelRoom`: per Claude family, whether any account
+can run it, the most room any one account has left, and each signed-in account's own reading) on an accounts refresh
+when a family or one account's reading turns usable or spent or its room moves by 5 points (`isModelRoomMoved`); recording it re-checks waits on a model's own limit, so a step on
+Automatic waiting on Fable starts again on Opus. Everything that needs a concrete model before a step starts (the
+account list, the safe pace, delegations) reads `resolveAgentModel`, which gives the role's default for `auto`. The
+quick jobs are not routed: the classifier on Automatic answers on Sonnet, and the writer on Automatic writes with Codex
+first, on Codex's writer model, and falls back to Claude's Sonnet when Codex cannot answer (`resolveQuickProvider`,
+`AUTO_QUICK_PROVIDERS`), because Codex writes the better copy. Every step's header in the chat names the model it ran
+on beside its account (`resolveRunModelLabel`).
+
 **The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
 task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
 
@@ -1546,7 +1570,7 @@ Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your
 (`request_browser_sign_in`, The shared browser, below); all three are an agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
 above), `operation` an operation after the merge waiting for your OK on the merged commit, and `result` a finished
 answer, report or diagnosis waiting for you to read and close it (Task shapes → Answered, not done). `failure` means the
-engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
+engine ran out of automatic recovery and of automatic retries (Automatic retries, below), an agent's wait ran out of time or check-ins (`cause: monitor`), the task
 reached its usage or cost limit (`cause: budget`), or the
 repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
 approve is Send to the agent again, another fix round with the hook's output, and its `reply` adds your words; there is
@@ -1589,6 +1613,25 @@ as guidance, like any failure gate; reject cancels the task. Pause is refused (`
 settled, already at a pausing gate, resting at your decision (a plan, review, merge, your OK, a result or an
 operation to run), waiting on other tasks, or watching after the merge. A task whose agent asked you a question can be
 paused: its run is stopped, so the question is withdrawn with it. An agent may pause a task for you, but only you resume it, since resuming closes a gate.
+
+**Automatic retries.** A step that fails no longer stops the task for you to press Retry. Every failure in core goes
+through `Decider.fail`, which stops the task's runs and waits as before, then arms an automatic retry instead of a
+failure gate: `task.retry_scheduled` writes `Task.autoRetry` (`at`, `attempt`, the `title` and `detail` the gate would
+have shown, its `runId` and `cause`, the `milestone` it failed at, `status: armed`). The `TaskRetry` clock
+(`apps/engine/src/tasks/retry/`) sends the engine-only `task.auto_retry` when `at` comes, and core runs `retryTask`,
+exactly what the gate's Retry does: a fresh fix budget and the step started again. Retries come after 1, 5, 15 and
+30 minutes, then hourly (`resolveAutoRetryDelay`). The streak counts retries at one milestone (`resolveRetryMilestone`:
+the round, the plan version, the phases reported and the gates you answered); a new phase, plan version, round or a
+plan, review or merge gate starts it again, while a new commit alone does not, since a stalled fix loop makes one every
+round. The 11th failure at the same milestone opens the failure gate as before, its detail saying Shinsa already
+retried it 10 times (`MAX_AUTO_RETRIES`, `describeRetriesSpent`). While a retry is armed the task counts as live and
+shows Retrying with the reason and a countdown, Retry now (`task.retry`, which, like the clock, starts a fix round for a
+failed pre-push hook) and Stop retrying (`task.pause`, accepted at any stage while a retry is armed); a message to
+the agent retries at once with it as guidance; Retry, a message, your Pause, cancelling or any step that starts clears
+it (`task.retry_cleared`), and only your own Retry or message starts the count again (`streak: reset`), never one sent
+on your behalf. Holds you chose keep the gate through `Decider.hold`: your Pause, the task's usage or cost limit, a
+usage limit reached with auto-resume off, a cancelled task this one waits on or is stacked on, an agent's wait that ran
+out, and a signed-out account.
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
 behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).
@@ -5282,7 +5325,7 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
 - **Stale output is dropped.** Agent commands carry their run id. A run that has ended, a
   finished task, or the wrong role is rejected with a message telling the agent to stop.
 - **Liveness.** After every command each open task must have something moving it: a gate, an
-  active run, an armed wait (a monitor on something outside the repository, or a usage limit),
+  active run, an armed wait (a monitor on something outside the repository, a usage limit, or an automatic retry),
   a typed wait on other tasks, or Shinsa itself (triage, checks, pull request). A task stuck in an
   agent stage with none of these gets a failure gate instead of hanging silently (`isTaskLive`). A
   task waiting on other tasks names the stalled leaf of its chain (Waits and monitors, above).
@@ -5297,7 +5340,8 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
 ## Recovery
 
 - A run that ends without handing over, or fails, is resumed once on its own session with a
-  nudge. A second stop opens a failure gate. Any progress resets that budget. How a failed run
+  nudge. A second stop fails the step, which arms an automatic retry (Gates → Automatic retries) and opens the
+  failure gate only once 10 retries at the same milestone are spent. Any progress resets that budget. How a failed run
   recovers depends on its failure class, in the table in The agent loop (below): another account, a
   usage wait, a Sign in gate, a fresh session told to read the worktree, a resume of the same
   session, or a failure gate at once.
@@ -5437,7 +5481,8 @@ keeps beside its events (`store/event-log.ts`).
   steps again, and the engine reports a retry as `<effect key>:<attempt>:pull_request.record_retry`; a repository triage or the setup check registers
   `<effect key>:repo.register`. The
   clocks name theirs after what they fire (`monitor:<id>:<attempt>`, `schedule:<id>:<dueAt>` and
-  `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`). The files two open tasks both change go
+  `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`, and `auto-retry:<task>:<attempt>:<at>` for a
+  failed task's automatic retry, its due time in the id so a streak that starts again is never a repeat). The files two open tasks both change go
   under `overlaps:<task>:<hash of the overlaps>` (Other work in the repository).
   - A run (`agents/supervisor/attempts.ts`): its attempt ids are `<run>:<n>`, and the attempt's commands are
     `run.attempt:<attempt>`, `run.link:<attempt>:<session>`, `run.meter:<attempt>` (and `run.meter:<attempt>:<session>`
@@ -6734,8 +6779,8 @@ nothing before its turn is left as it is, and so is a step whose history is unde
 `foldFloor`) while its cache is still warm: there a fold would rewrite more of the cache than it saves, so the fold is
 dropped and the step reads its warm cache. Whether it is warm is the expiry the session's last run recorded when it
 ended (`resolveCacheExpiry`, the same reading idle compaction uses, kept on the run by `run.cached` so it survives a
-restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, or
-no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
+restart; `isSessionCacheWarm` in `agents/turns/plan.ts`), passed to the fold as `cacheWarm`. Once that time has passed, when
+that run was on another model (a provider caches per model), or when no run of the session recorded one, the next request rewrites the whole prefix anyway, so a step of any size folds
 first and writes only the folded prefix.
 
 *Routing a session* (`providers/claude/route.ts`). Each Claude session and idle compaction resolves a route before it

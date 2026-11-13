@@ -1,5 +1,6 @@
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
+  AutoRetry,
   BacklogCause,
   BundleConflict,
   BundleReady,
@@ -14,6 +15,7 @@ import type {
   Gate,
   GateDecision,
   MessageKind,
+  ModelRoomReading,
   Monitor,
   PhaseReport,
   PhaseStatus,
@@ -99,6 +101,7 @@ type EventBody =
       endingPace: number | null;
       resetEndsAt: number | null;
     }
+  | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'settings.changed'; settings: Settings }
   | {
       type: 'task.created';
@@ -216,6 +219,8 @@ type EventBody =
       onto?: number | null;
     }
   | { type: 'task.recovered'; taskId: string; recoveries: number; fingerprint?: string }
+  | { type: 'task.retry_scheduled'; taskId: string; retry: AutoRetry }
+  | { type: 'task.retry_cleared'; taskId: string; streak: 'kept' | 'reset' }
   | { type: 'worktree.requested'; taskId: string; workspace: WorkspaceMode }
   | {
       type: 'worktree.created';

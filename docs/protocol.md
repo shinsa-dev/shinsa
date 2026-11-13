@@ -88,6 +88,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | backlog | Where work you want planned now and built later waits: a status of a task, never a kind; it is triaged and planned, then its plan waits out of Needs you until you start building it. Only you, or an agent you asked, put work there | `Task.backlog` (`TaskBacklog`), `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `isHeldInBacklog`, `queue.backlog`, plan gate reason `backlog` | Backlog, "Move to the backlog", "Remove from the backlog", "Start building" |
 | All tasks | Every task in to-do order, in status groups (the Backlog one of them), a waiting or stacked task nested under the task it builds on | `resolveTaskGroup`, `TASK_GROUPS` (web) | All tasks |
 | schedule (automation) | A trigger (once, interval, daily, webhook, Slack channel) that starts a task, messages one, or watches an integration; on screen a Schedule, a Trigger or a Watch | `Schedule`, `ScheduleSource` | Settings → Automations: Schedule, Trigger, Watch |
+| automatic retry | A failed step retried on its own after a growing delay, up to 10 times at one milestone, before the failure gate opens | `AutoRetry`, `Task.autoRetry`, `task.auto_retry` | "Retrying", "Retries in 5m", "Retry 2 of 10" |
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
 | pace hold | A step held before it starts because the last 24 hours reached the daily or a project's usage limit; it starts when older usage drops out | `UsageWait` with `cause: pace`, `UsagePace` | "Held at a usage limit" |
@@ -97,6 +98,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | rate pool | The accounts that learn one usage rate together: every account on one provider and plan, or one account whose plan is unknown | `resolveRatePool`, `plan:<provider>:<plan>`, `state.accountPlans`, `STARTING_RATES` | "an estimate from its plan's usual rate" |
 | build estimate | What a task's build will cost, from the nearest past builds or a measured table, corrected after each phase | `BuildEstimate` (`resolveBuildEstimate`) | "About 6% to build", Build estimate |
 | Auto pace | Your switch that starts each build only when its estimate fits the safe pace, in queue order | `autoPace`, `autoPaceResets`, `usage.pace_recorded`, `state.usagePaces`, a pace hold with scope `admission` | Auto pace, Count on usage resets, "Waiting to build", "Builds tonight", Build now |
+| Automatic | The model choice that picks each step's Claude model from the task's size, the step and each model's room, and writes the Home guide with Codex first | `auto` (`AUTO_MODEL`) in `agentModels`, `resolveStepModel`, `MODEL_ROUTES`, `resolveQuickProvider`, `usage.models_recorded`, `state.modelRoom`, `models.routing` | Automatic |
 | night shift | What Auto pace does in your away hours: queued builds run, and the Agent records judgement calls instead of asking | `AwayHours` (`resolveAwayHours`), `NightShift`, `resolveNightShiftTold` | "built overnight" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
 | provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
@@ -331,6 +333,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `monitor?` | `Monitor` \| null | an agent's armed wait |
+| `autoRetry?` | `AutoRetry` \| null | the automatic retry of a failed step: armed until it fires or is cleared, then kept `spent` so the next failure at the same `milestone` counts on from its `attempt` |
 | `usageWait?` | `UsageWait` \| null | a step waiting for a usage reset, or held at a daily or project limit (`cause: pace`, with `pace`: `scope` `daily` or `project`, `limit`, `percent`, `projectId`, `stageReason`) |
 | `account?` | `RunAccount` \| null | the account the task is bound to |
 | `budgetAcknowledgedUsd?`, `usageAcknowledgedPercent?` | number | what you allowed past the cost and usage limits |
@@ -1023,6 +1026,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `watchdog.fire` | `WatchdogClock` | checks a watchdog at its `nextCheckAt` (`dueAt`), defers it while the task works, or passes it once its window ended |
 | `usage_wait.resume` | `UsageResume` | resumes a step after the reset |
+| `task.auto_retry` | `TaskRetry` (`tasks/retry/service.ts`) | retries a failed step when its armed `Task.autoRetry` is due, as Retry does; nothing when none is armed |
 | `watch_suggestion.record` | the `watch.suggest` effect | records the suggested watch for a new integration (`projectId`, `server`, the Writer's `name` and `text` or null for plain wording, `timeZone`), hourly; does nothing when the integration is gone or watched, was suggested before, or 10 suggestions are open |
 | `feedback.record_draft` | the `feedback.draft` effect | the drafted `title` and `body` of an entry still `drafting`; an empty one fails it |
 | `feedback.record_filed` | the `feedback.file` effect | the new issue's `number` and `url`, for an entry still `filing`; its `openedAt` is now and `closedAt` null |
@@ -1031,6 +1035,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `account.plan_recorded` | the account roster, when an account's plan differs from `state.accountPlans` | records the account's `provider` and `plan` under its plan key, or forgets it with `plan: null`; nothing when unchanged |
 | `usage.pace_recorded` | the account roster, on an accounts refresh | records a provider's safe `pace` (the forecast without usage resets), `resetPace` (with each usable reset as a budget ending at its `endsAt`), `endingPace` (with only the resets that end within 3 days) and `resetEndsAt` (when the soonest of them ends), or clears them with a null pace; nothing when unchanged |
+| `usage.models_recorded` | the account roster, on an accounts refresh | records each Claude family's room (`models`: `{ family, usable, left, accounts }`, each account's own `{ account, usable, left }`, `listModelRoom`); nothing unless a family or one account's reading turned usable or spent or moved by 5 points; re-checks model waits under Automatic |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
 | `onboarding.welcome` | `Onboarding.complete` (`onboarding/index.ts`), when setup ends | records the welcome task, "Welcome to Shinsa", with `body` as its answer: `task.created` (origin `onboarding`, no repository, mode `ask`), `task.triaged`, `task.delivered`, then done; no triage, agent or effect; refused with an empty body (`welcome_invalid`) or once a task with that origin exists (`welcome_recorded`) |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries/service.ts` | a delivery claim was taken, or released |
@@ -1093,6 +1098,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `round.pull_request_merged` | an earlier round's pull request merged outside Shinsa while a later round works: that round is merged, and the active round takes a new `branch` from the default branch for its own pull request |
 | `task.noted` | an agent kept a note |
 | `task.recovered` | the recovery count changed |
+| `task.retry_scheduled` | a failed step armed an automatic retry (`retry`: `at`, `attempt`, `title`, `detail`, `runId`, `cause`, `milestone`, `status: armed`) |
+| `task.retry_cleared` | the armed retry ended (`status: spent`): retried, paused, cancelled or a step started; `streak: reset` starts the count again |
 | `task.delivered` | an answer, a diagnosis, a report or an outcome was handed over (`step`) |
 | `task.change_proposed`, `task.change_approved`, `task.change_declined` | a proposal was made (with its `recommend`), approved, declined |
 | `task.actions_suggested` | a hand-over suggested replies (`actions`, empty to clear them); also cleared by your message or a gate answer |
@@ -1151,6 +1158,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `usage_wait.armed`, `usage_wait.ended` | a usage wait was armed; resumed, reset or cleared (a pace hold's `pace.scope` is `daily`, `project` or `admission`, the last with the build's estimate as `need`) |
 | `account.plan_recorded` | an account's plan was recorded or forgotten, folded into `state.accountPlans` |
 | `usage.pace_recorded` | a provider's safe pace was recorded or cleared, folded into `state.usagePaces` |
+| `usage.models_recorded` | each Claude family's room was recorded, folded into `state.modelRoom` (a family left out is removed) |
 | `task.pace_limits_ignored` | you resumed a pace hold, so the daily and project usage limits no longer hold the task |
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |

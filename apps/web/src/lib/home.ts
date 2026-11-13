@@ -5,6 +5,7 @@ import {
   describeCount,
   isAwayAt,
   isListedInFocus,
+  isRetryArmed,
   isTaskComplete,
   resolveAutoPace,
   resolveAwayHours,
@@ -94,6 +95,7 @@ export function resolveRunningVerb(task: Task) {
     if (isAdmissionWait(task.usageWait)) return 'waiting to build';
     return isPaceWait(task.usageWait) ? 'held at a usage limit on' : 'waiting for the usage limit on';
   }
+  if (isRetryArmed(task)) return 'retrying';
   if (task.monitor?.status === 'armed') return 'waiting to check in again on';
   if (isResolvingConflicts(task)) return 'resolving conflicts on';
   return RUNNING_VERB[task.stage] ?? 'working on';

@@ -331,7 +331,7 @@ describe('effect outbox', () => {
     expect(resolveUncappedBackoff(20)).toBe(30_000);
   });
 
-  test('a process-bound effect that fails is not retried and opens a failure gate', async () => {
+  test('a process-bound effect that fails is not retried by the outbox and arms a task retry', async () => {
     const log = openEventLog(createDatabasePath());
     const engine = new Engine(log);
     let calls = 0;
@@ -358,10 +358,11 @@ describe('effect outbox', () => {
     const taskId = await startPlanning(engine);
     await awaitEffect(log, selectKey(log, 'run.execute'));
     await engine.settle();
-    const gate = Object.values(engine.state.gates).find((candidate) => candidate.taskId === taskId);
     expect(calls).toBe(1);
-    expect(gate?.type).toBe('failure');
-    expect(gate?.body).toBe('no claude');
+    expect(engine.state.tasks[taskId]?.autoRetry).toMatchObject({
+      title: 'Could not start',
+      detail: 'no claude',
+    });
     expect(keys).toEqual([selectKey(log, 'run.execute')]);
     expect(log.listEffectStatuses().find((row) => row.kind === 'run.execute')?.status).toBe('failed');
     engine.stop();

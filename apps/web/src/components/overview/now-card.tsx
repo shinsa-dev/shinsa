@@ -29,6 +29,7 @@ import { PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
 import { ReplyReport, WorkingRequest } from '@/components/overview/reply-report.tsx';
+import { RetryCard } from '@/components/overview/retry-card.tsx';
 import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
@@ -598,6 +599,8 @@ export function NowCard({
       return gate && <GateCard state={state} task={task} gate={gate} onOpen={onOpen} />;
     case 'usage_wait':
       return task.usageWait && <UsageWaitCard state={state} task={task} wait={task.usageWait} />;
+    case 'retry':
+      return task.autoRetry && <RetryCard state={state} task={task} retry={task.autoRetry} />;
     case 'wait':
       return task.monitor && <WaitCard state={state} task={task} monitor={task.monitor} />;
     case 'result':

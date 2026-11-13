@@ -999,7 +999,7 @@ describe('restarts and recovery', () => {
     });
   });
 
-  test('a parent that is paused instead of restarted stops what it delegated', () => {
+  test('a parent that retries later instead of restarting stops what it delegated', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const delegated = child(harness, parent.id);
@@ -1017,7 +1017,8 @@ describe('restarts and recovery', () => {
       },
     });
     expect(current(harness, delegated.id).outcome).toBe('cancelled');
-    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['failure']);
+    expect(listOpenGates(harness.state, taskId)).toEqual([]);
+    expect(harness.task(taskId).autoRetry?.status).toBe('armed');
   });
 
   for (const failure of ['usage_limit', 'auth'] as const) {

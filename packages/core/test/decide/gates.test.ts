@@ -31,6 +31,7 @@ import {
   readyWorktree,
   refreshWorktree,
   resolveReply,
+  spendRetries,
   verifySetup,
 } from '../harness.ts';
 
@@ -68,6 +69,7 @@ describe('answering a gate', () => {
       harness.send({ type: 'gate.answer', gateId: 'q1', decision: 'reply', response: ' ' })
     ).toThrow('Write an answer first.');
 
+    spendRetries(harness, asking);
     harness.send({ type: 'effect.fail', taskId: asking, title: 'Broke', detail: 'x' });
     const failure = harness.openGate(asking).id;
     expect(() =>
@@ -80,6 +82,7 @@ describe('answering a gate', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
+    spendRetries(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Broke', detail: 'x' });
     harness.send({
       type: 'gate.answer',
@@ -477,14 +480,17 @@ describe('fixing findings, then approving', () => {
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_review', approveAfterFix: false });
   });
 
-  test('checks that fail past the fix budget stop for you and drop the approval', () => {
+  test('checks that fail past the fix budget retry on their own and drop the approval', () => {
     const { harness, taskId } = askFixThenApprove();
     harness.send({ type: 'settings.change', patch: { maxFixRounds: 1 } });
     fix(harness, taskId, 'tree-1', ['c1']);
     harness.send({ type: 'checks.record', taskId, results: failing('r2') });
     fix(harness, taskId, 'tree-2');
     harness.send({ type: 'checks.record', taskId, results: failing('r1') });
-    expect(harness.openGate(taskId).type).toBe('failure');
+    expect(harness.task(taskId).autoRetry).toMatchObject({
+      title: 'Out of automatic fix rounds',
+      status: 'armed',
+    });
     expect(harness.task(taskId).approveAfterFix).toBe(false);
   });
 
@@ -680,6 +686,7 @@ describe('decisions only the human makes', () => {
     });
     remember(browser);
     const failure = createTask(harness, { request: 'Failure' });
+    spendRetries(harness, failure);
     harness.send({ type: 'effect.fail', taskId: failure, title: 'Broke', detail: 'x' });
     remember(failure);
     const signIn = createTask(harness, { request: 'Sign in' });

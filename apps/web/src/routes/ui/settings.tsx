@@ -361,6 +361,7 @@ function ModelsSpecimen({ label, initial }: { label: string; initial: Settings }
           settings={settings}
           providers={KNOWN_AGENT_PROVIDERS}
           accounts={null}
+          automatic
           update={(patch) => setSettings((current) => ({ ...current, ...patch }))}
         />
       </div>
