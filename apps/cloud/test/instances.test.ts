@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   CONNECT_TOKEN_TTL_MS,
   parseBase64Url,
@@ -11,6 +11,7 @@ import {
 } from '@shinsa/core';
 import { Effect, Duration, Option } from 'effect';
 import { ONLINE_WINDOW } from '../src/domain/schema.ts';
+import { RELAY_ROLE_HEADER } from '../src/relay/schema.ts';
 import { createHarness, type Harness, heartbeat, pairMachine, readJson } from './harness.ts';
 
 const ONLINE_WINDOW_MS = Duration.toMillis(ONLINE_WINDOW);
@@ -49,6 +50,19 @@ describe('instances', () => {
     expect((await harness.call(REMOTE_PATHS.instances)).status).toBe(401);
   });
 
+  test('lists a machine that beats without joining the relay as offline, until it joins', async () => {
+    const harness = createHarness();
+    const session = await harness.signIn();
+    const studio = await pairMachine(harness, session);
+    await heartbeat(harness, studio, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    expect((await listInstances(harness, session))[0]).toMatchObject({
+      online: false,
+      lastSeenAt: harness.clock.now,
+    });
+    await heartbeat(harness, studio);
+    expect((await listInstances(harness, session))[0]?.online).toBe(true);
+  });
+
   test('goes offline at once when the machine says so', async () => {
     const harness = createHarness();
     const session = await harness.signIn();
@@ -63,21 +77,19 @@ describe('instances', () => {
     expect((await listInstances(harness, session))[0]?.online).toBe(false);
   });
 
-  test('moves the tunnel to the port the machine now listens on, only when it changed', async () => {
+  test('records the port the machine now listens on, calling nothing outside the Worker', async () => {
     const harness = createHarness();
     const session = await harness.signIn();
     const studio = await pairMachine(harness, session);
-    const configurations = () =>
-      harness.calls.filter((call) => call.method === 'PUT' && call.url.endsWith('/configurations'));
+    harness.calls.length = 0;
     await heartbeat(harness, studio, 'http://127.0.0.1:5180');
-    await heartbeat(harness, studio, 'http://127.0.0.1:5180');
-    expect(configurations()).toHaveLength(2);
-    expect(JSON.parse(configurations()[1]?.body ?? '').config.ingress[0].service).toBe(
-      'http://127.0.0.1:5180'
-    );
+    expect(harness.db.sqlite.query('SELECT local_url FROM machines').get()).toEqual({
+      local_url: 'http://127.0.0.1:5180',
+    });
+    expect(harness.calls).toEqual([]);
   });
 
-  test('refuses a heartbeat that points the tunnel anywhere but loopback', async () => {
+  test('refuses a heartbeat that names anything but a loopback address', async () => {
     const harness = createHarness();
     const session = await harness.signIn();
     const studio = await pairMachine(harness, session);
@@ -108,7 +120,7 @@ describe('instances', () => {
     expect(answer.expiresAt).toBe(harness.clock.now + CONNECT_TOKEN_TTL_MS);
     const url = new URL(answer.url);
     expect(`${url.protocol}//${url.host}${url.pathname}`).toBe(
-      `wss://t-${studio.instanceId}.shinsa.dev/remote`
+      `wss://app.shinsa.dev/__relay/${studio.instanceId}/remote`
     );
     const token = url.searchParams.get('token') ?? '';
     const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
@@ -193,21 +205,33 @@ describe('instances', () => {
     expect(crossSite.status).toBe(403);
   });
 
-  test('removing a machine on the dashboard deletes its tunnel and DNS, and its next heartbeat is refused', async () => {
+  test('removing a machine on the dashboard closes its relay, and its next heartbeat is refused', async () => {
     const harness = createHarness();
     const session = await harness.signIn();
     const studio = await pairMachine(harness, session);
+    harness.calls.length = 0;
     const removed = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session });
     expect(removed.status).toBe(200);
-    const deletes = harness.calls
-      .filter((call) => call.method === 'DELETE')
-      .map((call) => new URL(call.url).pathname);
-    expect(deletes).toEqual([
-      '/client/v4/zones/zone-1/dns_records/record-1',
-      '/client/v4/accounts/account-1/cfd_tunnel/tunnel-1',
-    ]);
+    expect(harness.calls.map((call) => [call.method, call.url, call.headers.get(RELAY_ROLE_HEADER)])).toEqual(
+      [['POST', `https://${studio.instanceId}.relay.test/`, 'evict']]
+    );
     expect(await listInstances(harness, session)).toEqual([]);
     expect((await heartbeat(harness, studio)).status).toBe(401);
+  });
+
+  test('a relay that cannot be reached still lets the machine go, with a warning', async () => {
+    const harness = createHarness();
+    const session = await harness.signIn();
+    const studio = await pairMachine(harness, session);
+    harness.handlers.push(() => Promise.reject(new Error('relay down')));
+    const warned = spyOn(console, 'warn').mockImplementation(() => undefined);
+    const removed = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, { session });
+    expect(removed.status).toBe(200);
+    expect(warned.mock.calls.map((call) => call[0])).toContain(
+      '[Cloud] Could not close a removed machine’s relay'
+    );
+    warned.mockRestore();
+    expect(await listInstances(harness, session)).toEqual([]);
   });
 
   test('answers not_found for a connect to a machine that no longer exists', async () => {
@@ -244,7 +268,7 @@ describe('instances', () => {
     const connect = await harness.post(resolveInstanceConnectPath(studio.instanceId), {}, auth);
     expect(connect.status).toBe(200);
     expect((await readJson<ConnectResponse>(connect)).url).toStartWith(
-      `wss://t-${studio.instanceId}.shinsa.dev/remote?token=`
+      `wss://app.shinsa.dev/__relay/${studio.instanceId}/remote?token=`
     );
     const removed = await harness.post(resolveInstanceRemovePath(studio.instanceId), {}, auth);
     expect(removed.status).toBe(200);

@@ -15,6 +15,8 @@ export interface ClaudeSessionOptions {
   readonly contextTimeoutMs?: number;
   readonly exitGraceMs?: number;
   readonly interruptTimeoutMs?: number;
+  readonly backgroundWaitMs?: number;
+  readonly backgroundGraceMs?: number;
   readonly createProcess?: () => ClaudeProcessHandle;
   readonly now?: () => number;
 }
@@ -46,7 +48,13 @@ export interface ClaudeSessionState {
   readonly contextWindow: number | null;
   readonly cacheExpiresAt: number | null;
   readonly background: ReadonlySet<string>;
+  readonly waiting: BackgroundWait | null;
   readonly connected: Readonly<Record<string, McpServerConfig>>;
+}
+
+export interface BackgroundWait {
+  readonly finished: readonly string[];
+  readonly timedOut: boolean;
 }
 
 export interface ContextMeasure {
@@ -98,10 +106,21 @@ export const EXIT_GRACE = Duration.seconds(10);
 
 export const INTERRUPT_TIMEOUT = Duration.seconds(5);
 
+export const BACKGROUND_WAIT = Duration.minutes(30);
+
+export const BACKGROUND_GRACE = Duration.seconds(10);
+
 export const SUMMARY_LIMIT = 2000;
 
 export const STREAM_ENDED = 'The agent’s process ended before it finished its turn.';
 
 export const SESSION_ENDED = 'The session has ended.';
+
+export const BACKGROUND_FINISHED = 'Your background work finished.';
+
+export const BACKGROUND_TIMED_OUT =
+  'Your background work was still running after 30 minutes, so Shinsa stopped it.';
+
+export const BACKGROUND_CARRY_ON = 'Carry on with your step and finish with its hand-over tool.';
 
 export const EDIT_TOOLS = ['Edit', 'Write', 'NotebookEdit'];

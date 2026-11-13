@@ -5,6 +5,7 @@ import type {
   Task,
   TaskPriority,
   TaskShape,
+  PresetShape,
   TaskSize,
   TeammateOriginal,
   TriageReasons,
@@ -52,7 +53,7 @@ export interface MessageClass {
   kind: MessageKind;
   title: string | null;
   why: string | null;
-  shape: TaskShape | null;
+  shape: PresetShape | null;
 }
 
 export type RepositoryFinder = (

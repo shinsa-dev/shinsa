@@ -118,7 +118,7 @@ export class EffectHandlers extends Context.Service<
           case 'pull_request.push':
             return yield* shipping.push(effect.taskId, attempt);
           case 'pull_request.merge':
-            return yield* merging.merge(effect);
+            return yield* merging.merge(effect, attempt);
           case 'pull_request.watch':
             yield* pullRequests.sync(effect.taskId, true);
             return;
@@ -130,6 +130,8 @@ export class EffectHandlers extends Context.Service<
             return yield* cleanup.removeScratch(effect.taskId);
           case 'briefing.request':
             return yield* world.briefings.schedule;
+          case 'initiative.wake':
+            return yield* world.leads.schedule(effect.initiativeId);
           case 'watch.suggest':
             return yield* suggestWatch(effect, attempt);
           case 'run.wake':

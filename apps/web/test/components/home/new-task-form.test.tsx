@@ -265,7 +265,7 @@ describe('NewTaskForm attachments', () => {
 });
 
 describe('NewTaskForm', () => {
-  it('has no kind of task: it starts on the project, then Auto start and priority', async () => {
+  it('asks only for the project, Auto start and priority, leaving the kind to Shinsa', async () => {
     renderForm();
     expect(screen.getAllByRole('combobox').map((element) => element.getAttribute('aria-label'))).toEqual([
       'Project',

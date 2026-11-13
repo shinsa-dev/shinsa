@@ -17,6 +17,7 @@ import {
   checkResult,
   createHarness,
   createTask,
+  fireRetry,
   type Harness,
   proposePlan,
   pullRequest,
@@ -24,6 +25,8 @@ import {
   pushFix,
   reachReviewGate,
   reachShipping,
+  shipAndMerge,
+  spendRetries,
 } from '../harness.ts';
 
 function shipping() {
@@ -148,7 +151,7 @@ describe('reacting to the pull request', () => {
     }
   });
 
-  test('a pull request that keeps failing while its fixes change nothing stops after 8 fix rounds', () => {
+  test('a pull request that keeps failing while its fixes change nothing stops after 8 fix rounds and retries later', () => {
     const { harness, taskId } = shipping();
     for (let round = 0; round < 12; round += 1) {
       harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'failing' }) });
@@ -161,9 +164,9 @@ describe('reacting to the pull request', () => {
       });
       pushed(harness, taskId);
     }
-    const gate = harness.openGate(taskId);
-    expect(gate.type).toBe('failure');
-    expect(gate.body).toBe(
+    const retry = harness.task(taskId).autoRetry;
+    expect(retry?.status).toBe('armed');
+    expect(retry?.detail).toBe(
       'The pull request’s failing checks, open threads or conflict came back after 8 fix rounds. Steer the agent in the chat, or retry.'
     );
   });
@@ -185,7 +188,7 @@ describe('reacting to the pull request', () => {
       });
       pushed(harness, taskId);
     }
-    expect(harness.openGate(taskId).body).toBe(
+    expect(harness.task(taskId).autoRetry?.detail).toBe(
       'The conflict with the base branch came back after 8 fix rounds. Steer the agent in the chat, or retry.'
     );
   });
@@ -264,9 +267,22 @@ describe('reacting to the pull request', () => {
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
 
+  test('a failed merge arms a retry that Stop retrying holds with your Pause gate', () => {
+    const { harness, taskId } = shipping();
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    approve(harness, taskId);
+    harness.send({ type: 'effect.fail', taskId, title: 'Could not merge the pull request', detail: 'gh' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_merge', autoRetry: { status: 'armed' } });
+    harness.send({ type: 'task.pause', taskId });
+    expect(harness.task(taskId).autoRetry?.status).toBe('spent');
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'failure', cause: 'paused' });
+  });
+
   test('a clean pull request clears a failure the loop left behind', () => {
     const { harness, taskId } = shipping();
+    spendRetries(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'gh' });
+    expect(harness.openGate(taskId).type).toBe('failure');
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['merge']);
   });
@@ -297,7 +313,7 @@ describe('retrying a pull request step', () => {
     approve(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Could not open the pull request', detail: 'auth' });
     const before = harness.effectsOf('pull_request.open').length;
-    approve(harness, taskId);
+    fireRetry(harness, taskId);
     expect(harness.effectsOf('pull_request.open')).toHaveLength(before + 1);
   });
 
@@ -306,7 +322,7 @@ describe('retrying a pull request step', () => {
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'pending' }) });
     harness.send({ type: 'effect.fail', taskId, title: 'Could not push the fixes', detail: 'rejected' });
     const before = harness.effectsOf('pull_request.push').length;
-    approve(harness, taskId);
+    fireRetry(harness, taskId);
     expect(harness.effectsOf('pull_request.push')).toHaveLength(before + 1);
   });
 
@@ -321,7 +337,7 @@ describe('retrying a pull request step', () => {
       detail: 'blocked',
     });
     const pushes = harness.effectsOf('pull_request.push').length;
-    approve(harness, taskId);
+    fireRetry(harness, taskId);
     expect(harness.effectsOf('pull_request.push')).toHaveLength(pushes);
     expect(harness.lastEffect('pull_request.watch').taskId).toBe(taskId);
     expect(harness.task(taskId)).toMatchObject({
@@ -398,6 +414,32 @@ describe('waiting on other tasks after building started', () => {
     expect(harness.effectsOf('pull_request.watch')).toHaveLength(watches);
   });
 
+  test('a held task is judged again as each task it waits on merges, and only then', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    const second = createTask(harness, { request: 'Second' });
+    const top = createTask(harness, { request: 'Top' });
+    reachShipping(harness, top);
+    harness.send({ type: 'task.wait_on', taskId: top, waitsOn: [first, second] });
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(harness.task(top).stageReason).toBe('waiting for “First”, “Second” to merge');
+
+    const watches = harness.effectsOf('pull_request.watch').length;
+    harness.send({ type: 'task.prioritize', taskId: first, priority: 'high' });
+    expect(harness.effectsOf('pull_request.watch')).toHaveLength(watches);
+
+    shipAndMerge(harness, first);
+    expect(harness.task(top).stageReason).toBe('waiting for “Second” to merge');
+    expect(harness.lastEffect('pull_request.watch').taskId).toBe(top);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(listOpenGates(harness.state, top)).toHaveLength(0);
+
+    shipAndMerge(harness, second);
+    expect(harness.lastEffect('pull_request.watch').taskId).toBe(top);
+    harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest({ number: 2 }) });
+    expect(harness.openGate(top).type).toBe('merge');
+  });
+
   test('cancelling the task it waits on lets its pull request be judged again', () => {
     const harness = createHarness();
     const base = createTask(harness, { request: 'Base' });
@@ -431,6 +473,16 @@ function failReads(harness: Harness, taskId: string, count: number, detail: stri
   }
   return events;
 }
+
+const INHERITED = {
+  name: 'Workers Builds: superwall-docs',
+  status: 'failure' as const,
+  required: true,
+  url: null,
+  failsOnBase: true,
+};
+
+const LINT = { name: 'lint', status: 'failure' as const, required: true, url: null };
 
 function record(
   harness: Harness,
@@ -499,6 +551,158 @@ describe('watching the pull request', () => {
     ]);
   });
 
+  test('a required check that fails on the base too starts no fix and waits, naming it, until it passes', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      base: 'main',
+      checks: 'failing',
+      checkRuns: [INHERITED, { name: 'build', status: 'success', required: true, url: null }],
+    });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: '“Workers Builds: superwall-docs” fails on main too',
+      fixRounds: 0,
+    });
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    record(harness, taskId, {
+      base: 'main',
+      checks: 'passing',
+      checkRuns: [{ ...INHERITED, status: 'success', failsOnBase: undefined }],
+    });
+    expect(harness.openGate(taskId).type).toBe('merge');
+  });
+
+  test('several inherited failures are all named in the waiting reason', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      checks: 'failing',
+      checkRuns: ['a', 'b', 'c'].map((name) => ({ ...INHERITED, name })),
+    });
+    expect(harness.task(taskId).stageReason).toBe('“a”, “b” and “c” fail on the base branch too');
+  });
+
+  test('a check that fails only on the pull request is fixed, and the prompt says the inherited one is not the agent’s', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      base: 'main',
+      checks: 'failing',
+      checkRuns: [INHERITED, { name: 'lint', status: 'failure', required: true, url: 'https://ci/lint' }],
+    });
+    const prompt = harness.activeRun(taskId).prompt;
+    expect(prompt).toContain('  - lint https://ci/lint');
+    expect(prompt).not.toContain('  - Workers Builds');
+    expect(prompt).toContain(
+      '- These checks fail on `main` too, so no change here can clear them: leave them alone. Workers Builds: superwall-docs.'
+    );
+    expect(harness.task(taskId).fixFingerprints?.at(-1)?.signature).toBe('check:lint');
+  });
+
+  test('an inherited failure the base no longer has goes to the agent', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, { checks: 'failing', checkRuns: [INHERITED] });
+    expect(harness.task(taskId).stage).toBe('shipping');
+    record(harness, taskId, { checks: 'failing', checkRuns: [{ ...INHERITED, failsOnBase: undefined }] });
+    expect(harness.task(taskId).stage).toBe('fixing');
+  });
+
+  test('an optional check that fails on the base too does not hold the merge gate once the required ones pass', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      checks: 'failing',
+      checkRuns: [
+        { ...INHERITED, required: false },
+        { name: 'build', status: 'success', required: true, url: null },
+      ],
+    });
+    expect(harness.openGate(taskId).type).toBe('merge');
+  });
+
+  test('a required check that fails on the base too closes an open merge gate on the same head', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, { base: 'main' });
+    expect(harness.openGate(taskId).type).toBe('merge');
+    record(harness, taskId, { base: 'main', checks: 'failing', checkRuns: [INHERITED] });
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: '“Workers Builds: superwall-docs” fails on main too',
+      fixRounds: 0,
+    });
+  });
+
+  test('an optional check that fails on the base too keeps an open merge gate', () => {
+    const { harness, taskId } = shipping();
+    const build = { name: 'build', status: 'success' as const, required: true, url: null };
+    record(harness, taskId, { checks: 'passing', checkRuns: [build] });
+    const gate = harness.openGate(taskId);
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, { ...INHERITED, required: false }] });
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+
+  test('an optional inherited failure keeps an open merge gate while a late required check runs', () => {
+    const { harness, taskId } = shipping();
+    const build = { name: 'build', status: 'success' as const, required: true, url: null };
+    const optional = { ...INHERITED, required: false };
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, optional] });
+    const gate = harness.openGate(taskId);
+    const late = { name: 'deploy', status: 'pending' as const, required: true, url: null };
+    record(harness, taskId, { checks: 'failing', checkRuns: [build, optional, late] });
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+
+  test('an inherited failure with no required checks known keeps the task waiting', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, {
+      checks: 'failing',
+      checkRuns: [
+        { ...INHERITED, required: null },
+        { name: 'build', status: 'success', required: null, url: null },
+      ],
+    });
+    expect(harness.task(taskId).stage).toBe('shipping');
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('a fix that leaves the head, the tree and the failure unchanged stops at once', () => {
+    const { harness, taskId } = shipping();
+    const fixOn = (treeHash: string) => {
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        treeHash,
+      });
+      pushed(harness, taskId, 'h1');
+    };
+    record(harness, taskId, { checks: 'failing', headSha: 'h0', checkRuns: [LINT] });
+    fixOn('t1');
+    record(harness, taskId, { checks: 'failing', headSha: 'h1', checkRuns: [LINT] });
+    expect(harness.task(taskId).stage).toBe('fixing');
+    fixOn('t1');
+    record(harness, taskId, { checks: 'failing', headSha: 'h1', checkRuns: [LINT] });
+    const retry = harness.task(taskId).autoRetry;
+    expect(retry?.title).toBe('Fixing is not making progress');
+    expect(retry?.detail).toContain('did not change after a fix round that changed nothing');
+    expect(harness.task(taskId).fixRounds).toBe(2);
+  });
+
+  test('a fix that changed the tree is followed by another fix when the same check still fails', () => {
+    const { harness, taskId } = shipping();
+    for (const treeHash of ['t1', 't2', 't3']) {
+      record(harness, taskId, { checks: 'failing', headSha: 'h1', checkRuns: [LINT] });
+      expect(harness.task(taskId).stage).toBe('fixing');
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        treeHash,
+      });
+      pushed(harness, taskId, 'h1');
+    }
+    expect(harness.task(taskId).fixRounds).toBe(3);
+  });
+
   test('failing reads without check names are a stall only when the fix left the tree unchanged', () => {
     const { harness, taskId } = shipping();
     const fixOn = (treeHash: string) => {
@@ -525,12 +729,13 @@ describe('watching the pull request', () => {
       if (harness.task(taskId).stage !== 'fixing') break;
       fixOn('t3');
     }
-    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Fixing is not making progress');
     expect(harness.task(taskId).fixRounds).toBe(11);
   });
 
   test('ten updates in a row that only bring comments stop the watch; retrying watches again', () => {
     const { harness, taskId } = shipping();
+    spendRetries(harness, taskId);
     for (let wake = 0; wake < 10; wake += 1) {
       record(harness, taskId, {}, [
         { ...REMARK, id: `c${wake}`, createdAt: `2026-10-02T12:00:${String(wake).padStart(2, '0')}Z` },
@@ -599,7 +804,7 @@ describe('watching the pull request', () => {
       record(harness, taskId, { checks: 'failing', headSha: `head-${round}` });
       if (harness.task(taskId).stage !== 'fixing') break;
     }
-    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Fixing is not making progress');
     expect(harness.task(taskId).stalledFixes).toBe(7);
   });
 
@@ -645,17 +850,41 @@ describe('a pull request GitHub cannot read', () => {
     failReads(harness, taskId, PULL_REQUEST_READ_FAILURE_LIMIT - 1, 'HTTP 502.');
     expect(harness.task(taskId).pullRequestReadFailures).toBe(PULL_REQUEST_READ_FAILURE_LIMIT - 1);
     expect(listOpenGates(harness.state, taskId)).toEqual([]);
+    spendRetries(harness, taskId);
     failReads(harness, taskId, 1, 'HTTP 502.');
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ type: 'failure', title: 'Could not read the pull request' });
     expect(gate.body).toBe(
-      'Shinsa failed to read pull request #42 from GitHub 8 times in a row: HTTP 502. Check it on GitHub, then retry to watch it again.'
+      'Shinsa failed to read pull request #42 from GitHub 8 times in a row: HTTP 502. Check it on GitHub, then retry to watch it again. Shinsa already retried it 10 times on its own.'
     );
     expect(harness.send({ type: 'pull_request.read_failed', taskId, detail: 'x' }).events).toEqual([]);
     record(harness, taskId, { checks: 'failing' });
     expect(harness.task(taskId).pullRequestReadFailures).toBe(0);
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     approve(harness, taskId);
+    expect(harness.task(taskId).pullRequestWatch?.stopped).toBeNull();
+  });
+
+  test('an SSO refusal stops the watch with the SSO gate on the first failure', () => {
+    const { harness, taskId } = shipping();
+    record(harness, taskId, { checks: 'pending' });
+    failReads(
+      harness,
+      taskId,
+      1,
+      'gh pr view failed: GraphQL: Resource protected by organization SAML enforcement. You must grant your OAuth token access to this organization. (repository) Authorize in your web browser: https://github.com/orgs/superwall/sso?authorization_request=ABC123'
+    );
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'failure',
+      title: 'GitHub needs SSO authorization for superwall',
+      cause: 'github_sso',
+      githubSso: {
+        organization: 'superwall',
+        url: 'https://github.com/orgs/superwall/sso?authorization_request=ABC123',
+      },
+    });
+    expect(harness.task(taskId).pullRequestWatch?.stopped).toBe('unreadable');
+    harness.send({ type: 'task.retry', taskId });
     expect(harness.task(taskId).pullRequestWatch?.stopped).toBeNull();
   });
 
@@ -674,7 +903,7 @@ describe('a pull request GitHub cannot read', () => {
     record(harness, taskId, { checks: 'pending' });
     expect(harness.task(taskId).pullRequestReadFailures).toBe(0);
     failReads(harness, taskId, PULL_REQUEST_READ_FAILURE_LIMIT, 'HTTP 502.');
-    expect(harness.openGate(taskId).title).toBe('Could not read the pull request');
+    expect(harness.task(taskId).autoRetry?.title).toBe('Could not read the pull request');
     harness.send({ type: 'task.retry', taskId });
     expect(harness.task(taskId).pullRequestReadFailures).toBe(0);
     failReads(harness, taskId, 1, 'HTTP 502.');
@@ -854,6 +1083,15 @@ describe('getting the branch to GitHub', () => {
     );
   });
 
+  test('a push step reported after the retries ran out and the failure gate opened changes nothing', () => {
+    const { harness, taskId } = approved();
+    spendRetries(harness, taskId);
+    harness.send({ type: 'effect.fail', taskId, title: 'Could not open the pull request', detail: 'auth' });
+    expect(harness.openGate(taskId).type).toBe('failure');
+    const late = { type: 'pull_request.record_step', taskId, step: { kind: 'opening' } } as const;
+    expect(harness.send(late).events).toEqual([]);
+  });
+
   test('a retry names the step, when it runs, the attempt and the error, and logs one entry', () => {
     const { harness, taskId } = approved();
     harness.send({
@@ -991,38 +1229,39 @@ describe('a pre-push hook that rejects the push', () => {
     });
   });
 
-  test('the same failure after a fix round opens a gate with the output; sending it again starts a round', () => {
+  test('the same failure after a fix round retries with the output; the retry or a message starts a round', () => {
     const { harness, taskId } = approved();
     failHook(harness, taskId);
     finishFix(harness, taskId);
     failHook(harness, taskId);
-    const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({
-      type: 'failure',
+    const retry = harness.task(taskId).autoRetry;
+    expect(retry).toMatchObject({
+      status: 'armed',
       cause: 'push_hook',
       title: 'The pre-push hook failed again',
     });
-    expect(gate.body).toContain('- test/a.test.ts › adds');
-    expect(gate.body).toContain(`\`\`\`\n${HOOK_OUTPUT}\n\`\`\``);
-    expect(gate.body).toContain('Shinsa never pushes without the hook.');
+    expect(retry?.detail).toContain('- test/a.test.ts › adds');
+    expect(retry?.detail).toContain(`\`\`\`\n${HOOK_OUTPUT}\n\`\`\``);
+    expect(retry?.detail).toContain('Shinsa never pushes without the hook.');
     expect(harness.task(taskId).stageReason).toBe('the pre-push hook failed again');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     expect(
       harness.send({ type: 'pull_request.record_step', taskId, step: { kind: 'opening' } }).events
     ).toEqual([]);
 
-    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    fireRetry(harness, taskId);
     expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'hook', fixRounds: 1 });
     expect(harness.activeRun(taskId).prompt).toContain(HOOK_OUTPUT);
 
     finishFix(harness, taskId);
     failHook(harness, taskId);
-    harness.send({
-      type: 'gate.answer',
-      gateId: harness.openGate(taskId).id,
-      decision: 'reply',
-      response: 'Skip the flaky snapshot test',
-    });
+    harness.send({ type: 'task.retry', taskId });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'hook', autoRetry: null });
+
+    finishFix(harness, taskId);
+    failHook(harness, taskId);
+    harness.send({ type: 'task.message', taskId, text: 'Skip the flaky snapshot test' });
+    expect(harness.task(taskId).autoRetry).toBeNull();
     expect(harness.activeRun(taskId).prompt).toContain(
       'Guidance from the human: Skip the flaky snapshot test'
     );
@@ -1040,7 +1279,7 @@ describe('a pre-push hook that rejects the push', () => {
     expect(harness.activeRun(taskId).prompt).not.toContain('The failures it names');
     finishFix(harness, taskId);
     failHook(harness, taskId, []);
-    expect(harness.openGate(taskId).cause).toBe('push_hook');
+    expect(harness.task(taskId).autoRetry?.cause).toBe('push_hook');
   });
 
   test('cancelling at the gate cancels the task; a push that gets through forgets the failure', () => {
@@ -1053,6 +1292,7 @@ describe('a pre-push hook that rejects the push', () => {
     const other = approved();
     failHook(other.harness, other.taskId);
     finishFix(other.harness, other.taskId);
+    spendRetries(other.harness, other.taskId);
     failHook(other.harness, other.taskId);
     other.harness.send({
       type: 'gate.answer',
@@ -1061,6 +1301,18 @@ describe('a pre-push hook that rejects the push', () => {
       response: null,
     });
     expect(other.harness.task(other.taskId).stage).toBe('cancelled');
+  });
+
+  test('once its retries are spent the hook opens a gate, and Retry there starts a round and the count again', () => {
+    const { harness, taskId } = approved();
+    failHook(harness, taskId);
+    finishFix(harness, taskId);
+    spendRetries(harness, taskId);
+    failHook(harness, taskId);
+    const gate = harness.openGate(taskId);
+    expect(gate).toMatchObject({ type: 'failure', cause: 'push_hook' });
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'hook', autoRetry: null });
   });
 });
 

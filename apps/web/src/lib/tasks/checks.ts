@@ -4,6 +4,7 @@ import {
   type CiRun,
   describeList,
   type Evidence,
+  isInheritedCiFailure,
   isPausingGate,
   listOpenGates,
   listTaskChecks,
@@ -189,16 +190,28 @@ function describeCiMeta(run: CiRun) {
   return run.required === false ? 'Optional' : 'CI';
 }
 
-function resolveCiRow(run: CiRun): CheckRow {
+function resolveCiState(run: CiRun): CheckState {
+  if (isInheritedCiFailure(run) && run.required !== true) return 'fails_on_base';
+  return CI_STATE[run.status];
+}
+
+function describeCiNote(run: CiRun, base: string | null) {
+  if (!isInheritedCiFailure(run)) return null;
+  const branch = base ?? 'the base branch';
+  if (run.required === true) return `Fails on ${branch} too, so the merge waits until it passes there`;
+  return `Fails on ${branch} too, so it does not block`;
+}
+
+function resolveCiRow(run: CiRun, base: string | null): CheckRow {
   return {
     key: `ci:${run.name}`,
     id: null,
     label: run.name,
     command: null,
-    state: CI_STATE[run.status],
+    state: resolveCiState(run),
     origin: 'ci',
     meta: describeCiMeta(run),
-    note: null,
+    note: describeCiNote(run, base),
     detail: null,
     url: run.url,
     output: null,
@@ -247,7 +260,11 @@ function resolveCiStage(task: Task): CheckStage | null {
   if (!pullRequest) return null;
   const runs = pullRequest.checkRuns ?? [];
   if (runs.length === 0 && pullRequest.checks === 'none') return null;
-  const stage = createStage('ci', runs.map(resolveCiRow), CI_FALLBACK[pullRequest.checks]);
+  const stage = createStage(
+    'ci',
+    runs.map((run) => resolveCiRow(run, pullRequest.base ?? null)),
+    CI_FALLBACK[pullRequest.checks]
+  );
   if (runs.length > 0) return stage;
   return { ...stage, summary: CI_SUMMARY[stage.status] };
 }

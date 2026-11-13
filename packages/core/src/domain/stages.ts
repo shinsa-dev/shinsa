@@ -1,3 +1,4 @@
+import { isRetryArmed } from './retries.ts';
 import { resolveTaskShape } from './shapes.ts';
 import type { Task, TaskPriority, TaskStage } from './types.ts';
 
@@ -43,8 +44,12 @@ export function isTaskComplete(task: Task) {
   return task.stage === 'answered' || task.stage === 'merged' || task.stage === 'done';
 }
 
+export function hasMergedPullRequest(task: Pick<Task, 'pullRequest'>) {
+  return task.pullRequest?.state === 'merged';
+}
+
 export function hasArmedWait(task: Task) {
-  return task.monitor?.status === 'armed' || task.usageWait?.status === 'armed';
+  return task.monitor?.status === 'armed' || task.usageWait?.status === 'armed' || isRetryArmed(task);
 }
 
 export function isAskTask(task: Task) {

@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  parseQuickTunnelUrl,
-  type RouteSamples,
-  serializeRemoteTable,
-  summarizeCloud,
-  summarizeRoute,
-} from './remote-stats.ts';
+import { type RouteSamples, serializeRemoteTable, summarizeCloud, summarizeRoute } from './remote-stats.ts';
 
 const SAMPLES: RouteSamples = {
   label: 'Loopback',
@@ -17,18 +11,6 @@ const SAMPLES: RouteSamples = {
   requests: { '/api/health': [3, 5, 4] },
   parallel: [12, 14],
 };
-
-describe('parseQuickTunnelUrl', () => {
-  it('reads the URL cloudflared prints for a quick tunnel', () => {
-    expect(
-      parseQuickTunnelUrl('INF |  https://silly-words-here-42.trycloudflare.com                    |')
-    ).toBe('https://silly-words-here-42.trycloudflare.com');
-  });
-
-  it('returns null for any other line', () => {
-    expect(parseQuickTunnelUrl('INF Registered tunnel connection connIndex=0')).toBeNull();
-  });
-});
 
 describe('summarizeRoute', () => {
   it('summarizes each leg and keeps the last connect’s frame sizes', () => {
@@ -64,17 +46,17 @@ describe('serializeRemoteTable', () => {
   it('writes one row per leg', () => {
     const table = serializeRemoteTable({
       cloud: summarizeCloud([120, 40]),
-      tunnels: [{ label: 'Tunnel (quic)', registered: 1500, reachable: 4200 }],
+      relays: [{ label: 'Relay', connected: 42 }],
       routes: [summarizeRoute(SAMPLES)],
     });
     expect(table).toContain('| Shinsa Cloud | Connect call, first (DNS, TLS) | 120 ms |');
-    expect(table).toContain('| Tunnel (quic) | Quick tunnel name resolving (DNS) | 4200 ms |');
+    expect(table).toContain('| Relay | Machine socket connected | 42 ms |');
     expect(table).toContain('| Loopback | First state frame on the wire | 2.50 MB |');
     expect(table).toContain('| Loopback | `GET /api/health` through the channel | 4.0 ms (p95 5.0 ms) |');
   });
 
   it('leaves the cloud rows out when it was not called', () => {
-    const table = serializeRemoteTable({ cloud: null, tunnels: [], routes: [] });
+    const table = serializeRemoteTable({ cloud: null, relays: [], routes: [] });
     expect(table).not.toContain('Shinsa Cloud');
   });
 });

@@ -248,6 +248,8 @@ describe('resolveRunningVerb', () => {
     expect(resolveRunningVerb(createTask({ id: 'monitor', stage: 'building', monitor }))).toBe(
       'waiting to check in again on'
     );
+    const autoRetry = { status: 'armed' } as Task['autoRetry'];
+    expect(resolveRunningVerb(createTask({ id: 'retry', stage: 'fixing', autoRetry }))).toBe('retrying');
   });
 });
 

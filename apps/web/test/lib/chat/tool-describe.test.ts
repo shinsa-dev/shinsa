@@ -449,6 +449,10 @@ describe('resolveGroupPhrase', () => {
     expect(resolveGroupPhrase(['report_read'])).toBe('Reported what it read');
   });
 
+  it('names a lead’s report on its initiative', () => {
+    expect(resolveGroupPhrase(['report_initiative'])).toBe('Reported on the initiative');
+  });
+
   it('counts each kind of step in the order it first appeared', () => {
     expect(resolveGroupPhrase(['command', 'read', 'command', 'read', 'command'])).toBe(
       'Ran 3 commands and read 2 files'

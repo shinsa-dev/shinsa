@@ -13,12 +13,12 @@ import {
   FileSystem,
   Layer,
   type PlatformError,
-  Stream,
+  Redacted,
 } from 'effect';
-import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse } from 'effect/http';
-import { ChildProcess, ChildProcessSpawner } from 'effect/process';
+import { FetchHttpClient, HttpBody, HttpClient } from 'effect/http';
 import { EngineConfig } from '../../apps/engine/src/config/service.ts';
-import { REMOTE_FILE } from '../../apps/engine/src/remote/index.ts';
+import { RemoteOrigin } from '../../apps/engine/src/remote/client/schema.ts';
+import { REMOTE_FILE, RelayConnector, RelayConnectorLayer } from '../../apps/engine/src/remote/index.ts';
 import { resolveStateVersion } from '../../apps/engine/src/store/index.ts';
 import { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import { openEventLog } from '../../apps/engine/test/helpers/event-log.ts';
@@ -33,37 +33,32 @@ import {
   REMOTE_CONNECT_PARAM,
   REMOTE_KEY_ALGORITHM,
   resolveInstanceConnectPath,
+  resolveRelayUrl,
   serializeBase64Url,
   serializePublicKey,
 } from '../../packages/core/src/index.ts';
+import { startLocalRelay } from '../kit/relay.ts';
 import { startRemoteMachine } from '../kit/remote.ts';
 import { startIdleServer } from '../kit/server.ts';
 import { createTranscripts } from '../kit/transcripts.ts';
 import {
   type ConnectSample,
-  parseQuickTunnelUrl,
+  type RelayStart,
   type RemoteReport,
   type RouteSamples,
   serializeRemoteTable,
   summarizeCloud,
   summarizeRoute,
-  type TunnelStart,
 } from './remote-stats.ts';
 import {
   API_PATHS,
   type BenchMachine,
-  DNS_POLL,
-  DnsAnswer,
-  HEALTH_POLL,
   INSTANCE,
+  MACHINE_TOKEN,
   MAX_BODY_BYTES,
   PARALLEL,
   PARALLEL_ROUNDS,
-  REGISTERED_LINE,
   RemoteBenchFailed,
-  TUNNEL_HOST,
-  TUNNEL_TIMEOUT,
-  TunnelNotReady,
   USER_ID,
 } from './remote/schema.ts';
 import { writeReport } from './report/write.ts';
@@ -75,8 +70,6 @@ const { values: args } = parseArgs({
     scratch: { type: 'string', default: '/tmp/shinsa-perf-remote' },
     connects: { type: 'string', default: '5' },
     requests: { type: 'string', default: '20' },
-    protocols: { type: 'string', default: 'quic,http2' },
-    cloudflared: { type: 'string', default: 'cloudflared' },
     json: { type: 'string' },
     offline: { type: 'boolean', default: false },
   },
@@ -85,7 +78,6 @@ const { values: args } = parseArgs({
 const program = Effect.gen(function* () {
   const http = yield* HttpClient.HttpClient;
   const clock = yield* Clock.Clock;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const requests = Number(args.requests);
   const connects = Number(args.connects);
@@ -132,9 +124,7 @@ const program = Effect.gen(function* () {
           version: 1,
           credentials: {
             instanceId: INSTANCE,
-            machineToken: 'bench',
-            tunnelToken: 'bench',
-            tunnelHost: TUNNEL_HOST,
+            machineToken: MACHINE_TOKEN,
             connectKey,
           },
           enabled: true,
@@ -169,7 +159,7 @@ const program = Effect.gen(function* () {
       startRemoteMachine({
         engine,
         config,
-        refusal: 'The bench runs its own tunnel.',
+        refusal: 'The bench runs its own relay.',
         localUrl: 'http://127.0.0.1',
         version: 'bench',
         maxBodyBytes: MAX_BODY_BYTES,
@@ -206,86 +196,26 @@ const program = Effect.gen(function* () {
     return summarizeCloud(samples);
   });
 
-  const awaitReachable = Effect.fn('RemoteBench.awaitReachable')(function* (url: string, started: bigint) {
-    const { hostname } = new URL(url);
-    const remaining = Effect.map(elapsedSince(started), (spent) =>
-      Duration.subtract(TUNNEL_TIMEOUT, Duration.millis(spent))
+  const startRelay = Effect.fn('RemoteBench.startRelay')(function* (port: number) {
+    const relay = yield* Effect.acquireRelease(Effect.sync(startLocalRelay), (running) =>
+      Effect.promise(running.stop)
     );
-    const published = http
-      .get(`https://cloudflare-dns.com/dns-query?name=${hostname}&type=A`, {
-        headers: { accept: 'application/dns-json' },
-      })
-      .pipe(
-        Effect.flatMap(HttpClientResponse.schemaBodyJson(DnsAnswer)),
-        Effect.map((answer) => (answer.Answer?.length ?? 0) > 0)
-      );
-    yield* published.pipe(
-      Effect.repeat({ schedule: DNS_POLL, until: (found) => found }),
-      Effect.timeoutOrElse({
-        duration: yield* remaining,
-        orElse: () => Effect.fail(new TunnelNotReady({ message: `${hostname} was never published.` })),
-      })
-    );
-    const healthy = HttpClient.filterStatusOk(http)
-      .get(`${url}/health`)
-      .pipe(
-        Effect.as(true),
-        Effect.orElseSucceed(() => false)
-      );
-    yield* healthy.pipe(
-      Effect.repeat({ schedule: HEALTH_POLL, until: (ok) => ok }),
-      Effect.timeoutOrElse({
-        duration: yield* remaining,
-        orElse: () => Effect.fail(new TunnelNotReady({ message: `${url} never answered /health.` })),
-      })
-    );
-  });
-
-  const startTunnel = Effect.fn('RemoteBench.startTunnel')(function* (port: number, protocol: string) {
-    const started = yield* Clock.currentTimeNanos;
-    const tunnel = yield* spawner
-      .spawn(
-        ChildProcess.make(
-          args.cloudflared,
-          ['tunnel', '--no-autoupdate', '--protocol', protocol, '--url', `http://127.0.0.1:${port}`],
-          { stdin: 'ignore', stdout: 'ignore', stderr: 'pipe' }
-        )
+    const [took] = yield* Effect.timed(
+      Effect.gen(function* () {
+        const connector = yield* RelayConnector;
+        yield* connector
+          .open({
+            instanceId: INSTANCE,
+            machineToken: Redacted.make(MACHINE_TOKEN),
+            localUrl: `http://127.0.0.1:${port}`,
+          })
+          .pipe(Effect.mapError((error) => new RemoteBenchFailed({ message: error.message })));
+      }).pipe(
+        Effect.provide(RelayConnectorLayer.pipe(Layer.provide(Layer.succeed(RemoteOrigin, relay.origin))))
       )
-      .pipe(Effect.mapError((error) => new RemoteBenchFailed({ message: error.message })));
-    const address = yield* Deferred.make<string>();
-    const registered = yield* Deferred.make<number>();
-    const readLine = Effect.fn('RemoteBench.readTunnelLine')(function* (line: string) {
-      const found = parseQuickTunnelUrl(line);
-      if (found) yield* Deferred.succeed(address, found);
-      if (line.includes(REGISTERED_LINE)) yield* Deferred.succeed(registered, yield* elapsedSince(started));
-    });
-    yield* tunnel.stderr.pipe(
-      Stream.decodeText(),
-      Stream.splitLines,
-      Stream.runForEach(readLine),
-      Effect.ignore,
-      Effect.forkScoped
     );
-    const url = yield* Deferred.await(address).pipe(
-      Effect.timeoutOrElse({
-        duration: TUNNEL_TIMEOUT,
-        orElse: () =>
-          Effect.fail(new TunnelNotReady({ message: 'cloudflared printed no quick tunnel URL.' })),
-      })
-    );
-    const registeredMs = yield* Deferred.await(registered).pipe(
-      Effect.timeoutOrElse({
-        duration: TUNNEL_TIMEOUT,
-        orElse: () => Effect.fail(new TunnelNotReady({ message: 'cloudflared registered no connection.' })),
-      })
-    );
-    yield* awaitReachable(url, started);
-    const start: TunnelStart = {
-      label: `Tunnel (${protocol})`,
-      registered: registeredMs,
-      reachable: yield* elapsedSince(started),
-    };
-    return { url, start };
+    const start: RelayStart = { label: 'Relay', connected: Duration.toMillis(took) };
+    return { relay, start };
   });
 
   const awaitFirstState = (channel: RemoteChannel) =>
@@ -365,16 +295,13 @@ const program = Effect.gen(function* () {
     label: string,
     base: string,
     local: boolean,
-    machine: BenchMachine
+    machine: BenchMachine,
+    askHealth: Effect.Effect<unknown, RemoteBenchFailed>
   ) {
-    const httpBase = base.replace(/^ws/, 'http');
     const health: number[] = [];
     for (let index = 0; index < requests; index += 1) {
       const started = yield* Clock.currentTimeNanos;
-      const response = yield* http.get(`${httpBase}/health`, {
-        headers: local ? { 'cf-connecting-ip': '127.0.0.1' } : {},
-      });
-      yield* response.arrayBuffer;
+      yield* askHealth;
       health.push(yield* elapsedSince(started));
     }
     const connectSamples: ConnectSample[] = [];
@@ -416,22 +343,36 @@ const program = Effect.gen(function* () {
   const target: BenchMachine = { connectKey, device, machineKey: yield* machine.resolveMachineKey };
   yield* Console.error(`Engine up on :${machine.port} after ${Math.round(machine.bootMs)} ms.`);
   const cloud: RemoteReport['cloud'] = args.offline ? null : yield* timeCloudConnect();
-  const routes = [yield* measureRoute('Loopback', `ws://127.0.0.1:${machine.port}`, true, target)];
-  const tunnels: TunnelStart[] = [];
-  const protocols = args.offline ? [] : args.protocols.split(',').filter(Boolean);
-  for (const protocol of protocols) {
-    const tunnelRoute = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const tunnel = yield* startTunnel(machine.port, protocol);
-        tunnels.push(tunnel.start);
-        return yield* measureRoute(tunnel.start.label, tunnel.url.replace(/^https/, 'wss'), false, target);
-      })
+  const loopbackHealth = http
+    .get(`http://127.0.0.1:${machine.port}/health`, { headers: { 'cf-connecting-ip': '127.0.0.1' } })
+    .pipe(
+      Effect.flatMap((response) => response.arrayBuffer),
+      Effect.mapError((error) => new RemoteBenchFailed({ message: error.message }))
     );
-    routes.push(tunnelRoute);
-  }
+  const routes = [
+    yield* measureRoute('Loopback', `ws://127.0.0.1:${machine.port}`, true, target, loopbackHealth),
+  ];
+  const relayed = yield* Effect.scoped(
+    Effect.gen(function* () {
+      const { relay, start } = yield* startRelay(machine.port);
+      const relayHealth = Effect.tryPromise({
+        try: async () => (await relay.request(INSTANCE, '/health')).arrayBuffer(),
+        catch: (error) => new RemoteBenchFailed({ message: String(error) }),
+      });
+      const route = yield* measureRoute(
+        start.label,
+        resolveRelayUrl(INSTANCE, relay.origin),
+        false,
+        target,
+        relayHealth
+      );
+      return { start, route };
+    })
+  );
+  routes.push(relayed.route);
   const report: RemoteReport & { bootMs: number } = {
     cloud,
-    tunnels,
+    relays: [relayed.start],
     routes: routes.map(summarizeRoute),
     bootMs: machine.bootMs,
   };

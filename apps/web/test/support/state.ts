@@ -3,6 +3,7 @@ import {
   createState,
   type Evidence,
   type Gate,
+  type Initiative,
   type Project,
   type Repo,
   type Run,
@@ -133,6 +134,18 @@ export function createLesson(overrides: Partial<AutopilotLesson> & { id: string 
   };
 }
 
+export function createInitiative(overrides: Partial<Initiative> & { id: string }): Initiative {
+  return {
+    name: `Initiative ${overrides.id}`,
+    description: '',
+    phases: [],
+    leadTaskId: null,
+    createdAt: NOW - 60_000,
+    updatedAt: NOW - 60_000,
+    ...overrides,
+  };
+}
+
 export function createShinsaState(parts: {
   tasks?: Task[];
   gates?: Gate[];
@@ -140,6 +153,7 @@ export function createShinsaState(parts: {
   repos?: Repo[];
   projects?: Project[];
   evidence?: Evidence[];
+  initiatives?: Initiative[];
   patch?: Partial<ShinsaState>;
 }): ShinsaState {
   return {
@@ -150,6 +164,7 @@ export function createShinsaState(parts: {
     repos: byId(parts.repos),
     projects: byId(parts.projects),
     evidence: byId(parts.evidence),
+    initiatives: byId(parts.initiatives),
     ...parts.patch,
   };
 }

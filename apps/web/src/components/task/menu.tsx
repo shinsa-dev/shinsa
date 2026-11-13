@@ -6,6 +6,7 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { AccountSubmenu } from '@/components/accounts/account-items.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
+import { InitiativeItems } from '@/components/initiatives/task-items.tsx';
 import { TaskActionItems } from '@/components/task/action-items.tsx';
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { useEngineCommands, useMachine } from '@/lib/connection/socket.ts';
@@ -20,6 +21,7 @@ export function TaskMenu({ state, task }: { state: ShinsaState; task: Task }) {
       <OptionsTrigger label='Task actions' />
       <DropdownMenuContent align='end' className='min-w-48'>
         <DependencyItems state={state} task={task} />
+        <InitiativeItems state={state} task={task} />
         <AccountSubmenu task={task} />
         {!isTaskSettled(task) && <DropdownMenuSeparator />}
         <TaskActionItems state={state} task={task} />

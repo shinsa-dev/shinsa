@@ -16,6 +16,8 @@ type HumanOnlyType =
   | 'task.unshare'
   | 'project.add_to_team'
   | 'project.remove_from_team'
+  | 'initiative.add_to_team'
+  | 'initiative.remove_from_team'
   | 'preview.share'
   | 'preview.unshare'
   | 'task.hand_off'
@@ -37,6 +39,8 @@ const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'task.unshare',
   'project.add_to_team',
   'project.remove_from_team',
+  'initiative.add_to_team',
+  'initiative.remove_from_team',
   'preview.share',
   'preview.unshare',
   'task.hand_off',
@@ -68,6 +72,11 @@ function quoteRunTask(state: ShinsaState, runId: string) {
   return quoteTask(state, state.runs[runId]?.taskId ?? null);
 }
 
+function quoteInitiative(state: ShinsaState, initiativeId: string) {
+  const name = state.initiatives[initiativeId]?.name;
+  return name ? quoteTitle(name) : 'an initiative';
+}
+
 function quoteSchedule(state: ShinsaState, scheduleId: string) {
   const name = state.schedules[scheduleId]?.name;
   return name ? quoteTitle(name) : 'a schedule';
@@ -81,9 +90,20 @@ const DESCRIPTIONS: Descriptions = {
   'project.remove': () => 'Removed a project',
   'focus.change': (state, command) => {
     const projectIds = command.projectIds ?? (command.projectId ? [command.projectId] : []);
+    if (command.initiativeId)
+      return `Focused on the initiative ${quoteInitiative(state, command.initiativeId)}`;
     if (projectIds.length === 0) return command.teamId ? 'Focused on a team' : 'Cleared the focus';
     const names = describeList(projectIds.map((id) => state.projects[id]?.name ?? 'a project'));
     return command.except ? `Focused on everything but ${names}` : `Focused on ${names}`;
+  },
+  'initiative.write': (_state, command) => `Changed the initiative ${quoteTitle(command.name.trim())}`,
+  'initiative.adopt_task': (state, command) => `Made an initiative from ${quoteTask(state, command.taskId)}`,
+  'task.join_initiative': (state, command) => {
+    if (!command.initiativeId) return `Took ${quoteTask(state, command.taskId)} out of its initiative`;
+    if (command.team) {
+      return `Added ${quoteTask(state, command.taskId)} to the teammate’s initiative ${quoteTitle(command.team.name)}`;
+    }
+    return `Added ${quoteTask(state, command.taskId)} to the initiative ${quoteInitiative(state, command.initiativeId)}`;
   },
   'settings.change': (_state, command) => `Changed settings: ${Object.keys(command.patch).join(', ')}`,
   'task.prioritize': (state, command) =>

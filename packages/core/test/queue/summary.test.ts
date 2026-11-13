@@ -6,6 +6,7 @@ import {
   reachReviewGate,
   reachShipping,
   registerRepo,
+  spendRetries,
   verifySetup,
 } from '../harness.ts';
 
@@ -15,6 +16,7 @@ describe('resolveQueueSummary', () => {
     const review = createTask(harness, { request: 'Review me' });
     reachReviewGate(harness, review);
     const paused = createTask(harness, { request: 'Pause me' });
+    spendRetries(harness, paused);
     harness.send({ type: 'effect.fail', taskId: paused, title: 'Broke', detail: 'x' });
     const working = createTask(harness, { request: 'Plan me' });
     const summary = resolveQueueSummary(harness.state, 0, 'http://localhost:5180');

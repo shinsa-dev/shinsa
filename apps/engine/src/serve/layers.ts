@@ -29,6 +29,8 @@ import { GitHubLayer } from '../github/layers.ts';
 import { EngineModels, ServedChangelog, ServedInstance } from '../http/schema.ts';
 import { EngineServer } from '../http/server/service.ts';
 import { resolveServerUrl } from '../http/server/url.ts';
+import { LeadWakes } from '../initiatives/service.ts';
+import { TeamMembers } from '../initiatives/team-members/service.ts';
 import {
   BUNDLE,
   createServiceRestart,
@@ -43,11 +45,11 @@ import { IdleWatch } from '../presence/idle/service.ts';
 import { MacIdle } from '../presence/mac-idle/service.ts';
 import { ProjectChanges } from '../projects/changes/service.ts';
 import {
-  createInstalledConnector,
   Handoffs,
   PlacementAsker,
   Previews,
   Remote,
+  RelayConnectorLayer,
   RemoteEdgeLayer,
   RemoteLayer,
   RemoteOrigin,
@@ -64,6 +66,7 @@ import { CurrentLogin } from '../repos/current-login/service.ts';
 import { RepoFolders } from '../repos/folders/service.ts';
 import { Roots } from '../repos/index.ts';
 import { GitHubLogins } from '../repos/login/service.ts';
+import { RepoOrigins } from '../repos/origin/service.ts';
 import { RepoRegistry } from '../repos/registry/service.ts';
 import { RepoSetup } from '../repos/setup/service.ts';
 import { ProcessLedger, ResourceMachine, ResourceMonitor } from '../resources/index.ts';
@@ -85,6 +88,7 @@ import { Slack } from '../slack/service.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES, Evidence } from '../store/index.ts';
 import { StoreLayer } from '../store/layers.ts';
 import { resolveStateVersion } from '../store/snapshot/version.ts';
+import { TaskRetry } from '../tasks/index.ts';
 import { TerminalsLayer } from '../terminals/layers.ts';
 import { ServiceRefiner } from '../terminals/refine/service.ts';
 import { Terminals } from '../terminals/service.ts';
@@ -111,7 +115,7 @@ export function createMachineLayer({
   const login = resolveLogin
     ? Layer.succeed(CurrentLogin, CurrentLogin.of({ lookup: Effect.promise(resolveLogin) }))
     : CurrentLogin.layer;
-  const repos = Layer.mergeAll(folders, RepoSetup.layer, GitHubLogins.layer);
+  const repos = Layer.mergeAll(folders, RepoSetup.layer, RepoOrigins.layer, GitHubLogins.layer);
   const stores = Layer.mergeAll(
     ConfigStore.layer,
     SecretStore.layer.pipe(Layer.provide(SecretFiles.layer)),
@@ -190,6 +194,7 @@ function createAgentsLayer(options: ShinsaOptions) {
   return Layer.mergeAll(
     RemoteQuickLayer,
     BriefingWriter.layer,
+    LeadWakes.layer,
     FeedbackDrafter.layer,
     Layer.unwrap(
       Effect.gen(function* () {
@@ -218,10 +223,8 @@ function createRemoteLayer(config: ServerConfig, options: ShinsaOptions, instanc
   );
   return remote.pipe(
     Layer.provide(
-      Layer.mergeAll(
-        options.remoteConnector ?? createInstalledConnector(config.dataDir),
-        RemoteEdgeLayer,
-        Layer.succeed(RemoteOrigin, config.remoteOrigin)
+      Layer.mergeAll(options.remoteConnector ?? RelayConnectorLayer, RemoteEdgeLayer).pipe(
+        Layer.provideMerge(Layer.succeed(RemoteOrigin, config.remoteOrigin))
       )
     )
   );
@@ -307,7 +310,8 @@ function createClocksLayer(options: ShinsaOptions) {
     WatchdogClock.layer,
     AutopilotClock.layer,
     ShareClock.layer,
-    IdleWatch.layer.pipe(Layer.provide(MacIdle.layer))
+    IdleWatch.layer.pipe(Layer.provide(MacIdle.layer)),
+    TaskRetry.layer
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -470,7 +474,7 @@ function createServeLayer(
     Layer.provideMerge(createServedLayer(options, instance, stop)),
     Layer.provideMerge(createEffectsLayer(options, instance)),
     Layer.provideMerge(createRunsLayer(options)),
-    Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer)),
+    Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer, TeamMembers.layer)),
     Layer.provideMerge(
       Layer.mergeAll(createTriageLayer(), createClocksLayer(options), createTerminalsLayer(instance))
     ),

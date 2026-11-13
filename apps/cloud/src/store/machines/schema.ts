@@ -9,8 +9,6 @@ export const Machine = Schema.Struct({
   ownerId: RemoteUserId,
   name: Schema.String,
   fingerprint: Schema.String,
-  tunnelId: Schema.String,
-  dnsRecordId: Schema.String,
   connectKey: Schema.RedactedFromValue(Schema.String),
   localUrl: Schema.NullOr(Schema.String),
   online: Schema.BooleanFromBit,
@@ -27,8 +25,6 @@ export const NewMachine = Schema.Struct({
   ownerId: RemoteUserId,
   name: Schema.String,
   fingerprint: Schema.String,
-  tunnelId: Schema.String,
-  dnsRecordId: Schema.String,
   machineTokenHash: TokenHash,
   connectKey: Schema.RedactedFromValue(Schema.String),
   features: StoredFeatures,
@@ -51,7 +47,7 @@ export interface SharedMachine {
 }
 
 export const MACHINE_COLUMNS =
-  'machines.id, machines.owner_id, machines.name, machines.fingerprint, machines.tunnel_id, machines.dns_record_id, machines.connect_key, machines.local_url, machines.online, machines.last_seen_at, machines.signing_key, machines.features, machines.created_at';
+  'machines.id, machines.owner_id, machines.name, machines.fingerprint, machines.connect_key, machines.local_url, machines.online, machines.last_seen_at, machines.signing_key, machines.features, machines.created_at';
 
 export interface MachineBeat {
   readonly localUrl: string;

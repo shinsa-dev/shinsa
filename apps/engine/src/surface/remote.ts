@@ -125,7 +125,8 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'pair'],
-    summary: 'Turn on remote access: sign in with GitHub in the browser to give this machine its tunnel.',
+    summary:
+      'Turn on remote access: sign in with GitHub in the browser to connect this machine to Shinsa Cloud.',
     humanOnly: true,
     fields: [],
     act: (client) =>
@@ -133,7 +134,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'enable'],
-    summary: 'Start the tunnel again after pausing it.',
+    summary: 'Connect to Shinsa Cloud again after pausing remote access.',
     humanOnly: true,
     fields: [],
     act: (client) =>
@@ -141,7 +142,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'disable'],
-    summary: 'Pause remote access: stop the tunnel and close every open session.',
+    summary: 'Pause remote access: disconnect from Shinsa Cloud and close every open session.',
     humanOnly: true,
     fields: [],
     act: (client) =>
@@ -149,7 +150,7 @@ export const REMOTE_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['remote', 'remove'],
-    summary: 'Remove this machine from Shinsa Cloud and forget its tunnel and devices.',
+    summary: 'Remove this machine from Shinsa Cloud and forget its devices.',
     humanOnly: true,
     fields: [],
     act: (client) =>

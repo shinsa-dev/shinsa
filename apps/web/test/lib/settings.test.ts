@@ -435,6 +435,28 @@ describe('models per role', () => {
     });
   });
 
+  it('puts Automatic first, on its own and with no hint, only when asked to', () => {
+    const items = listAgentModelItems(providers, 'claude:opus', true);
+    expect(items[0]).toEqual({ value: 'claude:auto', label: 'Automatic', icon: 'IconArrowSplitRight' });
+    expect(items.filter((item) => item.value.endsWith(':auto'))).toHaveLength(1);
+    expect(listAgentModelItems(providers, 'claude:opus').some((item) => item.value === 'claude:auto')).toBe(
+      false
+    );
+  });
+
+  it('offers Automatic to every group, quick jobs too', () => {
+    for (const group of AGENT_GROUPS) {
+      expect(listGroupModelItems(providers, settings(), group, true)[0]?.label).toBe('Automatic');
+      expect(
+        listGroupModelItems(providers, settings(), group).some((item) => item.label === 'Automatic')
+      ).toBe(false);
+    }
+  });
+
+  it('shows a role on Automatic as auto, not as the model it falls back to', () => {
+    expect(resolveAgentModelValue(settings({ agentModels: { agent: 'auto' } }), 'agent')).toBe('claude:auto');
+  });
+
   it('patches a role’s provider and model together, and only that role', () => {
     const current = settings({ agentProviders: { answerer: 'codex' }, agentModels: { agent: 'sonnet' } });
     expect(resolveAgentModelPatch(current, 'reviewer', 'codex:gpt-5.6-sol')).toEqual({

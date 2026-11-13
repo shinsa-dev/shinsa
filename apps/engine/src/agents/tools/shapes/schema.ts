@@ -1,6 +1,7 @@
 import {
   COMPOSABLE_STEPS,
   type DeliveringStep,
+  INITIATIVE_LIMITS,
   PROPOSAL_RECOMMENDATIONS,
   SCHEDULE_LIMITS,
   SHAPE_LIMITS,
@@ -127,6 +128,21 @@ export const SHAPE_TOOL_SPECS = {
         },
       },
       required: ['summary'],
+    },
+  },
+  report_initiative: {
+    name: 'report_initiative',
+    description:
+      'End a turn leading an initiative, then stop without restating it: where the initiative stands and what comes next. The human reads it at the top of the initiative’s overview. Ask what only the human can settle with `ask` before, never here.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        narrative: limitedText(
+          'Where the initiative stands now and what comes next, in markdown, naming tasks by their links.',
+          INITIATIVE_LIMITS.narrative
+        ),
+      },
+      required: ['narrative'],
     },
   },
   reshape_task: {

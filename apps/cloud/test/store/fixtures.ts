@@ -33,8 +33,6 @@ export const seedMachine = (id: InstanceId, userId: RemoteUserId, token = 'a') =
       ownerId: userId,
       name: `Machine ${id}`,
       fingerprint: `fp-${id}`,
-      tunnelId: `tunnel-${id}`,
-      dnsRecordId: `record-${id}`,
       machineTokenHash: hashOf(token),
       connectKey: Redacted.make(`connect-${id}`),
       features: [...MACHINE_FEATURES],

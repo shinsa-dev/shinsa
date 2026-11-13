@@ -65,7 +65,7 @@ src/
 │                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
 │                        tasks, and BundleMark, its count beside a queue row's name, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
-│                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
+│                        frame, the wait, usage-wait, retry (an armed automatic retry: its reason, countdown, Retry now and Stop retrying), setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
 │                        steps left after the merge), the plan's
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
@@ -159,6 +159,14 @@ src/
     │                    components/task/share-dialog.tsx is Share task (Hand off is its last Share as choice, lib/share/handoff.ts)
     │                    and Stop sharing's confirmation,
     │                    components/task/sharing-banner.tsx the banner a shared task's page shows
+    ├── initiatives/     Initiatives, each a lead task (docs/engine.md → Initiatives): view.ts (the sheet's sections and
+    │                    progress), draft.ts (the Edit initiative draft and its phases), membership.ts
+    │                    (Add to an initiative, Phase and Take out of the initiative choices, the open initiatives),
+    │                    lead.ts (the initiative a task leads, its report); the pieces are components/initiatives/
+    │                    (sheet.tsx: the lead task's Overview, lead.tsx: Where it stands, write-dialog.tsx,
+    │                    task-items.tsx: the task's initiative fact and menu items) and ⌘K's lib/command/initiatives.ts;
+    │                    Home and the queue list the members themselves and leave the lead out, grouping two or more
+    │                    of one initiative or one bundle in a section under one small row that opens the group's task (lib/queue.ts)
     ├── teams/           Teams (docs/engine.md → Teams): settings.ts (Settings → Teams' words, the new team draft,
     │                    the shared projects dropdown's label, who can reach this machine), admit.ts (adding this
     │                    browser to a teammate's machine with the team key), join.ts (the join page's fragment and the
@@ -306,7 +314,7 @@ src/
     │                    evidence), runs.ts (a test or check run's commands, outcomes and counts), layout.ts (the round's items grouped by kind, comparisons as one item, a check's pieces as one item, the viewer's images
     │                    numbered item by item with their parts, the count of items by kind, the folder on disk), texts.ts (the bounded text cache; /ui records its samples in it), prefetch.ts (images and texts
     │                    read ahead with the task)
-    ├── overview/        Now card titles, progress steps, activity glyphs and check details, waits,
+    ├── overview/        Now card titles, progress steps, activity glyphs and check details, waits, automatic retries (retry.ts),
     │                    questions, verdicts, plan versions, plan parameters, the operation gate and its notes
     ├── tasks/           prefetch.ts (the task under the pointer or highlighted in ⌘K, the queue's tasks read at idle),
     │                    checks.ts (the Checks list: the task's checks and the repository's baseline with their latest

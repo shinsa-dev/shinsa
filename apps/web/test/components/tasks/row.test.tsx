@@ -73,6 +73,7 @@ describe('the row context menu', () => {
       'Wait for another task',
       'Stop waiting',
       'Stack on another task',
+      'Make an initiative from this task',
       'Copy branch name',
       'Open in editor',
       'Open a terminal',
@@ -123,7 +124,12 @@ describe('the row context menu', () => {
   it('offers only Open task, forking and sharing on a settled task without a branch', async () => {
     renderRow(findTask('shipped'));
     await openContextMenu();
-    expect(menuItems()).toEqual(['Open task', 'Fork into a new task', 'Share task']);
+    expect(menuItems()).toEqual([
+      'Open task',
+      'Make an initiative from this task',
+      'Fork into a new task',
+      'Share task',
+    ]);
   });
 });
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Repo, Round, Settings, Task } from '@shinsa/core';
+import type { CiRun, Repo, Round, Settings, Task } from '@shinsa/core';
 import {
   type PullRequestDetails,
   resolveCheckRuns,
@@ -12,7 +12,7 @@ import {
   serializePullRequest,
   serializePullRequestTitle,
 } from '../../src/github/index.ts';
-import type { Attachment } from '../../src/github/pulls/schema.ts';
+import type { Attachment, ContextNode } from '../../src/github/pulls/schema.ts';
 import { PullRequests } from '../../src/github/pulls/service.ts';
 import { runGit } from '../helpers/git.ts';
 import { createGitRepo, createTempDir, git, overrideEnv } from '../helpers/index.ts';
@@ -281,6 +281,122 @@ describe('serializePullRequest', () => {
       mergeQueue: { state: 'awaiting_checks', position: 2 },
       queueRemoval: 'failed checks',
     });
+  });
+
+  test('a failing check that also fails on the base branch’s head is marked as failing on the base', () => {
+    const run = (name: string, conclusion: string) => ({
+      __typename: 'CheckRun',
+      name,
+      status: 'COMPLETED',
+      conclusion,
+    });
+    const rollup = (nodes: ContextNode[]) => ({ statusCheckRollup: { contexts: { nodes } } });
+    const details = createDetails({
+      commits: {
+        nodes: [
+          {
+            commit: rollup([
+              run('Workers Builds: docs', 'FAILURE'),
+              run('lint', 'FAILURE'),
+              run('build', 'SUCCESS'),
+              { __typename: 'StatusContext', context: 'deploy', state: 'ERROR' },
+            ]),
+          },
+        ],
+      },
+      baseRef: {
+        target: {
+          history: {
+            nodes: [
+              rollup([
+                run('Workers Builds: docs', 'FAILURE'),
+                run('lint', 'SUCCESS'),
+                run('build', 'FAILURE'),
+                { __typename: 'StatusContext', context: 'deploy', state: 'FAILURE' },
+              ]),
+            ],
+          },
+        },
+      },
+    });
+    expect(serializePullRequest(view, details, 5).checkRuns).toEqual([
+      { name: 'Workers Builds: docs', status: 'failure', required: null, url: null, failsOnBase: true },
+      { name: 'lint', status: 'failure', required: null, url: null },
+      { name: 'build', status: 'success', required: null, url: null },
+      { name: 'deploy', status: 'failure', required: null, url: null, failsOnBase: true },
+    ]);
+  });
+
+  test('without a base commit or its checks no run is marked as failing on the base', () => {
+    const failing = {
+      nodes: [
+        {
+          commit: {
+            statusCheckRollup: {
+              contexts: {
+                nodes: [{ __typename: 'CheckRun', name: 'ci', status: 'COMPLETED', conclusion: 'FAILURE' }],
+              },
+            },
+          },
+        },
+      ],
+    };
+    const expected: CiRun[] = [{ name: 'ci', status: 'failure', required: null, url: null }];
+    for (const baseRef of [
+      undefined,
+      null,
+      { target: null },
+      { target: {} },
+      { target: { history: { nodes: [] } } },
+      { target: { history: { nodes: [{ statusCheckRollup: null }] } } },
+    ]) {
+      expect(serializePullRequest(view, createDetails({ commits: failing, baseRef }), 5).checkRuns).toEqual(
+        expected
+      );
+    }
+  });
+
+  test('a check still running on the base’s newest commit takes its result from the newest commit that finished it', () => {
+    const run = (name: string, status: string, conclusion: string | null) => ({
+      __typename: 'CheckRun',
+      name,
+      status,
+      conclusion,
+    });
+    const rollup = (nodes: ContextNode[]) => ({ statusCheckRollup: { contexts: { nodes } } });
+    const details = createDetails({
+      commits: {
+        nodes: [
+          {
+            commit: rollup([
+              run('Workers Builds: docs', 'COMPLETED', 'FAILURE'),
+              run('lint', 'COMPLETED', 'FAILURE'),
+              run('e2e', 'COMPLETED', 'FAILURE'),
+            ]),
+          },
+        ],
+      },
+      baseRef: {
+        target: {
+          history: {
+            nodes: [
+              rollup([
+                run('Workers Builds: docs', 'IN_PROGRESS', null),
+                run('lint', 'IN_PROGRESS', null),
+                run('e2e', 'IN_PROGRESS', null),
+              ]),
+              rollup([run('Workers Builds: docs', 'COMPLETED', 'FAILURE'), run('lint', 'QUEUED', null)]),
+              rollup([run('lint', 'COMPLETED', 'SUCCESS'), run('e2e', 'COMPLETED', 'FAILURE')]),
+            ],
+          },
+        },
+      },
+    });
+    expect(serializePullRequest(view, details, 5).checkRuns).toEqual([
+      { name: 'Workers Builds: docs', status: 'failure', required: null, url: null, failsOnBase: true },
+      { name: 'lint', status: 'failure', required: null, url: null },
+      { name: 'e2e', status: 'failure', required: null, url: null, failsOnBase: true },
+    ]);
   });
 
   test('auto-merge counts as a queue, a written reason is kept as it is, and an unknown queue state is no queue', () => {

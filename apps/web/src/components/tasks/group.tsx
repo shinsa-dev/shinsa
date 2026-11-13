@@ -18,7 +18,7 @@ export function TaskGroupSection({
   columns = TASK_LIST_COLUMNS,
 }: {
   persistId: DisclosureId;
-  group: TaskGroup;
+  group: Pick<TaskGroup, 'title' | 'icon' | 'tone'>;
   entries: ChainEntry[];
   state: ShinsaState;
   defaultOpen: boolean;

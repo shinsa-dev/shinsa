@@ -6,6 +6,7 @@ import {
   MAX_TEAM_MEMBERS,
   type MachineCredentials,
   REMOTE_CHANNEL_PATH,
+  resolveRelayPath,
   REMOTE_PATHS,
   type RemoteMember,
   type RemoteTeam,
@@ -219,6 +220,15 @@ describe('the owner and the members', () => {
     expect(await readCode(full)).toBe('members_full');
   });
 
+  test('a teammate’s machine that has not joined the relay is listed offline, so no one keeps reaching for it', async () => {
+    const { harness, kai, studio, laptop } = await joinedTeam();
+    await heartbeat(harness, studio, 'http://127.0.0.1:7446', ['sealed-pairing']);
+    await heartbeat(harness, laptop);
+    const [seen] = await listTeams(harness, kai);
+    const online = Object.fromEntries(seen?.machines.map((machine) => [machine.id, machine.online]) ?? []);
+    expect(online).toEqual({ [studio.instanceId]: false, [laptop.instanceId]: true });
+  });
+
   test('declining a request drops it, so it can no longer be accepted', async () => {
     const { harness, mona, kai, studio, team, invite } = await startTeam();
     await joinTeam(harness, kai, invite);
@@ -292,8 +302,8 @@ describe('team connect tokens', () => {
       await harness.post(resolveTeamConnectPath(team.id), { instanceId: studio.instanceId }, { session: kai })
     );
     const url = new URL(answer.url);
-    expect(url.host).toBe(`t-${studio.instanceId}.shinsa.dev`);
-    expect(url.pathname).toBe('/team');
+    expect(url.host).toBe('app.shinsa.dev');
+    expect(url.pathname).toBe(`/__relay/${studio.instanceId}/team`);
     const token = url.searchParams.get('token') ?? '';
     const teamChannel = { instanceId: studio.instanceId, channel: 'team' } as const;
     const claim = await Effect.runPromise(
@@ -329,7 +339,7 @@ describe('team connect tokens', () => {
       await act(harness, laptop, team.id, 'connect/remote', { instanceId: studio.instanceId })
     );
     const url = new URL(answer.url);
-    expect(url.pathname).toBe(REMOTE_CHANNEL_PATH);
+    expect(url.pathname).toBe(`${resolveRelayPath(studio.instanceId)}${REMOTE_CHANNEL_PATH}`);
     const token = url.searchParams.get('token') ?? '';
     const remote = { instanceId: studio.instanceId, channel: 'remote' } as const;
     expect(

@@ -314,6 +314,54 @@ describe('projects and focus', () => {
     expect((await runSpec(older, ['focus', 'show'])).text).toBe('Focused on Home.');
   });
 
+  test('shows an initiative focus by the initiative’s name, or says it is gone', async () => {
+    const focus = { projectIds: [], except: false, teamId: null, initiativeId: 'init-1', until: null };
+    const initiatives = { initiatives: [{ id: 'init-1', name: 'Chat split' }] };
+    const fake = createFakeClient({
+      '/api/projects': { ...PROJECTS, focus },
+      '/api/initiatives': initiatives,
+    });
+    expect((await runSpec(fake, ['focus', 'show'])).text).toBe('Focused on the initiative Chat split.');
+    const gone = createFakeClient({
+      '/api/projects': { ...PROJECTS, focus },
+      '/api/initiatives': { initiatives: [] },
+    });
+    expect((await runSpec(gone, ['focus', 'show'])).text).toBe('Focused on the initiative that is gone.');
+  });
+
+  test('focuses on an initiative found by name, for a while or until cleared', async () => {
+    setSystemTime(new Date(1_000));
+    try {
+      const fake = createFakeClient({
+        '/api/initiatives': { initiatives: [{ id: 'init-1', name: 'Chat split' }] },
+      });
+      expect((await runSpec(fake, ['focus', 'initiative', 'chat split', '--hours', '2'])).text).toBe(
+        'Focused.'
+      );
+      await runSpec(fake, ['focus', 'initiative', 'init-1']);
+      expect(fake.sent).toEqual([
+        {
+          type: 'focus.change',
+          projectId: null,
+          projectIds: [],
+          except: false,
+          initiativeId: 'init-1',
+          until: 1_000 + 2 * HOUR_MS,
+        },
+        {
+          type: 'focus.change',
+          projectId: null,
+          projectIds: [],
+          except: false,
+          initiativeId: 'init-1',
+          until: null,
+        },
+      ]);
+    } finally {
+      setSystemTime();
+    }
+  });
+
   test('records a span you were away', async () => {
     const fake = createFakeClient({});
     expect((await runSpec(fake, ['away', 'record', '--from', '1000', '--to', '5000'])).text).toBe(

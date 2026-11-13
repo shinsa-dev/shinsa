@@ -48,10 +48,10 @@ async function settle() {
   await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
-function renderAgents(settings: Settings = createSettings()) {
+function renderAgents(settings: Settings = createSettings(), automatic = false) {
   return render(
     <TooltipProvider>
-      <AgentSettings settings={settings} />
+      <AgentSettings settings={settings} automatic={automatic} />
     </TooltipProvider>
   );
 }
@@ -67,6 +67,33 @@ async function choose(label: string, option: string | RegExp) {
 }
 
 describe('Settings → Agents → Models', () => {
+  it('offers Automatic on its own above the providers, for every group, and picking it saves the auto model', async () => {
+    renderAgents(createSettings(), true);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model for quick jobs' }));
+    await settle();
+    const quick = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(quick).getByRole('option', { name: 'Automatic' })).toBeTruthy();
+    fireEvent.keyDown(quick, { key: 'Escape' });
+    await settle();
+    await choose('Model for task agents', 'Automatic');
+    const sent = listSentCommands().at(-1) as { patch: Partial<Settings> };
+    expect(sent.patch.agentModels).toMatchObject({ agent: 'auto', reviewer: 'auto', answerer: 'auto' });
+  });
+
+  it('shows Automatic as the chosen model', () => {
+    const auto = { ...createSettings(), agentModels: { agent: 'auto', reviewer: 'auto', answerer: 'auto' } };
+    renderAgents(auto, true);
+    expect(screen.getByRole('combobox', { name: 'Model for task agents' }).textContent).toBe('Automatic');
+  });
+
+  it('offers no Automatic when the engine cannot route', async () => {
+    renderAgents(createSettings(), false);
+    fireEvent.click(screen.getByRole('combobox', { name: 'Model for task agents' }));
+    await settle();
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(list).queryByRole('option', { name: /Automatic/ })).toBeNull();
+  });
+
   it('has two groups, task agents on Opus and quick jobs on Sonnet, each saying what it holds', () => {
     renderAgents();
     expect(screen.getByRole('heading', { name: 'Models' })).toBeTruthy();

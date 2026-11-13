@@ -37,6 +37,7 @@ import {
   resolveReply,
   reachShipping,
   registerRepo,
+  spendRetries,
   shipAndMerge,
 } from '../harness.ts';
 
@@ -966,6 +967,7 @@ describe('what each round keeps', () => {
     harness.send({ type: 'task.message', taskId, text: 'Round two note.' });
     const prompt = harness.activeRun(taskId).prompt ?? '';
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({ round: 2, text: 'Sent instructions' });
+    spendRetries(harness, taskId);
     harness.send({ type: 'run.end', runId: harness.activeRun(taskId).id, outcome: 'failed', summary: 'x' });
     harness.send({ type: 'run.end', runId: harness.activeRun(taskId).id, outcome: 'failed', summary: 'x' });
     expect(harness.openGate(taskId)).toMatchObject({ type: 'failure', round: 2 });

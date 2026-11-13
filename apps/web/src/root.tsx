@@ -6,6 +6,7 @@ import * as React from 'react';
 import { SignInDialog } from '@/components/accounts/sign-in-dialog.tsx';
 import { CommandMenu } from '@/components/command/menu.tsx';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
+import { InitiativeDialog } from '@/components/initiatives/write-dialog.tsx';
 import { AppFrame } from '@/components/layout/frame.tsx';
 import { OnboardingShell } from '@/components/onboarding/shell.tsx';
 import { PreviewShareDialog } from '@/components/services/preview-share-dialog.tsx';
@@ -203,6 +204,7 @@ function AppContent({ route }: { route: PageRoute }) {
         <HandoffRemoveConfirm />
         <PreviewShareDialog />
         <DuplicateDialog />
+        <InitiativeDialog />
       </ErrorBoundary>
     </>
   );

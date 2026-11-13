@@ -368,7 +368,8 @@ function listWorkflowChoices(settings: Settings): Command[] {
 function listGroupChoices(
   settings: Settings,
   providers: AgentProviderInfo[],
-  snapshot: AccountsSnapshot | null
+  snapshot: AccountsSnapshot | null,
+  automatic: boolean
 ) {
   return AGENT_GROUPS.flatMap((group) => {
     const labels = describeGroupSelects(group);
@@ -377,7 +378,7 @@ function listGroupChoices(
       settingChoice(
         `model.${group.id}`,
         labels.model,
-        listGroupModelItems(providers, settings, group),
+        listGroupModelItems(providers, settings, group, automatic),
         resolveGroupModel(settings, group),
         (next) => patchSettings(resolveGroupModelPatch(settings, group, next))
       ),
@@ -395,7 +396,8 @@ function listGroupChoices(
 function listRoleChoices(
   settings: Settings,
   providers: AgentProviderInfo[],
-  snapshot: AccountsSnapshot | null
+  snapshot: AccountsSnapshot | null,
+  automatic: boolean
 ) {
   return AGENT_ROLES.flatMap((entry) => {
     const { role } = entry;
@@ -406,7 +408,7 @@ function listRoleChoices(
       settingChoice(
         `model.${role}`,
         labels.model,
-        listAgentModelItems(providers, model),
+        listAgentModelItems(providers, model, automatic),
         model,
         (next) => patchSettings(resolveAgentModelPatch(settings, role, next)),
         true
@@ -521,7 +523,8 @@ export function listSettingsSections(
   repos: Repo[] = [],
   explorerSide: ExplorerSide = 'left',
   updateChannel: UpdateChannel | null = null,
-  rates: Map<string, UsageRate | null> | null = null
+  rates: Map<string, UsageRate | null> | null = null,
+  automatic = false
 ): CommandSection[] {
   return [
     { id: 'settings.sections', heading: 'Jump to', rank: RANK.context, commands: listJumpCommands() },
@@ -532,8 +535,8 @@ export function listSettingsSections(
       commands: [
         ...listAttentionChoices(settings, notifications),
         ...listWorkflowChoices(settings),
-        ...listGroupChoices(settings, providers, snapshot),
-        ...listRoleChoices(settings, providers, snapshot),
+        ...listGroupChoices(settings, providers, snapshot, automatic),
+        ...listRoleChoices(settings, providers, snapshot, automatic),
         ...listUsageChoices(settings, snapshot, rates),
         ...listWorkspaceChoices(repos),
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>

@@ -12,7 +12,7 @@ import {
 } from '../../packages/core/src/index.ts';
 import { DAY, HOUR } from '../kit/time.ts';
 import { createRandomKey, readBearerMachine } from './requests.ts';
-import { TEAM_INVITE, TEAMMATE, type TunnelData, USER } from './schema.ts';
+import { TEAM_INVITE, TEAMMATE, type RelayData, USER } from './schema.ts';
 
 export const TEAM_KEY = createRandomKey(32);
 
@@ -98,7 +98,7 @@ export const TEAM_SCOPES = new Map<string, Pick<RemoteTeam, 'scopes' | 'override
 export const teammateLink = {
   online: true,
   signingKey: null as string | null,
-  sockets: new Set<ServerWebSocket<TunnelData>>(),
+  sockets: new Set<ServerWebSocket<RelayData>>(),
 };
 
 function isInTeam(team: Omit<RemoteTeam, 'role'>, user: RemoteUser) {

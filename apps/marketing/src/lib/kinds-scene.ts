@@ -1,10 +1,10 @@
-import { type Gate, SHAPE_PIPELINES, type ShinsaState, type Task, type TaskShape } from '@shinsa/core';
+import { type Gate, SHAPE_PIPELINES, type ShinsaState, type Task, type PresetShape } from '@shinsa/core';
 import { createSampleGate, createSampleState, createSampleTask, MINUTE } from '@/routes/ui/samples.ts';
 import { createPullRequest, PROJECT } from './scene.ts';
 
-export const KIND_ORDER: TaskShape[] = ['answer', 'investigate', 'research', 'change', 'fix', 'operation'];
+export const KIND_ORDER: PresetShape[] = ['answer', 'investigate', 'research', 'change', 'fix', 'operation'];
 
-export const KIND_ENDS: Record<TaskShape, string> = {
+export const KIND_ENDS: Record<PresetShape, string> = {
   answer: 'Ends with an answer, read from the repository. Nothing changes.',
   investigate: 'Ends with a diagnosis: the cause, and how it was reproduced in a scratch worktree.',
   research: 'Ends with a report: a comparison or a recommendation.',
@@ -18,7 +18,7 @@ interface KindScene {
   gate: Gate | null;
 }
 
-function base(now: number, shape: TaskShape, overrides: Partial<Task> & { title: string }) {
+function base(now: number, shape: PresetShape, overrides: Partial<Task> & { title: string }) {
   return createSampleTask(now, {
     id: `kind-${shape}`,
     handle: `NW-${160 + KIND_ORDER.indexOf(shape)}`,
@@ -38,7 +38,7 @@ function result(now: number, shape: 'answer' | 'investigate' | 'research', title
   });
 }
 
-function createKindScenes(now: number): Record<TaskShape, KindScene> {
+function createKindScenes(now: number): Record<PresetShape, KindScene> {
   const fix = base(now, 'fix', {
     title: 'Refunds over €1,000 fail',
     stage: 'awaiting_proposal',
@@ -198,7 +198,10 @@ function createKindScenes(now: number): Record<TaskShape, KindScene> {
   };
 }
 
-export function createKindsState(now: number): { state: ShinsaState; scenes: Record<TaskShape, KindScene> } {
+export function createKindsState(now: number): {
+  state: ShinsaState;
+  scenes: Record<PresetShape, KindScene>;
+} {
   const scenes = createKindScenes(now);
   const state = createSampleState({
     tasks: KIND_ORDER.map((shape) => scenes[shape].task),

@@ -3,16 +3,19 @@ import type { CommandOf } from '../commands/index.ts';
 import {
   compareTasks,
   DomainError,
+  isDependencyComplete,
   isTaskComplete,
   isTaskSettled,
   resolveCurrentRound,
   type Task,
 } from '../domain/index.ts';
+import type { ShinsaState } from '../state/project.ts';
 import {
   canChangeStack,
   isBundleMember,
   isDependencyOf,
   isTriaged,
+  listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
   listPendingStackParents,
@@ -38,7 +41,7 @@ export function resolveDependencies(decider: Decider, task: Task | null, ids: st
     if (dependency.stage === 'cancelled') {
       throw new DomainError({ code: 'dependency_cancelled', message: 'That task was cancelled.' });
     }
-    if (isTaskComplete(dependency)) continue;
+    if (isDependencyComplete(dependency)) continue;
     if (task && isDependencyOf(decider.state, task.id, id)) {
       throw new DomainError({ code: 'dependency_cycle', message: 'That task already waits on this one.' });
     }
@@ -186,9 +189,8 @@ function pauseForCancelled(decider: Decider, task: Task, cancelled: Task[], rema
     remaining.length > 0
       ? `Retry to keep waiting on ${quoteTitles(remaining)} only, wait for another task instead, or cancel this one.`
       : 'Retry to start without that work, wait for another task instead, or cancel this one.';
-  decider.openGate(
+  decider.hold(
     task.id,
-    'failure',
     `${quoteTitles(cancelled)} ${one ? 'was' : 'were'} cancelled`,
     `${waited} ${choices}`
   );
@@ -217,5 +219,21 @@ export function releaseWaiting(decider: Decider) {
     }
     if (holdForCheckout(decider, task.id)) continue;
     startWork(decider, task.id);
+  }
+}
+
+function countOpenBlockers(state: ShinsaState, taskId: string) {
+  const task = state.tasks[taskId];
+  return task ? listOpenBlockers(state, task).length : 0;
+}
+
+export function releaseMergeHolds(decider: Decider, before: ShinsaState) {
+  const held = Object.values(decider.state.tasks)
+    .filter((task) => task.stage === 'shipping' || task.stage === 'awaiting_merge')
+    .sort(compareTasks);
+  for (const task of held) {
+    const was = countOpenBlockers(before, task.id);
+    if (was === 0 || countOpenBlockers(decider.state, task.id) >= was) continue;
+    reviewMergeHold(decider, task.id);
   }
 }

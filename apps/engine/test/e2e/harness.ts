@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   type ChatNotice,
+  type AutoRetry,
   type Gate,
   type GateType,
   listActiveRuns,
@@ -159,6 +160,9 @@ const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
   },
   intake: async (agent) => {
     await agent.call('report_read', { summary: 'Read the channel; nothing new to file.' });
+  },
+  lead: async (agent) => {
+    await agent.call('report_initiative', { narrative: 'Nothing moved yet.' });
   },
   planner: async (agent) => {
     agent.say('Read the code; nothing to add.');
@@ -818,6 +822,14 @@ export class World {
       this.gates(taskId).some((gate) => !type || gate.type === type)
     );
     return this.gates(taskId).find((gate) => !type || gate.type === type) as Gate;
+  }
+
+  async untilRetry(taskId: string) {
+    await this.until(
+      `an automatic retry on ${taskId}`,
+      () => this.task(taskId).autoRetry?.status === 'armed'
+    );
+    return this.task(taskId).autoRetry as AutoRetry;
   }
 
   async answer(gate: Gate, decision: NonNullable<Gate['decision']>, response: string | null = null) {

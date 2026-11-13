@@ -1,7 +1,9 @@
 import {
   isDelegatedRun,
   isFoldingCompaction,
+  isHandOverTool,
   isReadOnlyRun,
+  isShinsaToolName,
   type LoadedExtensions,
   RUN_AGENT_ROLE,
   type Run,
@@ -244,6 +246,7 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
   );
   const context = yield* Effect.context<never>();
   const runSync = Effect.runSyncWith(context);
+  let handedOver = false;
   const handleTool: ToolHandler = (name, input, signal, requestId) => {
     if (loader?.specs.some((spec) => spec.name === name))
       return loader.handle(name, input).pipe(
@@ -252,7 +255,13 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
           McpServerFailed: (failure) => Effect.fail(new ToolCallFailed({ message: failure.message })),
         })
       );
-    return host.tools.handle(name, { runId: run.id, attemptId, input, signal, requestId });
+    return host.tools.handle(name, { runId: run.id, attemptId, input, signal, requestId }).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          if (isShinsaToolName(name) && isHandOverTool(name)) handedOver = true;
+        })
+      )
+    );
   };
   const tools = yield* createShinsaTools(run.role, handleTool, run.delegation?.depth ?? 0, [
     ...(host.hooks.manages && !isDelegatedRun(run) ? listSurfaceToolSpecs() : []),
@@ -285,6 +294,7 @@ export const attemptTurn = Effect.fn('RunSupervisor.attempt')(function* (turn: T
     },
     onEntry: (entry) => runSync(world.recordEntry(run.id, entry)),
     onActivity: () => runSync(host.questions.touch(run.id)),
+    handedOver: () => handedOver,
     onProcess: (pid) => {
       if (host.hooks.trackProcess) releases.push(runSync(host.hooks.trackProcess(run.taskId, 'agent', pid)));
     },

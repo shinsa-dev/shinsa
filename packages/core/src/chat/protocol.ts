@@ -120,6 +120,7 @@ export type ChatNotice =
   | { kind: 'delegation'; event: ChatDelegationEvent; runIds: string[] }
   | { kind: 'proxy'; proxy: 'eunoe'; status: 'unavailable'; detail: string | null }
   | { kind: 'fast_mode'; status: ChatFastModeStatus; reason: string | null }
+  | { kind: 'background_wait'; tasks: number }
   | ({ kind: 'extensions' } & LoadedExtensions)
   | {
       kind: 'handoff';

@@ -23,6 +23,7 @@ import type { ProviderUsageReading } from '../../src/agents/providers/types.ts';
 import { ProgramVersions } from '../../src/agents/providers/versions/service.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { EngineConfig } from '../../src/config/service.ts';
+import { ConfigStore } from '../../src/config/store/service.ts';
 import { JsonLogger } from '../../src/log/service.ts';
 import { EngineCore } from '../../src/runtime/engine/service.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
@@ -267,6 +268,9 @@ function createAccountsLayer(options: AccountsHarnessOptions, calls: ShellCall[]
           ? TerminalPty.layer.pipe(Layer.provide(ShellLayer))
           : Layer.succeed(TerminalPty, createFakePty(options.spawnLogin ?? NO_LOGIN)),
         Layer.succeed(EngineConfig, options.config),
+        ConfigStore.layer.pipe(
+          Layer.provide(Layer.merge(Layer.succeed(EngineConfig, options.config), JsonFileLayer))
+        ),
         Layer.succeed(EngineCore, options.engine),
         ProgramVersions.layer.pipe(Layer.provide(ShellLayer)),
         JsonFileLayer,

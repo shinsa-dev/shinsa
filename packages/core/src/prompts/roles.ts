@@ -129,6 +129,7 @@ function describePlanSplit(task: Task) {
     `When the request holds work that would ship better as separate pull requests, each worth reviewing on its own, plan only the part that stays in this task and give the rest in \`split\`: up to ${PROTOCOL_LIMITS.splitParts} parts, each a \`title\`, a \`request\` that stands on its own and an \`order\`.`,
     "Most splits are parts of one goal, so they usually become a bundle: `stacks_on` builds a part on this task's branch or an earlier part's, and the bundle merges as one. Stack parts that serve the same goal: pieces of one feature, a change and its follow-ups, work on the same code. `parallel` starts a part at once beside this task, only when it serves a different goal and is worth merging alone. `waits_on` starts it once the task in `on` merges, only when it needs code that sits on that unmerged branch and should ship apart. `on` is 0 for this task, or an earlier part's number, counted from 1.",
     'The human approves the split with the plan, and each part then plans for itself, starting from this conversation. Keep a small or cohesive request whole: split only what you would otherwise file as separate tasks.',
+    'When the split is one effort that will run for days and keep growing, set `initiative` to true: approving the plan then makes this task and its parts an initiative, with a lead agent that keeps track of them and files the next pieces. Leave it out for a split of two or three parts.',
   ].join('\n');
 }
 

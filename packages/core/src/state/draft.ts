@@ -11,6 +11,7 @@ export const STATE_RECORDS = [
   'briefings',
   'schedules',
   'memories',
+  'initiatives',
   'feedback',
   'watchSuggestions',
   'sessionUsage',
@@ -19,6 +20,7 @@ export const STATE_RECORDS = [
   'focusHistory',
   'accountPlans',
   'usagePaces',
+  'modelRoom',
 ] as const;
 
 export type StateRecordKey = (typeof STATE_RECORDS)[number];
