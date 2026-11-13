@@ -2,7 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import type { ProviderLogin } from '@shinsa/core';
 import {
   describeProviderLogin,
+  describeProviderAdded,
   describeProviderRefresh,
+  describeProviderRemoval,
+  listAddableProviders,
   resolveProviderHeader,
   selectSignInCommand,
 } from '@/lib/accounts/providers.ts';
@@ -121,5 +124,25 @@ describe('a provider’s header in Agent usage', () => {
       tone: 'orange',
       until: null,
     });
+  });
+});
+
+describe('listAddableProviders', () => {
+  it('offers each provider but Claude that the accounts list does not show', () => {
+    expect(listAddableProviders({})).toEqual([{ id: 'codex', label: 'Codex' }]);
+    expect(listAddableProviders({ providers: [login({})] })).toEqual([]);
+  });
+});
+
+describe('describeProviderRemoval', () => {
+  it('says that removing forgets the provider and keeps its CLI signed in', () => {
+    expect(describeProviderRemoval(login({}))).toEqual({
+      menu: 'Remove Codex',
+      title: 'Remove Codex from Shinsa?',
+      body: 'Shinsa forgets Codex, and your Codex CLI stays signed in.',
+      action: 'Remove Codex',
+      done: 'Codex removed.',
+    });
+    expect(describeProviderAdded({ label: 'Codex' })).toBe('Codex added.');
   });
 });

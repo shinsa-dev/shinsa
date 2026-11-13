@@ -1,4 +1,14 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
 import { type Duration, Effect, Layer, type Scope } from 'effect';
@@ -12,18 +22,24 @@ import { until } from '../helpers/until.ts';
 export const SHINSA = BrowserProfile.make('01a1c0c1-shinsa');
 export const SUPERWALL = BrowserProfile.make('01a1c0c1-superwall');
 
-const FAKE_CHROME = `#!/bin/sh
+const FAKE_CHROME = `#!/bin/bash
 here="$(dirname "$0")"
 for arg in "$@"; do case "$arg" in --user-data-dir=*) profile="\${arg#--user-data-dir=}";; esac; done
 echo "$*" >> "$here/launches"
 case "$*" in *--headless=new*) ;; *) [ -f "$profile/pid" ] && kill -0 "$(cat "$profile/pid")" 2>/dev/null && exit 0;; esac
+[ -f "$here/busy" ] && exit 21
+[ -f "$here/busy-once" ] && rm "$here/busy-once" && exit 21
+holder="$(readlink "$profile/SingletonLock" 2>/dev/null)"
+[ -n "$holder" ] && [ "\${holder%-*}" != "$(hostname)" ] && exit 21
+[ -n "$holder" ] && kill -0 "\${holder##*-}" 2>/dev/null && exit 21
+ln -sfn "$(hostname)-$$" "$profile/SingletonLock"
 echo $$ > "$profile/pid"
 [ -f "$here/fail" ] && exit 3
 case "$*" in *--headless=new*)
   port=9222; [ -f "$here/port" ] && port="$(cat "$here/port")"
   if [ -f "$here/garbage" ]; then echo "not a port" > "$profile/DevToolsActivePort"; else printf '%s\\n/devtools/browser/fake-%s\\n' "$port" "$$" > "$profile/DevToolsActivePort"; fi;;
 esac
-exec sleep 30
+exec -a "$0 $*" sleep 30
 `;
 
 export interface FakeChrome {
@@ -35,6 +51,11 @@ export interface FakeChrome {
   fail(): void;
   writeGarbage(): void;
   listenOn(port: number): void;
+  busy(): void;
+  busyOnce(): void;
+  lockProfile(profile: BrowserProfile, pid: number, host?: string): void;
+  renameLockHost(profile: BrowserProfile, host: string): void;
+  startOrphan(profile: BrowserProfile, mode?: 'headless' | 'window'): number;
 }
 
 export function createFakeChrome(): FakeChrome {
@@ -55,6 +76,28 @@ export function createFakeChrome(): FakeChrome {
     fail: () => writeFileSync(join(dir, 'fail'), ''),
     writeGarbage: () => writeFileSync(join(dir, 'garbage'), ''),
     listenOn: (port) => writeFileSync(join(dir, 'port'), String(port)),
+    busy: () => writeFileSync(join(dir, 'busy'), ''),
+    busyOnce: () => writeFileSync(join(dir, 'busy-once'), ''),
+    lockProfile: (profile, pid, host = hostname()) => {
+      const folder = join(home, 'data', 'browser', profile);
+      mkdirSync(folder, { recursive: true });
+      symlinkSync(`${host}-${pid}`, join(folder, 'SingletonLock'));
+    },
+    renameLockHost: (profile, host) => {
+      const lock = join(home, 'data', 'browser', profile, 'SingletonLock');
+      const pid = readlinkSync(lock).split('-').at(-1);
+      rmSync(lock);
+      symlinkSync(`${host}-${pid}`, lock);
+    },
+    startOrphan: (profile, mode = 'headless') => {
+      const folder = join(home, 'data', 'browser', profile);
+      mkdirSync(folder, { recursive: true });
+      const args = mode === 'headless' ? ['--headless=new', 'about:blank'] : ['https://accounts.google.com/'];
+      const orphan = Bun.spawn([path, `--user-data-dir=${folder}`, ...args], {
+        stdio: ['ignore', 'ignore', 'ignore'],
+      });
+      return orphan.pid;
+    },
   };
 }
 
@@ -88,10 +131,13 @@ export function awaitLaunches(chrome: FakeChrome, count: number) {
   return Effect.promise(() => until(`${count} launches of Chrome`, () => chrome.launches().length >= count));
 }
 
-export function awaitPid(chrome: FakeChrome, profile: BrowserProfile) {
+export function awaitPid(chrome: FakeChrome, profile: BrowserProfile, replacing?: number) {
   return Effect.promise(async () => {
-    await until('Chrome to write its pid', () =>
-      existsSync(join(chrome.home, 'data', 'browser', profile, 'pid'))
+    await until(
+      'Chrome to write its pid',
+      () =>
+        existsSync(join(chrome.home, 'data', 'browser', profile, 'pid')) &&
+        chrome.pidOf(profile) !== replacing
     );
     return chrome.pidOf(profile);
   });

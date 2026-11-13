@@ -85,6 +85,24 @@ const CI_RUNS: CiRun[] = [
   { name: 'e2e', status: 'failure', required: false, url: 'https://github.com/ada/shop/actions/runs/3' },
 ];
 
+const INHERITED_CI_RUNS: CiRun[] = [
+  { name: 'build', status: 'success', required: true, url: 'https://github.com/ada/shop/actions/runs/4' },
+  {
+    name: 'Workers Builds: shop',
+    status: 'failure',
+    required: true,
+    url: 'https://dash.cloudflare.com/builds/5',
+    failsOnBase: true,
+  },
+  {
+    name: 'lighthouse',
+    status: 'failure',
+    required: false,
+    url: 'https://github.com/ada/shop/actions/runs/6',
+    failsOnBase: true,
+  },
+];
+
 function listPhaseReports(now: number, count: number): PhaseReport[] {
   return Array.from({ length: count }, (_, index) => ({
     index: index + 1,
@@ -181,7 +199,7 @@ export interface ChecksScene {
   activity: Activity[];
 }
 
-export type ChecksSpecimen = 'running' | 'passed' | 'failing' | 'alone' | 'base' | 'ci';
+export type ChecksSpecimen = 'running' | 'passed' | 'failing' | 'alone' | 'base' | 'ci' | 'inherited';
 
 export function createChecksScene(now: number): ChecksScene {
   const passed = [...TASK_CHECKS, AGENT_CHECK, LINT].map((check) => pass(check));
@@ -234,6 +252,22 @@ export function createChecksScene(now: number): ChecksScene {
         checkRuns: CI_RUNS,
       },
     }),
+    inherited: createChecksTask(now, 'inherited', {
+      stage: 'shipping',
+      stageReason: '“Workers Builds: shop” fails on main too',
+      checkResults: [pass(CURRENCY), pass(TYPES), pass(BACKFILL), pass(LINT)],
+      pullRequest: {
+        number: 43,
+        url: 'https://github.com/ada/shop/pull/43',
+        base: 'main',
+        state: 'open',
+        checks: 'failing',
+        unresolvedComments: 0,
+        mergeable: true,
+        updatedAt: now - 2 * MINUTE,
+        checkRuns: INHERITED_CI_RUNS,
+      },
+    }),
     linked: createChecksTask(now, 'linked', {
       checkResults: [pass(CURRENCY, '2 pass'), pass(TYPES), pass(BACKFILL), pass(LINT)],
     }),
@@ -254,6 +288,7 @@ export function createChecksScene(now: number): ChecksScene {
       alone: view(tasks.alone),
       base: view(tasks.base),
       ci: view(tasks.ci),
+      inherited: view(tasks.inherited),
     },
     evidence: resolveEvidenceListLayout(evidence, {}),
     evidenceChecks: resolveChecksView(state, tasks.linked),

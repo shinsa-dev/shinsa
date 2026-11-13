@@ -14,9 +14,9 @@ const MISSING_GH = createCheck({
   command: 'brew install gh',
 });
 
-const MISSING_CODEX = createCheck({
-  id: 'codex',
-  label: 'Codex',
+const OPTIONAL_BUN = createCheck({
+  id: 'bun',
+  label: 'Bun',
   ok: false,
   optional: true,
   detail: 'Not installed.',
@@ -37,7 +37,7 @@ describe('the welcome', () => {
 
 describe('asking for help', () => {
   test('lists only the required checks that fail', () => {
-    expect(listFailingChecks([createCheck({}), MISSING_GH, MISSING_CODEX])).toEqual([MISSING_GH]);
+    expect(listFailingChecks([createCheck({}), MISSING_GH, OPTIONAL_BUN])).toEqual([MISSING_GH]);
   });
 
   test('names each check, what went wrong and the command Shinsa would run', () => {

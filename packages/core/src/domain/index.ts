@@ -36,6 +36,7 @@ export {
   type RunDelegation,
   type RunWait,
   resolveDelegationStatus,
+  selectPlanSplit,
   type TaskCreator,
   type TaskCreatorKind,
   type TaskSplit,
@@ -103,6 +104,13 @@ export {
   listFeedbackLeaks,
   resolveFeedbackText,
 } from './feedback.ts';
+export {
+  hasBlockingCiFailure,
+  isBlockingCiFailure,
+  isFailedCiRun,
+  isInheritedCiFailure,
+  listInheritedCiFailures,
+} from './ci.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
 export {
   INITIATIVE_LIMITS,
@@ -217,6 +225,7 @@ export {
   resolveWatchdogDefaults,
   resolveWatchdogsIgnoreUsageLimits,
   resolveAutoPace,
+  resolveAutoPaceResets,
   isSharedMachine,
   isSharedWithTeam,
   resolveSharedTeams,

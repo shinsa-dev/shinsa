@@ -140,6 +140,7 @@ const FEATURE_ROUTES = {
   'team-keys': ['POST /api/remote/teams/key/request', 'POST /api/remote/teams/key/answer'],
   'usage.pace_limits': [],
   'usage.auto_pace': [],
+  'usage.auto_pace_resets': [],
   'team-relay': ['GET /api/teams/relays'],
   'usage.watchdog_limits': [],
   'share.scopes': [],
@@ -158,6 +159,7 @@ const FEATURE_ROUTES = {
   ],
   initiatives: ['GET /api/initiatives', 'GET /api/initiatives/([^/]+)'],
   'slack-channel-triggers': ['GET /api/slack/channels'],
+  'accounts.provider_choice': ['POST /api/accounts/provider'],
 };
 
 const LOCAL_ONLY = [
@@ -213,6 +215,7 @@ const OWNER_ONLY = [
   'POST /api/accounts/import',
   'POST /api/accounts/update',
   'POST /api/accounts/remove',
+  'POST /api/accounts/provider',
   'POST /api/schedules/([^/]+)/webhook',
   'POST /api/secrets/([^/]+)',
   'POST /api/extensions/check',
@@ -318,6 +321,7 @@ describe('EngineApi routes', () => {
         'POST /api/accounts/import',
         'POST /api/accounts/update',
         'POST /api/accounts/remove',
+        'POST /api/accounts/provider',
         'GET /api/github-token',
         'POST /api/github-token',
       ])

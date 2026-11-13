@@ -1597,7 +1597,8 @@ Only these, and they win over anything below:
       named with its provider (`AccountName`, medium: "Claude · a@b.com"), the plan (`fg-2`), a `Badge` "Default", and only when something is wrong a status in its tone
       ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage, resets in 1h 20m" red through `TimeAgo` as soon as a
       window is at 100%: a reset later today says how long, one on a later day its moment, "Out of usage until Sat
-      2:00 AM"), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up; an agent's pushed
+      2:00 AM"; "Out of Fable usage until …" when only the agent model's own limit is spent, which shows only while
+      the agent runs on that model), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up; an agent's pushed
       reading counts, and while Claude rate limits the reads it adds when the next one happens: "Updated 3h ago · next
       read in 12m"; its tooltip adds the server's reason under the time, "Rate limited by Claude." or a login that
       needs refreshing) and a

@@ -7,6 +7,7 @@ import {
   resolveAgentModel,
   resolveAgentProvider,
   resolveModelFamily,
+  resolveModelFamilyLabel,
   resolveModelLabel,
   resolveProviderLabel,
 } from '../../src/index.ts';
@@ -71,6 +72,8 @@ describe('resolveAgentModel on another provider', () => {
 
 describe('model names', () => {
   test('Codex models read like the Codex picker', () => {
+    expect(resolveModelFamilyLabel('fable')).toBe('Fable');
+    expect(resolveModelFamilyLabel('claude-opus-4-8[1m]')).toBe('Opus');
     expect(resolveModelLabel('gpt-6-astra')).toBe('GPT-6-Astra');
     expect(resolveModelLabel('gpt-5.5-codex')).toBe('GPT-5.5-Codex');
   });

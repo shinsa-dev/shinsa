@@ -87,7 +87,7 @@ describe('the sandbox’s stand-in for app.shinsa.dev', () => {
     expect((await cloud.respond(new Request(`${unknown}/`, cookie))).status).toBe(404);
   });
 
-  test('says a machine whose tunnel it cannot reach is offline', async () => {
+  test('says a machine its relay cannot reach is offline', async () => {
     const cloud = await runCloud(
       createSandboxCloud(createFolder(), 'localhost:5998', '1', [
         { id: 'laptop', name: 'Laptop', port: 1, connectKey: serializeBase64Url(new Uint8Array(32)) },

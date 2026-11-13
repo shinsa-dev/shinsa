@@ -17,9 +17,11 @@ import {
 import { resolveWindowId } from '../usage/answer.ts';
 import { resolveReadUsage } from './read.ts';
 import {
+  ACCOUNT_READS_FILE,
   ACCOUNT_USAGE_FILE,
   NO_PROVIDER_WINDOWS,
   NO_WINDOWS,
+  PROVIDER_READS_FILE,
   PROVIDER_USAGE_FILE,
   type RateLimitNotice,
   type UsageTable,
@@ -47,12 +49,16 @@ export class UsageLimits extends Context.Service<
 
       const makeTable = Effect.fn('UsageLimits.makeTable')(function* (table: {
         readonly path: string;
+        readonly readsPath: string;
         readonly read: (id: string) => Effect.Effect<UsageRead, AccountStepFailed>;
         readonly windows: Record<string, KeyedWindow>;
         readonly emptyDetail: string;
       }) {
         const entries = yield* Ref.make<ReadonlyMap<string, AccountUsage>>(
           yield* registry.readUsage(table.path)
+        );
+        const lastRead = yield* Ref.make<ReadonlyMap<string, AccountUsage>>(
+          yield* registry.readUsage(table.readsPath)
         );
         const reading = yield* Ref.make<ReadonlyMap<string, Deferred.Deferred<void>>>(new Map());
 
@@ -61,9 +67,18 @@ export class UsageLimits extends Context.Service<
         const snapshot = (id: string) =>
           Effect.map(selectEntry(id), (usage) => usage ?? createUnknownUsage());
 
+        const measured = (id: string) =>
+          Effect.map(Ref.get(lastRead), (all) => all.get(id) ?? createUnknownUsage());
+
         const persist = Effect.gen(function* () {
           yield* registry.keepUsage(table.path, yield* Ref.get(entries));
           yield* changes.notify;
+        });
+
+        const keepRead = Effect.fn('UsageLimits.keepRead')(function* (
+          update: (all: ReadonlyMap<string, AccountUsage>) => ReadonlyMap<string, AccountUsage>
+        ) {
+          yield* registry.keepUsage(table.readsPath, yield* Ref.updateAndGet(lastRead, update));
         });
 
         const store = Effect.fn('UsageLimits.store')(function* (id: string, usage: AccountUsage) {
@@ -78,7 +93,13 @@ export class UsageLimits extends Context.Service<
             rest.delete(id);
             return [true, rest];
           });
-          if (removed) yield* persist;
+          if (!removed) return;
+          yield* keepRead((all) => {
+            const rest = new Map(all);
+            rest.delete(id);
+            return rest;
+          });
+          yield* persist;
         });
 
         const isFresh = Effect.fn('UsageLimits.isFresh')(function* (id: string) {
@@ -103,7 +124,11 @@ export class UsageLimits extends Context.Service<
           const result = yield* attempt(id);
           const { retryAt: _retryAt, ...previous } = (yield* selectEntry(id)) ?? createUnknownUsage();
           const now = yield* Clock.currentTimeMillis;
-          if (result.ok) return yield* store(id, resolveReadUsage(result, previous, now, table.emptyDetail));
+          if (result.ok) {
+            const fresh = resolveReadUsage(result, previous, now, table.emptyDetail);
+            yield* keepRead((all) => new Map(all).set(id, fresh));
+            return yield* store(id, fresh);
+          }
           yield* store(id, {
             ...previous,
             status: previous.windows.length > 0 ? previous.status : 'unavailable',
@@ -166,18 +191,20 @@ export class UsageLimits extends Context.Service<
           });
         });
 
-        const usage: UsageTable = { snapshot, isFresh, refresh, remove, recordPush };
+        const usage: UsageTable = { snapshot, measured, isFresh, refresh, remove, recordPush };
         return usage;
       });
 
       const claude = yield* makeTable({
         path: join(dataDir, ACCOUNT_USAGE_FILE),
+        readsPath: join(dataDir, ACCOUNT_READS_FILE),
         read: readings.readAccount,
         windows: KEYED_WINDOWS,
         emptyDetail: NO_WINDOWS,
       });
       const providers = yield* makeTable({
         path: join(dataDir, PROVIDER_USAGE_FILE),
+        readsPath: join(dataDir, PROVIDER_READS_FILE),
         read: readings.readProvider,
         windows: PROVIDER_WINDOWS,
         emptyDetail: NO_PROVIDER_WINDOWS,
