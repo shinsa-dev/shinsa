@@ -480,7 +480,7 @@ describe('extra usage, credit and usage resets', () => {
       id: 'sooner',
       label: 'Weekly reset',
       value: '1 of 1 left',
-      detail: `Clears the 5-hour and weekly limits · ends ${formatMoment(dec10, NOW)}`,
+      detail: `Clears 5-hour and weekly · ends ${formatMoment(dec10, NOW)}`,
       ending: false,
     });
   });
@@ -496,7 +496,7 @@ describe('extra usage, credit and usage resets', () => {
     const ends = NOW + 10 * 24 * HOUR;
     expect(line([grant({ label: 'Launch reset', clears: ['five_hour'] })])).toMatchObject({
       label: 'Launch reset',
-      detail: 'Clears the 5-hour limit',
+      detail: 'Clears 5-hour',
     });
     expect(resets([grant({ label: 'Launch reset', clears: ['five_hour'] })])?.value).toBe('Launch reset 1');
     expect(
@@ -508,11 +508,11 @@ describe('extra usage, credit and usage resets', () => {
       ])
     ).toMatchObject({
       label: 'One full limit reset (November 2026)',
-      detail: 'Clears the weekly and weekly Fable limits',
+      detail: 'Clears full weekly',
     });
     expect(line([grant({ clears: ['seven_day_overage_included'] })])).toMatchObject({
       label: 'Fable reset',
-      detail: 'Clears the weekly Fable limit',
+      detail: 'Clears Fable weekly',
     });
     expect(line([grant({ clears: ['something_new'] })])).toMatchObject({
       label: 'Usage reset',
@@ -560,7 +560,7 @@ describe('extra usage, credit and usage resets', () => {
     const soon = grant({ id: 'soon', endsAt: inTwoDays, clears: ['seven_day_overage_included'] });
     expect(line([soon])).toMatchObject({
       label: 'Fable reset',
-      detail: 'Clears the weekly Fable limit · ends in 2 days',
+      detail: 'Clears Fable weekly · ends in 2 days',
       ending: true,
     });
     const mixed = resets([soon, grant({ id: 'weekly', endsAt: NOW + 10 * 24 * HOUR })]);

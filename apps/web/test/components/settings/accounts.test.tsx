@@ -207,7 +207,7 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
   });
 
-  it('shows extra usage, credit from $1 and each usage reset under the windows, and never a way to claim one', () => {
+  it('shows extra usage, credit from $1 and the usage resets as one row under the windows, and never a way to claim one', async () => {
     const windows = [createWindow({ id: 's', usedPercent: 10 })];
     const read = {
       status: 'ok' as const,
@@ -273,13 +273,14 @@ describe('the Accounts settings', () => {
     expect(screen.getByText('Off')).toBeTruthy();
     expect(screen.getAllByText('Credit left')).toHaveLength(1);
     expect(screen.getByText('$12.40')).toBeTruthy();
-    expect(screen.getByText('Usage reset')).toBeTruthy();
-    expect(screen.getByText('1 of 2 left')).toBeTruthy();
-    expect(screen.getByText('Clears the 5-hour limit').className).toContain('text-fg-2');
-    expect(screen.getByText('Fable reset')).toBeTruthy();
-    expect(screen.getByText('Clears the weekly Fable limit · ends in 2 days').className).toContain(
-      'text-amber-text'
+    expect(screen.getAllByText('Usage resets')).toHaveLength(1);
+    expect(screen.getByText('Usage reset 1').className).not.toContain('text-amber-text');
+    expect(await findTooltipText(screen.getByText('Usage reset 1'))).toBe(
+      'Usage reset 1 of 2 leftClears 5-hour'
     );
+    const fable = screen.getByText('Fable 1');
+    expect(fable.className).toContain('text-amber-text');
+    expect(await findTooltipText(fable)).toBe('Fable reset 1 of 1 leftClears Fable weekly · ends in 2 days');
     expect(screen.queryByRole('button', { name: /claim/i })).toBeNull();
   });
 

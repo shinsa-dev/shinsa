@@ -48,10 +48,12 @@ const USAGE_EXTRA_LABEL = {
   notUsable: 'Not usable yet',
 };
 
+const FULL_WEEKLY = 'full weekly';
+
 const CLEARED_LIMITS: Record<string, string> = {
   five_hour: '5-hour',
   seven_day: 'weekly',
-  seven_day_overage_included: 'weekly Fable',
+  seven_day_overage_included: 'Fable weekly',
   seven_day_opus: 'weekly Opus',
   seven_day_sonnet: 'weekly Sonnet',
 };
@@ -320,10 +322,17 @@ export function formatUsageMoney(money: UsageMoney) {
   }).format(amount);
 }
 
-function describeCleared(clears: string[]) {
+function listClearedLimits(clears: string[]) {
   const limits = clears.flatMap((id) => (CLEARED_LIMITS[id] ? [CLEARED_LIMITS[id]] : []));
+  if (!clears.includes('seven_day') || !clears.includes('seven_day_overage_included')) return limits;
+  const weekly = [CLEARED_LIMITS.seven_day, CLEARED_LIMITS.seven_day_overage_included];
+  return [...limits.filter((limit) => !weekly.includes(limit)), FULL_WEEKLY];
+}
+
+function describeCleared(clears: string[]) {
+  const limits = listClearedLimits(clears);
   if (limits.length === 0) return null;
-  return `Clears the ${LIST_FORMAT.format(limits)} ${limits.length === 1 ? 'limit' : 'limits'}`;
+  return `Clears ${LIST_FORMAT.format(limits)}`;
 }
 
 function isGrantEnding(grant: UsageResetGrant, now: number) {
