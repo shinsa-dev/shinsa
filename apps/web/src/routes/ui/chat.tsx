@@ -26,6 +26,7 @@ import {
   useDisclosure,
   useDisclosureScope,
 } from '@/lib/preferences/disclosure.ts';
+import { scheduleEvery } from '@/lib/runtime/timers.ts';
 import { createSampleChatCalls, createSampleReportCall, createSampleRevisionCall } from './sample-chat.ts';
 import { createSampleDelegations } from './sample-delegations.ts';
 import { createOverviewScene } from './sample-overview.ts';
@@ -362,10 +363,7 @@ const DELIVERY_REPLAY_MS = 2_400;
 
 function DeliveryReplay() {
   const [delivering, setDelivering] = React.useState(true);
-  React.useEffect(() => {
-    const timer = setInterval(() => setDelivering((current) => !current), DELIVERY_REPLAY_MS);
-    return () => clearInterval(timer);
-  }, []);
+  React.useEffect(() => scheduleEvery(DELIVERY_REPLAY_MS, () => setDelivering((current) => !current)), []);
   return (
     <UserMessage
       persistId={createDisclosureId('ui', 'chat', 'message', 'replay')}

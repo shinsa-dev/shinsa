@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { resolvePlanKey } from '../accounts/plan.ts';
 import { CLAUDE_PROVIDER, resolveProviderLabel } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
@@ -242,7 +243,7 @@ export function recordProviderSignIn(decider: Decider, command: CommandOf<'provi
 }
 
 export function recordAccountPlan(decider: Decider, command: CommandOf<'account.plan_recorded'>) {
-  const plan = resolvePlanKey(command.plan);
+  const plan = Option.getOrNull(resolvePlanKey(command.plan));
   const known = decider.state.accountPlans[command.accountId];
   if (!known && !plan) return;
   if (known?.plan === plan && known.provider === command.provider) return;
@@ -260,7 +261,7 @@ export function recordUsagePace(decider: Decider, command: CommandOf<'usage.pace
   decider.emit({
     type: 'usage.pace_recorded',
     provider: command.provider,
-    pace: resolveRecordablePace(command.pace),
+    pace: Option.getOrNull(resolveRecordablePace(command.pace)),
   });
 }
 

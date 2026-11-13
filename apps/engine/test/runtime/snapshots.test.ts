@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { applyStatePatch, resolveStatePatch, type ShinsaState } from '@shinsa/core';
+import { Option } from 'effect';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
 import { createTempDir, until } from '../helpers/index.ts';
@@ -141,7 +142,7 @@ describe('state changes', () => {
     const kept = engine.state;
     engine.subscribe((state, change) => {
       const patch = JSON.parse(JSON.stringify(resolveStatePatch(change.previous, state, change.changes)));
-      client = applyStatePatch(client, patch) ?? client;
+      client = Option.getOrNull(applyStatePatch(client, patch)) ?? client;
     });
     await engine.dispatch({ type: 'project.write', project: { name: 'Superwall', color: 'blue' } });
     await engine.dispatch({ type: 'task.create', request: 'Fix the tab scroll', repoId: null });

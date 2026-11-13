@@ -925,6 +925,30 @@ describe('writing a schedule from Settings', () => {
       time: '09:00',
       weekdays: [1, 5],
     });
+    expect(
+      parsed({
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'C1',
+          channelName: 'alerts',
+          threadUpdates: true,
+        },
+      }).trigger
+    ).toEqual({
+      kind: 'slack',
+      teamId: 'T1',
+      teamName: 'Acme',
+      channelId: 'C1',
+      channelName: 'alerts',
+      threadUpdates: true,
+    });
+    expect(
+      parsed({
+        trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: 'alerts' },
+      }).trigger
+    ).toMatchObject({ threadUpdates: true });
     expect(parsed({ trigger: { kind: 'webhook' } }).trigger).toEqual({
       kind: 'webhook',
       signature: null,
@@ -978,7 +1002,7 @@ describe('writing a schedule from Settings', () => {
     [
       'an unknown trigger kind',
       { trigger: { kind: 'cron' } },
-      'kind must be one of once, interval, daily, webhook.',
+      'kind must be one of once, interval, daily, webhook, slack.',
     ],
     ['a one-off without a time', { trigger: { kind: 'once' } }, 'at must be a time.'],
     [
@@ -1030,6 +1054,16 @@ describe('writing a schedule from Settings', () => {
       'a replay key that is not text',
       { trigger: { kind: 'webhook', replayKey: 3 } },
       'replayKey must be text.',
+    ],
+    [
+      'a Slack channel without its workspace',
+      { trigger: { kind: 'slack', channelId: 'C1', channelName: 'alerts', teamName: 'Acme' } },
+      'teamId must be text.',
+    ],
+    [
+      'a Slack channel with no name',
+      { trigger: { kind: 'slack', teamId: 'T1', teamName: 'Acme', channelId: 'C1', channelName: '' } },
+      'channelName must not be empty.',
     ],
     ['a target that is not an object', { target: [] }, 'target must be an object.'],
     ['an unknown target kind', { target: { kind: 'repo' } }, 'kind must be one of new_task, task.'],

@@ -22,6 +22,17 @@ describe('describing a trigger', () => {
     [{ kind: 'daily', time: '08:00', weekdays: [1] }, 'Every Monday at 08:00'],
     [{ kind: 'daily', time: '08:00', weekdays: [5, 1, 3] }, 'Every Monday, Wednesday and Friday at 08:00'],
     [{ kind: 'webhook', signature: null, replayKey: null }, 'When its webhook is called'],
+    [
+      {
+        kind: 'slack',
+        teamId: 'T1',
+        teamName: 'Acme',
+        channelId: 'C1',
+        channelName: 'alerts',
+        threadUpdates: true,
+      },
+      'When a message is posted in #alerts',
+    ],
   ])('%o reads “%s”', (trigger, text) => {
     expect(describeScheduleTrigger(trigger)).toBe(text);
   });

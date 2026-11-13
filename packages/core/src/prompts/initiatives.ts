@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { quoteTitle } from '../chat/text.ts';
 import { INITIATIVE_LIMITS, type Initiative, selectInitiativePhase, type Task } from '../domain/index.ts';
 import { PROTOCOL_LIMITS } from '../report/schema.ts';
@@ -69,7 +70,7 @@ export function resolveLeadPrompt(turn: LeadTurn) {
 }
 
 export function describeInitiativeMembership(initiative: Initiative, task: Task, lead: Task | null) {
-  const phase = selectInitiativePhase(initiative, task.initiativePhaseId);
+  const phase = Option.getOrNull(selectInitiativePhase(initiative, task.initiativePhaseId));
   const where = phase ? `, in its phase ${quoteTitle(phase.name)}` : '';
   const opening = `This task is part of the initiative ${quoteTitle(initiative.name)}${where}.`;
   if (!lead) return `\n\n${opening}`;

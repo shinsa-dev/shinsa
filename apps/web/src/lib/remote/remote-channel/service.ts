@@ -220,7 +220,7 @@ export class RemoteChannels extends Context.Service<
               respond(message);
               return Effect.void;
             case 'body': {
-              const bytes = parseBodyChunk(message.chunk);
+              const bytes = Option.getOrNull(parseBodyChunk(message.chunk));
               const stream = pending.get(message.id)?.stream;
               if (stream && bytes) stream.enqueue(bytes);
               return Effect.void;
@@ -239,7 +239,7 @@ export class RemoteChannels extends Context.Service<
         };
 
         const handshake = Effect.fn('RemoteChannel.handshake')(function* (text: string) {
-          const welcome = parseServerHello(text);
+          const welcome = Option.getOrNull(parseServerHello(text));
           if (welcome?.type === 'refused')
             return yield* new ChannelError({ message: welcome.reason, refused: true });
           if (welcome?.type === 'pending') {
@@ -279,7 +279,7 @@ export class RemoteChannels extends Context.Service<
           const opened = yield* Effect.option(opener(frame));
           if (Option.isNone(opened)) return yield* refuse(CHANNEL_BROKE);
           const plain = opened.value;
-          const message = parseChannelMessage(decodeText(plain));
+          const message = Option.getOrNull(parseChannelMessage(decodeText(plain)));
           if (!message) return yield* refuse(CHANNEL_MESSAGE_UNKNOWN);
           return yield* handle(message);
         });

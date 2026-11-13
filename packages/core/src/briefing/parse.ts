@@ -88,24 +88,24 @@ function parseNote(
   now: number,
   ids: string[]
 ) {
-  if (raw === null) return null;
+  if (raw === null) return Option.none();
   const written = cleanSentence(raw ?? null, BRIEFING_LIMITS.note, ids);
   if (written === null) return resolveFallbackNote(queue, named, now);
   return resolveNote(written, queue, named, now);
 }
 
-export function parseBriefing(raw: unknown, queue: Queue, now: number): Briefing | null {
+export function parseBriefing(raw: unknown, queue: Queue, now: number): Option.Option<Briefing> {
   const decoded = decodeBriefingAnswer(raw);
-  if (Option.isNone(decoded)) return null;
+  if (Option.isNone(decoded)) return Option.none();
   const answer = decoded.value;
   const fallback = resolveFallbackBriefing(queue, now);
   const entries = new Map(listBriefingEntries(queue).map((entry) => [entry.task.id, entry]));
-  if (entries.size === 0) return fallback;
+  if (entries.size === 0) return Option.some(fallback);
 
   const nowId = resolvePickedTask(answer.now);
   const nowEntry = nowId === null ? undefined : entries.get(nowId);
-  if (!nowEntry) return null;
-  if (isLow(nowEntry) && [...entries.values()].some((entry) => !isLow(entry))) return null;
+  if (!nowEntry) return Option.none();
+  if (isLow(nowEntry) && [...entries.values()].some((entry) => !isLow(entry))) return Option.none();
 
   const ids = listQueueTaskIds(queue);
   const next = parseNext(answer.next, entries, nowEntry.task.id, ids);
@@ -114,5 +114,5 @@ export function parseBriefing(raw: unknown, queue: Queue, now: number): Briefing
     why: cleanWhy(answer.now?.why ?? null, nowEntry, ids) ?? resolveBriefingWhy(nowEntry),
   };
   const note = parseNote(answer.note, queue, listNamedIds(nowItem, next), now, ids);
-  return { now: nowItem, next, running: fallback.running, note };
+  return Option.some({ now: nowItem, next, running: fallback.running, note: Option.getOrNull(note) });
 }

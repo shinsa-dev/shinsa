@@ -22,7 +22,7 @@ export const PreviewOpenRoutes = Layer.unwrap(
     const readPreviewTarget = Effect.fn('previews.readTarget')(function* (url: URL, previewOrigin: string) {
       const value = url.searchParams.get('url');
       const target = value && URL.canParse(value) ? new URL(value) : null;
-      const address = target && parsePreviewHost(target.host, previewOrigin);
+      const address = target && Option.getOrNull(parsePreviewHost(target.host, previewOrigin));
       const instanceId = address ? decodeInstanceId(address.instanceId) : Option.none();
       if (
         !target ||

@@ -1,4 +1,4 @@
-import { Option, Schema } from 'effect';
+import { type Option, Schema } from 'effect';
 import { ResourceSummary } from './schema.ts';
 
 export interface ResourceUse {
@@ -67,6 +67,6 @@ export function describeResourceSummary(resources: ResourceSummary) {
 
 const decodeResourceSummary = Schema.decodeUnknownOption(ResourceSummary);
 
-export function parseResourceSummary(value: unknown): ResourceSummary | null {
-  return Option.getOrNull(decodeResourceSummary(value));
+export function parseResourceSummary(value: unknown): Option.Option<ResourceSummary> {
+  return decodeResourceSummary(value);
 }

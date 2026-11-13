@@ -1,4 +1,5 @@
 import { resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
+import { Option } from 'effect';
 import { APP_NAME } from '../app/schema.ts';
 import type { DesktopUpdate } from '../bridge/schema.ts';
 import { describeUpdateChannel, isAboveChannel } from './channel.ts';
@@ -70,7 +71,7 @@ export function describeInstallError(state: UpdateState, message: string): Updat
 
 function describeCurrent(current: string, latest: string | null, channel: UpdateChannel) {
   const label = describeUpdateChannel(channel);
-  if (latest && resolveVersionOrder(latest, current) === -1)
+  if (latest && Option.contains(resolveVersionOrder(latest, current), -1))
     return `You have ${APP_NAME} ${current}, newer than ${latest}, the latest on the ${label} channel. It stays on ${current} until the ${label} channel passes it.`;
   return `You have ${APP_NAME} ${current}, the latest version on the ${label} channel.`;
 }

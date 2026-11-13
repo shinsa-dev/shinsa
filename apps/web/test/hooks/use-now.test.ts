@@ -1,25 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, setSystemTime, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, jest, setSystemTime } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
 import { useNow } from '@/hooks/use-now.ts';
 import { NOW } from '../support/state.ts';
 
-const ticks: (() => void)[] = [];
-
-let setSpy: ReturnType<typeof spyOn<typeof globalThis, 'setInterval'>>;
-let clearSpy: ReturnType<typeof spyOn<typeof globalThis, 'clearInterval'>>;
-
 beforeEach(() => {
-  setSpy = spyOn(globalThis, 'setInterval').mockImplementation(((tick: () => void) => {
-    ticks.push(tick);
-    return ticks.length as unknown as ReturnType<typeof setInterval>;
-  }) as typeof setInterval);
-  clearSpy = spyOn(globalThis, 'clearInterval').mockImplementation(() => undefined);
+  jest.useFakeTimers();
 });
 
 afterEach(() => {
-  ticks.length = 0;
-  setSpy.mockRestore();
-  clearSpy.mockRestore();
+  jest.useRealTimers();
   setSystemTime();
 });
 
@@ -29,9 +18,11 @@ describe('useNow', () => {
     const first = renderHook(() => useNow());
     const second = renderHook(() => useNow());
     expect(first.result.current).toBe(NOW);
-    expect(ticks).toHaveLength(1);
-    setSystemTime(NOW + 60_000);
-    act(() => ticks[0]?.());
+    expect(jest.getTimerCount()).toBe(1);
+    act(() => {
+      setSystemTime(NOW + 59_000);
+      jest.advanceTimersByTime(1000);
+    });
     expect([first.result.current, second.result.current]).toEqual([NOW + 60_000, NOW + 60_000]);
     first.unmount();
     second.unmount();
@@ -41,8 +32,8 @@ describe('useNow', () => {
     const first = renderHook(() => useNow());
     const second = renderHook(() => useNow());
     first.unmount();
-    expect(clearSpy).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(1);
     second.unmount();
-    expect(clearSpy).toHaveBeenCalledWith(1);
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

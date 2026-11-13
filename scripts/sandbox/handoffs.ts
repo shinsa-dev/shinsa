@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
 import {
   isTaskSettled,
@@ -123,7 +123,7 @@ export const createPreviewTeammateHandoff = Effect.fn('Sandbox.createPreviewTeam
       !entry.backlog &&
       !entry.share &&
       !isTaskSettled(entry) &&
-      resolveTaskProject(state, entry) === projectId
+      Option.getOrNull(resolveTaskProject(state, entry)) === projectId
   );
   if (!task?.handle) return [];
   yield* core.dispatch({

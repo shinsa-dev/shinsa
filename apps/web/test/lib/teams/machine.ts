@@ -13,7 +13,7 @@ import {
   type TeamHello,
   verifyTeamHello,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { Socket } from 'effect/socket';
 import type { TeamChannelTarget } from '@/lib/teams/team-socket/schema.ts';
 import { createSocketTransport } from '../../support/engine-socket.ts';
@@ -92,7 +92,7 @@ export function createFakeTeamMachine() {
       return socket;
     },
     answer: async (socket: FakeTeamSocket, data: string) => {
-      const hello = parseTeamHello(data);
+      const hello = Option.getOrNull(parseTeamHello(data));
       if (!(hello && (await Effect.runPromise(verifyTeamHello(machine.key, hello))))) {
         socket.emit('message', {
           data: JSON.stringify({ type: 'refused', reason: 'You are not in this team.' }),

@@ -11,6 +11,7 @@ import {
   type TaskStage,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import { isAdmissionWait, isPaceWait, isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
 import { GATE, STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
@@ -108,7 +109,7 @@ export function resolveStageLabel(task: Task) {
 }
 
 export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate?.type === 'post_merge') return { label: describePostMergeStatus(task), tone: 'amber' };
   const before = gate?.type === 'merge' ? describePreMergeStatus(task) : null;
   if (before) return { label: before, tone: 'amber' };
@@ -165,7 +166,7 @@ const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
 };
 
 export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName {
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate && isHeldInBacklog(state, gate)) return TASK_GROUP.backlog.icon;
   if (gate) return resolveGateGlyph(gate).icon;
   if (task.duplicate) return TASK_GROUP.duplicate.icon;
@@ -178,7 +179,7 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
 }
 
 export function resolveTaskGlyph(state: ShinsaState, task: Task): Glyph {
-  const gate = selectLeadGate(state, task);
+  const gate = Option.getOrNull(selectLeadGate(state, task));
   if (gate && !isHeldInBacklog(state, gate)) return resolveGateGlyph(gate);
   if (!gate && isHeldByTasks(state, task)) return { icon: 'IconHourglass', tone: 'neutral' };
   const group = TASK_GROUP[resolveTaskGroup(state, task)];

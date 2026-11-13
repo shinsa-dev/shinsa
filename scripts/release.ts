@@ -25,14 +25,9 @@ const program = Effect.gen(function* () {
       notesDir: Config.String('RUNNER_TEMP').pipe(Config.withDefault(tmpdir())),
     })
   );
-  const { channel, bump } = yield* Effect.try({
-    try: () =>
-      parseReleaseOptions(
-        settings.channel.pipe(Option.getOrUndefined),
-        settings.bump.pipe(Option.getOrUndefined)
-      ),
-    catch: (error) => new ReleaseRefused({ message: error instanceof Error ? error.message : String(error) }),
-  });
+  const { channel, bump } = yield* Effect.fromResult(
+    parseReleaseOptions(Option.getOrUndefined(settings.channel), Option.getOrUndefined(settings.bump))
+  );
   const root = yield* command.text(['git', 'rev-parse', '--show-toplevel']);
   const plan = resolveReleasePlan({ tags: [...(yield* listTags(root))], channel, bump });
   const entries = yield* listValidEntries(root);

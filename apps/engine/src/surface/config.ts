@@ -187,7 +187,7 @@ function describeProjectLine(project: ProjectView) {
 
 function describeProject(project: ProjectView, focus: ProjectsRead['focus']) {
   return [
-    `${project.name} (${project.key})${selectSingleFocusProject(focus) === project.id ? ', in focus' : ''}`,
+    `${project.name} (${project.key})${Option.contains(selectSingleFocusProject(focus), project.id) ? ', in focus' : ''}`,
     project.description || 'No description.',
     '',
     project.repos.length === 0 ? 'No repositories yet.' : 'Repositories:',
@@ -406,11 +406,11 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
     format: ({ projects, focus, initiative }) => {
       const names = new Map(projects.map((project) => [project.id, project.name]));
       const described = initiative
-        ? `the initiative ${initiative}`
+        ? Option.some(`the initiative ${initiative}`)
         : describeFocusProjects(focus, (projectId) => names.get(projectId));
-      if (!described) return 'No focus: everything shows.';
+      if (Option.isNone(described)) return 'No focus: everything shows.';
       const until = focus.until ? ` until ${DateTime.formatIso(DateTime.makeUnsafe(focus.until))}` : '';
-      return `Focused on ${described}${until}.`;
+      return `Focused on ${described.value}${until}.`;
     },
   }),
   defineCommand({

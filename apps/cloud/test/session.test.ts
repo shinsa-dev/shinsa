@@ -8,6 +8,7 @@ import {
   type RemoteSession,
   serializeBase64Url,
 } from '@shinsa/core';
+import { Option } from 'effect';
 import {
   createCodeChallenge,
   createHarness,
@@ -20,7 +21,7 @@ import {
 function readOAuthCookie(response: Response) {
   const cookie = (response.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
   const value = cookie.split('=')[1] ?? '';
-  const fields = JSON.parse(decodeText(parseBase64Url(value) ?? new Uint8Array())) as {
+  const fields = JSON.parse(decodeText(Option.getOrNull(parseBase64Url(value)) ?? new Uint8Array())) as {
     state: string;
     verifier: string;
     returnPath: string;

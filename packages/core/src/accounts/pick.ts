@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { type AccountSwitchReason, resolveAccountSwitchAt, type Settings } from '../domain/index.ts';
 import type { AccountSignIn, AccountSummary, AccountUsage } from '../protocol/accounts.ts';
 import { resolveHeadroom, resolveSpentUntil, resolveUsedPercent } from './usage.ts';
@@ -32,32 +33,32 @@ export function resolveCandidateSpentUntil(
   model: string | null,
   now: number
 ) {
-  const marked = candidate.spentUntil !== null && candidate.spentUntil > now ? candidate.spentUntil : null;
+  const marked = Option.filter(Option.fromNullOr(candidate.spentUntil), (until) => until > now);
   const measured = resolveSpentUntil(candidate.usage, model, now);
-  if (marked === null) return measured;
-  return measured === null ? marked : Math.max(marked, measured);
+  return Option.isSome(marked) && Option.isSome(measured)
+    ? Option.some(Math.max(marked.value, measured.value))
+    : Option.orElse(marked, () => measured);
 }
 
 export function isUsableAccount(candidate: AccountCandidate, model: string | null, now: number) {
   return (
     !candidate.paused &&
     candidate.signIn !== 'signed_out' &&
-    resolveCandidateSpentUntil(candidate, model, now) === null
+    Option.isNone(resolveCandidateSpentUntil(candidate, model, now))
   );
 }
 
 function isBelowThreshold(candidate: AccountCandidate, model: string | null) {
-  return (resolveUsedPercent(candidate.usage, model) ?? 0) < candidate.switchAt;
+  return Option.getOrElse(resolveUsedPercent(candidate.usage, model), () => 0) < candidate.switchAt;
 }
 
 function rankByHeadroom(candidates: AccountCandidate[], model: string | null) {
   return [...candidates].sort((a, b) => {
     const left = resolveHeadroom(a.usage, model);
     const right = resolveHeadroom(b.usage, model);
-    if (left === right) return 0;
-    if (left === null) return 1;
-    if (right === null) return -1;
-    return right - left;
+    if (Option.isNone(left)) return Option.isNone(right) ? 0 : 1;
+    if (Option.isNone(right)) return -1;
+    return right.value - left.value;
   });
 }
 
@@ -77,7 +78,8 @@ function rankLeastSpent(candidates: AccountCandidate[], model: string | null, no
     const signedIn = Number(a.signIn === 'signed_out') - Number(b.signIn === 'signed_out');
     if (signedIn !== 0) return signedIn;
     return (
-      (resolveCandidateSpentUntil(a, model, now) ?? 0) - (resolveCandidateSpentUntil(b, model, now) ?? 0)
+      Option.getOrElse(resolveCandidateSpentUntil(a, model, now), () => 0) -
+      Option.getOrElse(resolveCandidateSpentUntil(b, model, now), () => 0)
     );
   });
 }
@@ -86,7 +88,7 @@ function resolveReason(request: PickRequest, chosen: AccountCandidate): AccountS
   const previous = request.accounts.find((account) => account.id === request.previous);
   if (!previous || previous.id === chosen.id) return null;
   if (previous.signIn === 'signed_out') return 'signed_out';
-  if (resolveCandidateSpentUntil(previous, request.model, request.now) !== null) return 'usage_limit';
+  if (Option.isSome(resolveCandidateSpentUntil(previous, request.model, request.now))) return 'usage_limit';
   return 'headroom';
 }
 
@@ -105,16 +107,20 @@ function pickUsable(request: PickRequest) {
   );
 }
 
-export function pickAccount(request: PickRequest): PickedAccount | null {
+export function pickAccount(request: PickRequest): Option.Option<PickedAccount> {
   const { accounts, model, now } = request;
   if (request.bound !== null) {
     const bound = accounts.find((account) => account.id === request.bound);
-    if (!bound) return null;
+    if (!bound) return Option.none();
     const moved = request.previous !== null && request.previous !== bound.id;
-    return { account: bound, reason: moved ? 'bound' : null, usable: isUsableAccount(bound, model, now) };
+    return Option.some({
+      account: bound,
+      reason: moved ? 'bound' : null,
+      usable: isUsableAccount(bound, model, now),
+    });
   }
   const usable = pickUsable(request);
-  if (usable) return { account: usable, reason: resolveReason(request, usable), usable: true };
+  if (usable) return Option.some({ account: usable, reason: resolveReason(request, usable), usable: true });
   const untried = accounts.filter((account) => !request.exclude.has(account.id));
   const fallback =
     rankLeastSpent(
@@ -124,16 +130,19 @@ export function pickAccount(request: PickRequest): PickedAccount | null {
     )[0] ??
     untried.find((account) => account.isDefault) ??
     untried[0];
-  if (!fallback) return null;
-  return { account: fallback, reason: resolveReason(request, fallback), usable: false };
+  if (!fallback) return Option.none();
+  return Option.some({ account: fallback, reason: resolveReason(request, fallback), usable: false });
 }
 
 export function resolvePoolResetAt(accounts: AccountCandidate[], model: string | null, now: number) {
-  const resets = accounts
-    .filter((account) => !account.paused && account.signIn !== 'signed_out')
-    .map((account) => resolveCandidateSpentUntil(account, model, now));
-  if (resets.length === 0 || resets.some((reset) => reset === null)) return null;
-  return Math.min(...(resets as number[]));
+  const resets = Option.all(
+    accounts
+      .filter((account) => !account.paused && account.signIn !== 'signed_out')
+      .map((account) => resolveCandidateSpentUntil(account, model, now))
+  );
+  return Option.flatMap(resets, (until) =>
+    until.length === 0 ? Option.none() : Option.some(Math.min(...until))
+  );
 }
 
 export function resolveAccountCandidate(account: AccountSummary, settings: Settings): AccountCandidate {
@@ -162,5 +171,7 @@ export function selectNextAccount(
     exclude: new Set(),
     now,
   });
-  return accounts.find((account) => account.id === picked?.account.id) ?? null;
+  return Option.flatMap(picked, (chosen) =>
+    Option.fromNullishOr(accounts.find((account) => account.id === chosen.account.id))
+  );
 }

@@ -72,7 +72,7 @@ export class CloudCrypto extends Context.Service<
 
       const tokenKey = yield* Effect.cached(
         Effect.gen(function* () {
-          const raw = parseBase64Url(Redacted.value(config.slackTokenKey));
+          const raw = Option.getOrNull(parseBase64Url(Redacted.value(config.slackTokenKey)));
           if (raw?.length !== TOKEN_KEY_BYTES)
             return yield* new CryptoFailed({ message: 'SLACK_TOKEN_KEY must be 32 bytes in base64url.' });
           return yield* Effect.promise(() =>
@@ -117,7 +117,7 @@ export class CloudCrypto extends Context.Service<
       });
 
       const openToken = Effect.fn('CloudCrypto.openToken')(function* (sealed: string) {
-        const bytes = parseBase64Url(sealed);
+        const bytes = Option.getOrNull(parseBase64Url(sealed));
         if (!bytes || bytes.length <= SEALED_IV_BYTES)
           return yield* new CryptoFailed({ message: 'The stored token is not sealed.' });
         const key = yield* tokenKey;

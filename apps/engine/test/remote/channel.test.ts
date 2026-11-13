@@ -14,7 +14,7 @@ import {
   TERMINAL_STREAM_CLOSE,
 } from '@shinsa/core';
 import type { ScopedActor } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { HubSocket } from '../../src/http/socket.ts';
 import { describeError } from '../../src/log/redact.ts';
 import { JsonLogger } from '../../src/log/service.ts';
@@ -448,9 +448,9 @@ describe('the sealed channel', () => {
     expect(messages[0]).toMatchObject({ t: 'response', id: 'r1', status: 201 });
     expect((messages[0] as { headers: [string, string][] }).headers).toContainEqual(['x-echo', '{"a":1}']);
     const body = messages.filter((message) => message.t === 'body') as { chunk: string }[];
-    expect(body.reduce((total, part) => total + (parseBodyChunk(part.chunk)?.length ?? 0), 0)).toBe(
-      big.length
-    );
+    expect(
+      body.reduce((total, part) => total + (Option.getOrNull(parseBodyChunk(part.chunk))?.length ?? 0), 0)
+    ).toBe(big.length);
     expect(messages.at(-1)).toEqual({ t: 'end', id: 'r1' });
   });
 

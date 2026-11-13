@@ -15,6 +15,13 @@ export type WatchdogEventBody =
       nextCheckAt: number;
     }
   | { type: 'watchdog.live'; taskId: string; watchdogId: string; endsAt: number; nextCheckAt: number }
+  | {
+      type: 'watchdog.not_live';
+      taskId: string;
+      watchdogId: string;
+      check: WatchdogCheck | null;
+      nextCheckAt: number;
+    }
   | { type: 'watchdog.checking'; taskId: string; watchdogId: string; runId: string }
   | { type: 'watchdog.deferred'; taskId: string; watchdogId: string; nextCheckAt: number }
   | {

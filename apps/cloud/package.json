@@ -7,9 +7,10 @@
   "scripts": {
     "build": "bun run --cwd ../web build:remote",
     "check-types": "effect-tsgo tsc --noEmit",
-    "deploy": "bun run build && wrangler deploy",
+    "deploy": "bun run build && bun run release",
     "dev:worker": "bun run --cwd ../web build:remote && wrangler dev --port 5183",
     "migrate": "wrangler d1 migrations apply shinsa-cloud --remote",
+    "release": "bun run migrate && wrangler deploy",
     "test": "bun test --randomize"
   },
   "dependencies": {

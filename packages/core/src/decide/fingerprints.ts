@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { hashText } from '../domain/hash.ts';
 import { type FixFingerprint, type FixReason, listBlockingChecks, type Task } from '../domain/index.ts';
 
@@ -60,9 +61,12 @@ export function countReviewRounds(task: Task) {
   return (task.fixFingerprints ?? []).filter((fingerprint) => fingerprint.reason === 'review').length;
 }
 
-export function resolveReviewInputFingerprint(task: Task, evidenceIds: readonly string[]) {
+export function resolveReviewInputFingerprint(
+  task: Task,
+  evidenceIds: readonly string[]
+): Option.Option<string> {
   const tree = task.treeHash ?? null;
-  if (tree === null) return null;
+  if (tree === null) return Option.none();
   const input = {
     tree,
     plan: task.plan?.version ?? 0,
@@ -78,5 +82,5 @@ export function resolveReviewInputFingerprint(task: Task, evidenceIds: readonly 
       })),
     evidence: [...evidenceIds].sort(),
   };
-  return `review:${hashText(JSON.stringify(input)).toString(16).padStart(8, '0')}`;
+  return Option.some(`review:${hashText(JSON.stringify(input)).toString(16).padStart(8, '0')}`);
 }

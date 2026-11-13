@@ -11,8 +11,9 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
 import { resolveProjectInk } from '@/lib/projects.ts';
 import {
-  AUTOMATION_TYPE_LOOK,
   describeScheduleWhen,
+  describeScheduleWhere,
+  resolveAutomationLook,
   resolveAutomationType,
   resolveScheduleIcon,
 } from '@/lib/schedules.ts';
@@ -199,13 +200,29 @@ function describeFiledCount(count: number) {
   return count === 0 ? 'Nothing filed yet' : `${describeCount(count, 'task', 'tasks')} filed`;
 }
 
+function resolveSlackUpdatesFact(schedule: Schedule): AutomationFact | null {
+  if (schedule.trigger.kind !== 'slack' || schedule.source || schedule.target.kind !== 'new_task')
+    return null;
+  const posts = schedule.trigger.threadUpdates;
+  return {
+    key: 'updates',
+    icon: 'IconBubbleText',
+    label: posts ? 'Posts updates in Slack' : 'No updates in Slack',
+    tone: 'neutral',
+    hint: posts
+      ? 'A task it files gets its status, result and “Merged” in the message’s thread.'
+      : 'Tasks it files are not posted in Slack.',
+    at: null,
+  };
+}
+
 export function listAutomationFacts(state: ShinsaState, schedule: Schedule): AutomationFact[] {
   const type = resolveAutomationType(schedule);
   const source = selectWatchSource(state, schedule);
   const project = selectAutomationProject(state, schedule);
   const last = schedule.runs.filter((run) => run.outcome === 'sent').at(-1);
   const facts: (AutomationFact | null)[] = [
-    { key: 'type', ...AUTOMATION_TYPE_LOOK[type], label: type, at: null },
+    { key: 'type', ...resolveAutomationLook(schedule), label: type, at: null },
     { key: 'state', ...resolveAutomationState(schedule), at: null },
     source && {
       key: 'source',
@@ -229,9 +246,10 @@ export function listAutomationFacts(state: ShinsaState, schedule: Schedule): Aut
       icon: resolveScheduleIcon(schedule),
       label: describeScheduleWhen(schedule),
       tone: 'neutral',
-      hint: null,
+      hint: describeScheduleWhere(schedule),
       at: null,
     },
+    resolveSlackUpdatesFact(schedule),
     schedule.enabled && schedule.stopped === null && schedule.nextRunAt !== null
       ? {
           key: 'next',

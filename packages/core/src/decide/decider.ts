@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { RUN_AGENT_ROLE, resolveAgentModel, resolveAgentProvider } from '../agent-models/index.ts';
 import { quoteTitle } from '../chat/text.ts';
 import {
@@ -181,7 +182,7 @@ export class Decider {
   }
 
   projectOf(task: Task) {
-    const projectId = resolveTaskProject(this.state, task);
+    const projectId = Option.getOrNull(resolveTaskProject(this.state, task));
     return projectId ? (this.state.projects[projectId] ?? null) : null;
   }
 
@@ -191,7 +192,10 @@ export class Decider {
 
   requestBriefing(taskId: string) {
     const task = this.state.tasks[taskId];
-    this.run({ kind: 'briefing.request', projectId: task ? resolveTaskProject(this.state, task) : null });
+    this.run({
+      kind: 'briefing.request',
+      projectId: task ? Option.getOrNull(resolveTaskProject(this.state, task)) : null,
+    });
   }
 
   stage(taskId: string, stage: TaskStage, reason: string, by: 'you' | null = null) {

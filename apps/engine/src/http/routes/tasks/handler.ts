@@ -13,7 +13,7 @@ import { HttpApiBuilder } from 'effect/http-api';
 import { Transcripts } from '../../../agents/transcripts/service.ts';
 import { EngineConfig } from '../../../config/service.ts';
 import { selectInside, selectWritableInside } from '../../../files/inside.ts';
-import { assertRepoPath } from '../../../files/paths.ts';
+import { parseRepoPath } from '../../../files/paths.ts';
 import { selectOnPath } from '../../../files/probe.ts';
 import { GitCommands } from '../../../git/layers.ts';
 import { Git } from '../../../git/service.ts';
@@ -21,7 +21,7 @@ import { EngineCore } from '../../../runtime/engine/service.ts';
 import { runCommand } from '../../../shell/command.ts';
 import { ShellLayer } from '../../../shell/layers.ts';
 import { Workspaces } from '../../../workspaces/service.ts';
-import { requestSync, resolveRequestFailure } from '../../failures.ts';
+import { requestResult, resolveRequestFailure } from '../../failures.ts';
 import { BODY_INVALID } from '../../schema.ts';
 import { CommandLauncher } from '../../schema.ts';
 import { findTaskByRef } from '../../task-lookup.ts';
@@ -189,10 +189,13 @@ export const TasksHandlers = HttpApiBuilder.group(
             return yield* new RequestFailed({ code: 'code_unavailable', message: CODE_TO_EDIT_MISSING });
           const refusal = resolveEditRefusal(task);
           const root = task.worktreePath;
-          if (refusal || !root)
-            return yield* new RequestFailed({ code: 'edit_refused', message: refusal ?? '' });
-          const path = yield* requestSync(() =>
-            assertRepoPath(Predicate.isString(payload.path) ? payload.path : null)
+          if (Option.isSome(refusal) || !root)
+            return yield* new RequestFailed({
+              code: 'edit_refused',
+              message: Option.getOrUndefined(refusal) ?? '',
+            });
+          const path = yield* requestResult(
+            parseRepoPath(Predicate.isString(payload.path) ? payload.path : null)
           );
           const content = yield* readText(payload.content, 'content');
           const base = payload.base === null ? null : yield* readText(payload.base, 'base');

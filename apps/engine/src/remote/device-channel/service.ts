@@ -212,7 +212,7 @@ export class DeviceChannels extends Context.Service<DeviceChannels, DeviceChanne
               respond(message);
               return Effect.void;
             case 'body': {
-              const bytes = parseBodyChunk(message.chunk);
+              const bytes = Option.getOrNull(parseBodyChunk(message.chunk));
               const stream = pending.get(message.id)?.stream;
               if (stream && bytes) stream.enqueue(bytes);
               return Effect.void;
@@ -226,7 +226,7 @@ export class DeviceChannels extends Context.Service<DeviceChannels, DeviceChanne
         };
 
         const handshake = Effect.fn('DeviceChannel.handshake')(function* (text: string) {
-          const welcome = parseServerHello(text);
+          const welcome = Option.getOrNull(parseServerHello(text));
           if (welcome?.type === 'refused') return yield* fail(welcome.reason, true);
           if (welcome?.type === 'pending') return;
           if (!welcome) return yield* fail(DEVICE_CHANNEL_MESSAGES.handshakeUnknown);
@@ -259,7 +259,7 @@ export class DeviceChannels extends Context.Service<DeviceChannels, DeviceChanne
           if (typeof frame === 'string' || !opener) return yield* fail(DEVICE_CHANNEL_MESSAGES.unsealed);
           const opened = yield* Effect.option(opener(new Uint8Array(frame)));
           if (Option.isNone(opened)) return yield* fail(DEVICE_CHANNEL_MESSAGES.broke);
-          const message = parseChannelMessage(decodeText(opened.value));
+          const message = Option.getOrNull(parseChannelMessage(decodeText(opened.value)));
           if (!message) return yield* fail(DEVICE_CHANNEL_MESSAGES.unknown);
           return yield* handle(message);
         });

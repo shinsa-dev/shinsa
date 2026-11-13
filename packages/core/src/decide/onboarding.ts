@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { CommandOf } from '../commands/index.ts';
 import { DomainError } from '../domain/errors.ts';
 import { selectWelcomeTask, WELCOME_TASK } from '../domain/onboarding.ts';
@@ -8,7 +9,7 @@ export function recordWelcome(decider: Decider, command: CommandOf<'onboarding.w
   const body = command.body.trim();
   if (body.length === 0)
     throw new DomainError({ code: 'welcome_invalid', message: 'The welcome needs a summary.' });
-  if (selectWelcomeTask(decider.state.tasks)) {
+  if (Option.isSome(selectWelcomeTask(decider.state.tasks))) {
     throw new DomainError({ code: 'welcome_recorded', message: 'The welcome task is already there.' });
   }
   const taskId = decider.context.newId();

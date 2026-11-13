@@ -1,5 +1,5 @@
 import { parseTeamJoinFragment, type TeamJoinFragment, type TeamJoinStatus } from '@shinsa/core';
-import { Clock, Effect, Schema } from 'effect';
+import { Clock, Effect, Schema, Option } from 'effect';
 import type { DashboardClient } from '@/lib/remote/dashboard.ts';
 import type { KeyValueStore } from '@/lib/remote/schema.ts';
 import type { UserProfile } from '@/lib/remote/users.ts';
@@ -11,11 +11,11 @@ const JOIN_KEY = 'shinsa.remote.team-join';
 const TEAM_PREFIX = 'team:';
 
 export function stashTeamJoinFragment(storage: Storage, hash: string) {
-  if (parseTeamJoinFragment(hash)) storage.setItem(JOIN_KEY, hash.replace(/^#/, ''));
+  if (Option.isSome(parseTeamJoinFragment(hash))) storage.setItem(JOIN_KEY, hash.replace(/^#/, ''));
 }
 
 export function selectTeamJoinFragment(storage: Storage): TeamJoinFragment | null {
-  return parseTeamJoinFragment(storage.getItem(JOIN_KEY) ?? '');
+  return Option.getOrNull(parseTeamJoinFragment(storage.getItem(JOIN_KEY) ?? ''));
 }
 
 export function clearTeamJoinFragment(storage: Storage) {

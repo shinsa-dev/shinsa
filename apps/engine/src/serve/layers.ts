@@ -70,6 +70,7 @@ import { EngineCore } from '../runtime/engine/service.ts';
 import { MonitorClock } from '../runtime/monitors/service.ts';
 import { WatchdogClock } from '../runtime/watchdogs/service.ts';
 import { ScheduleClockTimings } from '../schedules/clock/schema.ts';
+import { ScheduleFilter } from '../schedules/filter/service.ts';
 import { SchedulesLayer } from '../schedules/layers.ts';
 import { ScheduleTimeZone } from '../schedules/schema.ts';
 import { Schedules } from '../schedules/service.ts';
@@ -290,9 +291,11 @@ function createClocksLayer(options: ShinsaOptions) {
     Effect.gen(function* () {
       const address = yield* ServerAddress;
       const remote = yield* Remote;
+      const slack = yield* Slack;
       return SchedulesLayer({
         baseUrl: address.url,
         hookUrl: (scheduleId, token) => remote.resolveHookUrl(scheduleId, token),
+        slackChannels: slack.channels,
       });
     })
   );
@@ -459,13 +462,10 @@ function createServeLayer(
     Layer.provideMerge(createRunsLayer(options)),
     Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer)),
     Layer.provideMerge(
-      Layer.mergeAll(
-        createTriageLayer(),
-        createSlackLayer(config),
-        createClocksLayer(options),
-        createTerminalsLayer(instance)
-      )
+      Layer.mergeAll(createTriageLayer(), createClocksLayer(options), createTerminalsLayer(instance))
     ),
+    Layer.provideMerge(createSlackLayer(config)),
+    Layer.provideMerge(ScheduleFilter.layer),
     Layer.provideMerge(
       Layer.mergeAll(
         createRemoteLayer(config, options, instance),

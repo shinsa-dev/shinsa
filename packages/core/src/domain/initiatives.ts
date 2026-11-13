@@ -1,3 +1,5 @@
+import { Option } from 'effect';
+
 export interface InitiativePhase {
   id: string;
   name: string;
@@ -49,9 +51,9 @@ export const INITIATIVE_LIMITS = {
 export function selectLeadInitiative<T extends Pick<Initiative, 'leadTaskId'>>(
   initiatives: Iterable<T>,
   taskId: string
-) {
-  for (const initiative of initiatives) if (initiative.leadTaskId === taskId) return initiative;
-  return null;
+): Option.Option<T> {
+  for (const initiative of initiatives) if (initiative.leadTaskId === taskId) return Option.some(initiative);
+  return Option.none();
 }
 
 export function resolveInitiativeText(text: string) {
@@ -59,22 +61,21 @@ export function resolveInitiativeText(text: string) {
 }
 
 export function selectInitiativePhase(initiative: Initiative, phaseId: string | null | undefined) {
-  if (!phaseId) return null;
-  return initiative.phases.find((phase) => phase.id === phaseId) ?? null;
+  if (!phaseId) return Option.none();
+  return Option.fromNullishOr(initiative.phases.find((phase) => phase.id === phaseId));
 }
 
 export function selectInitiativeByReference<T extends Pick<Initiative, 'id' | 'name'>>(
   initiatives: Iterable<T>,
   reference: string
-) {
+): Option.Option<T> {
   const trimmed = reference.trim();
   const lower = trimmed.toLowerCase();
-  if (!lower) return null;
+  if (!lower) return Option.none();
   const list = [...initiatives];
-  return (
+  return Option.fromNullishOr(
     list.find((initiative) => initiative.id === trimmed) ??
-    list.find((initiative) => initiative.name.toLowerCase() === lower) ??
-    list.find((initiative) => initiative.id.startsWith(trimmed)) ??
-    null
+      list.find((initiative) => initiative.name.toLowerCase() === lower) ??
+      list.find((initiative) => initiative.id.startsWith(trimmed))
   );
 }

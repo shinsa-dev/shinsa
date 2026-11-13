@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   formatTaskHandle,
   isProjectKey,
@@ -58,13 +59,13 @@ describe('task handles', () => {
   });
 
   test('reading a handle ignores case, spaces and leading zeros', () => {
-    expect(parseTaskHandle('sw-142')).toBe('SW-142');
-    expect(parseTaskHandle('  t-007 ')).toBe('T-7');
+    expect(Option.getOrNull(parseTaskHandle('sw-142'))).toBe('SW-142');
+    expect(Option.getOrNull(parseTaskHandle('  t-007 '))).toBe('T-7');
   });
 
   test('text that is not a handle reads as nothing', () => {
     for (const text of ['SW142', 'SW-', '-1', '1-SW', 'TOOLONGKEY-1', 'SW-1234567890', 'see SW-1']) {
-      expect(parseTaskHandle(text)).toBeNull();
+      expect(Option.getOrNull(parseTaskHandle(text))).toBeNull();
     }
   });
 });
@@ -91,10 +92,10 @@ describe('project references', () => {
   test('a project is named by its id, or by its key or name in any case', () => {
     const shinsa = { ...project('p1', []), key: 'LOC', name: 'Shinsa' };
     const other = project('p2', []);
-    expect(selectProjectByReference([other, shinsa], 'p1')?.id).toBe('p1');
-    expect(selectProjectByReference([other, shinsa], ' loc ')?.id).toBe('p1');
-    expect(selectProjectByReference([other, shinsa], 'SHINSA')?.id).toBe('p1');
-    expect(selectProjectByReference([other, shinsa], 'P1 ')).toBeNull();
-    expect(selectProjectByReference([other, shinsa], 'nothing')).toBeNull();
+    expect(Option.getOrNull(selectProjectByReference([other, shinsa], 'p1'))?.id).toBe('p1');
+    expect(Option.getOrNull(selectProjectByReference([other, shinsa], ' loc '))?.id).toBe('p1');
+    expect(Option.getOrNull(selectProjectByReference([other, shinsa], 'SHINSA'))?.id).toBe('p1');
+    expect(Option.getOrNull(selectProjectByReference([other, shinsa], 'P1 '))).toBeNull();
+    expect(Option.getOrNull(selectProjectByReference([other, shinsa], 'nothing'))).toBeNull();
   });
 });

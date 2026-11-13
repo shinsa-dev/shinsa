@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { Project, Repo, Task, TeammateFork } from '../domain/index.ts';
 import { listForkRounds } from '../prompts/forks.ts';
 import type { ShinsaState } from '../state/project.ts';
@@ -32,7 +33,7 @@ export function listOwnRepos(state: Pick<ShinsaState, 'repos' | 'teammateRepos'>
   return Object.values(state.repos).filter((repo) => !state.teammateRepos?.[repo.id]);
 }
 
-export function findForkRepo(
+export function selectForkRepo(
   state: Pick<ShinsaState, 'repos' | 'projects' | 'teammateRepos'>,
   repo: Pick<Repo, 'name' | 'remote'> | null,
   project: Pick<Project, 'name'> | null
@@ -44,5 +45,5 @@ export function findForkRepo(
     own.find((candidate) =>
       isSameText(candidate.projectId ? state.projects[candidate.projectId]?.name : null, project?.name)
     );
-  return match?.id ?? null;
+  return Option.map(Option.fromUndefinedOr(match), (found) => found.id);
 }

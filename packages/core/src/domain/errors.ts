@@ -7,3 +7,8 @@ export class DomainError extends Schema.TaggedError<DomainError, { readonly bran
     message: Schema.String,
   }
 ) {}
+
+export interface DomainRefusal {
+  readonly code: string;
+  readonly message: string;
+}

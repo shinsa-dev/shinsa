@@ -230,7 +230,7 @@ export class EngineServer extends Context.Service<
       }
 
       function respondTeamView(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
-        const target = parseTeamViewTarget(url);
+        const target = Option.getOrNull(parseTeamViewTarget(url));
         if (!(teamFeeds && target)) return respondNotFound();
         const open = (peer: ChannelPeer) => {
           const relay = runSync(teamFeeds.openRelay(peer, target));
@@ -263,7 +263,7 @@ export class EngineServer extends Context.Service<
       }
 
       function respondLocalRelay(request: Request, url: URL) {
-        const target = parseTeamRelayPath(url.pathname);
+        const target = Option.getOrNull(parseTeamRelayPath(url.pathname));
         if (!target) return null;
         const refusal = resolveRefusal(request, allowedHosts);
         if (refusal) return respondRefusal(RequestForbidden, refusal);
@@ -291,7 +291,7 @@ export class EngineServer extends Context.Service<
       function respondLocalSocket(request: Request, url: URL, bunServer: Bun.Server<ServerSocketData>) {
         const isPage = url.pathname === '/ws';
         const isTeamView = url.pathname === TEAM_VIEW_PATH;
-        const relayId = parseTeamRelaySocketPath(url.pathname);
+        const relayId = Option.getOrNull(parseTeamRelaySocketPath(url.pathname));
         const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
         if (!(isPage || isTeamView || relayId || terminalId)) return null;
         const refusal = resolveRefusal(request, allowedHosts);

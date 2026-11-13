@@ -29,6 +29,8 @@ describe('reading set_schedule', () => {
         name: null,
         text: null,
         trigger: null,
+        slackChannel: null,
+        slackUpdates: null,
         target: null,
         source: null,
         enabled: null,
@@ -92,6 +94,28 @@ describe('reading set_schedule', () => {
     });
   });
 
+  test('a Slack channel is named for the engine to look up, with or without its # and workspace', () => {
+    expect(read({ slack_channel: ' #alerts ', new_task: true })).toMatchObject({
+      ok: true,
+      value: {
+        trigger: null,
+        slackChannel: { channel: 'alerts', workspace: null, updates: null },
+        secretRef: null,
+      },
+    });
+    expect(read({ slack_channel: 'C0123', slack_workspace: ' Acme ' })).toMatchObject({
+      value: { slackChannel: { channel: 'C0123', workspace: 'Acme' } },
+    });
+    expect(read({ slack_channel: 'alerts', slack_updates: false })).toMatchObject({
+      value: { slackChannel: { channel: 'alerts', updates: false } },
+    });
+    expect(read({ every_minutes: 5 })).toMatchObject({ value: { slackChannel: null, slackUpdates: null } });
+    expect(read({ schedule_id: 'sch-1', slack_updates: false })).toMatchObject({
+      ok: true,
+      value: { trigger: null, slackChannel: null, slackUpdates: false },
+    });
+  });
+
   test('targets: a new task, a question, another task', () => {
     expect(read({ new_task: true })).toMatchObject({
       value: { target: { kind: 'new_task', priority: 'normal', mode: 'build' } },
@@ -126,6 +150,16 @@ describe('reading set_schedule', () => {
     ['a made-up time of day', { daily_at: '9pm' }, 'is not a time of day'],
     ['a time that is not a time', { run_at: 'tomorrow' }, 'is not a time'],
     ['a bad ref', { webhook: { signature: { header: 'x', secret_ref: 'abc' } } }, 'secret-ref'],
+    ['a channel and a clock', { slack_channel: '#alerts', every_minutes: 5 }, 'not several'],
+    ['a channel that is only a #', { slack_channel: '#' }, 'must name a channel, such as #alerts'],
+    ['a channel that is empty', { slack_channel: '' }, 'slack_channel'],
+    ['updates on a clock', { every_minutes: 5, slack_updates: false }, 'not with another trigger'],
+    ['updates alone on a new automation', { slack_updates: false }, 'or alone with schedule_id'],
+    [
+      'a workspace without a channel',
+      { every_minutes: 5, slack_workspace: 'Acme' },
+      'only goes with slack_channel',
+    ],
     ['both targets', { new_task: true, task_id: 't' }, 'not both'],
     ['zero minutes', { in_minutes: 0 }, 'in_minutes must be'],
     ['an unknown webhook field', { webhook: { replay: '{{body.id}}' } }, 'webhook has no replay.'],

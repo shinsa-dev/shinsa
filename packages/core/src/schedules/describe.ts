@@ -37,6 +37,8 @@ export function describeScheduleTrigger(trigger: ScheduleTrigger) {
       return `${describeDays(trigger.weekdays)} at ${trigger.time}`;
     case 'webhook':
       return 'When its webhook is called';
+    case 'slack':
+      return `When a message is posted in #${trigger.channelName}`;
   }
 }
 

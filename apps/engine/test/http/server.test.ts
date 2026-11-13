@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type AgentModel, applyStatePatch, type ServerMessage, serializeState } from '@shinsa/core';
-import { Effect, Queue } from 'effect';
+import { Effect, Queue, Option } from 'effect';
 import { type ModelSource } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { type Launcher } from '../../src/http/index.ts';
@@ -163,7 +163,8 @@ describe('the socket', () => {
     const first = client.messages.find((message) => message.type === 'state');
     let state = first?.type === 'state' ? first.state : null;
     for (const message of client.messages) {
-      if (message.type === 'state.patch' && state) state = applyStatePatch(state, message.patch);
+      if (message.type === 'state.patch' && state)
+        state = Option.getOrNull(applyStatePatch(state, message.patch));
     }
     expect(Object.keys(state?.tasks ?? {})).toHaveLength(1);
     expect(state).toEqual(JSON.parse(JSON.stringify(serializeState(engine.state))));

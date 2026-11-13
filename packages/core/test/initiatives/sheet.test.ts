@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   listInitiativeProgress,
   listInitiatives,
@@ -55,7 +56,7 @@ describe('resolveInitiativeSheet', () => {
     harness.send({ type: 'task.mark_duplicate', taskId: duplicate, duplicateOf: shipped });
     createTask(harness, { request: 'Not a member' });
 
-    const sheet = resolveInitiativeSheet(harness.state, id, harness.now);
+    const sheet = Option.getOrNull(resolveInitiativeSheet(harness.state, id, harness.now));
     expect(sheet?.initiative.name).toBe('Chat split');
     expect(sheet?.needsYou.map((entry) => entry.task.id)).toEqual([gated]);
     expect(sheet?.now.map((task) => task.id)).toEqual([working]);
@@ -111,7 +112,7 @@ describe('resolveInitiativeSheet', () => {
     } as Round;
     const unplanned = { title: 'Second round', outcome: null, endedAt: null, queuedAt: 6 } as Round;
     const state = withTask(harness.state, taskId, { rounds: [round, unplanned] });
-    const decisions = resolveInitiativeSheet(state, id, harness.now)?.decisions ?? [];
+    const decisions = Option.getOrNull(resolveInitiativeSheet(state, id, harness.now))?.decisions ?? [];
     expect(decisions.map((decision) => [decision.kind, decision.text])).toEqual([
       ['call', 'Kept the generation counter.'],
       ['plan', harness.task(taskId).plan?.document?.goal ?? ''],
@@ -123,18 +124,18 @@ describe('resolveInitiativeSheet', () => {
     const { harness, id } = createInitiativeHarness();
     const taskId = member(harness, id, null, 'Tidy the docs');
     const state = withTask(harness.state, taskId, { initiativePhaseId: 'gone' });
-    const sheet = resolveInitiativeSheet(state, id, harness.now);
+    const sheet = Option.getOrNull(resolveInitiativeSheet(state, id, harness.now));
     expect(sheet?.progress.map((entry) => [entry.phase?.name ?? null, entry.total])).toEqual([
       ['Dock', 0],
       ['Studio', 0],
       [null, 1],
     ]);
-    expect(resolveInitiativeSheet(harness.state, 'nope', harness.now)).toBeNull();
+    expect(Option.getOrNull(resolveInitiativeSheet(harness.state, 'nope', harness.now))).toBeNull();
   });
 
   test('an empty initiative shows its phases with nothing in them', () => {
     const { harness, id } = createInitiativeHarness();
-    const sheet = resolveInitiativeSheet(harness.state, id, harness.now);
+    const sheet = Option.getOrNull(resolveInitiativeSheet(harness.state, id, harness.now));
     expect(sheet?.progress.map((entry) => [entry.phase?.name, entry.total])).toEqual([
       ['Dock', 0],
       ['Studio', 0],
@@ -153,7 +154,9 @@ describe('resolveInitiativeSheet', () => {
     if (!initiative) throw new Error('no initiative');
 
     const progress = listInitiativeProgress(harness.state, initiative);
-    expect(progress).toEqual(resolveInitiativeSheet(harness.state, id, harness.now)?.progress ?? []);
+    expect(progress).toEqual(
+      Option.getOrNull(resolveInitiativeSheet(harness.state, id, harness.now))?.progress ?? []
+    );
     expect(progress.map((entry) => [entry.phase?.name, entry.shipped, entry.total, entry.dropped])).toEqual([
       ['Dock', 1, 2, 0],
       ['Studio', 0, 1, 1],

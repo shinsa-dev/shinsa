@@ -4,4 +4,4 @@ export {
   resolveCommitType,
   serializeConventionalSubject,
 } from './conventional.ts';
-export { assertRefName, slugify } from './refs.ts';
+export { slugify } from './refs.ts';

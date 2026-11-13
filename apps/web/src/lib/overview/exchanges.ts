@@ -10,6 +10,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import { Option } from 'effect';
 import type { Mention } from '@/lib/remote/users.ts';
 import { describeOwnerInSentence, resolveOwnerPossessive, type SharedOwner } from '@/lib/share/page.ts';
 
@@ -69,7 +70,7 @@ export function selectShownReply(
 }
 
 export function selectWorkingRequest(task: Task): Iteration | null {
-  return task.stage === 'fixing' ? selectOpenIteration(task) : null;
+  return task.stage === 'fixing' ? Option.getOrNull(selectOpenIteration(task)) : null;
 }
 
 export function listEarlierReplies(task: Task, shownId: string | null): AnsweredIteration[] {

@@ -77,8 +77,14 @@ describe('describing a watchdog', () => {
     expect(summary({ status: 'awaiting_production', checks: [] })).toBe(
       'Starts once the change is live in production.'
     );
+    expect(summary({ status: 'awaiting_production', awaitingSince: NOW })).toBe(
+      'Fine. Starts over once the change is live in production.'
+    );
+    expect(summary({ status: 'awaiting_production', awaitingSince: NOW + 1 })).toBe(
+      'The change is not live in production. Starts over once it is.'
+    );
     expect(summary({ status: 'awaiting_production' })).toBe(
-      'Starts once the change is live in production. Fine.'
+      'The change is not live in production. Starts over once it is.'
     );
     expect(summary({ status: 'awaiting_production', runId: 'r' })).toBe(
       'Checking whether the change is live in production.'
@@ -124,7 +130,8 @@ describe('describing a watchdog', () => {
     expect(meta({})).toBe('31 h left · 1 check');
     expect(meta({ endsAt: null })).toBe('1 h left · 1 check');
     expect(meta({ status: 'needs_source' })).toBeNull();
-    expect(meta({ status: 'awaiting_production' })).toBeNull();
+    expect(meta({ status: 'awaiting_production', checks: [] })).toBeNull();
+    expect(meta({ status: 'awaiting_production' })).toBe('1 check');
     expect(meta({ status: 'passed', checks: [] })).toBe('0 checks');
     expect(WATCHDOG_STATUS.tripped).toEqual({ label: 'Found an issue', tone: 'red' });
   });

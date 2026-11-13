@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { splitMessageAttachments } from '../chat/attachments.ts';
 import type { UserCommand } from '../commands/index.ts';
 import type { Gate, GateType, Run, RunAccount, Task, TaskGuest } from '../domain/index.ts';
@@ -148,24 +149,26 @@ function resolveTeamRefusal(
   command: ScopedCommand,
   taskId: string
 ) {
-  if (command.type === 'task.give_back') return null;
+  if (command.type === 'task.give_back') return Option.none<string>();
   const scope = resolveCommandScope(command.type);
   const held = scope !== 'share' && isHeldBy(state.tasks[taskId], actor);
-  return hasScope(scopes, scope) || held ? null : TEAM_SCOPE_MESSAGES[scope];
+  return hasScope(scopes, scope) || held ? Option.none<string>() : Option.some(TEAM_SCOPE_MESSAGES[scope]);
 }
 
 export function resolveScopedRefusal(state: ShinsaState, actor: ScopedActor, command: UserCommand) {
   const { scope } = actor;
   const messages = scope.kind === 'task' ? SCOPE_MESSAGES : TEAM_SCOPE_MESSAGES;
-  if (!isScopedCommand(scope, command)) return messages.command;
+  if (!isScopedCommand(scope, command)) return Option.some(messages.command);
   const taskId = resolveCommandTask(state, command);
-  if (!taskId || !isTaskInScope(state, scope, taskId)) return messages.task;
-  if (command.type === 'task.retry' && command.account) return OWNER_ONLY_MESSAGE;
+  if (!taskId || !isTaskInScope(state, scope, taskId)) return Option.some(messages.task);
+  if (command.type === 'task.retry' && command.account) return Option.some(OWNER_ONLY_MESSAGE);
   if (splitMessageAttachments(resolveWrittenText(command)).attachments.length > 0)
-    return SCOPE_MESSAGES.attachments;
+    return Option.some(SCOPE_MESSAGES.attachments);
   const gate = command.type === 'gate.answer' ? state.gates[command.gateId] : undefined;
-  if (gate && KEYBOARD_GATES.has(gate.type)) return SCOPE_MESSAGES.gate;
-  return scope.kind === 'team' ? resolveTeamRefusal(state, actor, scope.scopes, command, taskId) : null;
+  if (gate && KEYBOARD_GATES.has(gate.type)) return Option.some(SCOPE_MESSAGES.gate);
+  return scope.kind === 'team'
+    ? resolveTeamRefusal(state, actor, scope.scopes, command, taskId)
+    : Option.none<string>();
 }
 
 function redactAccount<T extends RunAccount | null | undefined>(account: T): T {

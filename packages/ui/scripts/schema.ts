@@ -9,6 +9,11 @@ export class IconsNotFound extends Schema.TaggedError<IconsNotFound, { readonly 
   { message: Schema.String }
 ) {}
 
+export class IconsUnrendered extends Schema.TaggedError<IconsUnrendered, { readonly brand: unique symbol }>()(
+  'IconsUnrendered',
+  { message: Schema.String }
+) {}
+
 export class IconsOutOfDate extends Schema.TaggedError<IconsOutOfDate, { readonly brand: unique symbol }>()(
   'IconsOutOfDate',
   { message: Schema.String }

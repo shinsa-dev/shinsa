@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   listKeptMemory,
   listMemory,
@@ -38,7 +39,7 @@ function write(
 }
 
 function projectOf(harness: Harness, taskId: string) {
-  return resolveTaskProject(harness.state, harness.task(taskId)) ?? '';
+  return Option.getOrNull(resolveTaskProject(harness.state, harness.task(taskId))) ?? '';
 }
 
 function entries(harness: Harness) {

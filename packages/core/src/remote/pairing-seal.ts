@@ -77,7 +77,7 @@ export const openPairingCredentials = Effect.fn('openPairingCredentials')(functi
   machine: { readonly publicKey: string; readonly privateKey: CryptoKey },
   sealed: string
 ) {
-  const bytes = parseBase64Url(sealed);
+  const bytes = Option.getOrNull(parseBase64Url(sealed));
   if (!bytes || bytes.length <= EPHEMERAL_BYTES + PAIRING_SEAL_IV_BYTES) return null;
   const ephemeral = bytes.slice(0, EPHEMERAL_BYTES);
   const sender = yield* parsePublicKey(serializeBase64Url(ephemeral));
@@ -95,5 +95,5 @@ export const openPairingCredentials = Effect.fn('openPairingCredentials')(functi
     )
   ).pipe(Effect.option);
   if (Option.isNone(opened)) return null;
-  return Option.getOrNull(selectCredentials(new Uint8Array(opened.value)));
+  return Option.getOrNull(Option.flatten(selectCredentials(new Uint8Array(opened.value))));
 });

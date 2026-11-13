@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
 import {
   INITIATIVE_LIMITS,
   listInitiatives,
@@ -107,7 +108,9 @@ describe('starting a lead', () => {
     const { harness, initiativeId, leadId } = ledInitiative();
     report(harness, leadId);
     harness.send({ type: 'task.complete', taskId: leadId });
-    expect(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId))).toBeNull();
+    expect(
+      Option.getOrNull(selectInitiativeLead(harness.state, initiativeOf(harness, initiativeId)))
+    ).toBeNull();
     expect(initiativeOf(harness, initiativeId).report?.narrative).toBe('Dock is in review.');
   });
 
@@ -117,17 +120,17 @@ describe('starting a lead', () => {
     report(harness, leadId);
     harness.send({ type: 'task.complete', taskId: leadId });
     expect(listInitiativeWork(harness.state, initiativeId).map((task) => task.id)).toEqual([member]);
-    const sheet = resolveInitiativeSheet(harness.state, initiativeId, harness.now);
+    const sheet = Option.getOrNull(resolveInitiativeSheet(harness.state, initiativeId, harness.now));
     expect(sheet?.progress.reduce((sum, phase) => sum + phase.total, 0)).toBe(1);
     expect(sheet?.shipped.map((task) => task.id)).not.toContain(leadId);
   });
 
   test('finds no lead when the initiative names none, or names a task that is not a lead', () => {
     const { harness, initiativeId } = ledInitiative();
-    expect(selectInitiativeLead(harness.state, { leadTaskId: null })).toBeNull();
+    expect(Option.getOrNull(selectInitiativeLead(harness.state, { leadTaskId: null }))).toBeNull();
     const member = addMember(harness, initiativeId);
-    expect(selectInitiativeLead(harness.state, { leadTaskId: member })).toBeNull();
-    expect(selectInitiativeLead(harness.state, { leadTaskId: 'gone' })).toBeNull();
+    expect(Option.getOrNull(selectInitiativeLead(harness.state, { leadTaskId: member }))).toBeNull();
+    expect(Option.getOrNull(selectInitiativeLead(harness.state, { leadTaskId: 'gone' }))).toBeNull();
   });
 
   test('making an initiative from a task forks its lead from that task’s conversation', () => {
@@ -581,7 +584,7 @@ describe('the lead in the sheet and the rules', () => {
   test('the sheet leaves the lead out of every section', () => {
     const { harness, initiativeId, leadId } = ledInitiative();
     const memberId = addMember(harness, initiativeId);
-    const sheet = resolveInitiativeSheet(harness.state, initiativeId, harness.now);
+    const sheet = Option.getOrNull(resolveInitiativeSheet(harness.state, initiativeId, harness.now));
     expect(sheet?.now.map((task) => task.id)).toEqual([memberId]);
     expect(sheet?.now.map((task) => task.id)).not.toContain(leadId);
   });

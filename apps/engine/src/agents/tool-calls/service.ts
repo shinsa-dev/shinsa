@@ -14,7 +14,7 @@ import {
   type ShinsaCommand,
   type WatchdogSpec,
 } from '@shinsa/core';
-import { Clock, Context, Effect, FileSystem, Layer, Option } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Option, type Result } from 'effect';
 import { Checkout } from '../../git/checkout/service.ts';
 import { provideTaskGitHub } from '../../github/identity/resolve.ts';
 import { MachineGitHub } from '../../github/identity/schema.ts';
@@ -31,10 +31,10 @@ import { awaitDelegation } from '../delegations/delivery.ts';
 import { storeEvidence } from '../evidence.ts';
 import {
   assertHeldSourcesUsed,
-  assertProtocol,
   HANDED_OVER,
   readString,
   resolveCommitMessage,
+  resolveHandOver,
 } from '../handover.ts';
 import { createManageClient, isSurfaceTool, ManageAccess, readSurfaceToolCall } from '../manage/index.ts';
 import { Providers } from '../providers/index.ts';
@@ -96,6 +96,9 @@ export class ToolCalls extends Context.Service<
       const assertCalled = <T>(check: () => T) =>
         Effect.try({ try: check, catch: (error) => refuse(describeError(error)) });
 
+      const readCalled = <T, E>(result: Result.Result<T, E>) =>
+        Effect.fromResult(result).pipe(Effect.mapError((error) => refuse(describeError(error))));
+
       const createDispatch = ({ runId, attemptId, requestId }: ToolCall): EffectCallDispatch => {
         const sent = new Map<string, number>();
         return (command, id) => {
@@ -147,7 +150,7 @@ export class ToolCalls extends Context.Service<
         if (!watchdogs.some((watchdog) => watchdog.sourceRequest)) return;
         const { run } = yield* findCurrent(call.runId, call.attemptId);
         const serverNames = yield* runs.listServerNames(run);
-        yield* assertCalled(() => assertHeldSourcesUsed(watchdogs, serverNames));
+        yield* readCalled(assertHeldSourcesUsed(watchdogs, serverNames));
       });
 
       const handOver = Effect.fn('ToolCalls.handOver')(function* (
@@ -158,8 +161,8 @@ export class ToolCalls extends Context.Service<
         const { runId, attemptId, input } = call;
         switch (name) {
           case 'propose_plan': {
-            const { document, reply, actions } = yield* assertCalled(() =>
-              assertProtocol(validatePlanHandOver(input))
+            const { document, reply, actions } = yield* readCalled(
+              resolveHandOver(validatePlanHandOver(input))
             );
             const { task } = yield* findCurrent(runId, attemptId);
             yield* work.recordOverlaps(
@@ -171,7 +174,7 @@ export class ToolCalls extends Context.Service<
             break;
           }
           case 'complete_phase': {
-            const phase = yield* assertCalled(() => assertProtocol(validatePhaseHandOver(input)));
+            const phase = yield* readCalled(resolveHandOver(validatePhaseHandOver(input)));
             yield* assertSourcesUsed(call, phase.walkthrough?.watchdogs);
             yield* commitThenDispatch(
               call,
@@ -181,7 +184,7 @@ export class ToolCalls extends Context.Service<
             break;
           }
           case 'complete_fix': {
-            const fix = yield* assertCalled(() => assertProtocol(validateFixHandOver(input)));
+            const fix = yield* readCalled(resolveHandOver(validateFixHandOver(input)));
             yield* assertSourcesUsed(call, fix.walkthrough?.watchdogs);
             yield* commitThenDispatch(
               call,
@@ -191,7 +194,7 @@ export class ToolCalls extends Context.Service<
             break;
           }
           case 'report_review': {
-            const review = yield* assertCalled(() => assertProtocol(validateReview(input)));
+            const review = yield* readCalled(resolveHandOver(validateReview(input)));
             yield* findCurrent(runId, attemptId);
             yield* dispatch({ type: 'agent.report_review', runId, attemptId, ...review });
             break;
@@ -218,7 +221,7 @@ export class ToolCalls extends Context.Service<
         { runId, attemptId, input }: ToolCall,
         dispatch: EffectCallDispatch
       ) {
-        const { items, reason } = yield* assertCalled(() => assertProtocol(validateEvidenceRemoval(input)));
+        const { items, reason } = yield* readCalled(resolveHandOver(validateEvidenceRemoval(input)));
         yield* findCurrent(runId, attemptId);
         yield* dispatch({ type: 'agent.remove_evidence', runId, attemptId, items, reason });
         return 'Removed.';
@@ -264,10 +267,7 @@ export class ToolCalls extends Context.Service<
         const { run, task } = yield* findCurrent(runId, attemptId);
         if (Option.isNone(access) || isDelegatedRun(run))
           return yield* refuse(`${name} is not available to this agent.`);
-        const { spec, values } = yield* Effect.try({
-          try: () => readSurfaceToolCall(name, input),
-          catch: fail,
-        });
+        const { spec, values } = yield* Effect.fromResult(readSurfaceToolCall(name, input));
         const managed = access.value;
         const client = createManageClient({
           engine,

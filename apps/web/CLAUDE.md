@@ -134,7 +134,9 @@ src/
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
 │                        (use-transcript-window, trimmed back to its newest blocks when hidden through use-on-hide, which the Overview's activity cap shares), the rows in view of a list (use-row-window) and a long list's rows a
-│                        batch at a time (use-progressive-count), use-delayed (useDelayed: true once a wait has
+│                        batch at a time (use-progressive-count), use-delay (useDelay: runs the latest callback once
+│                        a delay has passed, on the app runtime, cancelled on unmount or when the delay or deps
+│                        change; null turns it off), use-delayed (useDelayed: true once a wait has
 │                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
 │                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
@@ -196,7 +198,8 @@ src/
     ├── runtime/         The data layer's edge (Rules → The data layer is Effect): app.ts (the browser's
     │                    Fetch and WebSocket constructor; the one ManagedRuntime over EngineClient, RemoteClient and
     │                    EngineHttp; runApp and forkApp, the only places an effect runs; replaceAppTransport, which the
-    │                    site's stand-in calls once), schema.ts (AppServices, StepFailed), engine/ (EngineClient: core's
+    │                    site's stand-in calls once), timers.ts (scheduleAfter and scheduleEvery: a timer outside React as
+    │                    a forked Effect.sleep, returning its cancel), schema.ts (AppServices, StepFailed), engine/ (EngineClient: core's
     │                    EngineApi through HttpApiClient, onMachine for the fleet's `?machine=`; its tagged errors and
     │                    messages; answers.ts, decodeAnswer; lines.ts, streamLines: an NDJSON answer as a Stream of
     │                    decoded lines), engine-http/ (EngineHttp: the one place a refusal becomes the engine's own
@@ -357,7 +360,7 @@ src/
         checks, repository choices, the actions), workspaces.ts (where agents work: worktrees or the main checkout,
         changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
-        Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, automations.ts (a watch's page: its facts,
+        Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts (each automation's type, its look, Slack's mark for a channel trigger, and its wording), automations.ts (a watch's page: its facts, a Slack channel trigger's updates fact,
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the router's answer from POST /api/placement, each machine's load),
@@ -463,6 +466,15 @@ print the whole document.
   that machine's own Fetch (`sendThrough`, `EngineClient.onMachine`). Tests swap the transport, never the clients: a
   fake `fetch` sees the client's `Request`, a fake socket comes as a WebSocket constructor (`openSocket`,
   `provideTransport`), and the marketing site's stand-in is one `DemoTransport` layer (`replaceAppTransport`).
+- **Timers, stored JSON and failures that throw are Effect too** (the `effect` skill → What stays plain). No file
+  calls `setTimeout` or `setInterval`: a component waits with `useDelay` (`hooks/use-delay.ts`) or runs its own
+  `useAppEffect` with `Effect.sleep`, and code outside React with `scheduleAfter` or `scheduleEvery`
+  (`lib/runtime/timers.ts`), each a fiber on the app runtime that stops when it is interrupted, so Bun's fake timers
+  drive them in tests. JSON read from `localStorage` is decoded with a schema into an `Option`
+  (`lib/preferences/schema.ts`, `lib/review/schema.ts`, `lib/chat/schema.ts`), so a corrupt or old value is ignored,
+  and a call that throws on bad input (`decodeURIComponent`, `new URL`, `new RegExp`) goes through `Result.try`, the
+  helper returning an `Option` where its caller branches. `scripts/lint-baseline.json` holds no `throw`, `try-catch`,
+  `json-parse` or `timer` entry for the web app or the site.
 - **A person is a first name in a user tag** (`docs/design.md`, 43). Name someone by their capitalized first name
   (`resolveFirstName`), their login only when no name is known, and never put `@` in front of a login, in copy, docs
   or tests. Every mention is a `UserTag` (`components/people/user-tag.tsx`) and every row that lists a person is

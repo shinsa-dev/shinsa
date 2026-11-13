@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, jest, mock } from 'bun:test';
 import type {
   AccountsSnapshot,
   ChatEntry,
@@ -384,30 +384,18 @@ describe('waiting for every machine before showing the state', () => {
   it('waits ten seconds by default before showing the machines that answered', () => {
     const studio = createMember('m1', 'Studio');
     const laptop = createMember('m2', 'Laptop');
-    const timers: { run: () => void; ms: number | undefined }[] = [];
-    const cleared: unknown[] = [];
-    const realSet = globalThis.setTimeout;
-    const realClear = globalThis.clearTimeout;
-    globalThis.setTimeout = ((run: () => void, ms?: number) => {
-      timers.push({ run, ms });
-      return timers.length;
-    }) as unknown as typeof setTimeout;
-    globalThis.clearTimeout = ((id: unknown) => {
-      cleared.push(id);
-    }) as typeof clearTimeout;
+    jest.useFakeTimers();
     try {
       const fleet = new Fleet([studio.member, laptop.member]);
       fleet.start();
       studio.connection.push({ state: createWire(1), status: 'open' });
-      expect(timers.map((timer) => timer.ms)).toEqual([FLEET_WAIT_MS]);
       expect(FLEET_WAIT_MS).toBe(10_000);
+      jest.advanceTimersByTime(FLEET_WAIT_MS - 1);
       expect(fleet.snapshot().state).toBeNull();
-      timers[0]?.run();
+      jest.advanceTimersByTime(1);
       expect(fleet.snapshot().state).not.toBeNull();
-      expect(cleared).toEqual([1]);
     } finally {
-      globalThis.setTimeout = realSet;
-      globalThis.clearTimeout = realClear;
+      jest.useRealTimers();
     }
   });
 });

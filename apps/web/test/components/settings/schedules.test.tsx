@@ -94,7 +94,23 @@ describe('Settings → Schedules', () => {
         trigger: { kind: 'webhook', signature: null, replayKey: null },
         nextRunAt: null,
       }),
+      createSchedule({
+        id: 'd',
+        name: 'Alerts',
+        trigger: {
+          kind: 'slack',
+          teamId: 'T1',
+          teamName: 'Acme',
+          channelId: 'C1',
+          channelName: 'alerts',
+          threadUpdates: true,
+        },
+        nextRunAt: null,
+      }),
     ]);
+    expect(
+      screen.getByText('Trigger · Starts a new task · when a message is posted in #alerts')
+    ).toBeDefined();
     expect(screen.getByText('Audit')).toBeDefined();
     expect(screen.getAllByText('Schedule · Starts a new task · every hour')).toHaveLength(2);
     expect(screen.getByText(/^Next at /).tagName).toBe('TIME');

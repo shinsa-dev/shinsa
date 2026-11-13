@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import type { UserCommand } from '../commands/index.ts';
 import { HUMAN_ONLY_REPO_FIELDS, HUMAN_ONLY_SETTINGS } from '../domain/index.ts';
 
@@ -29,5 +30,7 @@ export function isOwnerOnlyCommand(command: UserCommand) {
 }
 
 export function resolveOwnerOnlyRefusal(origin: RequestOrigin, command: UserCommand) {
-  return origin === 'remote' && isOwnerOnlyCommand(command) ? OWNER_ONLY_MESSAGE : null;
+  return origin === 'remote' && isOwnerOnlyCommand(command)
+    ? Option.some(OWNER_ONLY_MESSAGE)
+    : Option.none<string>();
 }

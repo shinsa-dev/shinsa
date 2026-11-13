@@ -1,6 +1,5 @@
 import { isAbsolute, join, normalize } from 'node:path';
 import {
-  DomainError,
   isServiceActive,
   listTaskServices,
   listTerminalPlaces,
@@ -14,7 +13,6 @@ import {
 import { Effect, Option } from 'effect';
 import { isInside } from '../../files/paths.ts';
 import { isPresent } from '../../files/probe.ts';
-import { describeError } from '../../log/index.ts';
 import { readServiceInput } from '../../terminals/input.ts';
 import { selectServiceRunIn } from '../../terminals/runs.ts';
 import { readString } from '../handover.ts';
@@ -99,7 +97,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
     const views = listTaskServices(state, snapshot, task, now);
     const reference = readString(input, 'service');
     if (!reference) {
-      const projectId = resolveTaskProject(state, task);
+      const projectId = Option.getOrNull(resolveTaskProject(state, task));
       const others = snapshot.services.filter(
         (service) => service.projectId === projectId && !views.some((each) => each.service.id === service.id)
       );
@@ -130,7 +128,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
       action === 'start'
         ? yield* runner.startService(view.service.id, run)
         : yield* runner.restartService(view.service.id, run);
-    const url = resolveServiceUrl(view.service, terminal);
+    const url = Option.getOrNull(resolveServiceUrl(view.service, terminal));
     const preview = url ? ` Its preview is at ${url} once it is up.` : '';
     return `${action === 'start' ? 'Started' : 'Restarted'} ${serviceName} for this task in ${run.cwd}.${preview} Read its output with list_services and the service’s name.`;
   });
@@ -148,7 +146,7 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
 
   const addService = Effect.fn('ServiceTools.add')(function* () {
     const repo = task.repoId ? state.repos[task.repoId] : undefined;
-    const projectId = resolveTaskProject(state, task);
+    const projectId = Option.getOrNull(resolveTaskProject(state, task));
     if (!(repo && projectId))
       return yield* refuse('add_service needs a task that works in a project’s repository.');
     const { relative, cwd } = yield* resolveServiceFolder(repo.path);
@@ -157,23 +155,21 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
         `${describeFolder(relative)} is not in the repository’s own checkout yet. A service runs from a folder on the default branch.`
       );
     const others = (yield* runner.snapshot).services.filter((each) => each.projectId === projectId);
-    const serviceInput = yield* Effect.try({
-      try: () =>
-        readServiceInput(
-          {
-            name: input.name ?? '',
-            path: cwd,
-            command: input.command ?? '',
-            env: input.env === undefined || input.env === null ? {} : input.env,
-            previewUrl: input.preview_url ?? null,
-            portVariable: input.port_variable ?? null,
-          },
-          others,
-          listTerminalPlaces(state, projectId),
-          runner.home
-        ),
-      catch: (error) => (error instanceof DomainError ? error : refuse(describeError(error))),
-    });
+    const serviceInput = yield* Effect.fromResult(
+      readServiceInput(
+        {
+          name: input.name ?? '',
+          path: cwd,
+          command: input.command ?? '',
+          env: input.env === undefined || input.env === null ? {} : input.env,
+          previewUrl: input.preview_url ?? null,
+          portVariable: input.port_variable ?? null,
+        },
+        others,
+        listTerminalPlaces(state, projectId),
+        runner.home
+      )
+    );
     const added = yield* runner.addService(projectId, serviceInput).pipe(
       Effect.catchIf(
         (error) => error.code === 'service_limit',
@@ -207,12 +203,12 @@ export const runServiceTool = Effect.fn('ServiceTools.run')(function* (
   });
 
   const removeServices = Effect.fn('ServiceTools.remove')(function* () {
-    const projectId = resolveTaskProject(state, task);
+    const projectId = Option.getOrNull(resolveTaskProject(state, task));
     if (!projectId) return yield* refuse('remove_service needs a task in a project.');
     const snapshot = yield* runner.snapshot;
     const removed = new Map<string, ServiceDefinition>();
     for (const reference of yield* readServiceReferences()) {
-      const service = selectService(snapshot, reference, projectId);
+      const service = Option.getOrNull(selectService(snapshot, reference, projectId));
       if (!service)
         return yield* refuse(`No service ${reference} in the project. Call list_services to see them.`);
       removed.set(service.id, service);

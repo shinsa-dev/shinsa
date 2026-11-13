@@ -14,6 +14,7 @@ import {
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { Option } from 'effect';
 import { type FocusTeam, UNNAMED_TEAM } from '@/lib/focus.ts';
 import { PRIORITY_ICON, PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -118,7 +119,7 @@ function resolveOwnRow(
   teams: readonly FocusTeam[],
   ownership: TaskOwnership
 ): TaskRow {
-  const projectId = resolveTaskProject(state, task);
+  const projectId = Option.getOrNull(resolveTaskProject(state, task));
   return {
     task,
     state,
@@ -154,7 +155,7 @@ function isTeamRowInProject(state: ShinsaState, team: TeamEntry, projectId: stri
 }
 
 function isTeamRowInFocus(state: ShinsaState, team: TeamEntry, now: number) {
-  const teamId = resolveFocusTeam(state, now);
+  const teamId = Option.getOrNull(resolveFocusTeam(state, now));
   if (teamId !== null) return team.entry.teamId === teamId;
   const { projectIds, except } = resolveFocusProjects(state, now);
   if (projectIds.length === 0) return true;

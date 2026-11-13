@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 import { listEvidenceItems } from '../domain/evidence.ts';
 import { type Round, resolveCurrentRound, resolveRoundBases, resolveTaskRounds } from '../domain/rounds.ts';
 import type { Evidence, Task } from '../domain/types.ts';
@@ -62,9 +63,9 @@ function isPublicAddress(uri: string) {
   return /^https?:\/\//i.test(uri) && !LOCAL_HOST.test(uri);
 }
 
-export function resolvePublicUrl(evidence: Evidence) {
-  if (evidence.uploadUrl) return evidence.uploadUrl;
-  return isPublicAddress(evidence.uri) ? evidence.uri : null;
+export function resolvePublicUrl(evidence: Evidence): Option.Option<string> {
+  if (evidence.uploadUrl) return Option.some(evidence.uploadUrl);
+  return isPublicAddress(evidence.uri) ? Option.some(evidence.uri) : Option.none();
 }
 
 function listEarlierRounds(task: Task): Round[] {
@@ -139,9 +140,9 @@ function describeNote(item: EvidenceGroup, notes: PullRequestSource['notes']) {
 function describeEvidenceItem(item: EvidenceGroup, notes: PullRequestSource['notes'], taskUrl: string) {
   const [first] = item.parts as [Evidence, ...Evidence[]];
   if (item.kind === 'note') return describeNote(item, notes) ?? describeUnpublished(item, taskUrl);
-  const urls = item.parts.map(resolvePublicUrl);
-  if (urls.some((url) => url === null)) return describeUnpublished(item, taskUrl);
-  const published = urls as string[];
+  const urls = Option.all(item.parts.map(resolvePublicUrl));
+  if (Option.isNone(urls)) return describeUnpublished(item, taskUrl);
+  const published = urls.value;
   if (item.kind === 'comparison') return describeComparison(item, published);
   if (item.kind === 'preview') return `- **${item.title}**: <${published[0]}>`;
   return [describeHeading(item), describeMedia(first, published[0] as string)].join('\n\n');

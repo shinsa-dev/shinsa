@@ -1,3 +1,4 @@
+import { Option } from 'effect';
 export const WORKING_REF = 'working';
 
 export const CODE_LIMITS = {
@@ -104,8 +105,8 @@ const IMAGE_TYPES: Record<string, string> = {
 
 export function resolveImageType(path: string) {
   const dot = path.lastIndexOf('.');
-  if (dot < 0) return null;
-  return IMAGE_TYPES[path.slice(dot + 1).toLowerCase()] ?? null;
+  if (dot < 0) return Option.none<string>();
+  return Option.fromUndefinedOr(IMAGE_TYPES[path.slice(dot + 1).toLowerCase()]);
 }
 
 export function isCommitSha(value: string) {

@@ -152,7 +152,13 @@ describe('the tunnel supervisor', () => {
           request: {
             localUrl: 'http://127.0.0.1:7446',
             version: '1.0.0',
-            features: ['bound-connect-tokens', 'sealed-pairing', 'slack-linked-threads', 'slack-task-owner'],
+            features: [
+              'bound-connect-tokens',
+              'sealed-pairing',
+              'slack-linked-threads',
+              'slack-task-owner',
+              'slack-channel-triggers',
+            ],
             signingKey: 'signing-key',
           },
         });
@@ -174,7 +180,13 @@ describe('the tunnel supervisor', () => {
           request: {
             localUrl: 'http://127.0.0.1:7446',
             version: '1.0.0',
-            features: ['bound-connect-tokens', 'sealed-pairing', 'slack-linked-threads', 'slack-task-owner'],
+            features: [
+              'bound-connect-tokens',
+              'sealed-pairing',
+              'slack-linked-threads',
+              'slack-task-owner',
+              'slack-channel-triggers',
+            ],
           },
         });
         for (let ping = 0; ping < 3; ping += 1) yield* TestClock.adjust(PING);
