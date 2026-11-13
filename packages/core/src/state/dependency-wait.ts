@@ -18,6 +18,7 @@ const STAGE_WAIT: Record<TaskStage, string> = {
   researching: 'is being researched',
   operating: 'is running an operation',
   watching: 'is checking a watchdog',
+  leading: 'is following its tasks',
   awaiting_proposal: 'waits for your OK',
   awaiting_operation: 'waits for your OK on its operation',
   answered: 'is answered',
