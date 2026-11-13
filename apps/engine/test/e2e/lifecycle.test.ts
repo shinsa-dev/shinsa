@@ -145,11 +145,12 @@ describe('fix loops', () => {
     expect(readFileSync(join(w.task(taskId).worktreePath ?? '', 'a.txt'), 'utf8')).toBe('hello\n');
   });
 
-  test('the same failure 8 times in a row stops the loop with a failure gate', async () => {
+  test('the same failure 8 times in a row stops the loop and arms an automatic retry', async () => {
     const w = await open({ checks: ['grep -q never a.txt'] });
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'failure');
-    expect(gate.title).toBe('Fixing is not making progress');
+    const retry = await w.untilRetry(taskId);
+    expect(retry.title).toBe('Fixing is not making progress');
+    expect(w.gates(taskId)).toEqual([]);
     expect(w.agents.of('fix')).toHaveLength(8);
     expect(w.activeRuns(taskId)).toHaveLength(0);
   });
@@ -235,7 +236,7 @@ describe('recovery', () => {
     expect(w.task(taskId).recoveries).toBe(0);
   });
 
-  test('a second stop opens a failure gate, and a message retries with guidance', async () => {
+  test('a second stop arms an automatic retry, and a message retries at once with guidance', async () => {
     const w = await open();
     w.agents.queue(
       'build',
@@ -247,9 +248,8 @@ describe('recovery', () => {
       }
     );
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'failure');
-    expect(gate.title).toBe('The agent paused');
-    expect(gate.body).toBe('overloaded');
+    const retry = await w.untilRetry(taskId);
+    expect(retry).toMatchObject({ title: 'The agent paused', detail: 'overloaded' });
     await w.engine.dispatch({ type: 'task.message', taskId, text: 'Try again, it was a blip.' });
     await w.untilStage(taskId, 'awaiting_review');
     expect(w.agents.of('build').at(-2)?.prompt).toContain(

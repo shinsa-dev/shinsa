@@ -28,6 +28,7 @@ export const ENGINE_FEATURES = [
   'browser',
   'initiatives',
   'slack-channel-triggers',
+  'models.routing',
   'accounts.provider_choice',
 ] as const;
 

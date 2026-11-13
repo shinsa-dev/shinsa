@@ -1,5 +1,6 @@
 import {
   describeDelegateRole,
+  isRetryArmed,
   listRunningRuns,
   resolveSilenceLevel,
   resolveTaskRounds,
@@ -9,6 +10,7 @@ import {
 import { describeStopDelegation, listLiveDelegations } from '@/lib/chat/delegations.ts';
 import { type Command, RANK } from '@/lib/command/registry.ts';
 import { hasTaskEngineFeature } from '@/lib/connection/socket.ts';
+import { describeRetryCount } from '@/lib/overview/retry.ts';
 import { describeCheckInCount } from '@/lib/overview/wait.ts';
 import {
   acceptSuggestion,
@@ -16,6 +18,7 @@ import {
   dismissSuggestion,
   keepSuggestion,
   requestCheckInNow,
+  requestRetryNow,
   SNOOZE_HINT,
   snoozeSilence,
   stopDelegation,
@@ -27,6 +30,21 @@ import {
   listSuggestionStarts,
   SUGGESTION_START_LABEL,
 } from '@/lib/tasks/suggestions.ts';
+
+function listRetryCommands(task: Task): Command[] {
+  if (!task.autoRetry || !isRetryArmed(task)) return [];
+  return [
+    {
+      kind: 'run',
+      id: `task.${task.id}.retry-now`,
+      label: 'Retry now',
+      hint: describeRetryCount(task.autoRetry),
+      icon: 'IconArrowRotateClockwise',
+      keywords: ['retry', 'restart', 'again', 'failed', 'paused'],
+      run: () => void requestRetryNow(task.id),
+    },
+  ];
+}
 
 function listWaitCommands(task: Task): Command[] {
   if (task.monitor?.status !== 'armed') return [];
@@ -156,6 +174,7 @@ function listDelegationCommands(state: ShinsaState, task: Task): Command[] {
 
 export function listProcessCommands(state: ShinsaState, task: Task, now: number): Command[] {
   return [
+    ...listRetryCommands(task),
     ...listWaitCommands(task),
     ...listSilenceCommands(state, task, now),
     ...listDelegationCommands(state, task),

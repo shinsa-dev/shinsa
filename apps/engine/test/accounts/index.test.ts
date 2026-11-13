@@ -681,6 +681,48 @@ describe('recording the safe usage pace', () => {
   });
 });
 
+describe('recording the room each model has', () => {
+  function roomCommands(world: World) {
+    return dispatched(world).filter((command) => command.type === 'usage.models_recorded');
+  }
+
+  test('records each routed model’s room, a model spent everywhere as not usable, again only once it moves', async () => {
+    const world = await createWorld({ registry: true });
+    await addAccount(world, 'a@example.com', 10);
+    world.usage.set('token-a@example.com', windows(10, 30, 100));
+    await world.accounts.refresh();
+    const recorded = roomCommands(world).at(-1);
+    const models = recorded?.type === 'usage.models_recorded' ? recorded.models : [];
+    expect(models).toMatchObject([
+      { family: 'fable', usable: false, left: null, accounts: [{ usable: false, left: 0 }] },
+      { family: 'opus', usable: true, left: 70, accounts: [{ usable: true, left: 70 }] },
+      { family: 'sonnet', usable: true, left: 70 },
+    ]);
+    world.stub.update((state) => {
+      for (const model of models) state.modelRoom[model.family] = { ...model, at: 1 };
+    });
+    const before = roomCommands(world).length;
+    world.usage.set('token-a@example.com', windows(12, 32, 100));
+    await world.accounts.refresh();
+    expect(roomCommands(world)).toHaveLength(before);
+  });
+
+  test('room the log refuses is only logged, and inspect mode records none', async () => {
+    const world = await createWorld({ registry: true });
+    const logs = captureLogs();
+    world.stub.reject((command) => command.type === 'usage.models_recorded', new Error('the log is closed'));
+    await addAccount(world, 'a@example.com', 10);
+    expect(logs.fieldsOf('[Accounts] Could not record the room each model has')[0]).toMatchObject({
+      error: expect.stringContaining('the log is closed'),
+    });
+    await world.accounts.stop();
+    const inspected = await createWorld({ root: world.root, inspect: true });
+    await inspected.accounts.start();
+    expect(roomCommands(inspected)).toEqual([]);
+    await inspected.accounts.stop();
+  });
+});
+
 describe('importing logins', () => {
   test('an account from claude-swap gets a sign-in of its own, and claude-swap’s login is never read', async () => {
     const world = await createWorld({ registry: true });

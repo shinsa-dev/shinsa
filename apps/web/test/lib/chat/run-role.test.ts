@@ -7,7 +7,7 @@ import {
   type Task,
   type WireRun,
 } from '@shinsa/core';
-import { RUN_ROLE, resolveRunHeadline } from '@/lib/chat/run-role.ts';
+import { RUN_ROLE, resolveRunHeadline, resolveRunModelLabel } from '@/lib/chat/run-role.ts';
 import { createCallEntry, shinsaTool } from '../../support/chat.ts';
 import { createRun, createTask, NOW } from '../../support/state.ts';
 
@@ -217,5 +217,13 @@ describe('resolveRunHeadline', () => {
   it('falls back to fixing the change when the server found no focus', () => {
     expect(resolveRunHeadline(live({ role: 'agent', purpose: 'fix' }), task, [])).toBe('Fixing the change');
     expect(resolveRunHeadline(done({ role: 'agent', purpose: 'fix' }), task, [])).toBe('Fixed the change');
+  });
+});
+
+describe('resolveRunModelLabel', () => {
+  it('names the model a step ran on, and nothing before it has one', () => {
+    expect(resolveRunModelLabel({ model: 'opus' })).toBe('Opus 5.5');
+    expect(resolveRunModelLabel({ model: 'claude-fable-5-2' })).toBe('Fable 5.2');
+    expect(resolveRunModelLabel({ model: null })).toBeNull();
   });
 });

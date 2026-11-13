@@ -13,6 +13,7 @@ import {
   bindAccount,
   changeUsageWait,
   recordAccountPlan,
+  recordModelRoom,
   recordUsagePace,
   recordAccountRemoved,
   recordProviderSignIn,
@@ -108,6 +109,7 @@ import {
   recordUploads,
 } from './pull-requests.ts';
 import { fileReport, reportRead } from './reads.ts';
+import { autoRetryTask } from './retry.ts';
 import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
@@ -464,6 +466,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return resumeUsageWaitNow(decider, command);
     case 'usage_wait.resume':
       return resumeUsageWait(decider, command);
+    case 'task.auto_retry':
+      return autoRetryTask(decider, command);
     case 'account.signed_in':
       return recordSignedIn(decider, command);
     case 'account.removed':
@@ -472,6 +476,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordAccountPlan(decider, command);
     case 'usage.pace_recorded':
       return recordUsagePace(decider, command);
+    case 'usage.models_recorded':
+      return recordModelRoom(decider, command);
     case 'provider.record_sign_in':
       return recordProviderSignIn(decider, command);
     case 'agent.delegate':

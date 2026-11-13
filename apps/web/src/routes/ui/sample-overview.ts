@@ -1,4 +1,4 @@
-import type { DeliveringStep, Monitor, PlanDocument, Task, UsageWait } from '@shinsa/core';
+import type { AutoRetry, DeliveringStep, Monitor, PlanDocument, Task, UsageWait } from '@shinsa/core';
 import { createSampleDelegations } from './sample-delegations.ts';
 import {
   createSampleGate,
@@ -219,7 +219,26 @@ export function createOverviewScene(now: number) {
     maxAttempts: 10,
     status: 'armed',
   };
+  const retry: AutoRetry = {
+    at: now + 5 * MINUTE,
+    attempt: 2,
+    title: 'Fixing is not making progress',
+    detail:
+      'The pull request’s failing checks, open threads or conflict came back after 8 fix rounds. Steer the agent in the chat, or retry.',
+    runId: null,
+    cause: null,
+    milestone: 'sample',
+    status: 'armed',
+  };
   const tasks = {
+    retry: createSampleTask(now, {
+      id: 'retry',
+      title: 'Cache the paywall export',
+      stage: 'fixing',
+      fixFor: 'pull_request',
+      stageReason: 'fixing the pull request',
+      autoRetry: retry,
+    }),
     setup: createSampleTask(now, {
       id: 'setup',
       title: 'Add a dark mode toggle to the paywall editor',
@@ -684,6 +703,7 @@ export function createOverviewScene(now: number) {
     runs,
     usageWaits,
     monitor,
+    retry,
     results: createResultTasks(now),
     answered: createAnsweredSample(now),
   };

@@ -1,4 +1,5 @@
 import type {
+  ModelRoomReading,
   BundleConflict,
   CheckEvidence,
   ConfigProblem,
@@ -316,6 +317,7 @@ type SystemCommand =
     }
   | { type: 'evidence.record_uploads'; taskId: string; uploads: EvidenceUpload[] }
   | { type: 'usage_wait.resume'; taskId: string; waitId: string }
+  | { type: 'task.auto_retry'; taskId: string }
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
@@ -328,6 +330,7 @@ type SystemCommand =
       endingPace: number | null;
       resetEndsAt: number | null;
     }
+  | { type: 'usage.models_recorded'; models: readonly ModelRoomReading[] }
   | { type: 'onboarding.welcome'; body: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand

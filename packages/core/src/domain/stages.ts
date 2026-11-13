@@ -1,3 +1,4 @@
+import { isRetryArmed } from './retries.ts';
 import { resolveTaskShape } from './shapes.ts';
 import type { Task, TaskPriority, TaskStage } from './types.ts';
 
@@ -44,7 +45,7 @@ export function isTaskComplete(task: Task) {
 }
 
 export function hasArmedWait(task: Task) {
-  return task.monitor?.status === 'armed' || task.usageWait?.status === 'armed';
+  return task.monitor?.status === 'armed' || task.usageWait?.status === 'armed' || isRetryArmed(task);
 }
 
 export function isAskTask(task: Task) {

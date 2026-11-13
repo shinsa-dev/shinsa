@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   type ChatNotice,
+  type AutoRetry,
   type Gate,
   type GateType,
   listActiveRuns,
@@ -821,6 +822,14 @@ export class World {
       this.gates(taskId).some((gate) => !type || gate.type === type)
     );
     return this.gates(taskId).find((gate) => !type || gate.type === type) as Gate;
+  }
+
+  async untilRetry(taskId: string) {
+    await this.until(
+      `an automatic retry on ${taskId}`,
+      () => this.task(taskId).autoRetry?.status === 'armed'
+    );
+    return this.task(taskId).autoRetry as AutoRetry;
   }
 
   async answer(gate: Gate, decision: NonNullable<Gate['decision']>, response: string | null = null) {

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type Gate,
+  isRetryArmed,
   isTaskSettled,
   listOpenGates,
   type ShinsaCommand,
@@ -86,10 +87,23 @@ function resendAll() {
   }
 }
 
+function isCrashLoop(runId: string | null) {
+  return shinsa.engine.state.runs[runId ?? '']?.failure?.code === 'crash_loop';
+}
+
 function isCrashPause(gate: Gate) {
-  return (
-    gate.type === 'failure' && shinsa.engine.state.runs[gate.runId ?? '']?.failure?.code === 'crash_loop'
-  );
+  return gate.type === 'failure' && isCrashLoop(gate.runId);
+}
+
+function isCrashRetry(task: Task) {
+  return isRetryArmed(task) && isCrashLoop(task.autoRetry?.runId ?? null);
+}
+
+function retryCrashes() {
+  for (const task of Object.values(shinsa.engine.state.tasks)) {
+    if (!isCrashRetry(task) || isDueForCancel(task)) continue;
+    send(`client:retry:${task.id}:${task.autoRetry?.at}`, { type: 'task.retry', taskId: task.id });
+  }
 }
 
 function answerGates() {
@@ -149,6 +163,7 @@ function stopWhenSettled() {
 
 function react() {
   answerGates();
+  retryCrashes();
   cancelOnCue();
   stopWhenSettled();
 }
@@ -158,6 +173,7 @@ function isSettled() {
   if (tasks.length === 0) return false;
   const gates = listOpenGates(shinsa.engine.state);
   if (gates.some((gate) => gate.type === 'failure' && !isCrashPause(gate))) return true;
+  if (tasks.some((task) => isRetryArmed(task) && !isCrashRetry(task))) return true;
   return tasks.every((task) => isTaskSettled(task) && task.worktreePath === null);
 }
 

@@ -38,16 +38,19 @@ const MAX_CONTINUATIONS = 3;
 
 const CONTINUATION_WINDOW_MS = 5 * MINUTE_MS;
 
-type FailureRecovery = { mode: 'resume' } | { mode: 'fresh' } | { mode: 'pause'; title: string };
+type FailureRecovery =
+  | { mode: 'resume' }
+  | { mode: 'fresh' }
+  | { mode: 'pause'; title: string; retries: boolean };
 
 const RESUME: FailureRecovery = { mode: 'resume' };
 
 const FRESH: FailureRecovery = { mode: 'fresh' };
 
 const FAILURE_RECOVERY: Record<RunFailureClass, FailureRecovery> = {
-  usage_limit: { mode: 'pause', title: 'The agent hit its usage limit' },
-  auth: { mode: 'pause', title: 'The agent needs you to sign in' },
-  setup_failed: { mode: 'pause', title: 'The agent could not start' },
+  usage_limit: { mode: 'pause', title: 'The agent hit its usage limit', retries: false },
+  auth: { mode: 'pause', title: 'The agent needs you to sign in', retries: false },
+  setup_failed: { mode: 'pause', title: 'The agent could not start', retries: true },
   context_window_full: FRESH,
   image_error: FRESH,
   session_lost: FRESH,
@@ -145,7 +148,9 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   const givesUp = recovery.mode === 'pause' || task.recoveries >= MAX_RECOVERIES;
   if (givesUp && missRead(decider, run.id, why)) return;
   if (recovery.mode === 'pause') {
-    decider.fail(task.id, recovery.title, `${why} Retry starts the step again.`, run.id);
+    const detail = `${why} Retry starts the step again.`;
+    if (recovery.retries) decider.fail(task.id, recovery.title, detail, run.id);
+    else decider.hold(task.id, recovery.title, detail, run.id);
     return;
   }
   if (task.recoveries >= MAX_RECOVERIES) {

@@ -24,6 +24,7 @@ import {
   readInstruction,
   registerRepo,
   shipAndMerge,
+  spendRetries,
   verifySetup,
 } from '../harness.ts';
 
@@ -488,6 +489,7 @@ describe('talking to the lead', () => {
 
   test('retrying a lead with guidance passes it on as the human’s', () => {
     const { harness, leadId } = ledInitiative();
+    spendRetries(harness, leadId);
     const failLead = () => {
       while (listOpenGates(harness.state, leadId).length === 0) {
         harness.send({
@@ -515,6 +517,7 @@ describe('talking to the lead', () => {
     const second = harness.activeRun(leadId);
     expect(second.id).not.toBe(first.id);
     expect(second.purpose).toBe('lead');
+    spendRetries(harness, leadId);
     while (!harness.state.gates || listOpenGates(harness.state, leadId).length === 0) {
       harness.send({
         type: 'run.end',
