@@ -49,7 +49,7 @@ export class Machines extends Context.Service<
       const insert = SqlSchema.void({
         Request: Schema.Struct({ ...NewMachine.fields, createdAt: Schema.Number }),
         execute: (row) =>
-          sql`INSERT INTO machines (id, owner_id, name, fingerprint, tunnel_id, dns_record_id, machine_token_hash, connect_key, features, created_at) VALUES (${row.id}, ${row.ownerId}, ${row.name}, ${row.fingerprint}, ${row.tunnelId}, ${row.dnsRecordId}, ${row.machineTokenHash}, ${row.connectKey}, ${row.features}, ${row.createdAt})`,
+          sql`INSERT INTO machines (id, owner_id, name, fingerprint, tunnel_id, dns_record_id, machine_token_hash, connect_key, features, created_at) VALUES (${row.id}, ${row.ownerId}, ${row.name}, ${row.fingerprint}, '', '', ${row.machineTokenHash}, ${row.connectKey}, ${row.features}, ${row.createdAt})`,
       });
       const countAll = SqlSchema.findOne({
         Request: Schema.Void,

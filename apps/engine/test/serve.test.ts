@@ -10,7 +10,7 @@ import type { ModelSource } from '../src/agents/index.ts';
 import { type AgentProvider, type CompletionRequest, Providers } from '../src/agents/providers/index.ts';
 import { SIGN_IN_CALLBACK_PATH } from '../src/extensions/sign-in.ts';
 import { createServerInstance, INSTALL_PATH, LOCK_FILE, resolveBootedAt } from '../src/instance/index.ts';
-import { REMOTE_FILE, TunnelConnectFailed, TunnelConnector } from '../src/remote/index.ts';
+import { RelayConnectFailed, RelayConnector, REMOTE_FILE } from '../src/remote/index.ts';
 import { Shell } from '../src/shell/service.ts';
 import { resolveStateVersion } from '../src/store/index.ts';
 import { TerminalPty } from '../src/terminals/pty/service.ts';
@@ -321,8 +321,6 @@ describe('startShinsa', () => {
         credentials: {
           instanceId: 'k3x9',
           machineToken: 'm',
-          tunnelToken: 't',
-          tunnelHost: 't-k3x9.shinsa.dev',
           connectKey: 'c',
         },
       })
@@ -330,10 +328,10 @@ describe('startShinsa', () => {
     const localUrls: string[] = [];
     const shinsa = await startShinsa(config, {
       models,
-      remoteConnector: Layer.succeed(TunnelConnector, {
-        open: (_token, localUrl) => {
-          localUrls.push(localUrl);
-          return Effect.fail(new TunnelConnectFailed({ message: 'No tunnel in tests.' }));
+      remoteConnector: Layer.succeed(RelayConnector, {
+        open: (target) => {
+          localUrls.push(target.localUrl);
+          return Effect.fail(new RelayConnectFailed({ message: 'No relay in tests.', status: null }));
         },
       }),
     });

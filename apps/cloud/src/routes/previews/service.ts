@@ -21,10 +21,15 @@ import { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { CloudConfig } from '../../config/service.ts';
 import { isMachineOnline } from '../../domain/machines.ts';
 import { serializeCookie } from '../../http/cookies.ts';
-import { isTunnelOffline, recordMachineOffline, resolveForwardHeaders } from '../../http/forward.ts';
+import {
+  isTunnelOffline,
+  recordMachineOffline,
+  recordPreviewStopped,
+  resolveForwardHeaders,
+} from '../../http/forward.ts';
 import { readCookie } from '../../http/request.ts';
 import { NOINDEX, respondRedirect, respondText } from '../../http/responses.ts';
-import { Tunnels } from '../../integrations/tunnels/service.ts';
+import { Relays } from '../../integrations/relays/service.ts';
 import type { Machine } from '../../store/machines/schema.ts';
 import { Machines } from '../../store/machines/service.ts';
 import { resolveForwardCookie } from './address.ts';
@@ -49,7 +54,7 @@ export class PreviewHost extends Context.Service<
     PreviewHost,
     Effect.gen(function* () {
       const config = yield* CloudConfig;
-      const tunnels = yield* Tunnels;
+      const relays = yield* Relays;
       const machines = yield* Machines;
       const decodeInstanceId = Schema.decodeUnknownOption(InstanceId);
 
@@ -115,11 +120,12 @@ export class PreviewHost extends Context.Service<
         const request = yield* Effect.orDie(
           HttpServerRequest.HttpServerRequest.pipe(Effect.flatMap(HttpServerRequest.toWeb))
         );
-        const answer = yield* tunnels
-          .request(machine.id, `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`, {
+        const answer = yield* relays
+          .request(machine, `${resolvePreviewTunnelPath(address.previewId, url.pathname)}${url.search}`, {
             method: request.method,
             headers: resolvePreviewHeaders(request.headers, pass),
             body: BODILESS_METHODS.has(request.method) ? null : request.body,
+            address: request.headers.get('cf-connecting-ip'),
           })
           .pipe(
             Effect.tapError((error) => recordMachineOffline('preview', machine.id, { error: error.message })),
@@ -132,6 +138,8 @@ export class PreviewHost extends Context.Service<
           yield* recordMachineOffline('preview', machine.id, { status: proxied.status });
           return respondPage('offline', 503);
         }
+        if (proxied.status >= 500 && proxied.headers.has(PREVIEW_PAGE_HEADER))
+          yield* recordPreviewStopped(machine.id, address.previewId, proxied.status);
         return HttpServerResponse.raw(
           new Response(proxied.body, {
             status: proxied.status,
@@ -191,8 +199,10 @@ export class PreviewHost extends Context.Service<
         if (!(pass.key || pass.access)) return respondPage('gone', 404);
         const machine = yield* selectMachine(address);
         if (Option.isNone(machine)) return respondPage('gone', 404);
-        if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis))
+        if (!isMachineOnline(machine.value, yield* Clock.currentTimeMillis)) {
+          yield* recordMachineOffline('preview', machine.value.id, { lastSeenAt: machine.value.lastSeenAt });
           return respondPage('offline', 503);
+        }
         return yield* forward(url, machine.value, address, pass);
       });
 

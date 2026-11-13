@@ -89,19 +89,10 @@ export class TunnelGate extends Context.Service<
       const extensions = Option.getOrUndefined(yield* Effect.serviceOption(Extensions));
       const engine = yield* EngineCore;
       const transcripts = yield* Transcripts;
-      const runSync = Effect.runSyncWith(yield* Effect.context<never>());
       const isEnabled = remote ? remote.isEnabled : Effect.succeed(false);
       const notFound = () => new RouteNotFound({ message: ROUTE_NOT_FOUND_MESSAGE });
 
-      const readHostname = (request: Request) =>
-        (request.headers.get('host') ?? '').replace(/:\d+$/, '').toLowerCase();
-
-      const isTunnel = (request: Request) => {
-        if (!remote) return false;
-        if (request.headers.has(TUNNEL_HEADER)) return true;
-        const host = runSync(remote.tunnelHost);
-        return host !== null && readHostname(request) === host.toLowerCase();
-      };
+      const isTunnel = (request: Request) => remote !== undefined && request.headers.has(TUNNEL_HEADER);
 
       const resolveRoute = ({ method, pathname }: GateRequest) => {
         const entry = TUNNEL_ROUTES.find(
