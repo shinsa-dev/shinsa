@@ -161,6 +161,9 @@ export const koe = {
   soonTitle: 'Koe is almost here.',
   soonText: 'There is no release to download yet. Check back soon.',
   byline: 'by Shinsa',
+  sessionLabel:
+    'A Koe session: talk, pin a comment on Save, screenshot the plan cards, then finish and Koe copies the bundle',
+  pillLabel: 'Koe’s pill while it listens',
   closingTitle: 'Say it once.',
   closingText: 'Koe brings the screenshots.',
   callout: 'Also from us',
@@ -179,7 +182,7 @@ export const koeSections = {
   tools: {
     id: 'tools',
     title: 'Point at it while you talk.',
-    text: 'Every tool is a page of the pill, and what you say next becomes its note. Nothing to type.',
+    text: 'Every tool is a page of the pill, and what you say next becomes its note. Drop a file on the pill and it joins too. Nothing to type.',
   },
   bundle: {
     id: 'bundle',
@@ -198,32 +201,70 @@ export const koeSections = {
   },
 } satisfies Record<string, SectionCopy>;
 
-export const koeTools: { icon: IconName; title: string; text: string; trigger: string }[] = [
+export const koeTools: {
+  icon: IconName;
+  title: string;
+  text: string;
+  trigger: string;
+  video: string;
+  label: string;
+}[] = [
   {
     icon: 'IconBubbleAnnotation2',
     title: 'Comment',
     trigger: '⇧⌘-click anything',
     text: 'Pin a comment to a button, a line or a cell. Koe captures what is under it.',
+    video: 'koe-comment',
+    label: 'Koe pinning a comment to a Save button while you say what to change',
   },
   {
     icon: 'IconCamera1',
     title: 'Screenshot',
     trigger: 'Drag a region or click a window',
     text: 'The screenshot lands in your words at the moment you took it.',
+    video: 'koe-screenshot',
+    label: 'Koe taking a screenshot of a region while you describe it',
   },
   {
     icon: 'IconVideo',
     title: 'Clip',
     trigger: 'Record the screen',
     text: 'Show a bug as it happens, then pick the frames that show it.',
-  },
-  {
-    icon: 'IconPaperclip1',
-    title: 'File',
-    trigger: 'Drop it on the pill',
-    text: 'A spec, a log or a design goes in the bundle beside the rest.',
+    video: 'koe-clip',
+    label: 'Koe recording a clip of the screen, then playing it back to pick frames',
   },
 ];
+
+export const koeBundle = {
+  attachedLabel: 'What Koe attached',
+  clipboardLabel: 'What the clipboard holds',
+  said: [
+    { text: 'Move the save button to the right, next to cancel.' },
+    { marker: '1', note: 'Make this one blue' },
+    { marker: '2', note: 'And give the plans a little more room.' },
+  ],
+  attachments: [
+    '[1] Comment on Google Chrome, "Acme", at the blue pin numbered 1, 37% across and 74% down: ~/Library/Application Support/Koe/Sessions/2026-11-13-170409-F517/attachments/screenshot-1.png',
+    '[2] Image of Google Chrome, "Acme": ~/Library/Application Support/Koe/Sessions/2026-11-13-170409-F517/attachments/screenshot-2.png',
+  ],
+  files: [
+    {
+      src: '/koe/koe-attachment-comment.webp',
+      width: 1600,
+      height: 881,
+      alt: 'The window Koe captured for comment 1, with a blue pin numbered 1 on the Save button',
+      caption: '[1] The window, with comment 1 pinned on Save.',
+    },
+    {
+      src: '/koe/koe-attachment-screenshot.webp',
+      width: 1460,
+      height: 186,
+      alt: 'The region Koe captured for screenshot 2: the three plan cards',
+      caption: '[2] The region you dragged over.',
+    },
+  ],
+  note: 'This is the session in the video above, as Koe copied it. The two images go on the clipboard too, so apps that take files get them.',
+};
 
 export const koeSpeed = {
   stats: [

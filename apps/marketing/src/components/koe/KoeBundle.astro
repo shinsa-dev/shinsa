@@ -1,0 +1,39 @@
+---
+import { koeBundle } from '../../lib/content';
+
+const said = koeBundle.said.map((part) => ('text' in part ? part.text : `[${part.marker}: ${part.note}]`)).join(' ');
+---
+
+<div class='grid items-start gap-4 lg:grid-cols-[1.15fr_1fr]'>
+  <div class='flex flex-col gap-3 rounded-2xl bg-bg-1 p-4 ring-1 ring-bg-3'>
+    <span class='font-medium text-fg-2 text-xs'>{koeBundle.attachedLabel}</span>
+    <div class='grid gap-3'>
+      {
+        koeBundle.files.map((file) => (
+          <figure class='flex flex-col gap-2'>
+            <img
+              src={file.src}
+              alt={file.alt}
+              width={file.width}
+              height={file.height}
+              loading='lazy'
+              class='h-auto w-full rounded-lg ring-1 ring-bg-3'
+            />
+            <figcaption class='text-fg-2 text-xs'>{file.caption}</figcaption>
+          </figure>
+        ))
+      }
+    </div>
+  </div>
+  <div class='flex flex-col gap-3 rounded-2xl bg-bg-1 p-4 ring-1 ring-bg-3'>
+    <span class='font-medium text-fg-2 text-xs'>{koeBundle.clipboardLabel}</span>
+    <div class='flex flex-col gap-3 font-mono text-fg-3 text-xs leading-relaxed'>
+      <p class='text-fg-4'>{said}</p>
+      <div class='flex flex-col'>
+        <span>Attachments:</span>
+        {koeBundle.attachments.map((line) => <span class='break-all'>{line}</span>)}
+      </div>
+    </div>
+    <p class='text-fg-2 text-xs'>{koeBundle.note}</p>
+  </div>
+</div>

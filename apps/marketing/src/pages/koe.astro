@@ -1,8 +1,8 @@
 ---
 import { Icon } from '@shinsa/ui/components/icon';
-import { KoeBundle } from '../components/demos/koe/bundle';
-import { KoeHeroDemo } from '../components/demos/koe/hero';
-import { KoeTools } from '../components/demos/koe/tools';
+import KoeBundle from '../components/koe/KoeBundle.astro';
+import KoeTools from '../components/koe/KoeTools.astro';
+import KoeVideo from '../components/koe/KoeVideo.astro';
 import Section from '../components/layout/Section.astro';
 import Button from '../components/ui/Button.astro';
 import Site from '../layouts/Site.astro';
@@ -29,9 +29,13 @@ import { koeSite } from '../lib/site';
     </div>
   </section>
   <section id={koeSections.talk.id} class='flex flex-col px-6 pt-8 pb-12 md:pb-16'>
-    <div class='mx-auto h-[540px] w-full max-w-5xl md:h-[600px]'>
-      <KoeHeroDemo client:load />
-    </div>
+    <KoeVideo
+      name='koe-session'
+      width={2048}
+      height={1266}
+      label={koe.sessionLabel}
+      class='mx-auto w-full max-w-5xl shadow-lg'
+    />
     <div class='mx-auto mt-10 flex max-w-2xl flex-col items-center gap-3 text-center'>
       <h2 class='font-medium text-2xl text-fg-4 tracking-tight text-balance md:text-3xl'>{koeSections.talk.title}</h2>
       <p class='text-base text-fg-2 leading-relaxed text-pretty'>{koeSections.talk.text}</p>

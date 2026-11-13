@@ -1,0 +1,25 @@
+---
+import { Icon } from '@shinsa/ui/components/icon';
+import { koeTools } from '../../lib/content';
+import KoeVideo from './KoeVideo.astro';
+---
+
+<div class='grid gap-4 md:grid-cols-3'>
+  {
+    koeTools.map((tool) => (
+      <div class='flex flex-col gap-3'>
+        <KoeVideo name={tool.video} width={1200} height={762} label={tool.label} />
+        <div class='flex flex-col gap-1 px-1'>
+          <span class='flex items-center gap-2 font-medium text-fg-4 text-sm [--icon-size:var(--icon-size-md)]'>
+            <span class='text-fg-2'>
+              <Icon name={tool.icon} />
+            </span>
+            {tool.title}
+            <span class='font-normal text-fg-2'>· {tool.trigger}</span>
+          </span>
+          <p class='text-fg-2 text-sm leading-relaxed text-pretty'>{tool.text}</p>
+        </div>
+      </div>
+    ))
+  }
+</div>

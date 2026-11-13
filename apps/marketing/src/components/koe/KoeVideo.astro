@@ -1,0 +1,29 @@
+---
+interface Props {
+  name: string;
+  width: number;
+  height: number;
+  label: string;
+  class?: string;
+}
+
+const { name, width, height, label, class: className } = Astro.props;
+---
+
+<div class:list={['overflow-hidden rounded-2xl bg-bg-1 ring-1 ring-bg-3', className]}>
+  <video
+    class='block h-auto w-full'
+    width={width}
+    height={height}
+    poster={`/koe/${name}.webp`}
+    aria-label={label}
+    autoplay
+    muted
+    loop
+    playsinline
+    preload='metadata'
+  >
+    <source src={`/koe/${name}.webm`} type='video/webm' />
+    <source src={`/koe/${name}.mp4`} type='video/mp4' />
+  </video>
+</div>

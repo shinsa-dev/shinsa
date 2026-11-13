@@ -1,5 +1,4 @@
 ---
-import { KoePillView } from '../demos/koe/pill';
 import { koe } from '../../lib/content';
 import { koeSite } from '../../lib/site';
 import Button from '../ui/Button.astro';
@@ -23,7 +22,7 @@ import Button from '../ui/Button.astro';
       aria-label={koe.calloutLink}
       class='koe-desktop relative flex min-h-60 items-end justify-center p-8 md:min-h-0'
     >
-      <KoePillView pill={{ kind: 'session', clock: '0:08', attached: 1 }} className='shadow-2xl' />
+      <img src='/koe/koe-pill.webp' alt={koe.pillLabel} width='560' height='80' class='h-auto w-full max-w-[560px]' />
     </a>
   </div>
 </section>

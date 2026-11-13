@@ -1,4 +1,4 @@
 ---
 kind: internal
 ---
-The icon set gains the microphone, cursor and clipboard glyphs the Koe page on shinsa.dev draws.
+The icon set gains the comment bubble the Koe page on shinsa.dev uses for its comment tool.

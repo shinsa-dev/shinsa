@@ -49,11 +49,11 @@ export function resolveBuildKey(version: string, name: string) {
   return `releases/${version}/${name}`;
 }
 
-export function resolveKoeBuildKey(version: string, name: string) {
+function resolveKoeBuildKey(version: string, name: string) {
   return `koe/${resolveBuildKey(version, name)}`;
 }
 
-export function resolveKoeAppcastKey(name: string) {
+function resolveKoeAppcastKey(name: string) {
   return `koe/appcast/${name}`;
 }
 
