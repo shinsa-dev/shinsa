@@ -1571,6 +1571,8 @@ function simulate(
   let view = connectView(state);
   let counter = 0;
   let outageCounter = 0;
+  let learned = 0;
+  const walked = () => (learned === 0 ? state : { ...state, seq: state.seq - learned });
   const apply = (
     step: number,
     now: number,
@@ -1585,6 +1587,7 @@ function simulate(
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
       const stamped = { ...event, seq: replayed.seq + 1, at: now } as ShinsaEvent;
+      if (stamped.type === 'autopilot.decided') learned += 1;
       assertOneSessionPerTask(replayed, stamped, `seed ${seed}, step ${step}, after ${command.type}`);
       log.push(stamped);
       replayed = applyEvent(replayed, stamped);
@@ -1614,10 +1617,10 @@ function simulate(
     const combined = sideStream === 'compositions';
     const shapes = sideStream === 'shapes' || combined ? shaping : null;
     const command = combined
-      ? nextCommand(state, random, random, null, shapes, true)
-      : nextCommand(state, random, side, extra, shapes);
+      ? nextCommand(walked(), random, random, null, shapes, true)
+      : nextCommand(walked(), random, side, extra, shapes);
     apply(step, now, command, () => `${seed}-${++counter}`);
-    const sideCommand = selectSideCommand(sideStream, state, randoms, now);
+    const sideCommand = selectSideCommand(sideStream, walked(), randoms, now);
     if (sideCommand) {
       const onBehalf = sideStream === 'on_behalf' || sideCommand.type === 'schedule.write';
       apply(step, now, sideCommand, () => `${seed}-${sideStream}-${++outageCounter}`, onBehalf);
