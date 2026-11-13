@@ -26,10 +26,10 @@ import {
 import { SCHEDULE_TRIGGER_KINDS, WEBHOOK_ENCODINGS } from './schedules.ts';
 import {
   ACTIVE_DAY_LIMIT,
+  AUTO_MERGES,
   AUTOPILOT_CONTACT_KINDS,
-  AUTOPILOT_MERGES,
-  AUTOPILOT_RISKS,
-  AUTOPILOT_URGENT_ACTIONS,
+  AUTOPILOT_GATES,
+  AUTOPILOT_LEVELS,
   COMPACTION_MODES,
   MAX_AUTOPILOT_CONTACTS,
   MERGE_METHODS,
@@ -124,12 +124,10 @@ export const AutopilotContactPatch = Tagged('kind', AUTOPILOT_CONTACT_KINDS, [
 const AutopilotPatch = Strict(
   {
     enabled: Schema.optionalKey(Bool),
-    approveUpTo: Schema.optionalKey(Choice(AUTOPILOT_RISKS)),
-    urgentApproveUpTo: Schema.optionalKey(Choice(AUTOPILOT_RISKS)),
-    merge: Schema.optionalKey(Choice(AUTOPILOT_MERGES)),
-    urgent: Schema.optionalKey(Choice(AUTOPILOT_URGENT_ACTIONS)),
-    urgentWaitMinutes: Schema.optionalKey(WholeNumber),
-    quietWaitMinutes: Schema.optionalKey(WholeNumber),
+    level: Schema.optionalKey(Choice(AUTOPILOT_LEVELS)),
+    gates: Schema.optionalKey(List(Choice(AUTOPILOT_GATES), AUTOPILOT_GATES.length)),
+    autoMerge: Schema.optionalKey(Choice(AUTO_MERGES)),
+    escalate: Schema.optionalKey(Bool),
     ignoreUsageLimits: Schema.optionalKey(Bool),
     contacts: Schema.optionalKey(List(AutopilotContactPatch, MAX_AUTOPILOT_CONTACTS)),
   },

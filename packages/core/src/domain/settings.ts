@@ -1,6 +1,5 @@
 import { Option } from 'effect';
 import { CLAUDE_PROVIDER } from '../agent-models/index.ts';
-import type { ReviewRating } from '../report/types.ts';
 import { DAY_MS, HOUR_MS } from './time.ts';
 import type { AgentRole } from './types.ts';
 
@@ -54,22 +53,23 @@ export function resolveShareEnd(limit: ShareLimit, now: number): Option.Option<n
   return span === undefined ? Option.none() : Option.some(now + span);
 }
 
-export type AutopilotRisk = 'none' | ReviewRating;
+export type AutopilotLevel = 'ask_first' | 'balanced' | 'most';
 
-export const AUTOPILOT_RISKS: readonly AutopilotRisk[] = ['none', 'low', 'medium', 'high'];
+export const AUTOPILOT_LEVELS: readonly AutopilotLevel[] = ['ask_first', 'balanced', 'most'];
 
-export type AutopilotMerge = 'never' | 'low_risk' | 'approved';
+export type AutopilotGate = 'plans' | 'questions' | 'reviews' | 'suggestions' | 'watchdogTasks';
 
-export const AUTOPILOT_MERGES: readonly AutopilotMerge[] = ['never', 'low_risk', 'approved'];
-
-export type AutopilotUrgent = 'wait' | 'escalate' | 'merge' | 'escalate_then_merge';
-
-export const AUTOPILOT_URGENT_ACTIONS: readonly AutopilotUrgent[] = [
-  'wait',
-  'escalate',
-  'merge',
-  'escalate_then_merge',
+export const AUTOPILOT_GATES: readonly AutopilotGate[] = [
+  'plans',
+  'questions',
+  'reviews',
+  'suggestions',
+  'watchdogTasks',
 ];
+
+export type AutoMerge = 'off' | 'low_risk' | 'approved';
+
+export const AUTO_MERGES: readonly AutoMerge[] = ['off', 'low_risk', 'approved'];
 
 export type AutopilotContactKind = 'slack_channel' | 'slack_person';
 
@@ -99,26 +99,20 @@ export const ACTIVE_DAY_LIMIT = 14;
 
 export interface AutopilotPolicy {
   enabled: boolean;
-  approveUpTo: AutopilotRisk;
-  urgentApproveUpTo: AutopilotRisk;
-  merge: AutopilotMerge;
-  urgent: AutopilotUrgent;
-  urgentWaitMinutes: number;
-  quietWaitMinutes: number;
+  level: AutopilotLevel;
+  gates: AutopilotGate[];
+  autoMerge: AutoMerge;
+  escalate: boolean;
   ignoreUsageLimits: boolean;
   contacts: AutopilotContact[];
 }
 
-export const MAX_URGENT_WAIT_MINUTES = 1440;
-
 export const AUTOPILOT_DEFAULTS: AutopilotPolicy = {
   enabled: false,
-  approveUpTo: 'low',
-  urgentApproveUpTo: 'medium',
-  merge: 'never',
-  urgent: 'escalate',
-  urgentWaitMinutes: 60,
-  quietWaitMinutes: 15,
+  level: 'balanced',
+  gates: ['plans', 'questions', 'reviews', 'watchdogTasks'],
+  autoMerge: 'low_risk',
+  escalate: true,
   ignoreUsageLimits: true,
   contacts: [],
 };

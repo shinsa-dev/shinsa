@@ -31,3 +31,24 @@ export interface LocalSlot {
   hour: number;
   slot: number;
 }
+
+export const MAC_AWAY_AFTER_MINUTES = 10;
+
+export type PowerEvent = 'lock' | 'unlock' | 'suspend' | 'resume';
+
+export interface AwaySpan {
+  from: number;
+  to: number;
+}
+
+export interface AwayState {
+  lastInput: number | null;
+  frozen: boolean;
+}
+
+export interface AwayStep {
+  state: AwayState;
+  span: AwaySpan | null;
+}
+
+export const NO_INPUT_YET: AwayState = { lastInput: null, frozen: false };

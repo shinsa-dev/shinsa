@@ -1,7 +1,7 @@
-import { Duration } from 'effect';
-import { AWAY_AFTER, type AwayState, type AwayStep, type PowerEvent } from './schema.ts';
+import { MINUTE_MS } from '../domain/time.ts';
+import { type AwayState, type AwayStep, MAC_AWAY_AFTER_MINUTES, type PowerEvent } from './schema.ts';
 
-const AWAY_AFTER_MS = Duration.toMillis(AWAY_AFTER);
+const AWAY_AFTER_MS = MAC_AWAY_AFTER_MINUTES * MINUTE_MS;
 
 export function observeInput(state: AwayState, now: number, idleMs: number): AwayStep {
   if (state.frozen) return { state, span: null };

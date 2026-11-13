@@ -261,3 +261,30 @@ describe('which decisions are new', () => {
     expect(listNewDecisions(new Set(['g-question']), focused, NOW)).toEqual([]);
   });
 });
+
+describe('what Autopilot did for you', () => {
+  const merged = createGate({
+    id: 'g-merge',
+    taskId: 't-2',
+    type: 'merge',
+    status: 'answered',
+    answeredAt: NOW,
+    autopilotAnswer: 'Low risk, high confidence.',
+  });
+
+  it('notifies once for each thing it did, and stops once you mark it seen', () => {
+    const state = withTasks(merged);
+    expect(listOpenNoticeTags(state)).toEqual(new Set(['autopilot-done:g-merge']));
+    expect(listNewDecisions(new Set(), state, NOW)).toEqual([
+      {
+        tag: 'autopilot-done:g-merge',
+        taskId: 't-2',
+        title: 'Ship the fix',
+        body: 'Autopilot started the merge for you. Low risk, high confidence.',
+        path: null,
+      },
+    ]);
+    expect(listNewDecisions(listOpenNoticeTags(state), state, NOW)).toEqual([]);
+    expect(listOpenNoticeTags(withTasks({ ...merged, autopilotSeen: true }))).toEqual(new Set());
+  });
+});

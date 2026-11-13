@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { NO_INPUT_YET } from '../../src/away/schema.ts';
-import { applyPowerEvent, observeInput } from '../../src/away/tracker.ts';
+import { resolveAutopilotPresence } from '../../src/autopilot/index.ts';
+import { HOUR_MS, resolvePresenceHour } from '../../src/index.ts';
+import { applyPowerEvent, observeInput } from '../../src/presence/idle.ts';
+import { NO_INPUT_YET } from '../../src/presence/schema.ts';
+import { createHarness } from '../harness.ts';
 
 const MINUTE = 60_000;
 
@@ -53,5 +56,35 @@ describe('time away from your Mac', () => {
       state: { lastInput: 5 * MINUTE, frozen: false },
       span: null,
     });
+  });
+});
+
+describe('your Mac in use, as the engine reads it', () => {
+  it('counts the hour of your last input as active once, so Autopilot sees you at your Mac', () => {
+    const harness = createHarness();
+    harness.advance(10 * HOUR_MS);
+    const before = resolveAutopilotPresence(harness.state, harness.now);
+    expect(before.active).toBe(false);
+    harness.send({ type: 'idle.record', inputAt: harness.now, away: null });
+    expect(harness.state.presence[String(resolvePresenceHour(harness.now))]).toBe(1);
+    expect(resolveAutopilotPresence(harness.state, harness.now).active).toBe(true);
+    const seq = harness.state.seq;
+    harness.send({ type: 'idle.record', inputAt: harness.now, away: null });
+    expect(harness.state.seq).toBe(seq);
+  });
+
+  it('keeps a span you were away and never counts an input after now', () => {
+    const harness = createHarness();
+    harness.advance(10 * HOUR_MS);
+    const away = { from: harness.now - 2 * HOUR_MS, to: harness.now - HOUR_MS };
+    harness.send({ type: 'idle.record', inputAt: harness.now + HOUR_MS, away });
+    expect(Object.values(harness.state.away)).toEqual([away]);
+    expect(harness.state.presence[String(resolvePresenceHour(harness.now))]).toBe(1);
+  });
+
+  it('refuses a span that ends after now', () => {
+    const harness = createHarness();
+    const away = { from: harness.now - HOUR_MS, to: harness.now + HOUR_MS };
+    expect(() => harness.send({ type: 'idle.record', inputAt: harness.now, away })).toThrow('ends by now');
   });
 });

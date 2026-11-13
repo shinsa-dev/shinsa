@@ -3,12 +3,18 @@ import {
   AUTOPILOT_DEFAULTS,
   type AutopilotContact,
   createSettings,
+  EMPTY_AUTOPILOT_PROFILE,
   type MergeBlock,
   type SlackDirectoryView,
   type SlackSnapshot,
 } from '@shinsa/core';
 import {
-  AUTOPILOT_RISK_ITEMS,
+  AUTO_MERGE_DESCRIPTION,
+  AUTO_MERGE_ITEMS,
+  AUTOPILOT_GATE_ROWS,
+  AUTOPILOT_LEVEL_DESCRIPTION,
+  AUTOPILOT_LEVEL_ITEMS,
+  resolveAutopilotScoreView,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
   describeContactPickerEmpty,
@@ -16,7 +22,6 @@ import {
   hasTeamProject,
   isSlackTestSent,
   isAskWaiting,
-  listAutopilotUrgentItems,
   resolveContactTestBlock,
   listContactOptions,
   listSlackWorkspaceItems,
@@ -25,15 +30,16 @@ import {
   resolveSlackUnavailable,
   toggleAutopilotContact,
   describeAgentReviewNote,
-  listAutopilotWaitItems,
+  toggleAutopilotGate,
   listHandoffParagraphs,
   listTeamEscalationRows,
+  listDoneForYouRows,
   resolveAutopilotFact,
   resolveAutopilotValue,
   resolveEscalationFact,
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
-import { createTask } from '../support/state.ts';
+import { createAutopilotProfile, createGate, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
@@ -66,31 +72,13 @@ const DIRECTORY: SlackDirectoryView = {
 };
 
 describe('who an escalation reaches', () => {
-  it('offers asking for a review only once someone can be asked', () => {
-    const asks = (reachable: boolean) =>
-      listAutopilotUrgentItems(reachable).map((item) => [item.value, item.disabled ?? null]);
-    expect(asks(true)).toEqual([
-      ['wait', null],
-      ['escalate', null],
-      ['escalate_then_merge', null],
-      ['merge', null],
-    ]);
-    expect(asks(false)).toEqual([
-      ['wait', null],
-      ['escalate', 'Add someone to ask first'],
-      ['escalate_then_merge', 'Add someone to ask first'],
-      ['merge', null],
-    ]);
-  });
-
   it('knows whether a project is shared with a team, and warns while an ask reaches no one', () => {
     expect(hasTeamProject([{ teamIds: [] }, {}])).toBe(false);
     expect(hasTeamProject([{}, { teamIds: ['team-1'] }])).toBe(true);
-    const asking = { ...AUTOPILOT_DEFAULTS, urgent: 'escalate_then_merge' as const };
-    expect(isAskWaiting(asking, false)).toBe(true);
-    expect(isAskWaiting(asking, true)).toBe(false);
-    expect(isAskWaiting({ ...asking, contacts: [ONCALL] }, false)).toBe(false);
-    expect(isAskWaiting({ ...AUTOPILOT_DEFAULTS, urgent: 'merge' }, false)).toBe(false);
+    expect(isAskWaiting(AUTOPILOT_DEFAULTS, false)).toBe(true);
+    expect(isAskWaiting(AUTOPILOT_DEFAULTS, true)).toBe(false);
+    expect(isAskWaiting({ ...AUTOPILOT_DEFAULTS, contacts: [ONCALL] }, false)).toBe(false);
+    expect(isAskWaiting({ ...AUTOPILOT_DEFAULTS, escalate: false }, false)).toBe(false);
   });
 
   it('says why Slack cannot be picked: an older engine, still checking, unreachable, or not connected', () => {
@@ -234,32 +222,104 @@ describe('the Autopilot settings', () => {
     expect(resolveAutopilotValue(createSettings())).toEqual({ policy: AUTOPILOT_DEFAULTS, enabled: 'off' });
     const settings = {
       ...createSettings(),
-      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, merge: 'approved' as const },
+      autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, autoMerge: 'approved' as const },
     };
-    expect(resolveAutopilotValue(settings)).toMatchObject({ enabled: 'on', policy: { merge: 'approved' } });
+    expect(resolveAutopilotValue(settings)).toMatchObject({
+      enabled: 'on',
+      policy: { autoMerge: 'approved' },
+    });
   });
 
-  it('names each risk limit, and never approving is not a shield', () => {
-    expect(AUTOPILOT_RISK_ITEMS.map((item) => [item.value, item.label, item.icon])).toEqual([
-      ['none', 'Never', 'IconCircleX'],
-      ['low', 'Low risk only', 'IconShieldCheck'],
-      ['medium', 'Up to medium risk', 'IconShieldCheck'],
-      ['high', 'Any risk', 'IconShieldCheck'],
+  it('names how much it does alone and what Auto merge takes, each with one sentence on the level', () => {
+    expect(AUTOPILOT_LEVEL_ITEMS.map((item) => [item.value, item.label])).toEqual([
+      ['ask_first', 'Ask me first'],
+      ['balanced', 'Balanced'],
+      ['most', 'Most things'],
     ]);
+    expect(AUTOPILOT_LEVEL_ITEMS.every((item) => (item.hint ?? '').endsWith('.'))).toBe(true);
+    expect(AUTO_MERGE_ITEMS.map((item) => item.value)).toEqual(['off', 'low_risk', 'approved']);
   });
 
-  it('lists the waits in order with the one you saved, in minutes or hours', () => {
-    const items = listAutopilotWaitItems({ ...AUTOPILOT_DEFAULTS, urgentWaitMinutes: 90 });
-    expect(items.map((item) => item.label)).toEqual([
-      '15 minutes',
-      '30 minutes',
-      '1 hour',
-      '90 minutes',
-      '2 hours',
-      '4 hours',
-      '8 hours',
+  it('gives every level, gate and Auto merge choice one sentence on what happens', () => {
+    const sentences = [
+      ...Object.values(AUTOPILOT_LEVEL_DESCRIPTION),
+      ...AUTOPILOT_GATE_ROWS.map((row) => row.description),
+      ...Object.values(AUTO_MERGE_DESCRIPTION),
+    ];
+    for (const sentence of sentences) expect(sentence).toMatch(/^[A-Z][^.]*\.$/);
+  });
+
+  it('scores nothing and suggests Balanced before it learned anything', () => {
+    expect(resolveAutopilotScoreView({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'balanced')).toEqual({
+      score: {
+        detail:
+          'How often it guesses your plans, reviews and merges right, out of 100. It starts once you decide some.',
+        value: 0,
+        percent: '0%',
+      },
+      suggested: {
+        level: 'balanced',
+        detail: 'Balanced while it learns. Most things once the score reaches 90%.',
+        apply: null,
+      },
+    });
+  });
+
+  it('keeps suggesting Balanced while it agrees with you too rarely or over too few decisions', () => {
+    const few = createAutopilotProfile({
+      agreed: 10,
+      disagreed: 0,
+      unscored: 2,
+      tallies: [
+        { kind: 'plan', total: 3 },
+        { kind: 'review', total: 8 },
+        { kind: 'finding', total: 1 },
+        { kind: 'merge', total: 2 },
+      ],
+    });
+    const view = resolveAutopilotScoreView({ autopilotProfile: few }, 'ask_first');
+    expect(view.score).toEqual({
+      detail: 'It guessed you right on 10 of 10 so far and needs more to be sure.',
+      value: 18,
+      percent: '18%',
+    });
+    expect(view.suggested).toMatchObject({ level: 'balanced', apply: 'Use Balanced' });
+    const unsure = createAutopilotProfile({
+      agreed: 40,
+      disagreed: 20,
+      tallies: [{ kind: 'review', total: 60 }],
+    });
+    const unsureView = resolveAutopilotScoreView({ autopilotProfile: unsure }, 'balanced');
+    expect(unsureView).toMatchObject({
+      score: { detail: 'It guessed you right on 40 of 60, but not often enough lately.' },
+      suggested: { level: 'balanced', apply: null },
+    });
+    expect(unsureView.score.value).toBeLessThan(90);
+  });
+
+  it('suggests Most things once the score reaches 90', () => {
+    const sure = createAutopilotProfile({ agreed: 46, disagreed: 4 });
+    const view = resolveAutopilotScoreView({ autopilotProfile: sure }, 'balanced');
+    expect(view.score).toMatchObject({
+      detail: 'It guessed you right on 46 of 50, the recent ones counting most.',
+    });
+    expect(view.score.value).toBeGreaterThanOrEqual(90);
+    expect(view.score.percent).toBe(`${view.score.value}%`);
+    expect(view.suggested).toEqual({
+      level: 'most',
+      detail: 'It agrees with you often enough to act alone on most work.',
+      apply: 'Use Most things',
+    });
+    expect(resolveAutopilotScoreView({ autopilotProfile: sure }, 'most').suggested.apply).toBeNull();
+  });
+
+  it('adds or drops one gate and keeps the others', () => {
+    expect(toggleAutopilotGate(['plans', 'questions', 'reviews'], 'questions', false)).toEqual([
+      'plans',
+      'reviews',
     ]);
-    expect(items[2]).toEqual({ value: '60', label: '1 hour', icon: 'IconClock' });
+    expect(toggleAutopilotGate(['plans'], 'reviews', true)).toEqual(['plans', 'reviews']);
+    expect(toggleAutopilotGate(['plans', 'reviews'], 'reviews', true)).toEqual(['plans', 'reviews']);
   });
 });
 
@@ -512,5 +572,37 @@ describe('the hand-off an escalation shows', () => {
     expect(listHandoffParagraphs(ready, { owner: null, presence: null, now: HOUR })[0]?.text).toBe(
       'It is urgent and ready for you to merge, so Autopilot sent it to your team.'
     );
+  });
+});
+
+describe('the things Autopilot did for you on Home', () => {
+  const answered = { status: 'answered' as const, answeredAt: NOW, autopilotAnswer: 'Small and clear.' };
+  const state = createShinsaState({
+    tasks: [
+      createTask({ id: 't-1', title: 'Paint the button', stage: 'merged' }),
+      createTask({ id: 't-2', title: 'Ship the fix', stage: 'building' }),
+    ],
+    gates: [
+      createGate({ id: 'g-merge', taskId: 't-1', type: 'merge', ...answered }),
+      createGate({ id: 'g-plan', taskId: 't-2', type: 'plan', ...answered, answeredAt: NOW - 1 }),
+      createGate({ id: 'g-question', taskId: 't-2', type: 'question', ...answered, answeredAt: NOW - 2 }),
+      createGate({ id: 'g-review', taskId: 't-2', type: 'review', ...answered, answeredAt: NOW - 3 }),
+      createGate({ id: 'g-seen', taskId: 't-2', type: 'review', ...answered, autopilotSeen: true }),
+      createGate({ id: 'g-yours', taskId: 't-2', type: 'review', status: 'answered', answeredAt: NOW }),
+    ],
+  });
+
+  it('lists each unseen gate it answered, newest first, saying what it did', () => {
+    expect(listDoneForYouRows(state).map((row) => [row.gateId, row.title, row.summary, row.icon])).toEqual([
+      ['g-merge', 'Paint the button', 'Autopilot merged it for you.', 'IconMerged'],
+      ['g-plan', 'Ship the fix', 'Autopilot approved the plan for you.', 'IconChecklist'],
+      ['g-question', 'Ship the fix', 'Autopilot answered an agent’s question for you.', 'IconBubbleCheck'],
+      ['g-review', 'Ship the fix', 'Autopilot approved the review for you.', 'IconCheckCircle2'],
+    ]);
+    expect(listDoneForYouRows(state)[0]).toMatchObject({
+      reason: 'Small and clear.',
+      at: NOW,
+      tone: 'green',
+    });
   });
 });

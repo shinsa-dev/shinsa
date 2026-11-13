@@ -106,8 +106,11 @@ function TabSections({
     case 'agents':
       return (
         <>
-          <AgentSettings settings={state.settings} automatic={automatic} />
-          <ActiveHoursSettings state={state} />
+          <AgentSettings
+            settings={state.settings}
+            automatic={automatic}
+            afterAutopilot={<ActiveHoursSettings state={state} />}
+          />
           <MemorySettings state={state} />
           <VersionSettings />
         </>

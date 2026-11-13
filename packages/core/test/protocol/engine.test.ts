@@ -122,6 +122,7 @@ describe('resolveEngineFit', () => {
 
 const GATED_COMMANDS: EngineCommand[] = [
   'away.record',
+  'autopilot.seen',
   'task.stack_on_tasks',
   'task.pause',
   'initiative.write',

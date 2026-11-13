@@ -1,6 +1,6 @@
+import type { PowerEvent } from '@shinsa/core';
 import { Effect, Layer, Queue, Stream } from 'effect';
 import { powerMonitor } from 'electron';
-import type { PowerEvent } from '../away/schema.ts';
 import { PowerMonitor } from '../power-monitor/service.ts';
 
 export const PowerMonitorLive = Layer.effect(
