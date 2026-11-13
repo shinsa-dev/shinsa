@@ -114,7 +114,7 @@ src/
                             the exact text Koe copied, numbered [1] and [2]). public/koe/koe-session is the hero, and
                             koe-pill.webp the real pill in KoeCallout. Every recording is Koe over the seeded Shinsa (the
                             `seeded` service) in dark, never a made-up app; the comment one pins two comments in a row, each with ⇧⌘-click, so the second click attaches the first.
-                            Record them again from the installed Koe when its look changes, crop the bottom edge (Koe's frame
+                            Record them again from the installed Koe when its look changes, crop the bottom edge and 6px off each side (Koe's frame
                             around the screen while you pick) and time the captions again
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
                             own review as a page, the task page's header pinned on top (title, the two buttons, and the web's TaskSharedFacts:

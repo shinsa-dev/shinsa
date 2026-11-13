@@ -244,8 +244,8 @@ export const koeTools: {
     video: 'koe-screenshot',
     label: 'Koe taking a screenshot of Shinsa’s task box while you describe it',
     captions: [
-      { start: 0.55, end: 3.1, text: 'The options under the box feel cramped.' },
-      { start: 5.95, end: 7.7, text: 'Give them a little more room.' },
+      { start: 0.55, end: 2.65, text: 'The options under the box feel cramped.' },
+      { start: 5.95, end: 8.55, text: 'Give them a little more room, maybe eight pixels.' },
     ],
   },
   {
@@ -255,8 +255,8 @@ export const koeTools: {
     video: 'koe-clip',
     label: 'Koe recording a clip of hovering over Shinsa’s task list, then playing it back to pick a frame',
     captions: [
-      { start: 0.55, end: 2.5, text: 'Watch these rows when I hover.' },
-      { start: 10.05, end: 11.8, text: 'The hover is too faint.' },
+      { start: 0.55, end: 2.1, text: 'Watch these rows when I hover.' },
+      { start: 12.75, end: 15.4, text: 'The hover is too faint here, make it stronger.' },
     ],
   },
 ];
