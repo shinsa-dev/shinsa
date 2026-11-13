@@ -5,11 +5,14 @@ import { DomainError, type UserCommand } from '@shinsa/core';
 import { Effect } from 'effect';
 import { type CommandRouter, createManageClient } from '../../../src/agents/manage/client.ts';
 import type { DispatchOptions } from '../../../src/runtime/engine/schema.ts';
+import { EngineCore } from '../../../src/runtime/engine/service.ts';
 import { createConfigAt } from '../../helpers/config.ts';
+import { createStubEngineCoreLayer } from '../../helpers/engine-core.ts';
 import { Engine } from '../../helpers/engine.ts';
 import { openEventLog, type TestEventLog } from '../../helpers/event-log.ts';
 import { createTempDir } from '../../helpers/index.ts';
 import { createTestMachine } from '../../helpers/machine.ts';
+import { createStubEngine } from '../../helpers/state.ts';
 
 const logs: TestEventLog[] = [];
 
@@ -122,5 +125,85 @@ describe('what an agent changes through its management tools', () => {
     await Effect.runPromise(projects.upsertFolder(projectId, '~/basket'));
     expect(engine.state.projects[projectId]?.folders).toEqual([realpathSync(join(home, 'basket'))]);
     expect(engine.state.onBehalfActions?.map((action) => action.byTaskId)).toEqual(['task-1']);
+  });
+});
+
+describe('a message to a teammate’s lead', () => {
+  function createRelayClient(answer: Response) {
+    const stub = createStubEngine((state) => {
+      state.tasks = { 'task-1': { id: 'task-1', handle: 'SW-7', title: 'Sign webhooks' } } as never;
+    });
+    const engine = Effect.runSync(EngineCore.pipe(Effect.provide(createStubEngineCoreLayer(stub))));
+    const relayed: { instanceId: string; path: string; body: unknown }[] = [];
+    const client = createManageClient({
+      engine,
+      base: 'http://127.0.0.1:1',
+      key: null,
+      byTask: 'task-1',
+      relay: (instanceId, request) =>
+        Effect.promise(async () => {
+          relayed.push({ instanceId, path: new URL(request.url).pathname, body: await request.json() });
+          return answer;
+        }),
+    });
+    return { client, relayed };
+  }
+
+  test('posts the command to the lead’s machine, naming the task its agent works on', async () => {
+    const { client, relayed } = createRelayClient(Response.json({ ok: true }));
+    await Effect.runPromise(
+      client.relay?.('laptop', { type: 'task.message', taskId: 'lead', text: 'Wait for me.' }) ?? Effect.void
+    );
+    expect(relayed).toEqual([
+      {
+        instanceId: 'laptop',
+        path: '/api/commands',
+        body: {
+          type: 'task.message',
+          taskId: 'lead',
+          text: 'Wait for me.',
+          fromTeammateTask: { handle: 'SW-7', title: 'Sign webhooks' },
+        },
+      },
+    ]);
+  });
+
+  test('passes on the teammate machine’s refusal, or says what it answered', async () => {
+    const refused = createRelayClient(
+      Response.json({ error: { code: 'handoff_scope', message: 'Not yours.' } }, { status: 403 })
+    );
+    const send = (client: ReturnType<typeof createRelayClient>['client']) =>
+      Effect.runPromise(
+        Effect.flip(
+          client.relay?.('laptop', { type: 'task.message', taskId: 'lead', text: 'Hi' }) ?? Effect.void
+        )
+      );
+    expect(await send(refused.client)).toMatchObject({ code: 'handoff_scope', message: 'Not yours.' });
+    const broken = createRelayClient(new Response('nope', { status: 502 }));
+    expect(await send(broken.client)).toMatchObject({
+      code: 'relay_failed',
+      message: 'The teammate’s machine answered 502.',
+    });
+  });
+
+  test('names no task when its own task is gone', async () => {
+    const stub = createStubEngine();
+    const engine = Effect.runSync(EngineCore.pipe(Effect.provide(createStubEngineCoreLayer(stub))));
+    const bodies: unknown[] = [];
+    const client = createManageClient({
+      engine,
+      base: 'http://127.0.0.1:1',
+      key: null,
+      byTask: 'gone',
+      relay: (_instanceId, request) =>
+        Effect.promise(async () => {
+          bodies.push(await request.json());
+          return Response.json({ ok: true });
+        }),
+    });
+    await Effect.runPromise(
+      client.relay?.('laptop', { type: 'task.message', taskId: 'lead', text: 'Hi' }) ?? Effect.void
+    );
+    expect(bodies).toEqual([{ type: 'task.message', taskId: 'lead', text: 'Hi' }]);
   });
 });

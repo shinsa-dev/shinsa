@@ -453,6 +453,8 @@ export function HandoverCard({
       return <DeliveryCard title='Reported the outcome' args={tool.args} field='outcome' />;
     case 'report_read':
       return <DeliveryCard title='Reported what it read' args={tool.args} field='summary' />;
+    case 'report_initiative':
+      return <DeliveryCard title='Where it stands' args={tool.args} field='narrative' />;
     case 'reshape_task':
       return <ReshapeCard args={tool.args} />;
     case 'move_to_repository':

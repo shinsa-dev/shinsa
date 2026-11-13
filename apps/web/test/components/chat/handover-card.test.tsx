@@ -327,6 +327,12 @@ describe('HandoverCard for the process tools', () => {
     expect(diagnosed.getByText('dry')).toBeTruthy();
   });
 
+  it('shows a lead’s report as where the initiative stands', () => {
+    const view = renderCard(call('report_initiative', { narrative: 'The dock is in review.' }));
+    expect(view.getByText('Where it stands')).toBeTruthy();
+    expect(view.getByText('The dock is in review.')).toBeTruthy();
+  });
+
   it('shows the reply to your message first, then the plan, the summary or the report below it', () => {
     const reply = {
       headline: 'Split the work as you asked.',

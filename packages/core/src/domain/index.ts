@@ -53,6 +53,7 @@ export {
   FeedbackId,
   GateId,
   IdText,
+  InitiativeId,
   MemoryId,
   ProjectId,
   RepoId,
@@ -111,6 +112,22 @@ export {
   listInheritedCiFailures,
 } from './ci.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
+export {
+  INITIATIVE_LIMITS,
+  type Initiative,
+  type InitiativeMilestone,
+  type InitiativeMilestoneKind,
+  type InitiativePhase,
+  type InitiativeReport,
+  type InitiativeTeamMember,
+  isInitiativeInTeam,
+  resolveInitiativeText,
+  selectInitiativeByReference,
+  selectInitiativePhase,
+  selectLeadInitiative,
+  type TeamInitiativeRef,
+  type TeammateMilestoneTask,
+} from './initiatives.ts';
 export { isReplyingRun, type ReplyingHandOver, selectOpenIteration } from './iterations.ts';
 export {
   isMemoryOf,
@@ -238,9 +255,11 @@ export {
   isComposedByAgent,
   isFollowUpOnWork,
   isInquiryDone,
+  isLeadTask,
   isSamePipeline,
   needsRepository,
   type OperationTiming,
+  type PresetShape,
   PROPOSAL_RECOMMENDATIONS,
   type ProposalRecommendation,
   type SuggestedAction,

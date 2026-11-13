@@ -193,9 +193,24 @@ export function validatePlanRules(steps: readonly PipelineStep[], document: Plan
     );
   }
   const split = document.split ?? [];
-  if (split.length > 0 && !steps.includes('pull_request')) {
+  if (split.length > 0 && !steps.includes('pull_request') && !steps.includes('lead')) {
     errors.push(
       '`split` starts other changes, and this task opens no pull request: leave it out and suggest the work with `suggest_tasks`.'
+    );
+  }
+  if (steps.includes('lead') && document.initiative) {
+    errors.push(
+      '`initiative` is for a task that turns into one, and this task already leads one: leave it out.'
+    );
+  }
+  if (steps.includes('lead') && document.files.length > 0) {
+    errors.push(
+      '`files` is for a change, and a lead changes no files: its tasks plan their own. Leave it empty.'
+    );
+  }
+  if (document.initiative && split.length === 0) {
+    errors.push(
+      '`initiative` makes this task and its split parts an initiative: give the parts in `split`, or leave it out.'
     );
   }
   return errors;

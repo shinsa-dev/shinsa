@@ -7,9 +7,10 @@ import {
   type ShinsaState,
 } from '@shinsa/core';
 import { EngineApi } from '@shinsa/core/engine-api';
-import { Effect } from 'effect';
+import { Clock, Effect } from 'effect';
 import { HttpApiBuilder } from 'effect/http-api';
 import { EngineCore } from '../../../runtime/engine/service.ts';
+import { findInitiativeSheet, listInitiativeViews } from '../../initiative-views.ts';
 import { findTaskByRef } from '../../task-lookup.ts';
 import { listActionViews, listProjectViews, resolveRunView } from '../../task-views.ts';
 
@@ -37,6 +38,27 @@ export const StateHandlers = HttpApiBuilder.group(
             project: entry.projectId ? (state.projects[entry.projectId]?.name ?? null) : null,
           })),
         }))
+      )
+      .handle(
+        'initiatives',
+        Effect.fn('StateHandlers.initiatives')(function* ({ request }) {
+          const state = yield* engine.state;
+          const now = yield* Clock.currentTimeMillis;
+          return { initiatives: listInitiativeViews(state, new URL(request.originalUrl).origin, now) };
+        })
+      )
+      .handle(
+        'initiative',
+        Effect.fn('StateHandlers.initiative')(function* ({ params, request }) {
+          const state = yield* engine.state;
+          const now = yield* Clock.currentTimeMillis;
+          return yield* findInitiativeSheet(
+            state,
+            params.initiativeRef,
+            new URL(request.originalUrl).origin,
+            now
+          );
+        })
       )
       .handle('feedback', () =>
         read((state) => ({

@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { isTeamTask, listTeamProjectIds, listTeamTasks, TEAM_SETTLED_LIMIT } from '../../src/index.ts';
+import {
+  isSameTeamMembers,
+  isTeamTask,
+  listTeamInitiatives,
+  listTeamProjectIds,
+  listTeamTasks,
+  resolveTeamMembersKey,
+  TEAM_SETTLED_LIMIT,
+} from '../../src/index.ts';
 import {
   approve,
   createHarness,
+  createInitiative,
   createTask,
   type Harness,
   reachReviewGate,
@@ -101,5 +110,79 @@ describe('the team task list', () => {
     harness.send({ type: 'project.add_to_team', projectId: shared.projectId, teamId: 'team-1' });
     const taskId = createTask(harness, { repoId: shared.repoId });
     expect(isTeamTask(harness.state, { ...harness.task(taskId), watchHome: true }, 'team-1')).toBe(false);
+  });
+});
+
+describe('an initiative shared with a team', () => {
+  test('lists its lead task as a team task, but not its members outside the team’s projects', () => {
+    const harness = createHarness();
+    const { initiativeId, leadId } = createInitiative(harness, { phases: ['Dock host'] });
+    const member = createTask(harness);
+    harness.send({ type: 'task.join_initiative', taskId: member, initiativeId, phaseId: null });
+    expect(isTeamTask(harness.state, harness.task(leadId), 'team-1')).toBe(false);
+    harness.send({ type: 'initiative.add_to_team', initiativeId, teamId: 'team-1' });
+    expect(isTeamTask(harness.state, harness.task(leadId), 'team-1')).toBe(true);
+    expect(isTeamTask(harness.state, harness.task(leadId), 'team-2')).toBe(false);
+    expect(isTeamTask(harness.state, harness.task(member), 'team-1')).toBe(false);
+    expect(listTeamTasks(harness.state, 'team-1', CONTEXT).map((entry) => entry.task.id)).toEqual([leadId]);
+  });
+
+  test('lists the initiative for the team, open or finished, and nothing once it leaves the team', () => {
+    const harness = createHarness();
+    const { initiativeId, leadId } = createInitiative(harness, { phases: ['Dock host'] });
+    expect(listTeamInitiatives(harness.state, 'team-1')).toEqual([]);
+    harness.send({ type: 'initiative.add_to_team', initiativeId, teamId: 'team-1' });
+    const initiative = harness.state.initiatives[initiativeId];
+    expect(listTeamInitiatives(harness.state, 'team-1')).toEqual([
+      {
+        id: initiativeId,
+        name: 'Chat split',
+        description: '',
+        phases: initiative?.phases ?? [],
+        leadTaskId: leadId,
+        report: null,
+        finished: false,
+        updatedAt: initiative?.updatedAt ?? 0,
+      },
+    ]);
+    const lead = harness.task(leadId);
+    const finished = {
+      ...harness.state,
+      tasks: { ...harness.state.tasks, [leadId]: { ...lead, stage: 'done' as const } },
+    };
+    expect(listTeamInitiatives(finished, 'team-1')[0]?.finished).toBe(true);
+    const leaderless = { ...harness.state, tasks: { ...harness.state.tasks, [leadId]: undefined } };
+    expect(listTeamInitiatives(leaderless as typeof harness.state, 'team-1')).toEqual([]);
+    harness.send({ type: 'initiative.remove_from_team', initiativeId, teamId: 'team-1' });
+    expect(listTeamInitiatives(harness.state, 'team-1')).toEqual([]);
+    expect(isTeamTask(harness.state, harness.task(leadId), 'team-1')).toBe(false);
+  });
+});
+
+describe('comparing an initiative’s team members', () => {
+  const member = {
+    teamId: 'team-1',
+    instanceId: 'laptop',
+    taskId: 't1',
+    handle: 'KAI-1',
+    title: 'Sign webhooks',
+    owner: 'kai',
+    stage: 'building' as const,
+    phaseId: null,
+    gate: null,
+    closedAt: null,
+  };
+  const other = { ...member, taskId: 't2', title: 'Retry' };
+
+  test('the same members match in any order and with their fields in any order, and share a key', () => {
+    const reordered = Object.fromEntries(Object.entries(member).reverse()) as typeof member;
+    expect(isSameTeamMembers([member, other], [other, reordered])).toBe(true);
+    expect(resolveTeamMembersKey([member, other])).toBe(resolveTeamMembersKey([other, reordered]));
+  });
+
+  test('a changed stage is a different list with a different key', () => {
+    const moved = { ...member, stage: 'merged' as const };
+    expect(isSameTeamMembers([member], [moved])).toBe(false);
+    expect(resolveTeamMembersKey([member])).not.toBe(resolveTeamMembersKey([moved]));
   });
 });

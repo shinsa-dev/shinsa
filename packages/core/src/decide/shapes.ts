@@ -12,6 +12,7 @@ import {
   isComposedByAgent,
   isFollowUpOnWork,
   isInquiryDone,
+  isLeadTask,
   isLaterRound,
   isSamePipeline,
   isWorktreeStep,
@@ -46,6 +47,7 @@ import { listOpenGates } from '../state/queries.ts';
 import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
 import { answerIteration, suggestActions } from './iterations.ts';
+import { startLeadPlan, startLeadTurn } from './leads.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
 import { requestWorkspace } from './workspaces.ts';
@@ -133,7 +135,7 @@ function reshapeTask(
   decider.emit({ type: 'task.reshaped', taskId, pipeline, by, reason });
 }
 
-type EntryStep = InquiryStep | 'your_ok' | 'plan';
+type EntryStep = InquiryStep | 'lead' | 'your_ok' | 'plan';
 
 function hasYourOk(task: Task) {
   return task.proposal?.status === 'accepted';
@@ -141,6 +143,8 @@ function hasYourOk(task: Task) {
 
 export function resolveNextStep(task: Task): Option.Option<EntryStep> {
   const pipeline = resolveTaskPipeline(task);
+  if (pipeline.includes('lead'))
+    return Option.some(pipeline.includes('plan') && !task.plan ? 'plan' : 'lead');
   const inquiry = resolveInquiryStep(pipeline);
   if (Option.isSome(inquiry) && !isInquiryDone(task, inquiry.value)) return inquiry;
   if (pipeline.includes('your_ok') && !hasYourOk(task)) return Option.some('your_ok');
@@ -186,6 +190,10 @@ function retitleFromPlan(decider: Decider, taskId: string) {
 }
 
 export function startAfterPlan(decider: Decider, taskId: string, addition = '') {
+  if (isLeadTask(decider.task(taskId))) {
+    startLeadPlan(decider, taskId);
+    return;
+  }
   retitleFromPlan(decider, taskId);
   if (Option.contains(resolveWorkStep(resolveTaskPipeline(decider.task(taskId))), 'operate')) {
     startOperation(decider, taskId, null);
@@ -282,13 +290,17 @@ export function startStep(decider: Decider, taskId: string, next: Option.Option<
     requestYourOk(decider, taskId, null, null, 'go_on');
     return;
   }
+  if (step === 'lead') {
+    startLeadTurn(decider, taskId, null);
+    return;
+  }
   startInquiry(decider, taskId, step, null);
 }
 
 export function proceedAfterSetup(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const step = resolveNextStep(task);
-  if (Option.isSome(step) && isWorktreeStep(step.value)) {
+  if (Option.isSome(step) && isWorktreeStep(step.value) && !isLeadTask(task)) {
     requestWorkspace(decider, taskId);
     return;
   }

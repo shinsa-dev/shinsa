@@ -70,6 +70,13 @@ describe('the verification rules', () => {
     ]);
   });
 
+  test('a plan makes an initiative only of a split', () => {
+    expect(validatePlanRules(SHAPE_PIPELINES.change, { ...SPLIT_PLAN, initiative: true })).toEqual([]);
+    expect(validatePlanRules(SHAPE_PIPELINES.change, { ...PLAN, initiative: true })).toEqual([
+      '`initiative` makes this task and its split parts an initiative: give the parts in `split`, or leave it out.',
+    ]);
+  });
+
   test('a plan splits off other tasks only when this task opens a pull request', () => {
     expect(validatePlanRules(SHAPE_PIPELINES.change, SPLIT_PLAN)).toEqual([]);
     expect(

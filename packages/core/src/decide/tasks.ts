@@ -43,6 +43,7 @@ import {
 import { type Decider, describeWaiting } from './decider.ts';
 import { changeDependencies, changeStack, resolveDependencies, resolveStackParents } from './dependencies.ts';
 import { closeTeammateDuplicate, closeTriageDuplicate, selectTriageDuplicate } from './duplicates.ts';
+import { resolveCreatedMembership } from './initiatives.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { finishMove } from './moves.ts';
@@ -95,6 +96,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   if (command.forkOf !== undefined && command.teammateFork !== undefined)
     throw new DomainError({ code: 'fork_twice', message: 'Fork one task at a time.' });
   const owner = resolveCreatedOwner(decider, lineage);
+  const membership = resolveCreatedMembership(decider, command, lineage, projectId ?? null);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
@@ -118,6 +120,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     ...(command.teammateFork ? { teammateFork: command.teammateFork } : {}),
     ...(owner ? { owner } : {}),
+    ...membership,
     ...lineage,
   });
   const by = lineage.createdBy ? 'shinsa' : 'you';

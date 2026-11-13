@@ -94,7 +94,14 @@ export const TEAMMATE_TASKS: SeedTask[] = [
     title: 'Move the paywall list to the new table',
     branch: 'refactor/paywall-table',
   },
+  {
+    request: 'Show the chat’s connection state in the paywall editor',
+    title: 'Show the chat’s connection state in the editor',
+    branch: 'feat/chat-connection-state',
+  },
 ];
+
+export const TEAMMATE_INITIATIVE_TASK = 'Show the chat’s connection state in the paywall editor';
 
 export const SEEDED_MESSAGES = [
   'Can you keep the old export working for one more release?',

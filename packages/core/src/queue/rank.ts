@@ -70,7 +70,8 @@ function isFocusOver(state: ShinsaState, now: number) {
 }
 
 export function resolveFocusProjects(state: ShinsaState, now: number): FocusProjects {
-  if (isFocusOver(state, now) || state.focus.teamId !== null) return NO_FOCUS_PROJECTS;
+  if (isFocusOver(state, now) || state.focus.teamId !== null || state.focus.initiativeId)
+    return NO_FOCUS_PROJECTS;
   return resolveFocusSelection(state.focus);
 }
 
@@ -82,8 +83,14 @@ export function resolveFocusTeam(state: ShinsaState, now: number): Option.Option
   return isFocusOver(state, now) ? Option.none() : Option.fromNullishOr(state.focus.teamId);
 }
 
+export function resolveFocusInitiative(state: ShinsaState, now: number): Option.Option<string> {
+  return isFocusOver(state, now) ? Option.none() : Option.fromNullishOr(state.focus.initiativeId);
+}
+
 export function isInFocus(state: ShinsaState, task: Task, now: number) {
   if (state.teammateTasks?.[task.id]) return false;
+  const initiativeId = resolveFocusInitiative(state, now);
+  if (Option.isSome(initiativeId)) return task.initiativeId === initiativeId.value;
   const teamId = resolveFocusTeam(state, now);
   if (Option.isSome(teamId)) return isTeamTask(state, task, teamId.value);
   return isProjectInFocus(
@@ -209,6 +216,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   return {
     focus: resolveFocusProjects(state, now),
     focusTeamId: Option.getOrNull(resolveFocusTeam(state, now)),
+    focusInitiativeId: Option.getOrNull(resolveFocusInitiative(state, now)),
     ready,
     upNow: ready.slice(0, limit),
     later: ready.slice(limit),

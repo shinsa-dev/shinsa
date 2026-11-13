@@ -60,12 +60,16 @@ function describeSplitStart(split: PlanSplitPart[], part: PlanSplitPart) {
   return part.order === 'waits_on' ? `waits on ${target}` : `stacks on ${target}`;
 }
 
-function describeSplit(split: PlanSplitPart[]) {
-  return split
+export const PLAN_INITIATIVE_NOTE =
+  'Approving the plan makes this task and these parts an initiative, with a lead that keeps track of them.';
+
+function describeSplit(split: PlanSplitPart[], initiative: boolean) {
+  const parts = split
     .map(
       (part, index) => `${index + 1}. **${part.title}** (${describeSplitStart(split, part)}): ${part.request}`
     )
     .join('\n');
+  return initiative && parts ? `${parts}\n\n${PLAN_INITIATIVE_NOTE}` : parts;
 }
 
 export function serializePlanMarkdown(plan: PlanDocument) {
@@ -79,7 +83,7 @@ export function serializePlanMarkdown(plan: PlanDocument) {
     `## Approach\n${plan.approach}`,
     describeSection('## Files', bulletList(plan.files.map((file) => `\`${file.path}\`: ${file.change}`))),
     describeSection('## Out of scope', bulletList(plan.outOfScope)),
-    describeSection('## Other tasks', describeSplit(plan.split ?? [])),
+    describeSection('## Other tasks', describeSplit(plan.split ?? [], plan.initiative ?? false)),
     describeSection('## Checks', bulletList(plan.verification.map(describePlanCheck))),
     describeSection('## Evidence', (plan.evidence ?? []).join(', ')),
     describeSection(

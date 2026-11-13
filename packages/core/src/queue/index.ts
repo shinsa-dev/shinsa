@@ -5,6 +5,7 @@ export {
   isListedInFocus,
   listWaitsOn,
   resolveFocusProject,
+  resolveFocusInitiative,
   resolveFocusProjects,
   resolveFocusTeam,
   resolveQueue,

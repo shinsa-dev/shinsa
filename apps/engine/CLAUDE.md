@@ -672,6 +672,9 @@ src/
 │                        of task is shaped first (TriageClassifier.shape); TriageClassifier.repository finds the
 │                        repository a task with none needs once its work needs one (the setup check calls it);
 │                        a dispatch that breaks is InboxDispatchFailed or CommandRouteFailed; index.ts the re-exports
+├── initiatives/         LeadWakes (service.ts): an initiative.wake effect waits LeadWakeDebounce (schema.ts, 30 s) on
+│                        one fiber per initiative in a FiberMap, then sends initiative.wake_lead; recover reschedules
+│                        every initiative with milestones queued on start (docs/engine.md → Initiatives)
 ├── briefing/            The Home guide, written beside the log through EngineCore.writeBriefing: service.ts
 │                        (BriefingWriter over EngineCore and QuickCalls' writer: waits BriefingDebounce, schema.ts,
 │                        on a fiber in a FiberHandle that each new request interrupts and stop cancels, the write
@@ -771,6 +774,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `FeedbackIssues` (`feedback/issues/service.ts`) | `FeedbackIssues.layer`, needs `GitHubLayer` | opening a feedback issue and reading your issues' states through `GitHubCli` (`FeedbackAnswerInvalid` for an answer without a link or a list) |
   | `FeedbackDrafter`, `FeedbackEffects` (`feedback/draft/`, `feedback/effects/`) | `FeedbackDrafter.layer`, needs `QuickCalls`; `FeedbackEffects.layer({ environment })`, needs `EngineCore`, `EngineConfig`, `FeedbackIssues` and `FeedbackDrafter` | the issue drafted by the writer; the feedback effects (draft, file, a failure for good, recovery, the issues' states every `FeedbackSync`), each reporting back as a command |
   | `EunoeServer` (`eunoe/service.ts`) | `EunoeServer.layer`, scoped, needs `EngineConfig` and `JsonFile` | Eunoe's forwarder for the Claude sessions (`EunoeSettings` for its upstream, port, window and tuning) |
+  | `LeadWakes` (`initiatives/service.ts`) | `LeadWakes.layer`, needs `EngineCore` | an initiative lead's wakes, debounced |
   | `BriefingWriter` (`briefing/service.ts`) | `BriefingWriter.layer`, scoped, needs `EngineCore` and `QuickCalls` | the Home guide, debounced |
   | `EngineRestarter` (`instance/restart/service.ts`) | `EngineRestarter.layer(createServiceRestart(…))`, scoped, needs `EngineCore` | restarting now or after draining, and the engine's activity for /api/health |
   | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |

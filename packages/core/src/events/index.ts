@@ -46,6 +46,7 @@ import type {
   TaskSize,
   TaskStage,
   TaskSuggestion,
+  TeamInitiativeRef,
   TeammateFork,
   TriageDecisions,
   UsageWait,
@@ -76,6 +77,7 @@ import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { FeedbackEventBody } from './feedback.ts';
 import type { HandoffEventBody } from './handoffs.ts';
+import type { InitiativeEventBody } from './initiatives.ts';
 import type { MemoryEventBody } from './memory.ts';
 import type { ScheduleEventBody } from './schedules.ts';
 import type { ShareEventBody } from './shares.ts';
@@ -125,12 +127,16 @@ type EventBody =
       watchHome?: boolean;
       forkOf?: string | null;
       teammateFork?: TeammateFork | null;
+      initiativeId?: string | null;
+      initiativePhaseId?: string | null;
+      teamInitiative?: TeamInitiativeRef | null;
     }
   | DelegationEventBody
   | ScheduleEventBody
   | SlackEventBody
   | WatchdogEventBody
   | MemoryEventBody
+  | InitiativeEventBody
   | FeedbackEventBody
   | ShareEventBody
   | HandoffEventBody

@@ -35,6 +35,7 @@ import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effe
 import type { ShinsaEventInput } from '../events/index.ts';
 import { describeUntoldMessages } from '../prompts/context.ts';
 import { describeForkSource, describeTeammateForkSource, resolveForkNote } from '../prompts/forks.ts';
+import { describeInitiativeMembership } from '../prompts/initiatives.ts';
 import { resolveMemoryTold } from '../prompts/memory.ts';
 import { resolveNightShiftTold } from '../prompts/night.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
@@ -251,6 +252,17 @@ export class Decider {
   }
 
   #describeFreshContext(task: Task, role: RunRole, fork: RunFork | null) {
+    return `${this.#describeOrigin(task, role, fork)}${this.#describeInitiative(task, role)}`;
+  }
+
+  #describeInitiative(task: Task, role: RunRole) {
+    const initiative = task.initiativeId ? this.state.initiatives[task.initiativeId] : undefined;
+    if (!initiative || !isTaskSessionRole(role) || initiative.leadTaskId === task.id) return '';
+    const lead = initiative.leadTaskId ? this.state.tasks[initiative.leadTaskId] : undefined;
+    return describeInitiativeMembership(initiative, task, lead && !isTaskSettled(lead) ? lead : null);
+  }
+
+  #describeOrigin(task: Task, role: RunRole, fork: RunFork | null) {
     const project = fork ? '' : resolveProjectContext(this.state, task);
     if (task.teammateFork && isTaskSessionRole(role))
       return `${project}${describeTeammateForkSource(task.teammateFork)}`;
