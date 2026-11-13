@@ -6,6 +6,7 @@ import type { CommandEnv } from '../../shell/schema.ts';
 import type { GitHubCli } from '../service.ts';
 import {
   GITHUB_HEADER_KEY,
+  MACHINE_GIT_CREDENTIALS,
   MachineGitHub,
   GITHUB_TOKEN_REFUSED,
   type GitHubIdentity,
@@ -17,8 +18,8 @@ import {
   type TaskGitHubShape,
 } from './schema.ts';
 
-export function resolveGitTokenEnv(identity: GitHubIdentity | null): CommandEnv | undefined {
-  if (!identity) return undefined;
+export function resolveGitTokenEnv(identity: GitHubIdentity | null): CommandEnv {
+  if (!identity) return MACHINE_GIT_CREDENTIALS;
   const basic = Buffer.from(`x-access-token:${identity.token}`).toString('base64');
   return {
     GIT_CONFIG_COUNT: '1',

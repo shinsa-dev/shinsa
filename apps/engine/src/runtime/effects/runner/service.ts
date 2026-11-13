@@ -111,6 +111,8 @@ export class EffectHandlers extends Context.Service<
             return yield* cleanup.removeScratch(effect.taskId);
           case 'briefing.request':
             return yield* world.briefings.schedule;
+          case 'initiative.wake':
+            return yield* world.leads.schedule(effect.initiativeId);
           case 'watch.suggest':
             return yield* suggestWatch(effect, attempt);
           case 'run.wake':

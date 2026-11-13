@@ -426,6 +426,39 @@ export function learnUsageRate(harness: Harness) {
   }
 }
 
+export function planLead(harness: Harness, leadId: string, split: PlanDocument['split'] = undefined) {
+  const initiative = Object.values(harness.state.initiatives).find((entry) => entry.leadTaskId === leadId);
+  const names = (initiative?.phases ?? []).map((phase) => phase.name);
+  const titles = names.length >= 2 ? names : [...(names.length === 1 ? names : ['Start']), 'Wrap up'];
+  proposePlan(harness, leadId, {
+    ...PLAN,
+    phases: titles.map((title) => ({ title, detail: `Finish ${title}.` })),
+    verification: [],
+    ...(split ? { split } : {}),
+  });
+  if (harness.task(leadId).stage === 'awaiting_plan') approve(harness, leadId);
+}
+
+export function createInitiative(
+  harness: Harness,
+  options: { name?: string; description?: string; phases?: string[] } = {}
+) {
+  const name = options.name ?? 'Chat split';
+  const request = options.description ? `${name}\n${options.description}` : name;
+  harness.send({ type: 'task.create', request, repoId: null, initiative: true });
+  const initiative = Object.values(harness.state.initiatives).at(-1);
+  if (!initiative?.leadTaskId) throw new Error('no initiative');
+  if (options.phases) {
+    harness.send({
+      type: 'initiative.write',
+      initiativeId: initiative.id,
+      name: initiative.name,
+      phases: options.phases.map((phase) => ({ id: null, name: phase })),
+    });
+  }
+  return { initiativeId: initiative.id, leadId: initiative.leadTaskId };
+}
+
 export function fireRetry(harness: Harness, taskId: string) {
   const retry = harness.task(taskId).autoRetry;
   if (retry?.status !== 'armed') throw new Error(`task ${taskId} has no armed retry`);

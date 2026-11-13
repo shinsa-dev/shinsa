@@ -125,7 +125,11 @@ export function isReadOnlyRole(role: RunRole) {
 
 export function isReadOnlyRun(run: Pick<Run, 'role' | 'purpose'>) {
   return (
-    isReadOnlyRole(run.role) || run.purpose === 'plan' || run.purpose === 'watch' || run.purpose === 'intake'
+    isReadOnlyRole(run.role) ||
+    run.purpose === 'plan' ||
+    run.purpose === 'watch' ||
+    run.purpose === 'intake' ||
+    run.purpose === 'lead'
   );
 }
 

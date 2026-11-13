@@ -11,6 +11,7 @@ export interface QueuedGate {
 export interface Queue {
   focus: FocusProjects;
   focusTeamId: string | null;
+  focusInitiativeId: string | null;
   ready: QueuedGate[];
   upNow: QueuedGate[];
   later: QueuedGate[];

@@ -12,6 +12,7 @@ const { resetRemoteAccess } = await import('@/lib/connection/remote-access.ts');
 const { resetSlack } = await import('@/lib/connection/slack.ts');
 const { connection } = await import('@/lib/connection/socket.ts');
 const { resetFeedbackOpen } = await import('@/lib/feedback.ts');
+const { closeInitiativeDialog } = await import('@/lib/initiatives/draft.ts');
 const { resetChangelog } = await import('@/lib/changelog.ts');
 const { resetEvidenceTexts } = await import('@/lib/evidence/texts.ts');
 const { resetDisclosures } = await import('@/lib/preferences/disclosure.ts');
@@ -31,6 +32,7 @@ afterEach(() => {
   resetTaskDrafts();
   resetEvidenceTexts();
   resetFeedbackOpen();
+  closeInitiativeDialog();
   resetChangelog();
   resetAgentProviders();
   resetRemoteAccess();

@@ -11,6 +11,7 @@ import {
   resolveRoundRelease,
   resolveTaskRounds,
   SHAPE_PIPELINES,
+  type PresetShape,
   type TaskShape,
 } from '../../src/index.ts';
 import {
@@ -746,7 +747,7 @@ function sendNewWork(
   harness: Harness,
   taskId: string,
   text: string,
-  shape: TaskShape,
+  shape: PresetShape,
   kind: MessageKind = 'new_round'
 ) {
   harness.send({ type: 'task.message', taskId, text, kind, shape, title: text.slice(0, 30) });

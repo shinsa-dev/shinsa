@@ -28,6 +28,10 @@ const MESSAGE_HINTS: Record<Exclude<MessageEffect, 'closed'>, MessageHint> = {
     placeholder: 'Tell the agent something. The step starts again with your message.',
     sent: 'Sent. Restarting the step.',
   },
+  lead: {
+    placeholder: 'Tell the lead something. It answers in a turn of its own.',
+    sent: 'Sent to the lead.',
+  },
   kept: {
     placeholder: 'Tell the agent something. The first agent on this task reads it.',
     sent: 'Saved for the first agent.',

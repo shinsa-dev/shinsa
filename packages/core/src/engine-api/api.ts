@@ -49,6 +49,8 @@ import {
   LocalOnly,
   LocalOnlyRoute,
   LocalReposAnswer,
+  InitiativeSheetAnswer,
+  InitiativesAnswer,
   MemoryAnswer,
   ModelsAnswer,
   ObjectAnswer,
@@ -260,6 +262,14 @@ class StateGroup extends HttpApiGroup.make('state')
     HttpApiEndpoint.get('projects', '/api/projects', { success: ProjectsAnswer }),
     HttpApiEndpoint.get('schedules', '/api/schedules', { success: SchedulesAnswer }),
     HttpApiEndpoint.get('memory', '/api/memory', { success: MemoryAnswer }),
+    HttpApiEndpoint.get('initiatives', '/api/initiatives', { success: InitiativesAnswer }).annotate(
+      EngineFeatureRoute,
+      'initiatives'
+    ),
+    HttpApiEndpoint.get('initiative', '/api/initiatives/:initiativeRef', {
+      params: { initiativeRef: Schema.String },
+      success: InitiativeSheetAnswer,
+    }).annotate(EngineFeatureRoute, 'initiatives'),
     HttpApiEndpoint.get('feedback', '/api/feedback', { success: FeedbackAnswer }).annotate(
       EngineFeatureRoute,
       'feedback'

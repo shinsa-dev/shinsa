@@ -6,6 +6,7 @@ import {
   type SurfaceClient,
   type SurfaceFailure,
 } from '../surface/index.ts';
+import { createCommandRelay, createLocalRelay } from '../surface/relay.ts';
 import { createEngineCalls, type EngineFailure, type EngineWake } from './client/index.ts';
 
 export { type EngineWake, NOT_RUNNING } from './client/index.ts';
@@ -23,6 +24,7 @@ export function createSurfaceClient(base: string, key: string, wake?: EngineWake
   return {
     base,
     api,
+    relay: createCommandRelay(createLocalRelay(base)),
     send: (command) =>
       Effect.suspend(() => {
         const header = resolveCommandKey(key, sent);

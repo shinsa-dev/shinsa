@@ -460,7 +460,13 @@ describe('watching teammates’ machines', () => {
 function readKeptFile(feedsPath: string) {
   if (!existsSync(feedsPath)) return null;
   return JSON.parse(readFileSync(feedsPath, 'utf8')) as {
-    lists: { teamId: string; instanceId: string; updatedAt: number; snapshot: TeamSnapshot | null }[];
+    lists: {
+      teamId: string;
+      instanceId: string;
+      updatedAt: number;
+      snapshot: TeamSnapshot | null;
+      initiatives?: unknown[];
+    }[];
   };
 }
 
@@ -500,6 +506,87 @@ async function releaseWait(waits: (() => void)[]) {
   await until('the fetch waits', () => waits.length > 0);
   waits.shift()?.();
 }
+
+describe('a teammate’s initiatives', () => {
+  test('lists the initiatives a teammate shared, keeps them signed and shows them after a restart', async () => {
+    const { feeds, stub, laptop, restart } = await setUp();
+    stub.state.tasks['task-1'] = { ...stub.state.tasks['task-1'], initiativeId: 'chat' } as never;
+    stub.state.initiatives = {
+      chat: {
+        id: 'chat',
+        name: 'Chat split',
+        description: 'Split the chat.',
+        phases: [{ id: 'p-1', name: 'Session' }],
+        leadTaskId: 'task-1',
+        createdAt: 1,
+        updatedAt: 2,
+        teamIds: ['team1'],
+        report: { narrative: 'Halfway.', runId: 'run-secret', at: 3 },
+      },
+    };
+    const kept = watchPublished(feeds, () => (feeds.snapshot().initiatives ?? []).length === 1);
+    await feeds.start();
+    await kept('the initiative arrives');
+    expect(feeds.snapshot().initiatives).toEqual([
+      {
+        id: 'chat',
+        name: 'Chat split',
+        description: 'Split the chat.',
+        phases: [{ id: 'p-1', name: 'Session' }],
+        leadTaskId: 'task-1',
+        report: { narrative: 'Halfway.', at: 3 },
+        finished: false,
+        updatedAt: 2,
+        teamId: 'team1',
+        instanceId: 'inst1',
+      },
+    ]);
+    expect(readKeptFile(resolveKeptPath(laptop))?.lists[0]?.initiatives).toHaveLength(1);
+    await feeds.stop();
+    await laptop.store.recordTeams([createTeam({ role: 'member', machines: [OFFLINE_STUDIO, LAPTOP] })]);
+    const restarted = await restart({ now: () => 60 });
+    await restarted.start();
+    expect(restarted.snapshot().initiatives?.map((initiative) => initiative.id)).toEqual(['chat']);
+    await restarted.stop();
+  });
+
+  test('takes a teammate’s initiatives from a copy their machine signed', async () => {
+    const desk = await createSigner();
+    const initiative = {
+      id: 'desk-plan',
+      name: 'Desk plan',
+      description: '',
+      phases: [],
+      leadTaskId: 'desk-1',
+      report: null,
+      finished: false,
+      updatedAt: 1,
+    };
+    const body = {
+      teamId: 'team1',
+      instanceId: 'inst3',
+      tasks: [createHeldTask('desk-1')],
+      initiatives: [initiative],
+      updatedAt: 40,
+    };
+    const signed = await Effect.runPromise(signTeamSnapshot(desk.privateKey, body));
+    const desktop: TeamMachine = {
+      id: 'inst3',
+      name: 'Desk',
+      userId: '9',
+      online: false,
+      lastSeenAt: 1,
+      signingKey: desk.signingKey,
+    };
+    const { feeds } = await setUp({ watcherMachines: [STUDIO, LAPTOP, desktop], held: [signed] });
+    await feeds.start();
+    await until('the kept initiative is taken', () =>
+      (feeds.snapshot().initiatives ?? []).some((entry) => entry.instanceId === 'inst3')
+    );
+    expect(feeds.snapshot().initiatives).toEqual([{ ...initiative, teamId: 'team1', instanceId: 'inst3' }]);
+    await feeds.stop();
+  });
+});
 
 describe('keeping a teammate’s last list', () => {
   test('keeps it on disk, signed, and shows it after a restart while the machine is offline', async () => {

@@ -528,7 +528,13 @@ const SplitPartNumber = WholeNumber(
   0
 );
 
-type SplitPartInput = Omit<PlanSplitPart, 'on'> & { on: number | null };
+const SplitPartPhase = WholeNumber(
+  `{path} must be the number of one of this plan's phases, from 1 to ${L.planPhases}.`,
+  (number) => number >= 1 && number <= L.planPhases,
+  1
+);
+
+type SplitPartInput = Omit<PlanSplitPart, 'on' | 'phase'> & { on: number | null; phase: number | null };
 
 const PlanSplit = Items(
   HandOverRecord({
@@ -536,6 +542,7 @@ const PlanSplit = Items(
     request: Required(L.suggestionRequest),
     order: OneOf(PLAN_SPLIT_ORDERS),
     on: OrAbsent(SplitPartNumber),
+    phase: OrAbsent(SplitPartPhase),
   }),
   L.splitParts
 ).check(
@@ -584,6 +591,7 @@ export const PlanParameters = HandOverRecord({
   ),
   approval: Flag,
   split: PlanSplit,
+  initiative: Flag,
 });
 
 const Finding = HandOverRecord({

@@ -16,6 +16,12 @@ export {
   listPrivateWords,
   resolveFeedbackIssueText,
 } from './feedback.ts';
+export {
+  listInitiativeMembers,
+  listInitiatives,
+  listInitiativeWork,
+  selectInitiativeLead,
+} from './initiatives.ts';
 export { listKeptMemory, listMemory } from './memory.ts';
 export {
   applyEvent,

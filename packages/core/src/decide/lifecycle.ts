@@ -2,6 +2,7 @@ import { Option } from 'effect';
 
 import {
   hasStep,
+  isLeadTask,
   isOfCurrentRound,
   isTaskSettled,
   listRepoWatchSources,
@@ -18,6 +19,7 @@ import {
 import type { ShinsaEffectKind } from '../effects/index.ts';
 import {
   resolveAgentPrompt,
+  resolveLeadPlanningPrompt,
   resolvePhaseInstruction,
   resolvePlanningPrompt,
   resolveReviewerPrompt,
@@ -92,6 +94,14 @@ export function startWork(decider: Decider, taskId: string) {
 export function startPlanning(decider: Decider, taskId: string, feedback: string | null) {
   decider.stage(taskId, 'planning', feedback ? 'revising the plan' : 'planning the phases');
   const task = decider.task(taskId);
+  if (isLeadTask(task)) {
+    decider.startRun(task, 'agent', resolveLeadPlanningPrompt(task, feedback), {
+      purpose: 'plan',
+      resumeFrom: decider.taskSession(taskId, 'agent'),
+      feedback,
+    });
+    return;
+  }
   decider.startRun(
     task,
     'agent',

@@ -563,6 +563,35 @@ describe('NowCard on the Overview', () => {
     ]);
   });
 
+  it('offers Authorize on GitHub beside Retry when GitHub wants SSO authorization', () => {
+    const task = createTask({ id: 'task-1' });
+    const url = 'https://github.com/orgs/superwall/sso?authorization_request=A1B2';
+    const gate = createGate({
+      id: 'gate-1',
+      taskId: 'task-1',
+      type: 'failure',
+      cause: 'github_sso',
+      title: 'GitHub needs SSO authorization for superwall',
+      body: 'The GitHub login Shinsa uses is not authorized for the superwall organization.',
+      githubSso: { organization: 'superwall', url },
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    const authorize = view.getByRole('button', { name: 'Authorize on GitHub' });
+    expect(authorize.getAttribute('href')).toBe(url);
+    expect(authorize.getAttribute('target')).toBe('_blank');
+    fireEvent.click(view.getByRole('button', { name: 'Retry' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null },
+    ]);
+  });
+
+  it('shows no Authorize on GitHub button on any other paused task', () => {
+    const task = createTask({ id: 'task-1' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'failure', title: 'Could not push' });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.queryByRole('button', { name: 'Authorize on GitHub' })).toBeNull();
+  });
+
   it('links a paused task to the run that stopped', () => {
     const task = createTask({ id: 'task-1' });
     const run = createRun({

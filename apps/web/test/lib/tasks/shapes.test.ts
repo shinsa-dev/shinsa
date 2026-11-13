@@ -23,6 +23,7 @@ describe('shape labels', () => {
       change: 'Change',
       fix: 'Find and fix',
       operation: 'Operation',
+      lead: 'Initiative lead',
     });
   });
 

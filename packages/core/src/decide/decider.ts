@@ -35,6 +35,7 @@ import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effe
 import type { ShinsaEventInput } from '../events/index.ts';
 import { describeUntoldMessages } from '../prompts/context.ts';
 import { describeForkSource, describeTeammateForkSource, resolveForkNote } from '../prompts/forks.ts';
+import { describeInitiativeMembership } from '../prompts/initiatives.ts';
 import { resolveMemoryTold } from '../prompts/memory.ts';
 import { resolveNightShiftTold } from '../prompts/night.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
@@ -104,6 +105,7 @@ type GateDetails = Partial<
     | 'account'
     | 'secret'
     | 'browserSignIn'
+    | 'githubSso'
     | 'commit'
     | 'notes'
   >
@@ -251,6 +253,17 @@ export class Decider {
   }
 
   #describeFreshContext(task: Task, role: RunRole, fork: RunFork | null) {
+    return `${this.#describeOrigin(task, role, fork)}${this.#describeInitiative(task, role)}`;
+  }
+
+  #describeInitiative(task: Task, role: RunRole) {
+    const initiative = task.initiativeId ? this.state.initiatives[task.initiativeId] : undefined;
+    if (!initiative || !isTaskSessionRole(role) || initiative.leadTaskId === task.id) return '';
+    const lead = initiative.leadTaskId ? this.state.tasks[initiative.leadTaskId] : undefined;
+    return describeInitiativeMembership(initiative, task, lead && !isTaskSettled(lead) ? lead : null);
+  }
+
+  #describeOrigin(task: Task, role: RunRole, fork: RunFork | null) {
     const project = fork ? '' : resolveProjectContext(this.state, task);
     if (task.teammateFork && isTaskSessionRole(role))
       return `${project}${describeTeammateForkSource(task.teammateFork)}`;
@@ -458,10 +471,17 @@ export class Decider {
     this.withdrawGates(taskId, isPausingGate);
   }
 
-  #openFailureGate(taskId: string, title: string, detail: string, runId: string | null, cause?: GateCause) {
+  #openFailureGate(
+    taskId: string,
+    title: string,
+    detail: string,
+    runId: string | null,
+    cause?: GateCause,
+    details: GateDetails = {}
+  ) {
     this.openGate(taskId, 'failure', title, detail, {
       runId,
-      ...(cause ? { details: { cause } } : {}),
+      ...(cause ? { details: { ...details, cause } } : {}),
     });
   }
 
@@ -497,10 +517,17 @@ export class Decider {
     this.requestBriefing(taskId);
   }
 
-  hold(taskId: string, title: string, detail: string, runId: string | null = null, cause?: GateCause) {
+  hold(
+    taskId: string,
+    title: string,
+    detail: string,
+    runId: string | null = null,
+    cause?: GateCause,
+    details: GateDetails = {}
+  ) {
     if (isTaskSettled(this.task(taskId))) return;
     this.#stopForFailure(taskId);
-    this.#openFailureGate(taskId, title, detail, runId, cause);
+    this.#openFailureGate(taskId, title, detail, runId, cause, details);
   }
 
   progressed(taskId: string) {

@@ -1,4 +1,4 @@
-import { type MessageKind, ROUND_LIMITS, type ShinsaState, type Task, type TaskShape } from '@shinsa/core';
+import { type MessageKind, ROUND_LIMITS, type ShinsaState, type PresetShape, type Task } from '@shinsa/core';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { describeDecisionQuestion, parseDecisionAnswer } from '../../agents/quick/decide.ts';
 import { QuickCalls } from '../../agents/quick/service.ts';
@@ -29,7 +29,7 @@ export class TriageClassifier extends Context.Service<
   TriageClassifier,
   {
     readonly message: (task: Task, text: string) => Effect.Effect<MessageClass | null, ClassifierFailed>;
-    readonly shape: (task: Task, request: string) => Effect.Effect<TaskShape | null, ClassifierFailed>;
+    readonly shape: (task: Task, request: string) => Effect.Effect<PresetShape | null, ClassifierFailed>;
     readonly repository: (
       state: ShinsaState,
       task: Task,
@@ -62,7 +62,7 @@ export class TriageClassifier extends Context.Service<
           kind,
           title: parseAnswerText(answer.title, ROUND_LIMITS.title),
           why: parseAnswerText(answer.why, ROUND_LIMITS.why),
-          shape: parseDecisionAnswer(MESSAGE_SHAPE_QUESTION, answer.shape) as TaskShape | null,
+          shape: parseDecisionAnswer(MESSAGE_SHAPE_QUESTION, answer.shape) as PresetShape | null,
         };
       });
 
@@ -77,7 +77,7 @@ export class TriageClassifier extends Context.Service<
           describeDecisionQuestion('shape', ROUND_SHAPE_QUESTION),
         ].join('\n');
         const answer = yield* ask<{ shape?: unknown }>(ROUND_SHAPE_SYSTEM, prompt, ROUND_SHAPE_SCHEMA);
-        return parseDecisionAnswer(ROUND_SHAPE_QUESTION, answer?.shape) as TaskShape | null;
+        return parseDecisionAnswer(ROUND_SHAPE_QUESTION, answer?.shape) as PresetShape | null;
       });
 
       const repository = Effect.fn('TriageClassifier.repository')(function* (

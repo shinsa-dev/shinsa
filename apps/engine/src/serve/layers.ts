@@ -28,6 +28,8 @@ import { GitHubLayer } from '../github/layers.ts';
 import { EngineModels, ServedChangelog, ServedInstance } from '../http/schema.ts';
 import { EngineServer } from '../http/server/service.ts';
 import { resolveServerUrl } from '../http/server/url.ts';
+import { LeadWakes } from '../initiatives/service.ts';
+import { TeamMembers } from '../initiatives/team-members/service.ts';
 import {
   BUNDLE,
   createServiceRestart,
@@ -189,6 +191,7 @@ function createAgentsLayer(options: ShinsaOptions) {
   return Layer.mergeAll(
     RemoteQuickLayer,
     BriefingWriter.layer,
+    LeadWakes.layer,
     FeedbackDrafter.layer,
     Layer.unwrap(
       Effect.gen(function* () {
@@ -466,7 +469,7 @@ function createServeLayer(
     Layer.provideMerge(createServedLayer(options, instance, stop)),
     Layer.provideMerge(createEffectsLayer(options, instance)),
     Layer.provideMerge(createRunsLayer(options)),
-    Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer)),
+    Layer.provideMerge(Layer.mergeAll(Previews.layer, SharedTeams.layer, BrowserLayer, TeamMembers.layer)),
     Layer.provideMerge(
       Layer.mergeAll(createTriageLayer(), createClocksLayer(options), createTerminalsLayer(instance))
     ),

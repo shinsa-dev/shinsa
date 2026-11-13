@@ -24,6 +24,7 @@ import { useChangelogAvailable } from '@/lib/changelog.ts';
 import { listAccountSections } from '@/lib/command/accounts.ts';
 import { listExtensionSections } from '@/lib/command/extensions.ts';
 import { listGlobalSections } from '@/lib/command/global.ts';
+import { listInitiativeSections } from '@/lib/command/initiatives.ts';
 import {
   arrangeByScore,
   type ChoiceCommand,
@@ -68,7 +69,7 @@ import { useAccounts } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
-import { useEngineCommands, useRemoteSnapshot } from '@/lib/connection/socket.ts';
+import { useEngineCommands, useRemoteSnapshot, useTeamFeed } from '@/lib/connection/socket.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
 import { listFocusTeams } from '@/lib/focus.ts';
@@ -425,6 +426,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
   const state = useShinsaState();
   const route = useRoute();
   const remote = useRemoteSnapshot();
+  const teamFeed = useTeamFeed();
   const focusTeams = React.useMemo(() => listFocusTeams(remote), [remote]);
   const registered = useRegisteredSections();
   const registeredIds = registered
@@ -458,6 +460,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
       state
         ? [
             ...listGlobalSections(state, route, theme, layout, engineCommands, focusTeams),
+            ...listInitiativeSections(state, route, { feed: teamFeed, teams: focusTeams }),
             ...listAccountSections(accounts),
             ...listScheduleSections(state),
             ...listServiceSections(state, terminals, Date.now()),
@@ -472,6 +475,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
       layout,
       engineCommands,
       focusTeams,
+      teamFeed,
       accounts,
       terminals,
       extensions.snapshot,

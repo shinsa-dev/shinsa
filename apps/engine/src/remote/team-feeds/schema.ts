@@ -3,6 +3,7 @@ import type {
   TeamFeedSnapshot,
   TeamFeedTask,
   TeamFeedStatus,
+  TeamInitiative,
   TeamKeyRequest,
   TeamMachine,
   TeamPresence,
@@ -39,6 +40,7 @@ export const TEAM_VIEW_FETCH_TIMEOUT = Duration.seconds(30);
 export const ListViewText = Schema.fromJsonString(
   Schema.Struct({
     tasks: Schema.Array(Schema.Unknown),
+    initiatives: Schema.optionalKey(Schema.Array(Schema.Unknown)),
     machineKey: Schema.optionalKey(Schema.String),
     grant: Schema.optionalKey(Schema.String),
     updatedAt: Schema.Number,
@@ -119,6 +121,7 @@ export interface Feed {
   readonly status: TeamFeedStatus;
   readonly reason: string | null;
   readonly tasks: TeamTask[];
+  readonly initiatives: TeamInitiative[];
   readonly presence: TeamPresence[];
   readonly updatedAt: number | null;
   readonly snapshot: TeamSnapshot | null;

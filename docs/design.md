@@ -249,7 +249,17 @@ Only these, and they win over anything below:
 8. **One queue, two sizes.** `components/queue/queue.tsx` is the only list of tasks by what they
    need: Needs you (every open decision in focus, in `resolveQueue` order, which `docs/engine.md` →
    Scheduling owns: priority, then what it unblocks, then the kind of decision, then age), In progress,
-   and Waiting on another task (in chain order, collapsed). Every section holds only the focus project's
+   and Waiting on another task (in chain order, collapsed). In In progress, Waiting and Snoozed, two or more tasks of
+   one initiative or one bundle sit under a small `ListRow` (`size='sm'`, 24px): the group's icon (the initiative's
+   target, the bundle's layers) centred in the 20px slot the task tiles use, its name in medium `text-fg-3` and
+   "‹n› tasks here · ‹progress›" in `text-fg-2` after it (`QueueGroupRows`). It hovers and highlights like a task row
+   and opens a task, never folds: an initiative's opens its lead task, a bundle's (named after its first task in bundle
+   order) the latest of its tasks still being worked on, else the latest still waiting. Its tasks are ordinary
+   `ListRow`s inside a 1px `border-border` guide line 16px in, always shown, and a section's count counts each of
+   them. The hover highlight holds on the last row while the pointer crosses a gap, an indent or a guide line
+   (`HoverHighlight`'s `holdOverGaps`, on Home's sections and the compact queue only), so it slides from row to
+   row; a section header is marked `data-highlight-release`, so pointing at it lets the highlight go back to the
+   task on screen. Once an initiative's lead task is done, its tasks are plain rows again. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from All tasks' groups (`lib/tasks/groups.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
@@ -3194,6 +3204,23 @@ Only these, and they win over anything below:
     `bun lint:conventions` fails on a description longer than 120 characters: the text inside either part, a
     `ConfirmDialog`'s `body` and a `PercentDialog`'s `description`, followed through constants, lookup tables and the
     functions that return them, as for a toast (42), with an inserted value counted as 12.
+
+45. **An initiative is a task whose Overview is its report sheet** (since 2026-11-09; `components/initiatives/`,
+    `lib/queue.ts`, `lib/initiatives/`). There is no Initiatives page or nav entry. The lead task's
+    Overview shows, in order: Where it stands (a `Panel` like a task's result panel, the lead's narrative alone; it
+    is left out until the first report, and the lead's questions are questions in Needs you, never rows here), then the members in one card laid out as All
+    tasks: its column header and its `TaskGroupSection`s in the same order and words (a gate's group, In progress),
+    then one section per phase titled with its name ("Tools in the chat", or Waiting without phases) where the waiting rows sit, then Done and
+    Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'
+    judgement calls are entries of the lead's Activity, among its own. Home and the queue are for tasks: they list an
+    initiative's members where any task sits (Needs you, In progress, Waiting) and never its lead, which you reach from a
+    member's initiative fact or ⌘K. The composer's Kind of task stays on Auto unless you
+    pick Initiative. A member's Overview facts name its initiative and phase and open the lead task, and its menus
+    carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's
+    menu carries Edit the initiative and Share with a team (a submenu of your teams, each ticked while shared). Once a
+    teammate's task is in the initiative the card uses All tasks' team table (`TEAM_TASK_LIST_COLUMNS`, with Repository
+    and Owner), and a teammate's row opens read-only as on All tasks. The join menus list a teammate's shared initiatives
+    under Teammates’ initiatives.
 
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
