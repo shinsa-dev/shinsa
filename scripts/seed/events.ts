@@ -11,6 +11,7 @@ import { DAY, HOUR } from '../kit/time.ts';
 import {
   pushSeedAutopilotDecisions,
   pushSeedAutopilotHandled,
+  pushSeedAutopilotReviewHistory,
   pushSeedAutopilotLessons,
 } from './autopilot.ts';
 import { listSeedEvidenceEvents } from './evidence.ts';
@@ -73,6 +74,7 @@ export function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[
   pushSeedFeedback(push);
   pushSeedAutopilotLessons(push);
   pushSeedAutopilotDecisions(push);
+  pushSeedAutopilotReviewHistory(push);
   pushSeedAutopilotHandled(push);
   const runEnds = new Map(
     timeline.flatMap(({ at, event }) => (event.type === 'run.ended' ? [[event.runId, at] as const] : []))

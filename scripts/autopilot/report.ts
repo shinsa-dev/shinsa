@@ -12,6 +12,7 @@ const KIND_LABEL: Record<AutopilotBenchmarkKind, string> = {
   review: 'Reviews',
   merge: 'Merges',
   proposal: 'Your OK',
+  failure: 'Failed steps',
   finding: 'Findings',
   suggestion: 'Suggested tasks',
   message: 'Messages',

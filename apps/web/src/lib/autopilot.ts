@@ -1,9 +1,13 @@
 import {
+  AUTOPILOT_READINESS_LIMITS,
   AUTOPILOT_SCORE_LIMITS,
   type AutopilotContact,
   type AutopilotContactKind,
   type AutopilotDone,
+  type AutopilotDoneAction,
   type AutopilotGateKind,
+  type AutopilotKindReadiness,
+  type AutopilotReadinessKind,
   type AutopilotGate,
   type AutopilotLevel,
   type AutopilotScore,
@@ -17,7 +21,9 @@ import {
   type AutopilotPolicy,
   type Project,
   type ReviewRating,
+  isWatchdogTask,
   resolveAutopilotPolicy,
+  resolveAutopilotReadiness,
   resolveAutopilotScore,
   type Settings,
   type ShinsaState,
@@ -67,6 +73,21 @@ export const AUTOPILOT_LEVEL_ITEMS: SettingItem<AutopilotLevel>[] = [
   },
 ];
 
+const EVERYTHING_LEVEL_ITEM: SettingItem<AutopilotLevel> = {
+  value: 'everything',
+  label: 'Everything',
+  icon: 'IconRocket',
+  hint: 'It decides every kind of gate whose score clears the bar, and the rest as Most things.',
+};
+
+export function listAutopilotLevelItems(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  level: AutopilotLevel
+): SettingItem<AutopilotLevel>[] {
+  const offered = level === 'everything' || resolveAutopilotReadiness(state).offered;
+  return offered ? [...AUTOPILOT_LEVEL_ITEMS, EVERYTHING_LEVEL_ITEM] : AUTOPILOT_LEVEL_ITEMS;
+}
+
 export const AUTOPILOT_LEVEL_DESCRIPTION: Record<AutopilotLevel, string> = {
   ask_first: 'Autopilot acts alone only on small, low-risk work and brings you everything else.',
   balanced: 'Autopilot acts alone on clear, low-risk work, and on medium risk when it is urgent.',
@@ -100,6 +121,22 @@ export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string; descript
     gate: 'watchdogTasks',
     title: 'Watchdog tasks',
     description: 'Gives your OK on the fix a watchdog task proposes, which still passes every gate after.',
+  },
+  {
+    gate: 'proposals',
+    title: 'Your OK on other tasks',
+    description: 'At Everything, gives your OK on any task once it knows how you decide them.',
+  },
+  {
+    gate: 'failures',
+    title: 'Failed steps',
+    description:
+      'At Everything, retries a failed step or cancels the task, never one stopped by your limits, accounts or pause.',
+  },
+  {
+    gate: 'findings',
+    title: 'Review findings',
+    description: 'At Everything, marks each review finding fix or dismiss when it approves the review.',
   },
 ];
 
@@ -150,6 +187,7 @@ export const AUTOPILOT_BLOCKS = {
   merging: { title: 'Merging', icon: 'IconMerged' },
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
   score: { title: 'How well it knows you', icon: 'IconGauge' },
+  readiness: { title: 'By kind of decision', icon: 'IconLayersThree' },
 } as const;
 
 export const AUTOPILOT_SCORE_ROWS = {
@@ -190,6 +228,15 @@ function describeMarginPoints(margin: number) {
   return points > 0 ? `${points} ${unit} ahead` : `${-points} ${unit} behind`;
 }
 
+function describeMarginPhrase(margin: number) {
+  const points = Math.round(margin * 100);
+  if (points === 0) return 'even with your usual answer';
+  const unit = Math.abs(points) === 1 ? 'point' : 'points';
+  return points > 0
+    ? `${points} ${unit} ahead of your usual answer`
+    : `${-points} ${unit} behind your usual answer`;
+}
+
 function resolveMarginView(score: AutopilotScore) {
   const base = score.tracks.combined.base;
   if (score.margin === null || base === null) return null;
@@ -216,9 +263,61 @@ export function resolveAutopilotScoreView(
     suggested: {
       level: score.suggested,
       detail: describeSuggested(score),
-      apply: score.suggested === level ? null : `Use ${LEVEL_LABEL[score.suggested]}`,
+      apply: isSuggestedInUse(score.suggested, level) ? null : `Use ${LEVEL_LABEL[score.suggested]}`,
     },
   };
+}
+
+function isSuggestedInUse(suggested: AutopilotLevel, level: AutopilotLevel) {
+  return suggested === level || (level === 'everything' && suggested === 'most');
+}
+
+const READINESS_TITLE: Record<AutopilotReadinessKind, string> = {
+  plan: 'Plans',
+  review: 'Reviews',
+  merge: 'Merges',
+  proposal: 'Your OK',
+  failure: 'Failed steps',
+  finding: 'Review findings',
+};
+
+const READINESS_NOUN: Record<AutopilotReadinessKind, string> = {
+  plan: 'plans',
+  review: 'reviews',
+  merge: 'merges',
+  proposal: 'proposals for your OK',
+  failure: 'failed steps',
+  finding: 'review findings',
+};
+
+export interface AutopilotReadinessRow {
+  kind: AutopilotReadinessKind;
+  title: string;
+  percent: string;
+  detail: string;
+  ready: boolean;
+}
+
+function describeReadiness({ kind, score, ready }: AutopilotKindReadiness) {
+  const { minScored, agreement, margin } = AUTOPILOT_READINESS_LIMITS;
+  if (score.scored === 0) return `It has not guessed any of your ${READINESS_NOUN[kind]} yet.`;
+  const right = `It guessed you right on ${score.agreed} of ${score.scored} ${READINESS_NOUN[kind]}`;
+  if (score.scored < minScored) return `${right}. Everything needs ${minScored} of them.`;
+  const lead = score.margin === null ? right : `${right}, ${describeMarginPhrase(score.margin)}`;
+  if (ready) return `${lead}. Ready for Everything.`;
+  return `${lead}. Everything needs ${Math.round(agreement * 100)}% and ${Math.round(margin * 100)} points ahead.`;
+}
+
+export function listAutopilotReadinessRows(
+  state: Pick<ShinsaState, 'autopilotProfile'>
+): AutopilotReadinessRow[] {
+  return resolveAutopilotReadiness(state).kinds.map((readiness) => ({
+    kind: readiness.kind,
+    title: READINESS_TITLE[readiness.kind],
+    percent: `${Math.floor((readiness.score.agreement ?? 0) * 100)}%`,
+    detail: describeReadiness(readiness),
+    ready: readiness.ready,
+  }));
 }
 
 export const AUTOPILOT_ROWS = {
@@ -593,8 +692,18 @@ const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
   question: 'Autopilot answered an agent’s question for you.',
   review: 'Autopilot approved the review for you.',
   merge: 'Autopilot started the merge for you.',
-  proposal: 'Autopilot gave your OK on a watchdog task’s fix.',
-  failure: 'Autopilot handled a failed step for you.',
+  proposal: 'Autopilot gave your OK for you.',
+  failure: 'Autopilot retried the failed step for you.',
+};
+
+const DONE_ACTION_TEXT: Partial<Record<AutopilotDoneAction, string>> = {
+  revised: 'Autopilot asked for changes for you.',
+  cancelled: 'Autopilot cancelled the task after a failed step.',
+};
+
+const DONE_ACTION_GLYPH: Partial<Record<AutopilotDoneAction, { icon: IconName; tone: Tone }>> = {
+  revised: { icon: 'IconPencil', tone: 'amber' },
+  cancelled: { icon: 'IconCircleX', tone: 'neutral' },
 };
 
 const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
@@ -603,7 +712,7 @@ const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone
   review: { icon: 'IconCheckCircle2', tone: 'blue' },
   merge: { icon: 'IconMerged', tone: 'green' },
   proposal: { icon: 'IconCheckCircle2', tone: 'purple' },
-  failure: { icon: 'IconCheckCircle2', tone: 'orange' },
+  failure: { icon: 'IconArrowRotateClockwise', tone: 'orange' },
 };
 
 export interface DoneForYouRow {
@@ -618,7 +727,12 @@ export interface DoneForYouRow {
 }
 
 function describeDoneForYou(done: AutopilotDone, task: Task | undefined) {
+  const action = DONE_ACTION_TEXT[done.action];
+  if (action) return action;
   if (done.gate === 'merge' && task?.stage === 'merged') return 'Autopilot merged it for you.';
+  if (done.gate === 'proposal' && task && isWatchdogTask(task)) {
+    return 'Autopilot gave your OK on a watchdog task’s fix.';
+  }
   return DONE_FOR_YOU_TEXT[done.gate];
 }
 
@@ -632,7 +746,7 @@ export function listDoneForYouRows(state: ShinsaState): DoneForYouRow[] {
       summary: describeDoneForYou(done, task),
       reason: done.reason,
       at: done.at,
-      ...DONE_FOR_YOU_GLYPH[done.gate],
+      ...(DONE_ACTION_GLYPH[done.action] ?? DONE_FOR_YOU_GLYPH[done.gate]),
     };
   });
 }

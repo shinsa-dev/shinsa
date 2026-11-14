@@ -142,9 +142,39 @@ export function pushSeedAutopilotDecisions(push: (at: number, event: ShinsaEvent
   }
 }
 
+function createSeedReviewDecision(index: number): AutopilotDecision {
+  const answer: AutopilotDecisionAnswer = index % 5 === 0 ? 'revised' : 'approved';
+  const agreeing: AutopilotVerdict = answer === 'approved' ? 'act' : 'forward';
+  const guess: AutopilotVerdict = index % 40 === 7 ? (agreeing === 'act' ? 'forward' : 'act') : agreeing;
+  return {
+    at: NOW - (8 * 24 - index * 1.5) * HOUR,
+    taskId: 'seed-autopilot',
+    gateId: `seed-review-decision-${index}`,
+    kind: 'review',
+    answer,
+    projectId: SEED_DECISION_PROJECTS[index % SEED_DECISION_PROJECTS.length] ?? null,
+    risk: 'low',
+    scope: null,
+    urgent: false,
+    watchdog: false,
+    touched: false,
+    guess,
+    note: null,
+    facts: createSeedFacts(answer, index),
+    estimate: { head: 'gate', p: guess === 'act' ? 0.9 : 0.15, confidence: 0.8, similar: 40 },
+  };
+}
+
+export function pushSeedAutopilotReviewHistory(push: (at: number, event: ShinsaEventInput) => void) {
+  for (let index = 0; index < 120; index += 1) {
+    const decision = createSeedReviewDecision(index);
+    push(decision.at, { type: 'autopilot.decided', decisions: [decision] });
+  }
+}
+
 interface SeedHandled {
   taskId: string;
-  type: Extract<Gate['type'], 'plan' | 'question' | 'merge'>;
+  type: Extract<Gate['type'], 'plan' | 'question' | 'merge' | 'failure'>;
   title: string;
   hoursAgo: number;
   reason: string;
@@ -152,6 +182,14 @@ interface SeedHandled {
 }
 
 const SEED_HANDLED: readonly SeedHandled[] = [
+  {
+    taskId: 'task-paywall-euro-prices',
+    type: 'failure',
+    title: 'The build stopped before the phase was handed over',
+    hoursAgo: 0.3,
+    reason: 'The run ended on a dropped connection, and you retried the same failure each time before.',
+    response: null,
+  },
   {
     taskId: 'task-docs-gate',
     type: 'merge',
