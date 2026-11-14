@@ -29,6 +29,7 @@ export interface TerminalInfo {
   port: number | null;
   remoteUrl?: string | null;
   status: TerminalStatus;
+  answering?: boolean;
   exitCode: number | null;
   startedAt: number;
   endedAt: number | null;
