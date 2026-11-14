@@ -555,3 +555,65 @@ describe('on a task page', () => {
     expect(listSentCommands()).toEqual([]);
   });
 });
+
+describe('over a task on Home or All tasks', () => {
+  const row = (
+    <a href='/tasks/billing'>
+      <span data-task='billing'>Rework billing emails</span>
+    </a>
+  );
+
+  function crumb() {
+    return input().parentElement as HTMLElement;
+  }
+
+  it('opens on the task under the pointer, and Backspace goes back to everything', async () => {
+    navigate('/');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    expect(within(crumb()).getByText('Rework billing emails')).toBeTruthy();
+    expect(input().getAttribute('placeholder')).toBe('Act on this task…');
+    expect(headings()).toEqual(['Open', 'Task']);
+    await press('Backspace');
+    expect(input().getAttribute('placeholder')).toBe('Search tasks and actions, or describe a new task…');
+  });
+
+  it('scopes on All tasks too', async () => {
+    navigate('/tasks');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).toBe('Act on this task…');
+    navigate('/');
+  });
+
+  it('opens on everything elsewhere, once the pointer leaves the task or the window', async () => {
+    navigate('/settings');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).not.toBe('Act on this task…');
+    await pressCommandK();
+    navigate('/');
+    fireEvent.pointerOver(screen.getByLabelText('Notes'));
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).not.toBe('Act on this task…');
+    await pressCommandK();
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    fireEvent.pointerOut(screen.getByText('Rework billing emails'), { relatedTarget: null });
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).not.toBe('Act on this task…');
+  });
+
+  it('keeps the task it opened on while the pointer moves over the open menu', async () => {
+    navigate('/');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    fireEvent.pointerOver(input());
+    await pressCommandK();
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).toBe('Act on this task…');
+  });
+});

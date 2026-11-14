@@ -25,6 +25,7 @@ import { useChangelogAvailable } from '@/lib/changelog.ts';
 import { listAccountSections } from '@/lib/command/accounts.ts';
 import { listExtensionSections } from '@/lib/command/extensions.ts';
 import { listGlobalSections } from '@/lib/command/global.ts';
+import { resolveOpeningStack, trackHoveredTasks } from '@/lib/command/hover.ts';
 import { listInitiativeSections } from '@/lib/command/initiatives.ts';
 import {
   arrangeByScore,
@@ -472,7 +473,9 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
   const changelogAvailable = useChangelogAvailable();
   const terminals = useTerminals();
   const [query, setQuery] = React.useState('');
-  const [stack, setStack] = React.useState<Visit[]>([]);
+  const [stack, setStack] = React.useState<Visit[]>(() =>
+    state ? resolveOpeningStack(state, route, accounts) : []
+  );
   const [selected, setSelected] = React.useState('');
   const [recent] = React.useState(listRecentTaskIds);
   usePrefetchSelected(state, selected);
@@ -693,6 +696,10 @@ export function CommandMenu() {
   const currentTaskId = useRouteTaskId(state);
 
   useCommandHotkey();
+
+  const openRef = React.useRef(open);
+  openRef.current = open;
+  React.useEffect(() => trackHoveredTasks(() => openRef.current), []);
 
   React.useEffect(() => {
     if (currentTaskId) recordRecentTask(currentTaskId);
