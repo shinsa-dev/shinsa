@@ -205,7 +205,6 @@ export const TasksHandlers = HttpApiBuilder.group(
           const absolute = writable.value;
           const disk: { current: string | null; written: boolean } = { current: null, written: false };
           yield* workspaces
-            .resolve(task)
             .writeEdit(
               repo,
               task,

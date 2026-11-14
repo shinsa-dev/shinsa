@@ -11,7 +11,6 @@ import {
   resolveTaskProject,
   type ShinsaState,
   type Task,
-  type WorkspaceMode,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
@@ -31,7 +30,6 @@ import { changeCoverage } from '@/lib/coverage.ts';
 import { formatNumber } from '@/lib/format/count.ts';
 import { runApp } from '@/lib/runtime/app.ts';
 import { StepFailed } from '@/lib/runtime/schema.ts';
-import { changeWorkspace } from '@/lib/workspaces.ts';
 
 export type ProjectField = 'name' | 'key' | 'description' | 'usageLimit';
 
@@ -325,7 +323,6 @@ export interface ProjectActions {
   removeRepo: (repo: Repo) => Promise<boolean>;
   addFolder: (project: Project, path: string) => Promise<string | null>;
   removeFolder: (project: Project, folder: string) => Promise<boolean>;
-  changeWorkspace: (repo: Repo, mode: WorkspaceMode) => Promise<boolean>;
   changeCoverage: (repo: Repo, setting: CoverageSetting) => Promise<boolean>;
   changeBaseline: (repo: Repo, commands: string[]) => Promise<boolean>;
 }
@@ -370,7 +367,13 @@ export const PROJECT_ACTIONS: ProjectActions = {
       },
       'Folder removed.'
     ),
-  changeWorkspace,
   changeCoverage,
   changeBaseline,
 };
+
+export function resolveRepoKey(repos: Pick<Repo, 'id'>[]) {
+  return repos
+    .map((repo) => repo.id)
+    .sort()
+    .join(',');
+}

@@ -29,13 +29,11 @@ import {
 } from '@/lib/projects.ts';
 import { describeWatchSource, removeWatchSource, WATCH_SOURCE_HINT } from '@/lib/tasks/watchdogs.ts';
 import { selectSourceSuggestion } from '@/lib/watch-suggestions.ts';
-import { WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { BaselineSelect } from './baseline-select.tsx';
 import { CoverageSelect } from './coverage-select.tsx';
 import { PathRow, SETTING_ROW, SETTINGS_SHELF, SettingRow, SettingsBlock, SettingsEmpty } from './group.tsx';
 import { ProjectDialog } from './project-dialog.tsx';
 import { AddMenu, type ProjectDialogValue, ProjectMenu } from './project-menu.tsx';
-import { WorkspaceSelect } from './workspace-select.tsx';
 
 function RepoRow({ repo, action }: { repo: Repo; action?: React.ReactNode }) {
   return (
@@ -131,9 +129,6 @@ function RepoSettings({
       </SettingRow>
       <SettingRow title={COVERAGE_TITLE}>
         <CoverageSelect repo={repo} detected={detected} onChange={actions.changeCoverage} />
-      </SettingRow>
-      <SettingRow title={WORKSPACE_TITLE}>
-        <WorkspaceSelect repo={repo} onChange={actions.changeWorkspace} />
       </SettingRow>
     </div>
   );

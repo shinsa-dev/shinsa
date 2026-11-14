@@ -31,7 +31,6 @@ import { type Decider, describeWaiting } from './decider.ts';
 import { syncStackBases } from './dependencies.ts';
 import { approveReviewAhead } from './gates.ts';
 import { proceedAfterSetup } from './shapes.ts';
-import { holdForCheckout } from './workspaces.ts';
 
 type SettledStage = 'merged' | 'done' | 'cancelled';
 
@@ -81,7 +80,6 @@ export function startWork(decider: Decider, taskId: string) {
     return;
   }
   syncStackBases(decider, taskId);
-  if (holdForCheckout(decider, taskId)) return;
   if (!needsSetup(decider.task(taskId))) {
     proceedAfterSetup(decider, taskId);
     return;

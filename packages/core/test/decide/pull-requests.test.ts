@@ -122,14 +122,12 @@ describe('reacting to the pull request', () => {
     expect(prompt).toContain('merge conflicts');
   });
 
-  test('a pull request that conflicts with its base goes straight to the agent to resolve, in every workspace', () => {
-    for (const [workspace, base, reason] of [
-      ['worktrees', 'main', 'resolving conflicts with main'],
-      ['main_checkout', undefined, 'resolving conflicts with the base branch'],
+  test('a pull request that conflicts with its base goes straight to the agent to resolve, with or without a known base', () => {
+    for (const [base, reason] of [
+      ['main', 'resolving conflicts with main'],
+      [undefined, 'resolving conflicts with the base branch'],
     ] as const) {
       const { harness, taskId } = shipping();
-      const repoId = harness.task(taskId).repoId ?? '';
-      harness.send({ type: 'repo.update', repoId, patch: { workspace } });
       harness.send({
         type: 'pull_request.record',
         taskId,

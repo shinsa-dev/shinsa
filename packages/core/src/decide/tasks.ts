@@ -29,9 +29,7 @@ import {
   isBundleMember,
   isDependencyOf,
   isTriaged,
-  isWaitingForCheckout,
   listPendingDependencies,
-  resolveTaskWorkspace,
   selectStackRefusal,
 } from '../state/queries.ts';
 import { syncAutopilotDeadlines } from './autopilot.ts';
@@ -318,21 +316,14 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
 
 export function readyWorktree(decider: Decider, command: CommandOf<'worktree.ready'>) {
   const current = decider.task(command.taskId);
-  if (current.repoId === null || current.movingTo || isWaitingForCheckout(decider.state, current)) return;
-  const workspace = resolveTaskWorkspace(decider.state, current);
-  const unchanged =
-    current.worktreePath === command.path &&
-    current.branch === command.branch &&
-    current.workspace === workspace &&
-    (command.returnBranch === undefined || current.returnBranch === command.returnBranch);
+  if (current.repoId === null || current.movingTo) return;
+  const unchanged = current.worktreePath === command.path && current.branch === command.branch;
   if (!unchanged) {
     decider.emit({
       type: 'worktree.created',
       taskId: command.taskId,
       path: command.path,
       branch: command.branch,
-      workspace,
-      ...(command.returnBranch === undefined ? {} : { returnBranch: command.returnBranch }),
     });
   }
   const task = decider.task(command.taskId);

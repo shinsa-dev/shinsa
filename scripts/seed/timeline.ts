@@ -175,7 +175,6 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
       taskId: task.id,
       path: task.worktreePath,
       branch: task.branch,
-      workspace: 'worktrees',
     });
   }
 }

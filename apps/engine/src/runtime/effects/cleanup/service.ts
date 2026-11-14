@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { isTaskSettled, type Repo } from '@shinsa/core';
 import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { SharedCaches } from '../../../checks/caches/service.ts';
@@ -55,12 +56,11 @@ export class Cleanup extends Context.Service<
         yield* closeTerminals(taskId);
         const services = world.services;
         yield* Effect.gen(function* () {
-          const workspace = world.workspaces.resolve(task);
-          if (workspace.mode === 'worktrees') {
+          if (resolve(worktreePath) !== resolve(repo.path)) {
             const spare = services ? yield* services.listTerminalPids : [];
             yield* leftovers.stop(worktreePath, { spare });
           }
-          yield* Effect.mapError(workspace.remove(repo, task), resolveEffectFailure);
+          yield* Effect.mapError(world.workspaces.remove(repo, task), resolveEffectFailure);
         }).pipe(
           Effect.catch((failure) =>
             Effect.logWarning('[Effects] Could not remove a worktree').pipe(

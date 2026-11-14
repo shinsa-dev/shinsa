@@ -225,7 +225,7 @@ type SystemCommand =
       unreached?: UnreachedTeammate[];
       reasons?: TriageReasons;
     }
-  | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }
+  | { type: 'worktree.ready'; taskId: string; path: string; branch: string }
   | { type: 'worktree.gone'; taskId: string }
   | { type: 'task.record_edit'; taskId: string; path: string; changed: boolean }
   | { type: 'task.commit_edits'; taskId: string; treeHash: string | null }

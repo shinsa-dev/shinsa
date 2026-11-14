@@ -43,7 +43,7 @@ function renameProject(name: string, to: string): LogMigration {
 const TWO_MIGRATIONS = [renameProject('rename-b', 'b'), renameProject('rename-c', 'c')];
 
 describe('event log migrations', () => {
-  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes, stamps what proposals recommend and marks old projects as chosen turns a focused project into a list and turns Slack thread updates on and gives old paces a reset pace and gives older reviews no ratings and older decisions no facts or estimates and older guesses and decisions no follow-up, twelve versions past the baseline', () => {
+  test('the shipped list turns stacks into lists, names Slack channels, stamps what reviews saw, turns share presets into scopes, stamps what proposals recommend and marks old projects as chosen turns a focused project into a list and turns Slack thread updates on and gives old paces a reset pace and gives older reviews no ratings and older decisions no facts or estimates and older guesses and decisions no follow-up and drops where agents worked, thirteen versions past the baseline', () => {
     expect(LOG_MIGRATIONS.map((migration) => migration.name)).toEqual([
       'stack-lists',
       'slack-channel-names',
@@ -57,8 +57,9 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
-    expect(resolveLogVersion()).toBe(LOG_BASELINE + 12);
+    expect(resolveLogVersion()).toBe(LOG_BASELINE + 13);
     expect(resolveLogVersion(TWO_MIGRATIONS)).toBe(LOG_BASELINE + 2);
   });
 
@@ -68,7 +69,7 @@ describe('event log migrations', () => {
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('a log that already holds events is never stamped on open', () => {
@@ -179,6 +180,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       { type: 'task.stack_changed', taskId: 't1', stacksOn: ['p1'], by: 'you', seq: 2, at: 1 },
@@ -189,7 +191,7 @@ describe('event log migrations', () => {
       { type: 'task.stack_based', taskId: 't2', bases: ['fix/p1', 'fix/p2'], seq: 7, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('slack-channel-names gives an older Slack thread link a null channel name, and keeps a known one', () => {
@@ -234,6 +236,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -252,7 +255,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('review-seen gives an older review a null input it saw, and keeps a stamped one', () => {
@@ -284,6 +287,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -308,7 +312,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('share-scopes turns each share preset into the view scopes it showed, and keeps a share with scopes', () => {
@@ -341,6 +345,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     const shared = log.readEvents().events.slice(1);
     expect(shared).toEqual([
@@ -382,7 +387,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('proposal-recommend has an older proposal recommend going on, and keeps a stamped one', () => {
@@ -419,6 +424,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -443,7 +449,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('task-auto-project marks the project of an older task as chosen, and keeps a stamped one', () => {
@@ -499,6 +505,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -530,7 +537,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('focus-projects turns a focused project into a list of one, no project into an empty list, and keeps a list', () => {
@@ -559,6 +566,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
@@ -583,7 +591,7 @@ describe('event log migrations', () => {
     const engine = new Engine(log, { readOnly: true });
     expect(engine.state.focus).toEqual({ projectIds: ['p1', 'p2'], except: true, teamId: null, until: null });
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('slack-thread-updates turns updates on for an older Slack trigger, and keeps a set one and other triggers', () => {
@@ -612,6 +620,7 @@ describe('event log migrations', () => {
       'review-ratings',
       'decision-facts',
       'follow-ups',
+      'worktrees-only',
     ]);
     expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
       {
@@ -634,7 +643,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('reset-paces gives an older recorded pace the same pace with resets and with ending resets, and keeps a cleared one', () => {
@@ -656,7 +665,13 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['reset-paces', 'review-ratings', 'decision-facts', 'follow-ups']);
+    expect(log.migrate()).toEqual([
+      'reset-paces',
+      'review-ratings',
+      'decision-facts',
+      'follow-ups',
+      'worktrees-only',
+    ]);
     expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'usage.pace_recorded',
@@ -690,7 +705,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('review-ratings gives an older review null ratings, and keeps rated ones', () => {
@@ -712,7 +727,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['review-ratings', 'decision-facts', 'follow-ups']);
+    expect(log.migrate()).toEqual(['review-ratings', 'decision-facts', 'follow-ups', 'worktrees-only']);
     expect(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'review.reported',
@@ -736,7 +751,7 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('decision-facts gives older Autopilot decisions null facts and estimates, older guesses a null estimate, and keeps what they have', () => {
@@ -768,7 +783,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['decision-facts', 'follow-ups']);
+    expect(log.migrate()).toEqual(['decision-facts', 'follow-ups', 'worktrees-only']);
     expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'autopilot.decided',
@@ -798,7 +813,7 @@ describe('event log migrations', () => {
       { type: 'autopilot.guessed', gateId: 'g2', verdict: 'act', estimate, followUp: null, seq: 6, at: 1 },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('follow-ups gives older Autopilot decisions and guesses no follow-up, and keeps the ones they have', () => {
@@ -827,7 +842,7 @@ describe('event log migrations', () => {
     }
     db.close();
     const log = openEventLog(path);
-    expect(log.migrate()).toEqual(['follow-ups']);
+    expect(log.migrate()).toEqual(['follow-ups', 'worktrees-only']);
     expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
       {
         type: 'autopilot.decided',
@@ -859,17 +874,64 @@ describe('event log migrations', () => {
       },
     ]);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
+  });
+
+  test('worktrees-only drops the stored workspace modes, the branch a main checkout went back to and the requests for them', () => {
+    const path = createLogPath();
+    writeLog(path, LOG_BASELINE + 12);
+    const db = new Database(path);
+    const repo = {
+      id: 'r',
+      name: 'app',
+      path: '/code/app',
+      defaultBranch: 'main',
+      remote: null,
+      projectId: null,
+    };
+    const rows = [
+      { type: 'repo.registered', repo: { ...repo, checkCommands: [], workspace: 'main_checkout' } },
+      { type: 'worktree.requested', taskId: 't', workspace: 'main_checkout' },
+      {
+        type: 'worktree.created',
+        taskId: 't',
+        path: '/code/app',
+        branch: 'fix/a',
+        workspace: 'main_checkout',
+        returnBranch: 'feat/mine',
+      },
+      { type: 'repo.updated', repo: { ...repo, checkCommands: ['bun test'] } },
+      { type: 'worktree.created', taskId: 'u', path: '/wt/u', branch: 'fix/b' },
+    ];
+    for (const [index, row] of rows.entries()) {
+      db.run('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)', [
+        index + 2,
+        1,
+        row.type,
+        JSON.stringify(row),
+      ]);
+    }
+    db.close();
+    const log = openEventLog(path);
+    expect(log.migrate()).toEqual(['worktrees-only']);
+    expect<unknown[]>(log.readEvents().events.slice(1)).toEqual([
+      { type: 'repo.registered', repo: { ...repo, checkCommands: [] }, seq: 2, at: 1 },
+      { type: 'worktree.created', taskId: 't', path: '/code/app', branch: 'fix/a', seq: 4, at: 1 },
+      { type: 'repo.updated', repo: { ...repo, checkCommands: ['bun test'] }, seq: 5, at: 1 },
+      { type: 'worktree.created', taskId: 'u', path: '/wt/u', branch: 'fix/b', seq: 6, at: 1 },
+    ]);
+    log.close();
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 
   test('a log a newer Shinsa wrote opens as it is', () => {
     const path = createLogPath();
-    writeLog(path, LOG_BASELINE + 12);
+    writeLog(path, LOG_BASELINE + 13);
     const log = openEventLog(path);
     expect(log.migrate()).toEqual([]);
     expect(() => log.assertCurrent()).not.toThrow();
     expect(new Engine(log, { readOnly: true }).state.seq).toBe(1);
     log.close();
-    expect(readVersion(path)).toBe(LOG_BASELINE + 12);
+    expect(readVersion(path)).toBe(LOG_BASELINE + 13);
   });
 });

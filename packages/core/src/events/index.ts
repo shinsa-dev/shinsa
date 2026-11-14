@@ -55,7 +55,6 @@ import type {
   TriageDecisions,
   UsageWait,
   WeeklyReading,
-  WorkspaceMode,
   ProposalRecommendation,
   SuggestedAction,
 } from '../domain/index.ts';
@@ -235,15 +234,7 @@ type EventBody =
   | { type: 'task.recovered'; taskId: string; recoveries: number; fingerprint?: string }
   | { type: 'task.retry_scheduled'; taskId: string; retry: AutoRetry }
   | { type: 'task.retry_cleared'; taskId: string; streak: 'kept' | 'reset' }
-  | { type: 'worktree.requested'; taskId: string; workspace: WorkspaceMode }
-  | {
-      type: 'worktree.created';
-      taskId: string;
-      path: string;
-      branch: string;
-      workspace: WorkspaceMode;
-      returnBranch?: string;
-    }
+  | { type: 'worktree.created'; taskId: string; path: string; branch: string }
   | { type: 'worktree.removed'; taskId: string }
   | { type: 'task.moving'; taskId: string; repoId: string; runId?: string; reason: string }
   | { type: 'task.moved'; taskId: string; repoId: string; projectId?: string; handle?: string }

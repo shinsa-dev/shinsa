@@ -164,7 +164,6 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const tabs = listSettingsTabs();
   const current = findSettingsTab(tab);
   const scroller = React.useRef<HTMLDivElement>(null);
-  const repos = Object.values(state.repos);
   const explorerSide = useExplorerSide();
   const updateChannel = React.useSyncExternalStore(subscribeDesktopUpdate, readDesktopChannel);
   const automatic = useAutomaticModel();
@@ -174,7 +173,6 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
       providers,
       notifications,
       accounts,
-      repos,
       explorerSide,
       updateChannel,
       resolveUsageRates(state.runs, state.accountPlans),

@@ -67,7 +67,6 @@ export class Shipping extends Context.Service<
         attempt: EffectAttempt
       ) {
         const update = yield* world.workspaces
-          .resolve(task)
           .syncBase(repo, task, base, Effect.orDie(recordStep(task.id, { kind: 'updating', base }, attempt)))
           .pipe(Effect.mapError(asShipping('updating')));
         if (update.status !== 'conflicted') return true;
@@ -116,17 +115,14 @@ export class Shipping extends Context.Service<
       ) {
         const hook = yield* remote.hasPrePushHook(task.worktreePath ?? repo.path);
         yield* recordStep(task.id, { kind: 'pushing', hook }, attempt);
-        return yield* world.workspaces
-          .resolve(task)
-          .push(repo, task)
-          .pipe(
-            Effect.mapError((error) =>
-              error instanceof PushError && error.kind === 'hook'
-                ? new HookRejected({ output: error.output })
-                : asShipping('pushing')(error)
-            ),
-            Effect.catchTag('HookRejected', (rejected) => recordHookFailure(task, rejected, attempt))
-          );
+        return yield* world.workspaces.push(repo, task).pipe(
+          Effect.mapError((error) =>
+            error instanceof PushError && error.kind === 'hook'
+              ? new HookRejected({ output: error.output })
+              : asShipping('pushing')(error)
+          ),
+          Effect.catchTag('HookRejected', (rejected) => recordHookFailure(task, rejected, attempt))
+        );
       });
 
       const pushHead = Effect.fn('Shipping.pushHead')(function* (

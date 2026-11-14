@@ -226,7 +226,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'activeHours',
 ] as const satisfies readonly (keyof Settings)[];
 
-export const OWNER_ONLY_REPO_FIELDS = ['checkCommands', 'workspace', 'coverage'] as const;
+export const OWNER_ONLY_REPO_FIELDS = ['checkCommands', 'coverage'] as const;
 
 const DEFAULT_MODEL = 'opus';
 

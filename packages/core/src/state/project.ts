@@ -1033,15 +1033,10 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
         ...(event.fingerprint === undefined ? {} : { recoveryFingerprint: event.fingerprint }),
       });
       break;
-    case 'worktree.requested':
-      updateTask(state, event.taskId, event.at, { workspace: event.workspace });
-      break;
     case 'worktree.created':
       updateTask(state, event.taskId, event.at, {
         worktreePath: event.path,
         branch: event.branch,
-        workspace: event.workspace,
-        ...(event.returnBranch === undefined ? {} : { returnBranch: event.returnBranch }),
       });
       recordRoundBranch(state, event.taskId, event.branch, event.at);
       break;

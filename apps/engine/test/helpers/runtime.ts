@@ -9,7 +9,7 @@ import { ReposLayer } from '../../src/repos/layers.ts';
 import { SecretFiles } from '../../src/secrets/files/service.ts';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { TerminalsLayer } from '../../src/terminals/layers.ts';
-import { WorkspacesLayer } from '../../src/workspaces/layers.ts';
+import { WorktreeWorkspaces } from '../../src/workspaces/worktrees-mode/service.ts';
 import { JsonFileLayer } from './files.ts';
 
 export const testRuntime = ManagedRuntime.make(
@@ -18,7 +18,7 @@ export const testRuntime = ManagedRuntime.make(
     Layer.mergeAll(
       MachineConfigFile.layer,
       ReposLayer,
-      WorkspacesLayer,
+      WorktreeWorkspaces.layer,
       ChecksLayer,
       TerminalsLayer,
       ExtensionsLayer,

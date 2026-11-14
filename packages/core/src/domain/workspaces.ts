@@ -1,30 +1,11 @@
 import { Option } from 'effect';
 import { hasStep } from './shapes.ts';
-import type { Repo, Task } from './types.ts';
+import type { Task } from './types.ts';
 
-export const WORKSPACE_MODES = ['worktrees', 'main_checkout'] as const;
-
-export type WorkspaceMode = (typeof WORKSPACE_MODES)[number];
-
-export const DEFAULT_WORKSPACE_MODE: WorkspaceMode = 'worktrees';
-
-export const WORKSPACE_SETUP_REASON: Record<WorkspaceMode, string> = {
-  worktrees: 'setting up the worktree',
-  main_checkout: 'setting up the checkout',
-};
-
-const SETUP_REASONS: ReadonlySet<string> = new Set(Object.values(WORKSPACE_SETUP_REASON));
-
-export function resolveRepoWorkspace(repo: Pick<Repo, 'workspace'> | null | undefined): WorkspaceMode {
-  return repo?.workspace ?? DEFAULT_WORKSPACE_MODE;
-}
+export const WORKSPACE_SETUP_REASON = 'setting up the worktree';
 
 export function isSettingUpWorkspace(task: Pick<Task, 'stage' | 'stageReason'>) {
-  return task.stage === 'triage' && SETUP_REASONS.has(task.stageReason);
-}
-
-export function isSharedWorkspace(mode: WorkspaceMode) {
-  return mode !== 'worktrees';
+  return task.stage === 'triage' && task.stageReason === WORKSPACE_SETUP_REASON;
 }
 
 export function resolveEditRefusal(

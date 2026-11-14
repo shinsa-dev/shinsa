@@ -426,14 +426,9 @@ export {
 } from './watchdogs.ts';
 export {
   type ApprovalPath,
-  DEFAULT_WORKSPACE_MODE,
   describeHumanEdits,
   isSettingUpWorkspace,
-  isSharedWorkspace,
   resolveApprovalPath,
   resolveEditRefusal,
-  resolveRepoWorkspace,
-  WORKSPACE_MODES,
   WORKSPACE_SETUP_REASON,
-  type WorkspaceMode,
 } from './workspaces.ts';

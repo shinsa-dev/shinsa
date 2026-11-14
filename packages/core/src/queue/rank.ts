@@ -31,7 +31,6 @@ import {
   listPendingDependencies,
   resolveActiveRunTasks,
   resolveTaskProject,
-  selectCheckoutHolder,
 } from '../state/queries.ts';
 import { resolveGateWords } from './reasons.ts';
 import type { Queue, QueuedGate } from './types.ts';
@@ -130,12 +129,7 @@ export function isGateHeld(state: ShinsaState, gate: Gate) {
 
 export function listWaitsOn(state: ShinsaState, task: Task): Task[] {
   if (task.stage === 'waiting_on_tasks') {
-    const pending = listPendingDependencies(state, task);
-    if (pending.length > 0) return pending;
-    return Option.match(selectCheckoutHolder(state, task), {
-      onNone: () => pending,
-      onSome: (holder) => [holder],
-    });
+    return listPendingDependencies(state, task);
   }
   if (task.stage === 'shipping' || task.stage === 'awaiting_merge' || HELD_DECISIONS[task.stage]) {
     return listOpenBlockers(state, task);

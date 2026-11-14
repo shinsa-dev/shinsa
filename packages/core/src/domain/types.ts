@@ -36,7 +36,6 @@ import type {
 import type { SlackEscalationPost, SlackThreadLink } from './slack.ts';
 import type { PipelineStep } from './steps.ts';
 import type { Watchdog, WatchSource } from './watchdogs.ts';
-import type { WorkspaceMode } from './workspaces.ts';
 
 export type TaskStage =
   | 'triage'
@@ -201,7 +200,7 @@ export interface ReviewEscalation {
   at: number;
 }
 
-export type ConfigProblemKind = 'repository' | 'no_repository' | 'default_branch' | 'workspace';
+export type ConfigProblemKind = 'repository' | 'no_repository' | 'default_branch';
 
 export interface ConfigProblem {
   kind: ConfigProblemKind;
@@ -234,7 +233,6 @@ export interface Repo {
   remote: string | null;
   projectId: string | null;
   checkCommands: string[];
-  workspace?: WorkspaceMode;
   coverage?: CoverageSetting;
 }
 
@@ -517,8 +515,6 @@ export interface Task {
   priority: TaskPriority;
   branch: string | null;
   worktreePath: string | null;
-  workspace?: WorkspaceMode;
-  returnBranch?: string;
   plan: Plan | null;
   phases: PhaseProgress[];
   planAnswers: string | null;

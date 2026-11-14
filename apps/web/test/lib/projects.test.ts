@@ -14,6 +14,7 @@ import {
   resolveProjectInk,
   resolveProjectInput,
   resolveRepoIcon,
+  resolveRepoKey,
   selectProject,
   selectTaskProject,
   validateFolderPath,
@@ -84,6 +85,12 @@ describe('reading projects', () => {
 
   it('explains the key by the handles it makes', () => {
     expect(describeProjectKey('SW')).toBe('Tasks in this project are named SW-1, SW-2…');
+  });
+});
+
+describe('repository keys', () => {
+  it('keys the repositories so what they report is read again only when they change', () => {
+    expect(resolveRepoKey([createRepo({ id: 'b' }), createRepo({ id: 'a' })])).toBe('a,b');
   });
 });
 

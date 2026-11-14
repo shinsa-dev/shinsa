@@ -1,4 +1,4 @@
-import type { Repo, Task, WorkspaceMode } from '@shinsa/core';
+import type { Repo, Task } from '@shinsa/core';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { EngineConfig } from '../../src/config/service.ts';
 import { ConfigStore } from '../../src/config/store/service.ts';
@@ -32,13 +32,11 @@ export function openWorkspaces(worktreesDir = createTempDir()) {
   return { runtime, workspaces, choose };
 }
 
-export function openStrategy(mode: WorkspaceMode, worktreesDir?: string) {
-  const { runtime, workspaces, choose } = openWorkspaces(worktreesDir);
-  const workspace = workspaces.resolve({ workspace: mode });
+export function openStrategy(worktreesDir?: string) {
+  const { runtime, workspaces: workspace, choose } = openWorkspaces(worktreesDir);
   return {
-    mode: workspace.mode,
     choose,
-    mark: (path: string) => runtime.runPromise(workspaces.root.mark(path)),
+    mark: (path: string) => runtime.runPromise(workspace.root.mark(path)),
     prepare: (repo: Repo, task: Task, signal?: AbortSignal) =>
       runtime.runPromise(workspace.prepare(repo, task, signal)),
     commit: (repo: Repo, task: Task, message: string) =>
@@ -63,7 +61,5 @@ export function openStrategy(mode: WorkspaceMode, worktreesDir?: string) {
       runtime.runPromise(
         workspace.syncBase(repo, task, base, Effect.promise(options.onBehind), options.signal)
       ),
-    describeProblem: (repo: Repo, holdsCheckout: boolean) =>
-      runtime.runPromise(workspaces.describeProblem(repo, mode, holdsCheckout)),
   };
 }

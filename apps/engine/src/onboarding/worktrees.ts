@@ -68,7 +68,7 @@ export const measureWorktreeUsage = Effect.fn('Onboarding.measureWorktreeUsage')
 ) {
   const paths = new Set<string>();
   for (const task of Object.values(tasks)) {
-    if (task.worktreePath && task.workspace !== 'main_checkout') paths.add(task.worktreePath);
+    if (task.worktreePath) paths.add(task.worktreePath);
   }
   const fs = yield* FileSystem.FileSystem;
   const isPresent = (path: string) => fs.exists(path).pipe(Effect.orElseSucceed(constFalse));

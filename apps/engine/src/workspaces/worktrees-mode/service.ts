@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { isLaterRound, type Repo, resolveRoundBases, type Task } from '@shinsa/core';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { constFalse } from 'effect/Function';
@@ -24,6 +25,8 @@ export class WorktreeWorkspaces extends Context.Service<
       const fs = yield* FileSystem.FileSystem;
       const checkout = yield* Checkout;
       const remote = yield* Remote;
+
+      const isRepositoryPath = (repo: Repo, path: string) => resolve(path) === resolve(repo.path);
 
       const commit = Effect.fn('WorktreeWorkspaces.commit')(function* (path: string, message: string) {
         const before = yield* checkout.head(path);
@@ -64,7 +67,6 @@ export class WorktreeWorkspaces extends Context.Service<
       });
 
       const make = (root: WorktreeRoot['Service']): Workspace => ({
-        mode: 'worktrees',
         prepare: Effect.fn('WorktreeWorkspace.prepare')(function* (
           repo: Repo,
           task: Task,
@@ -98,7 +100,10 @@ export class WorktreeWorkspaces extends Context.Service<
           Effect.flatMap(requireCheckout(task), ({ path, branch }) =>
             remote.pushBranch(path, branch, signal).pipe(Effect.andThen(checkout.head(path)))
           ),
-        remove: (repo, task) => (task.worktreePath ? checkout.remove(repo, task.worktreePath) : Effect.void),
+        remove: (repo, task) =>
+          task.worktreePath && !isRepositoryPath(repo, task.worktreePath)
+            ? checkout.remove(repo, task.worktreePath)
+            : Effect.void,
         writeEdit: (_repo, _task, _path, write) => Effect.asVoid(write),
         syncBase: (_repo, task, base, onBehind, signal) =>
           Effect.flatMap(requireCheckout(task), ({ path, branch }) =>

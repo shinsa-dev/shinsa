@@ -1,4 +1,6 @@
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { RunSupervisor } from '../../src/agents/supervisor/service.ts';
@@ -55,30 +57,38 @@ const CHANGE: Task['pipeline'] = [
   'merge',
 ];
 
-describe('effects where agents work', () => {
-  test('the setup check stops a task whose repository cannot hold agents the way you chose', async () => {
+describe('effects in a task’s checkout', () => {
+  test('the setup check never stops a task for your uncommitted changes in the repository, only for a missing one', async () => {
     const made = await createGitRepo();
     const { path } = made;
     const repo = { ...made.repo, checkCommands: ['true'] };
     writeFiles(path, { 'mine.txt': 'mine\n' });
-    const checkout = setup(
-      { stage: 'triage', pipeline: CHANGE, worktreePath: null },
-      { ...repo, workspace: 'main_checkout' }
-    );
+    const checkout = setup({ stage: 'triage', pipeline: CHANGE, worktreePath: null }, repo);
     await checkout.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
-    expect(checkout.dispatched[0]).toMatchObject({ problems: [{ kind: 'workspace' }] });
-    const answer = setup({ stage: 'triage', pipeline: ['answer'] }, { ...repo, workspace: 'main_checkout' });
-    await answer.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
-    expect(answer.dispatched[0]).toMatchObject({ problems: [] });
-    const missing = setup(
-      { stage: 'triage', pipeline: CHANGE },
-      { ...repo, path: `${path}-gone`, workspace: 'main_checkout' }
-    );
+    expect(checkout.dispatched[0]).toMatchObject({ problems: [] });
+    const missing = setup({ stage: 'triage', pipeline: CHANGE }, { ...repo, path: `${path}-gone` });
     await missing.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
     expect(missing.dispatched[0]).toMatchObject({ problems: [{ kind: 'repository' }] });
   });
 
-  test('a main-checkout task pushes its own branch from the checkout', async () => {
+  test('cleaning up a task whose checkout is the repository itself leaves the repository and what runs in it', async () => {
+    const { repo, path } = await createGitRepo();
+    const yours = Bun.spawn(['sh', '-c', 'sleep 30; true'], {
+      cwd: path,
+      stdout: 'ignore',
+      stderr: 'ignore',
+    });
+    const { runner, dispatched } = setup({ stage: 'merged', worktreePath: path }, repo);
+    await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
+    expect(dispatched).toEqual([{ type: 'worktree.gone', taskId: 'task-1' }]);
+    expect(existsSync(join(path, '.git'))).toBe(true);
+    expect(yours.exitCode).toBeNull();
+    yours.kill('SIGKILL');
+    await yours.exited;
+    await runner.stop();
+  });
+
+  test('a task pushes its own branch from its checkout', async () => {
     const { repo, path, origin } = await createGitRepo();
     await git(path, 'checkout', '-q', '-b', 'fix/tab-scroll');
     writeFiles(path, { 'a.txt': 'a\n' });
@@ -88,14 +98,13 @@ describe('effects where agents work', () => {
       {
         stage: 'shipping',
         worktreePath: path,
-        workspace: 'main_checkout',
         pullRequest: {
           number: 7,
           url: 'https://github.com/acme/app/pull/7',
           state: 'open',
         } as Task['pullRequest'],
       },
-      { ...repo, workspace: 'main_checkout' }
+      repo
     );
     await runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     const sha = await git(origin, 'rev-parse', 'refs/heads/fix/tab-scroll');
@@ -114,7 +123,6 @@ describe('effects where agents work', () => {
       {
         stage: 'shipping',
         worktreePath: path,
-        workspace: 'main_checkout',
         editedPaths: ['a.txt'],
         pullRequest: {
           number: 7,
@@ -122,7 +130,7 @@ describe('effects where agents work', () => {
           state: 'open',
         } as Task['pullRequest'],
       },
-      { ...repo, workspace: 'main_checkout' }
+      repo
     );
     await runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     expect(await git(origin, 'show', 'refs/heads/fix/tab-scroll:a.txt')).toBe('a, by you');
@@ -140,11 +148,10 @@ describe('effects where agents work', () => {
     const { repo, path } = await createGitRepo();
     await git(path, 'checkout', '-q', '-b', 'fix/tab-scroll');
     writeFiles(path, { 'a.txt': 'a, by you\n' });
-    const checked = { ...repo, workspace: 'main_checkout' as const, checkCommands: ['true'] };
+    const checked = { ...repo, checkCommands: ['true'] };
     const task = {
       stage: 'checking',
       worktreePath: path,
-      workspace: 'main_checkout',
       editedPaths: ['a.txt'],
     };
     const approved = setup({ ...task, approvedEdits: 'review' } as Partial<Task>, checked);
