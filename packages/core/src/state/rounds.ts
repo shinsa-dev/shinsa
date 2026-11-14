@@ -17,7 +17,7 @@ import {
   toRoundPullRequest,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
-import { listCarriedMergeSteps } from '../report/merge-steps.ts';
+import { listCarriedMergeSteps, resolveMergeStepKey } from '../report/merge-steps.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
 
@@ -272,6 +272,28 @@ function applyRoundPullRequestMerged(state: ShinsaState, event: EventOf<'round.p
   });
 }
 
+function resolveClosedRoundWork(task: Task, to: Round) {
+  if (!to.work) return {};
+  const ticks = new Map(
+    (task.carriedMergeSteps ?? []).map((step) => [resolveMergeStepKey(step), step.done] as const)
+  );
+  const own = new Set(
+    (task.carriedMergeSteps ?? [])
+      .filter((step) => step.round === to.number)
+      .map((step) => resolveMergeStepKey(step))
+  );
+  const earlierDone = (to.work.mergeStepsDone ?? []).filter((key) => !own.has(key));
+  const ownDone = [...own].filter((key) => ticks.get(key));
+  return {
+    ...to.work,
+    mergeStepsDone: [...earlierDone, ...ownDone],
+    carriedMergeSteps: (to.work.carriedMergeSteps ?? []).map((step) => {
+      const done = ticks.get(resolveMergeStepKey(step));
+      return done === undefined ? step : { ...step, done };
+    }),
+  };
+}
+
 function applyRoundClosed(state: ShinsaState, event: EventOf<'round.closed'>) {
   const task = state.tasks[event.taskId];
   const rounds = task ? resolveTaskRounds(task) : [];
@@ -284,7 +306,7 @@ function applyRoundClosed(state: ShinsaState, event: EventOf<'round.closed'>) {
     return round;
   });
   writeRounds(state, task, event.at, updated, {
-    ...to.work,
+    ...resolveClosedRoundWork(task, to),
     pipeline: [...to.pipeline],
     result: null,
     proposal: null,
