@@ -326,11 +326,7 @@ function AreasBlock() {
       header={<BlockHeader icon={AUTOPILOT_BLOCKS.areas.icon} title={AUTOPILOT_BLOCKS.areas.title} />}
     >
       {rows.map((row) => (
-        <DescribedRow
-          key={row.area}
-          title={<Truncate>{row.area}</Truncate>}
-          description={row.detail}
-        >
+        <DescribedRow key={row.area} title={<Truncate>{row.area}</Truncate>} description={row.detail}>
           <span className={cn(TOKEN_TEXT, 'flex items-center gap-1 pr-1.5')}>
             {row.status === 'alone' && <CheckMark label={AUTOPILOT_AREA_STATUS.alone} />}
             {AUTOPILOT_AREA_STATUS[row.status]} · {row.percent}
