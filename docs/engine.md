@@ -2384,7 +2384,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   task's request, plan goal or question, the facts, the last 8 lessons of that kind of gate and your decision profile
   for it, below, in the user prompt)
   and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
-  'forward', reason, reply}`. It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
+  'revise' | 'forward', reason, reply}` (`revise` on a plan, review or merge only, Follow-ups below). It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
   ("Autopilot could not reach a model, so this waits for you."). Core ignores a judgment for a gate no longer open
   or no longer judging, checks the limits again (the state may have moved), and then acts: a plan is approved
   (`answerGateForYou`), a question answered with the reply (with no reply it waits for you: "Autopilot was not sure
@@ -2395,6 +2395,34 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   waits for you as always. While a task is a review candidate, `reactToFindings` sends the review's `should_fix`
   findings to the Agent as well as its blocking ones (`isFindingFixedBeforeReview`), so it never approves past a
   finding you would have fixed.
+- **Follow-ups** (`revise`, `autopilot/follow-ups.ts`). At a plan, review or merge (`AUTOPILOT_FOLLOW_UP_GATES`) the
+  judge may answer `revise` with one follow-up question or change request in `reply`, written in your voice ("How
+  does this handle auth on the new endpoint?"). Autopilot answers the gate as your Request changes does
+  (`answerGateForYou` with `revise`, the same `reviseWork`), `gate.answered` with `autopilot: <reason>`, shown in the
+  activity as "Followed up for you by Autopilot" with the reason and the words it sent. A follow-up never sets
+  `Task.autopiloted`, so it never unlocks an auto merge. It has its own hard limit beside `act`
+  (`AutopilotLimits.revise`): it may go past the level's risk and size ceilings, since it approves nothing, but
+  never on a gate kind turned off in `gates`, a plan held for you, an escalated review, a paused kind (the lesson
+  limit), or a merge with `autoMerge` off or of a review you approved yourself. At most 2 follow-ups per gate in a
+  round (`AUTOPILOT_FOLLOW_UP_LIMITS.perGate`, `resolveFollowUpLimit`), counted since you last answered that kind of
+  gate on the task; then the gate comes to you ("Autopilot already followed up 2 times here, so this waits for
+  you."). A gate refused only for approving gets a live judgment that may only follow up (`autopilot.judging` with
+  `followUpOnly`, `Gate.autopilotFollowUpOnly`, the prompt told why it may not approve); an `act` there forwards with
+  the limit's reason, and its verdict is still kept as the guess. The prompt lists the follow-ups already sent at
+  this gate, oldest first, so it never asks the same twice; a `revise` with no words forwards. Handled by Autopilot
+  quotes the follow-up (`AutopilotDone.followUp`). Your later answer to that gate is a `revised` lesson: rejecting
+  it corrects Autopilot, approving or asking more keeps the call.
+- **The topics you probe** (`autopilot/topics.ts`, `AutopilotProfile.topics`). Each note you write when you ask for
+  changes or reply (`revised` or `replied` on a plan, question, review, merge or your OK) is read against a fixed
+  table of word patterns (`AUTOPILOT_TOPICS`: security, migrations, data loss, tests, error handling, performance,
+  compatibility, concurrency, privacy, docs; `listNoteTopics`), plain and replay-safe, no model call. Patterns match
+  whole words in any form (migrating, deleting, retried), and a word with another sense counts only in its topic's
+  context (drop or delete a table, rows or data; escape the input; row or table locks), so the Escape key, dropping
+  padding or a lock icon raise nothing. Each topic keeps
+  its count and a recency-weighted count with the profile's 30-day half-life (`AutopilotTopicTally`). Every judgment's
+  prompt lists the topics raised at least twice, at most 5, the ones raised lately first
+  (`listAutopilotTopicLines`, `AUTOPILOT_TOPIC_LIMITS`), so the judge raises them the way you would. Settings shows
+  the first three as What you ask about.
 - **It learns from you** (`autopilot/lessons.ts`). When you answer a gate after Autopilot acted on the task
   (approved its plan or review, answered its question) or brought it to you for a reason it could judge (not a
   setting), each answer becomes a lesson (`listAutopilotLessonsToLearn`, `autopilot.learned`,
@@ -2476,14 +2504,19 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
   merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
   (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
-  stored on the gate (`autopilot.guessed {verdict, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotEstimate`) and
+  stored on the gate (`autopilot.guessed {verdict, followUp, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotFollowUp`, `Gate.autopilotEstimate`) and
   acts on nothing. `estimate` is the model's estimate at that moment, the same one a live judgment reads for its
   veto, so the combined track scores exactly what Autopilot did or would have done. A gate it judged and then
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
-  (`AutopilotDecision.guess`). Approving agrees with `act`, changing or rejecting with `forward`; questions are not
-  scored, since a reply has no yes or no.
+  (`AutopilotDecision.guess`, and the follow-up it would have sent as `AutopilotDecision.followUp`). Approving agrees
+  with `act`, asking for changes with `revise` or `forward`, rejecting with `forward`; questions are not scored, since
+  a reply has no yes or no. **The follow-up match** (`AutopilotProfile.followUps`, `scoreFollowUp`,
+  `resolveAutopilotFollowUpScore`): when Autopilot guessed `revise` and you asked for changes in words that name a
+  topic, it counts whether its follow-up named one of the same topics; Settings shows the share as Its follow-ups,
+  and the benchmark prints it. Guesses and decisions from before follow-ups get `followUp: null` from the
+  `follow-ups` log migration.
 - **Four tracks** (`AutopilotProfile.tracks`, `AUTOPILOT_TRACKS`). Each decision is scored against four guessers,
   each a running agreement in which an older decision counts half as much after 50 newer ones
   (`AUTOPILOT_SCORE_LIMITS.halfLife`): `model`, the local model's guess (`p` of at least 0.5 is a yes), on every
@@ -2519,7 +2552,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   is always yours.
 - **Handled by Autopilot on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
   that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Handled by Autopilot, first on Home above
-  Needs you: what it did, the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
+  Needs you: what it did, the task and the reason; a follow-up quotes the words it sent. Opening a row marks it seen and it leaves the section (a finished task
   stays in Recently finished); with two or more rows, Mark all seen clears them (`autopilot.seen {gateIds}`, human-only, `Gate.autopilotSeen`; `shinsa autopilot seen`). Each notifies once when
   it happens and its notification closes when you mark it seen; none counts in the Needs you badge.
 - **Urgent merges while you are away.** With the policy on, an urgent task's open merge gate is checked every hour
