@@ -22,6 +22,7 @@ const WELCOME = {
   script: 'welcome.js',
   page: 'welcome.html',
   logo: '../../packages/ui/src/components/logo.tsx',
+  font: '../../packages/ui/src/styles/fonts/ABCArealVariable.woff2',
 } as const;
 
 const bundle = Effect.fn('DesktopBuild.bundle')(function* ({
@@ -52,7 +53,11 @@ const writeWelcomePage = Effect.fn('DesktopBuild.writeWelcomePage')(function* ()
   const template = yield* fs.readFileString(resolve(desktopDir, WELCOME.template));
   const script = yield* fs.readFileString(resolve(distDir, WELCOME.script));
   const marks = yield* readMarkPaths(resolve(desktopDir, WELCOME.logo));
-  yield* fs.writeFileString(resolve(distDir, WELCOME.page), inlinePageScript(template, { script, marks }));
+  const font = Buffer.from(yield* fs.readFile(resolve(desktopDir, WELCOME.font))).toString('base64');
+  yield* fs.writeFileString(
+    resolve(distDir, WELCOME.page),
+    inlinePageScript(template, { script, marks, font })
+  );
   yield* fs.remove(resolve(distDir, WELCOME.script));
 });
 

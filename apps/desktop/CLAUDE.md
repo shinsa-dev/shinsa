@@ -181,8 +181,9 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   the count the page puts on the Dock (`StatusTray.showCount`, from the bridge's `updateBadge`), no task list.
 - **The first launch asks.** Until `engineSource` is saved, a Mac with no Shinsa data folder (or the dev app) opens
   on the welcome page instead of registering the engine (`isWelcomeNeeded`, `Connection`'s `welcome`): an intro drawn
-  with Glimm (`glimm`, WebGL sweeps; `src/welcome-page/index.ts`, bundled and inlined with the logo's paths into
-  `dist/welcome.html` by `scripts/build.ts`, since its CSP loads no file), then On this Mac or On another machine,
+  with Glimm (`glimm`, one WebGL wave in the primary blue; `src/welcome-page/index.ts`, bundled and inlined with the
+  logo's paths and the kit's Areal font into `dist/welcome.html` by `scripts/build.ts`, since its CSP loads no file;
+  its colours are the kit's tokens, copied into the page), then On this Mac or On another machine,
   links to `shinsa://engine/choose-local` and `choose-cloud` that `AppWindow` takes as engine actions. The first
   `EngineSource.use` saves the choice, even This Mac, and lets `Connection` go on; On another machine relaunches on
   Shinsa Cloud without letting it go on, so nothing touches the local engine while the app quits. A Mac that already has `~/.config/shinsa/data` keeps This Mac and never sees it. To see it again in

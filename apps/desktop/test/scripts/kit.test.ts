@@ -67,13 +67,15 @@ describe('readMarkPaths', () => {
 });
 
 describe('inlinePageScript', () => {
-  it('puts the mark and the script into the page, so its CSP needs no file of its own', () => {
-    const page = inlinePageScript('<svg><!-- marks --></svg><!-- script -->', {
+  it('puts the font, the mark and the script into the page, so its CSP needs no file of its own', () => {
+    const page = inlinePageScript('<style>/* font */</style><svg><!-- marks --></svg><!-- script -->', {
       script: 'a("$&</script>")',
       marks: ['M0 0', 'M1 1'],
+      font: 'AAEC',
     });
     expect(page).toBe(
-      '<svg><path class="piece" style="--piece: 0" d="M0 0" /><path class="piece" style="--piece: 1" d="M1 1" /></svg>' +
+      "<style>src: url(data:font/woff2;base64,AAEC) format('woff2');</style>" +
+        '<svg><path class="piece" style="--piece: 0" d="M0 0" /><path class="piece" style="--piece: 1" d="M1 1" /></svg>' +
         '<script>a("$&<\\/script>")</script>'
     );
   });
