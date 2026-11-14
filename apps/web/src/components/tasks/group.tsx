@@ -7,8 +7,10 @@ import type { RowWindow } from '@/lib/format/rows.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import type { ChainEntry, TaskGroup } from '@/lib/tasks/groups.ts';
+import { resolveTaskRowModel } from '@/lib/tasks/row-model.ts';
 import { resolveTeamTaskPath, resolveTeamTaskTarget } from '@/lib/teams/feeds.ts';
 import { TeamTaskListRow } from '../teams/tasks.tsx';
+import { TaskRowState } from './row-state.tsx';
 import { TASK_LIST_COLUMNS, TASK_LIST_ROW_HEIGHT, TaskListRow } from './row.tsx';
 
 export interface TaskGroupListSection {
@@ -47,9 +49,7 @@ function TaskGroupRows({
           ) : (
             <TaskListRow
               key={entry.task.id}
-              state={state}
-              task={entry.task}
-              depth={entry.depth}
+              model={resolveTaskRowModel(state, entry.task, entry.depth)}
               columns={columns}
             />
           )
@@ -122,19 +122,21 @@ export function TaskGroupList({
     TASK_LIST_ROW_HEIGHT
   );
   return (
-    <div ref={list} className={className}>
-      {sections.map((section, index) => (
-        <TaskGroupSection
-          key={section.key}
-          index={index}
-          persistId={section.persistId}
-          section={section}
-          range={windows[index] as RowWindow}
-          remeasure={remeasure}
-          state={state}
-          columns={columns}
-        />
-      ))}
-    </div>
+    <TaskRowState state={state}>
+      <div ref={list} className={className}>
+        {sections.map((section, index) => (
+          <TaskGroupSection
+            key={section.key}
+            index={index}
+            persistId={section.persistId}
+            section={section}
+            range={windows[index] as RowWindow}
+            remeasure={remeasure}
+            state={state}
+            columns={columns}
+          />
+        ))}
+      </div>
+    </TaskRowState>
   );
 }

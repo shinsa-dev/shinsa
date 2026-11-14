@@ -1,4 +1,4 @@
-import type { Repo, ShinsaState } from '@shinsa/core';
+import type { Project, Repo, ShinsaState } from '@shinsa/core';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import type * as React from 'react';
 import { GlyphLabel, INLINE_MARK, InAppLink, SMART_LINK } from '@/components/links/link.tsx';
@@ -37,18 +37,17 @@ export function RepoDetails({ state, repo }: { state: ShinsaState; repo: Repo })
   );
 }
 
-export function RepoIcon({
-  state,
+export function RepoGlyph({
   repo,
+  project,
   icon = resolveRepoIcon(repo),
   className,
 }: {
-  state: ShinsaState;
   repo: Repo;
+  project: Project | null;
   icon?: IconName;
   className?: string;
 }) {
-  const project = selectProject(state, repo.projectId);
   return (
     <Icon
       size='sm'
@@ -59,6 +58,22 @@ export function RepoIcon({
         project ? ({ '--icon-color': resolveProjectInk(project.color) } as React.CSSProperties) : undefined
       }
     />
+  );
+}
+
+export function RepoIcon({
+  state,
+  repo,
+  icon,
+  className,
+}: {
+  state: ShinsaState;
+  repo: Repo;
+  icon?: IconName;
+  className?: string;
+}) {
+  return (
+    <RepoGlyph repo={repo} project={selectProject(state, repo.projectId)} icon={icon} className={className} />
   );
 }
 

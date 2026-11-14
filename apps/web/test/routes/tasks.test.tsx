@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import * as shapes from '@/lib/tasks/shapes.ts';
 import { TasksPage } from '@/routes/tasks.tsx';
 import { createGate, createProject, createShinsaState, createTask } from '../support/state.ts';
 
@@ -119,6 +120,26 @@ describe('the task groups', () => {
     expect(rows().length).toBeLessThan(200);
     const header = screen.getByRole('button', { name: /^In progress/ });
     expect(header.className).toContain('sticky');
+  });
+
+  it('redraws only the row whose task a push changed', () => {
+    const drawn = spyOn(shapes, 'describeTaskSteps');
+    const view = renderPage();
+    const before = drawn.mock.calls.length;
+    expect(before).toBeGreaterThanOrEqual(rows().length);
+    const review = TASKS.tasks.review as Task;
+    const pushed = {
+      ...TASKS,
+      tasks: { ...TASKS.tasks, review: { ...review, title: 'Review the logout fix' } },
+    };
+    view.rerender(
+      <TooltipProvider>
+        <TasksPage state={pushed} />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Review the logout fix')).toBeTruthy();
+    expect(drawn.mock.calls.slice(before).map(([task]) => task.id)).toEqual(['review']);
+    drawn.mockRestore();
   });
 
   it('opens a task from its row', () => {
