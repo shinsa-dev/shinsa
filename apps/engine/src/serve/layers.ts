@@ -11,8 +11,7 @@ import { ProgramVersions } from '../agents/providers/versions/service.ts';
 import { QuickCalls, QuickFastMode } from '../agents/quick/index.ts';
 import { RunSupervisorLayer } from '../agents/supervisor/layers.ts';
 import { TeammateTasks } from '../agents/tool-calls/schema.ts';
-import { openAppInBackground, resolveEngineApp } from '../app-updates/open.ts';
-import { AppUpdates } from '../app-updates/service.ts';
+import { AppUpdatesLayer } from '../app-updates/layers.ts';
 import { createAutopilotJudge, createAutopilotWeigher } from '../autopilot/judge.ts';
 import { BriefingWriter } from '../briefing/service.ts';
 import { BrowserLayer } from '../browser/layers.ts';
@@ -87,7 +86,6 @@ import { createWatchWriter } from '../schedules/suggest.ts';
 import { SecretFiles } from '../secrets/files/service.ts';
 import { SecretStore } from '../secrets/store/service.ts';
 import { ShellLayer } from '../shell/layers.ts';
-import type { Shell } from '../shell/service.ts';
 import { Slack } from '../slack/service.ts';
 import { ATTACHMENT_REQUEST_LIMIT_BYTES, Evidence } from '../store/index.ts';
 import { StoreLayer } from '../store/layers.ts';
@@ -443,16 +441,9 @@ function createServedLayer(options: ShinsaOptions, instance: ServerInstance, sto
       );
     })
   );
-  const appUpdates = Layer.unwrap(
-    Effect.gen(function* () {
-      const context = yield* Effect.context<Shell | FileSystem.FileSystem>();
-      return AppUpdates.layer({
-        app: yield* resolveEngineApp(),
-        engine: { version: instance.version, protocol: ENGINE_PROTOCOL },
-        open: (app) => openAppInBackground(app).pipe(Effect.provide(context)),
-      });
-    })
-  ).pipe(Layer.provideMerge(restarter));
+  const appUpdates = AppUpdatesLayer({ version: instance.version, protocol: ENGINE_PROTOCOL }).pipe(
+    Layer.provideMerge(restarter)
+  );
   const onboarding = Layer.unwrap(
     Effect.gen(function* () {
       const accounts = yield* Accounts;
