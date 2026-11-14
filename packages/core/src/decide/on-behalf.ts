@@ -113,6 +113,8 @@ const DESCRIPTIONS: Descriptions = {
     command.stacksOn.length > 0
       ? `Stacked ${quoteTask(state, command.taskId)} on ${describeList(command.stacksOn.map((id) => quoteTask(state, id)))}`
       : `Took ${quoteTask(state, command.taskId)} out of its bundle`,
+  'task.move_to_repository': (state, command) =>
+    `Moved ${quoteTask(state, command.taskId)} to ${state.repos[command.repoId]?.name ?? 'another repository'}`,
   'task.move_to_backlog': (state, command) => `Moved ${quoteTask(state, command.taskId)} to the backlog`,
   'task.remove_from_backlog': (state, command) =>
     `Moved ${quoteTask(state, command.taskId)} out of the backlog`,

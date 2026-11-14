@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  completePhase,
   createHarness,
   createTask,
   type Harness,
   linkSession,
+  proposePlan,
   registerRepo,
+  resolveReply,
   shipAndMerge,
   verifySetup,
 } from '../harness.ts';
@@ -13,6 +16,27 @@ function move(harness: Harness, taskId: string, repoId: string, reason = 'The ba
   const runId = harness.activeRun(taskId).id;
   harness.send({ type: 'agent.move_to_repository', runId, repoId, reason });
   return runId;
+}
+
+function moveByYou(harness: Harness, taskId: string, repoId: string) {
+  harness.send({ type: 'task.move_to_repository', taskId, repoId });
+}
+
+function ask(harness: Harness, repoId: string) {
+  harness.send({ type: 'task.create', request: 'How does the export retry?', repoId: null, mode: 'ask' });
+  const taskId = Object.keys(harness.state.tasks).at(-1) ?? '';
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: 'How the export retries',
+    repoId,
+    size: 'small',
+    branch: 'ask/export-retry',
+    waitsOn: [],
+  });
+  verifySetup(harness, taskId);
+  linkSession(harness, taskId, 'answer-session');
+  return taskId;
 }
 
 function createMoveTask() {
@@ -127,15 +151,6 @@ describe('core refuses the move', () => {
     expect(refusalOf(() => move(harness, taskId, pwn))).toBe('This task already works in that repository.');
   });
 
-  test('to a repository of another project, pointing at create_task', () => {
-    const { harness, taskId } = createMoveTask();
-    const other = registerRepo(harness, 'kanna', 'Kanna');
-    expect(refusalOf(() => move(harness, taskId, other))).toBe(
-      'kanna belongs to another project, so this task cannot move there. File the work there with `create_task` instead.'
-    );
-    expect(harness.activeRun(taskId).purpose).toBe('plan');
-  });
-
   test('to a repository Shinsa does not know', () => {
     const { harness, taskId } = createMoveTask();
     expect(refusalOf(() => move(harness, taskId, 'nowhere'))).toBe('No repository nowhere.');
@@ -153,7 +168,7 @@ describe('core refuses the move', () => {
       branch: harness.task(taskId).branch ?? '',
     });
     expect(refusalOf(() => move(harness, taskId, superwall))).toBe(
-      'Work on this task has already started, so it stays where it is. File the work there with `create_task` instead.'
+      'Work on this task has already started, so it stays where it is. File the work there as a new task instead.'
     );
   });
 
@@ -161,7 +176,7 @@ describe('core refuses the move', () => {
     const { harness, pwn, superwall, taskId } = createMoveTask();
     const above = createTask(harness, { repoId: pwn, stacksOn: [taskId] });
     const message =
-      'This task is part of a bundle in its repository, so it stays there. File the work there with `create_task` instead.';
+      'This task is part of a bundle in its repository, so it stays there. File the work there as a new task instead.';
     expect(refusalOf(() => move(harness, taskId, superwall))).toBe(message);
     expect(harness.task(above).stacksOn).toEqual([taskId]);
   });
@@ -185,5 +200,191 @@ describe('core refuses the move', () => {
     expect(harness.activeRun(taskId).purpose).toBe('build');
     expect(refusalOf(() => move(harness, taskId, superwall))).not.toBeNull();
     expect(harness.task(taskId).repoId).not.toBe(superwall);
+  });
+});
+
+describe('a move across projects', () => {
+  test('puts the task in the repository’s project with that project’s next handle', () => {
+    const { harness, taskId } = createMoveTask();
+    const kanna = registerRepo(harness, 'kanna', 'Kanna');
+    const kannaProject = harness.state.repos[kanna]?.projectId;
+    const before = harness.task(taskId).handle;
+    move(harness, taskId, kanna);
+    harness.send({ type: 'worktree.gone', taskId });
+    const task = harness.task(taskId);
+    expect(task).toMatchObject({ repoId: kanna, projectId: kannaProject, movingTo: null });
+    expect(task.handle).not.toBe(before);
+    expect(task.handle?.endsWith('-1')).toBe(true);
+    expect(harness.state.taskNumbers[task.handle?.split('-')[0] ?? '']).toBe(1);
+    expect(harness.lastEffect('config.verify')).toEqual({ kind: 'config.verify', taskId });
+  });
+
+  test('within the same project keeps the handle and the project', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    const { handle, projectId } = harness.task(taskId);
+    move(harness, taskId, superwall);
+    harness.send({ type: 'worktree.gone', taskId });
+    expect(harness.task(taskId)).toMatchObject({ handle, projectId, repoId: superwall });
+  });
+});
+
+describe('an agent answering a question moves its task', () => {
+  test('the answer step starts again in the new repository, in the same session', () => {
+    const harness = createHarness();
+    const pwn = registerRepo(harness, 'pwn');
+    const kanna = registerRepo(harness, 'kanna', 'Kanna');
+    const taskId = ask(harness, pwn);
+    const runId = harness.activeRun(taskId).id;
+    expect(harness.activeRun(taskId).role).toBe('answerer');
+    harness.send({
+      type: 'agent.move_to_repository',
+      runId,
+      repoId: kanna,
+      reason: 'The retry lives in Kanna.',
+    });
+    expect(harness.state.runs[runId]?.outcome).toBe('completed');
+    expect(harness.task(taskId)).toMatchObject({ repoId: kanna, movingTo: null, stage: 'triage' });
+    verifySetup(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({
+      role: 'answerer',
+      resume: true,
+      sessionId: 'answer-session',
+    });
+    expect(harness.activeRun(taskId).prompt).toContain('/code/kanna');
+  });
+});
+
+describe('you move a task to another repository', () => {
+  test('while it plans: the run stops, the worktree goes and planning starts again there', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    const runId = harness.activeRun(taskId).id;
+    moveByYou(harness, taskId, superwall);
+    expect(harness.state.runs[runId]?.outcome).toBe('cancelled');
+    expect(harness.task(taskId)).toMatchObject({ movingTo: superwall, stageReason: 'moving to superwall' });
+    const moving = harness
+      .task(taskId)
+      .activity.find((entry) => entry.text === 'Moving the task to superwall');
+    expect(moving).toMatchObject({ actor: 'you', detail: null, runId: null });
+    harness.send({ type: 'worktree.gone', taskId });
+    verifySetup(harness, taskId);
+    harness.send({
+      type: 'worktree.ready',
+      taskId,
+      path: `/wt/superwall/${taskId}`,
+      branch: `fix/${taskId}`,
+    });
+    expect(harness.activeRun(taskId)).toMatchObject({
+      purpose: 'plan',
+      resume: true,
+      sessionId: 'session-1',
+    });
+    expect(harness.task(taskId).repoId).toBe(superwall);
+  });
+
+  test('with a plan waiting for you: the plan gate is withdrawn and planning starts again', () => {
+    const harness = createHarness();
+    const pwn = registerRepo(harness, 'pwn');
+    const superwall = registerRepo(harness, 'superwall');
+    const taskId = createTask(harness, { repoId: pwn, planFirst: true });
+    linkSession(harness, taskId);
+    proposePlan(harness, taskId);
+    const planGate = harness.openGate(taskId);
+    expect(planGate.type).toBe('plan');
+    moveByYou(harness, taskId, superwall);
+    expect(harness.state.gates[planGate.id]?.status).not.toBe('open');
+    harness.send({ type: 'worktree.gone', taskId });
+    verifySetup(harness, taskId);
+    harness.send({
+      type: 'worktree.ready',
+      taskId,
+      path: `/wt/superwall/${taskId}`,
+      branch: `fix/${taskId}`,
+    });
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'plan', sessionId: 'session-1' });
+  });
+
+  test('to a repository of another project, which gives it that project’s handle', () => {
+    const { harness, taskId } = createMoveTask();
+    const kanna = registerRepo(harness, 'kanna', 'Kanna');
+    moveByYou(harness, taskId, kanna);
+    harness.send({ type: 'worktree.gone', taskId });
+    expect(harness.task(taskId)).toMatchObject({
+      repoId: kanna,
+      projectId: harness.state.repos[kanna]?.projectId,
+    });
+  });
+});
+
+describe('core refuses your move', () => {
+  test('once the task has handed over its result', () => {
+    const harness = createHarness();
+    const pwn = registerRepo(harness, 'pwn');
+    const kanna = registerRepo(harness, 'kanna', 'Kanna');
+    const taskId = ask(harness, pwn);
+    const runId = harness.activeRun(taskId).id;
+    harness.send({
+      type: 'agent.deliver',
+      runId,
+      step: 'answer',
+      body: 'It retries three times.',
+      ...resolveReply(harness, runId),
+    });
+    expect(refusalOf(() => moveByYou(harness, taskId, kanna))).toBe(
+      'This task has already handed over its result, so it stays where it is. File the work there as a new task instead.'
+    );
+  });
+
+  test('of a finished task', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    harness.send({ type: 'task.cancel', taskId });
+    expect(refusalOf(() => moveByYou(harness, taskId, superwall))).toBe(
+      'This task is finished, so it stays where it is.'
+    );
+  });
+
+  test('while it is already moving', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    const kanna = registerRepo(harness, 'kanna', 'Kanna');
+    moveByYou(harness, taskId, superwall);
+    expect(refusalOf(() => moveByYou(harness, taskId, kanna))).toBe(
+      'This task is already moving to another repository.'
+    );
+  });
+
+  test('once a phase has reported', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    proposePlan(harness, taskId);
+    completePhase(harness, taskId);
+    expect(harness.task(taskId).phaseReports.length).toBeGreaterThan(0);
+    expect(refusalOf(() => moveByYou(harness, taskId, superwall))).toBe(
+      'Work on this task has already started, so it stays where it is. File the work there as a new task instead.'
+    );
+  });
+
+  test('once a phase is being built, before it reports', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    proposePlan(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('building');
+    expect(harness.task(taskId).phaseReports).toEqual([]);
+    expect(refusalOf(() => moveByYou(harness, taskId, superwall))).toBe(
+      'Work on this task has already started, so it stays where it is. File the work there as a new task instead.'
+    );
+    expect(refusalOf(() => move(harness, taskId, superwall))).not.toBeNull();
+  });
+
+  test('once you edited a file in its worktree', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    expect(harness.task(taskId).editedPaths).toEqual(['src/a.ts']);
+    expect(refusalOf(() => moveByYou(harness, taskId, superwall))).toBe(
+      'Work on this task has already started, so it stays where it is. File the work there as a new task instead.'
+    );
+  });
+
+  test('to the repository it already works in', () => {
+    const { harness, pwn, taskId } = createMoveTask();
+    expect(refusalOf(() => moveByYou(harness, taskId, pwn))).toBe(
+      'This task already works in that repository.'
+    );
   });
 });
