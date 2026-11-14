@@ -89,6 +89,18 @@ describe('listRecentlyFinished', () => {
     ]);
   });
 
+  it('keeps a task a watchdog is checking in its place from the merge', () => {
+    const tasks = [
+      createTask({ id: 'checking', stage: 'watching', stageChangedAt: NOW - 5000 }),
+      createTask({ id: 'later', stage: 'merged', stageChangedAt: NOW - 1000 }),
+      createTask({ id: 'old-check', stage: 'watching', stageChangedAt: NOW - 2 * DAY }),
+    ];
+    expect(listRecentlyFinished(createShinsaState({ tasks }), NOW, NONE).map((task) => task.id)).toEqual([
+      'later',
+      'checking',
+    ]);
+  });
+
   it('shows five at most', () => {
     const tasks = Array.from({ length: 6 }, (_, index) =>
       createTask({ id: `t${index}`, stage: 'done', stageChangedAt: NOW - index })

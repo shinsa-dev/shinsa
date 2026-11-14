@@ -10,6 +10,7 @@ import {
   isDecisionGate,
   isProjectInFocus,
   isTaskSettled,
+  isWatchCheck,
   isWatchHome,
   NO_FOCUS_PROJECTS,
   PRIORITY_RANK,
@@ -221,7 +222,7 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
     else if (task.backlog && !isTaskSettled(task)) backlog.push(task);
     else if (listWaitsOn(state, task).length > 0 || listBundleBlockers(state, task).length > 0) {
       waiting.push(task);
-    } else if (isMoving(task, running, judging)) working.push(task);
+    } else if (!isWatchCheck(task) && isMoving(task, running, judging)) working.push(task);
   }
 
   const ready = entries.filter((entry) => isInFocus(state, entry.task, now)).sort(compareGates);

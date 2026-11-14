@@ -3143,7 +3143,8 @@ Only these, and they win over anything below:
     `lib/tasks/fork.ts`; `docs/engine.md` → Watchdogs, Forking a task).
     - **Watching is a status.** A merged task with a watchdog still watching or waiting for a source reads Watching
       (`IconRadar`, blue) wherever its status shows, and its Now card says "Merged. Its watchdogs keep watching the
-      change." A check running is the stage Checking a watchdog.
+      change." A check running changes nothing in the lists: the task stays in Done with its Watching status, never
+      In progress, and keeps its place (`resolveShownStage`).
     - **The Watchdogs panel** sits under the Now card on the Overview (`Panel`, `IconRadar`, its own `persistId`): how
       many still watch and how long is left, then one row per watchdog in two lines. The first has its title, its
       status in its tone and, quiet right after it at the same size, where it stands ("18 h left · 5 checks", "3

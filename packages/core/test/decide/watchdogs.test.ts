@@ -8,7 +8,10 @@ import {
   listOpenGates,
   type MergeStep,
   MINUTE_MS,
+  isWatchCheck,
   replayEventLog,
+  resolveQueue,
+  resolveShownStage,
   resolveTaskProgress,
   resolveTaskRounds,
   serializeTaskDetail,
@@ -314,6 +317,25 @@ describe('a watch check', () => {
     ]);
     expect(after.nextCheckAt).toBe((after.checks[0]?.at ?? 0) + 6 * HOUR_MS);
     expect(listActiveRuns(harness.state, taskId)).toEqual([]);
+  });
+
+  test('reads as the merged task it checks: out of the working queue, shown as merged, and keeping the merge’s stage time', () => {
+    const { harness, taskId } = mergeWith();
+    const mergedAt = harness.task(taskId).stageChangedAt;
+    fire(harness, taskId);
+    const checking = harness.task(taskId);
+    expect(checking.stage).toBe('watching');
+    expect(isWatchCheck(checking)).toBe(true);
+    expect(resolveShownStage(checking)).toBe('merged');
+    expect(checking.stageChangedAt).toBe(mergedAt);
+    expect(resolveQueue(harness.state, harness.now).working).toEqual([]);
+    harness.advance(MINUTE_MS);
+    report(harness, taskId, true);
+    const rested = harness.task(taskId);
+    expect(rested.stage).toBe('merged');
+    expect(isWatchCheck(rested)).toBe(false);
+    expect(resolveShownStage(rested)).toBe('merged');
+    expect(rested.stageChangedAt).toBe(mergedAt);
   });
 
   test('a check on a later day keeps the merged round’s merge time and end, and marking the task done keeps it merged', () => {
