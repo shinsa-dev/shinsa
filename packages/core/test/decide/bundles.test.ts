@@ -364,6 +364,25 @@ describe('taking a started task out of its bundle', () => {
     );
   });
 
+  test('a started task stacked on two tasks can leave one of them, but cannot swap one for another', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    const second = createTask(harness, { request: 'Second' });
+    const other = createTask(harness, { request: 'Other' });
+    const child = createTask(harness, { request: 'Child', stacksOn: [first, second] });
+    reachReady(harness, first);
+    reachReady(harness, second);
+    readyWorktree(harness, child);
+    proposePlan(harness, child);
+    expect(harness.task(child).stage).toBe('building');
+    expect(() => stackOn(harness, child, [first, other])).toThrow(
+      'This task has started building, so it can no longer stack on more tasks.'
+    );
+    stackOn(harness, child, [first]);
+    expect(harness.task(child).stacksOn).toEqual([first]);
+    expect(harness.task(child).waitsOn).toEqual([second]);
+  });
+
   test('a shipped task that leaves its bundle has its pull request watched again, onto the default branch', () => {
     const harness = createHarness();
     const { middle, top } = createBundle(harness);
