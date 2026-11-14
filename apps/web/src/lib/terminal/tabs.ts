@@ -203,9 +203,16 @@ export function describeTerminalEnd(terminal: TerminalInfo) {
   return `The shell exited with code ${terminal.exitCode}.`;
 }
 
+export function resolveTerminalTaskHandle(
+  terminal: TerminalInfo,
+  tasks: Record<string, Pick<Task, 'handle'>>
+) {
+  return (terminal.taskId && tasks[terminal.taskId]?.handle) || null;
+}
+
 export function resolveTerminalTabLabel(terminal: TerminalInfo, tasks: Record<string, Pick<Task, 'handle'>>) {
   const label = resolveTerminalLabel(terminal);
-  const handle = terminal.serviceId && terminal.taskId ? tasks[terminal.taskId]?.handle : null;
+  const handle = resolveTerminalTaskHandle(terminal, tasks);
   return handle ? `${label} · ${handle}` : label;
 }
 

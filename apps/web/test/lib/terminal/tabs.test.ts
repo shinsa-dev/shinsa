@@ -20,6 +20,7 @@ import {
   resolveTerminalPath,
   resolveTerminalProject,
   resolveTerminalTabLabel,
+  resolveTerminalTaskHandle,
   showsServices,
 } from '@/lib/terminal/tabs.ts';
 import { NOW } from '../../support/state.ts';
@@ -149,13 +150,15 @@ describe('the words', () => {
     expect(describeTerminalTab({ ...ONE, status: 'stopped' })).toStartWith('Ended when the engine restarted');
   });
 
-  it('names a service’s run for a task with the task’s handle', () => {
+  it('names a task’s terminal and a service’s run for a task with the task’s handle', () => {
+    expect(resolveTerminalTaskHandle({ ...ONE, taskId: 'fix' }, { fix: { handle: 'SH-4' } })).toBe('SH-4');
+    expect(resolveTerminalTaskHandle(ONE, { fix: { handle: 'SH-4' } })).toBeNull();
     const tasks = { fix: { handle: 'SH-4' }, raw: { handle: null } };
     const run = { ...ONE, name: 'api', serviceId: 'api', taskId: 'fix' };
     expect(resolveTerminalTabLabel(run, tasks)).toBe('api · SH-4');
     expect(resolveTerminalTabLabel({ ...run, taskId: 'raw' }, tasks)).toBe('api');
     expect(resolveTerminalTabLabel({ ...run, taskId: null }, tasks)).toBe('api');
-    expect(resolveTerminalTabLabel({ ...run, serviceId: null }, tasks)).toBe('api');
+    expect(resolveTerminalTabLabel({ ...run, serviceId: null }, tasks)).toBe('api · SH-4');
   });
 
   it('warns what closing a terminal with a program in front stops', () => {

@@ -15,7 +15,12 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeServiceState, SERVICE_GLYPHS } from '@/lib/terminal/services.ts';
-import { describeTerminalTab, moveTerminal, resolveTerminalTabLabel } from '@/lib/terminal/tabs.ts';
+import {
+  describeTerminalTab,
+  moveTerminal,
+  resolveTerminalTabLabel,
+  resolveTerminalTaskHandle,
+} from '@/lib/terminal/tabs.ts';
 
 function RenameField({
   terminal,
@@ -73,12 +78,16 @@ function TabMark({
 
 function TabLabel({
   label,
+  name,
+  handle,
   detail,
   service,
   ended,
   active,
 }: {
   label: string;
+  name: string;
+  handle: string | null;
   detail: string;
   service: ServiceView | null;
   ended: boolean;
@@ -88,7 +97,8 @@ function TabLabel({
     <Hint label={label} detail={detail}>
       <span className={cn('flex w-fit min-w-0 items-center gap-1.5', ended && 'text-fg-2')}>
         <TabMark service={service} ended={ended} active={active} />
-        <span className='truncate'>{label}</span>
+        <span className='truncate'>{name}</span>
+        {handle && <span className='shrink-0 text-fg-2 tabular-nums'>{handle}</span>}
       </span>
     </Hint>
   );
@@ -96,12 +106,16 @@ function TabLabel({
 
 function ServiceTabLabel({
   label,
+  name,
+  handle,
   service,
   now: fixed,
   ended,
   active,
 }: {
   label: string;
+  name: string;
+  handle: string | null;
   service: ServiceView;
   now: number | undefined;
   ended: boolean;
@@ -113,6 +127,8 @@ function ServiceTabLabel({
   return (
     <TabLabel
       label={label}
+      name={name}
+      handle={handle}
       detail={`${describeServiceState(view, now)} · ${view.service.command}`}
       service={view}
       ended={ended}
@@ -145,6 +161,8 @@ function TerminalTab({
   onDrop: () => void;
 }) {
   const label = resolveTerminalTabLabel(terminal, tasks);
+  const name = resolveTerminalLabel(terminal);
+  const handle = resolveTerminalTaskHandle(terminal, tasks);
   const ended = terminal.status !== 'running';
   return (
     <TabsTrigger
@@ -172,10 +190,20 @@ function TerminalTab({
       className='group/tab max-w-56 min-w-0 shrink-0 group-data-[variant=default]/tabs-list:pe-0.5 data-dragging:opacity-50'
     >
       {service ? (
-        <ServiceTabLabel label={label} service={service} now={now} ended={ended} active={active} />
+        <ServiceTabLabel
+          label={label}
+          name={name}
+          handle={handle}
+          service={service}
+          now={now}
+          ended={ended}
+          active={active}
+        />
       ) : (
         <TabLabel
           label={label}
+          name={name}
+          handle={handle}
           detail={describeTerminalTab(terminal)}
           service={null}
           ended={ended}

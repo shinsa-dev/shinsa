@@ -289,7 +289,7 @@ describe('the terminal page', () => {
   });
 
   describe('the filter', () => {
-    const TASK = createTerminal({ id: 'task', title: 'zsh', taskId: 'task-1', place: 'worktree' });
+    const TASK = createTerminal({ id: 'task', title: 'zsh', taskId: 'fix', place: 'worktree' });
     const SERVICE = createTerminal({ id: 'svc', name: 'api', serviceId: 'api', startedAt: 0 });
     const ALL = [SERVER, TASK, SERVICE];
 
@@ -305,18 +305,19 @@ describe('the terminal page', () => {
       const tasks = await screen.findByRole('menuitemradio', { name: /Task terminals/ });
       expect(tasks.textContent).toContain('1');
       fireEvent.click(tasks);
-      await waitFor(() => expect(readTabs()).toEqual(['zsh']));
+      await waitFor(() => expect(readTabs()).toEqual(['zshSH-4']));
       expect(localStorage.getItem('shinsa.terminal-filter')).toBe('tasks');
       fireEvent.click(screen.getByRole('button', { name: 'Show: Task terminals' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: /All terminals/ }));
-      await waitFor(() => expect(readTabs()).toEqual(['Dev server', 'zsh', 'api']));
+      await waitFor(() => expect(readTabs()).toEqual(['Dev server', 'zshSH-4', 'api']));
     });
 
-    it('always shows the terminal the URL names, such as one a task opened', () => {
+    it('always shows the terminal the URL names, such as one a task opened, with the task’s handle', () => {
       visit('/terminal?project=SH&terminal=task');
       show(createTerminalsSnapshot(ALL));
       const tabs = screen.getAllByRole('tab');
-      expect(tabs.map((tab) => tab.textContent)).toEqual(['Dev server', 'zsh']);
+      expect(tabs.map((tab) => tab.textContent)).toEqual(['Dev server', 'zshSH-4']);
+      expect(screen.getByText('SH-4').className).toContain('shrink-0');
       expect(tabs[1]?.getAttribute('aria-selected')).toBe('true');
     });
 
@@ -327,7 +328,7 @@ describe('the terminal page', () => {
       expect(screen.getByText('No services running in Shop')).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Open a terminal' })).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Show all terminals' }));
-      await waitFor(() => expect(readTabs()).toEqual(['Dev server', 'zsh']));
+      await waitFor(() => expect(readTabs()).toEqual(['Dev server', 'zshSH-4']));
     });
 
     it('offers no other filter when the project has no terminals at all', () => {
