@@ -223,11 +223,11 @@ describe('Autopilot at the review', () => {
 });
 
 describe('the Autopilot setting', () => {
-  test('starts balanced, on plans, questions, reviews and watchdog tasks, with Auto merge for low risk', () => {
+  test('starts balanced, on every kind of gate but suggested tasks, with Auto merge for low risk', () => {
     expect(AUTOPILOT_DEFAULTS).toEqual({
       enabled: false,
       level: 'balanced',
-      gates: ['plans', 'questions', 'reviews', 'watchdogTasks'],
+      gates: ['plans', 'questions', 'reviews', 'watchdogTasks', 'proposals', 'failures', 'findings'],
       autoMerge: 'low_risk',
       escalate: true,
       ignoreUsageLimits: true,

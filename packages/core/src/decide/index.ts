@@ -38,6 +38,7 @@ import {
   applyAutopilotWeighed,
   fireAutopilot,
   markAutopilotSeen,
+  syncAutopilotFailures,
 } from './autopilot.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
 import { requestBrowserSignIn } from './browser-sign-in.ts';
@@ -636,6 +637,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   dispatchRuns(decider);
   syncSlackThreads(decider);
   syncSlackEscalations(decider, state);
+  syncAutopilotFailures(decider, state);
   assertGatesStayOpen(decider, state);
   if (context.onBehalf) recordOnBehalfAction(decider, command);
   const changes = sealDraft(decider.state);

@@ -13,7 +13,14 @@ import {
 
 export type AutopilotLessonsState = Pick<ShinsaState, 'autopilotLessons'>;
 
-const LESSON_GATES: readonly AutopilotGateKind[] = ['plan', 'question', 'review', 'merge', 'proposal'];
+const LESSON_GATES: readonly AutopilotGateKind[] = [
+  'plan',
+  'question',
+  'review',
+  'merge',
+  'proposal',
+  'failure',
+];
 
 const DECIDED_GATES: ReadonlySet<Gate['type']> = new Set<Gate['type']>(['plan', 'review', 'merge']);
 
@@ -33,7 +40,8 @@ const GATE_NOUN: Record<AutopilotGateKind, string> = {
   question: 'agents’ questions',
   review: 'reviews',
   merge: 'merges',
-  proposal: 'proposals from watchdog tasks',
+  proposal: 'agents’ proposals',
+  failure: 'failed steps',
 };
 
 const ACTED_TEXT: Record<AutopilotGateKind, string> = {
@@ -41,7 +49,8 @@ const ACTED_TEXT: Record<AutopilotGateKind, string> = {
   question: 'You answered an agent’s question for them',
   review: 'You approved a review for them',
   merge: 'You merged a change for them',
-  proposal: 'You gave your OK on a watchdog task’s proposal for them',
+  proposal: 'You gave your OK on an agent’s proposal for them',
+  failure: 'You handled a failed step for them',
 };
 
 const FORWARDED_TEXT: Record<AutopilotGateKind, string> = {
@@ -49,7 +58,8 @@ const FORWARDED_TEXT: Record<AutopilotGateKind, string> = {
   question: 'You brought an agent’s question to them',
   review: 'You brought a review to them',
   merge: 'You brought a merge to them',
-  proposal: 'You brought a watchdog task’s proposal to them',
+  proposal: 'You brought an agent’s proposal to them',
+  failure: 'You brought a failed step to them',
 };
 
 const ACTED_ANSWER_TEXT: Record<AutopilotLessonAnswer, string> = {

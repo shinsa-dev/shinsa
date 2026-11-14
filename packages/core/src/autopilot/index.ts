@@ -41,10 +41,17 @@ export {
   isUrgentTask,
   isWatchdogTask,
   resolveAutopilotFacts,
+  resolveAutopilotFindingLimit,
+  resolveAutopilotLevel,
   resolveAutopilotLimits,
   resolveAutopilotPresence,
   resolveAutopilotSuggestionLimit,
 } from './limits.ts';
+export {
+  describeAutopilotFindingCall,
+  selectAutopilotFindingCall,
+  type AutopilotFindingCall,
+} from './findings.ts';
 export {
   AUTOPILOT_CEILINGS,
   AUTOPILOT_DECISION_ANSWERS,
@@ -80,7 +87,10 @@ export {
   type AutopilotDecisionKind,
   type AutopilotProfile,
   type AutopilotTally,
+  AUTOPILOT_DONE_ACTIONS,
   AUTOPILOT_DONE_LIMIT,
+  AUTOPILOT_FINDING_LIMITS,
+  AUTOPILOT_GATE_VERDICTS,
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LESSON_ANSWERS,
   AUTOPILOT_LESSON_KINDS,
@@ -90,6 +100,7 @@ export {
   AUTOPILOT_VERDICTS,
   type AutopilotCeiling,
   type AutopilotDone,
+  type AutopilotDoneAction,
   type AutopilotFacts,
   type AutopilotGateKind,
   type AutopilotJudgment,

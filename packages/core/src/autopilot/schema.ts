@@ -5,12 +5,24 @@ import type { ReviewRating } from '../report/types.ts';
 import type { AutopilotModelGuess } from './model/schema.ts';
 import type { AutopilotModelHead } from './model/schema.ts';
 
-export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal';
+export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal' | 'failure';
+
+export const AUTOPILOT_DONE_ACTIONS = [
+  'approved',
+  'replied',
+  'merged',
+  'revised',
+  'retried',
+  'cancelled',
+] as const;
+
+export type AutopilotDoneAction = (typeof AUTOPILOT_DONE_ACTIONS)[number];
 
 export interface AutopilotDone {
   gateId: string;
   taskId: string;
   gate: AutopilotGateKind;
+  action: AutopilotDoneAction;
   title: string;
   reason: string;
   at: number;
@@ -39,6 +51,7 @@ export interface AutopilotFacts {
   heldPlan: boolean;
   escalatedReview: boolean;
   approvedByYou: boolean;
+  ready: boolean;
   waitedMinutes: number;
   presence: AutopilotPresence;
 }
@@ -60,7 +73,7 @@ export const AUTOPILOT_CEILINGS: Record<AutopilotLevel, AutopilotCeiling> = {
   ask_first: { risk: 'low', urgentRisk: 'low', scope: { phases: 2, files: 4 } },
   balanced: { risk: 'low', urgentRisk: 'medium', scope: { phases: 4, files: 10 } },
   most: { risk: 'medium', urgentRisk: 'high', scope: { phases: 6, files: 20 } },
-  everything: { risk: 'medium', urgentRisk: 'high', scope: { phases: 6, files: 20 } },
+  everything: { risk: 'high', urgentRisk: 'high', scope: { phases: Infinity, files: Infinity } },
 };
 
 export const AUTOPILOT_LIMITS = {
@@ -68,9 +81,18 @@ export const AUTOPILOT_LIMITS = {
   awayMinutes: 60,
 } as const;
 
-export const AUTOPILOT_VERDICTS = ['act', 'forward'] as const;
+export const AUTOPILOT_VERDICTS = ['act', 'forward', 'cancel'] as const;
 
 export type AutopilotVerdict = (typeof AUTOPILOT_VERDICTS)[number];
+
+export const AUTOPILOT_GATE_VERDICTS: Record<AutopilotGateKind, readonly AutopilotVerdict[]> = {
+  plan: ['act', 'forward'],
+  question: ['act', 'forward'],
+  review: ['act', 'forward'],
+  merge: ['act', 'forward'],
+  proposal: ['act', 'forward'],
+  failure: ['act', 'cancel', 'forward'],
+};
 
 export const AUTOPILOT_SUGGESTION_VERDICTS = ['accept', 'dismiss', 'forward'] as const;
 
@@ -327,6 +349,8 @@ export const AUTOPILOT_SCORED_KINDS = [
   'plan',
   'review',
   'merge',
+  'proposal',
+  'failure',
 ] as const satisfies readonly AutopilotDecisionKind[];
 
 export type AutopilotScoredKind = (typeof AUTOPILOT_SCORED_KINDS)[number];
@@ -364,6 +388,10 @@ export const AUTOPILOT_SCORE_LIMITS = {
 export const AUTOPILOT_COMBINE_LIMITS = {
   veto: 0.5,
   confidence: 0.5,
+} as const;
+
+export const AUTOPILOT_FINDING_LIMITS = {
+  fix: 0.5,
 } as const;
 
 export const AUTOPILOT_JUDGED_FAILURE_CAUSES: readonly GateCause[] = ['monitor', 'push_hook'];

@@ -21,6 +21,12 @@ function writeApproveAfterFix(state: ShinsaState, taskId: string, at: number, ap
 
 function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (gate.type === 'result') return 'Closed the task';
+  if (event.autopilot && gate.type === 'failure') {
+    const did = event.decision === 'reject' ? 'Cancelled' : 'Retried';
+    return `${did} for you by Autopilot: ${gate.title}`;
+  }
+  if (event.autopilot && event.decision === 'revise')
+    return `Asked for changes for you by Autopilot: ${gate.title}`;
   if (event.autopilot && gate.type === 'merge')
     return `Approved the merge for you by Autopilot: ${gate.title}`;
   if (event.autopilot && isAgentQuestion(gate)) return `Answered for you by Autopilot: ${gate.title}`;
@@ -78,7 +84,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   clearMergeEscalation(state, gate.id, event.at);
   clearSuggestedActions(state, gate.taskId, event.at);
   if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
-  if (event.autopilot && gate.type === 'review')
+  if (event.autopilot && event.decision === 'approve' && gate.type === 'review')
     updateTask(state, gate.taskId, event.at, { autopiloted: { at: event.at, reason: event.autopilot } });
   record(state, gate.taskId, event.at, {
     actor: event.autopilot ? 'shinsa' : 'you',

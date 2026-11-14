@@ -6,7 +6,10 @@ import {
   type AutopilotPolicy,
   HOUR_MS,
   MINUTE_MS,
+  EMPTY_AUTOPILOT_PROFILE,
   resolveAutopilotFacts,
+  resolveAutopilotFindingLimit,
+  resolveAutopilotLevel,
   resolveAutopilotLimits,
   resolveAutopilotPresence,
   type Task,
@@ -31,6 +34,7 @@ const FACTS: AutopilotFacts = {
   heldPlan: false,
   escalatedReview: false,
   approvedByYou: false,
+  ready: false,
   waitedMinutes: AUTOPILOT_LIMITS.awayMinutes,
   presence: AWAY,
 };
@@ -218,5 +222,117 @@ describe('when Autopilot may contact your team', () => {
     ],
   ] as const)('never when %s', (_case, facts, policy, reason) => {
     expect(escalate(facts, policy)).toEqual({ allowed: false, reason, setting: false });
+  });
+});
+
+const EVERYTHING: Partial<AutopilotPolicy> = { level: 'everything', autoMerge: 'approved' };
+
+const READY_FINDINGS = {
+  autopilotProfile: {
+    ...EMPTY_AUTOPILOT_PROFILE,
+    kinds: {
+      finding: {
+        tracks: {
+          ...EMPTY_AUTOPILOT_PROFILE.tracks,
+          model: { scored: 100, agreed: 95, weight: 100, agreedWeight: 95, baseWeight: 80, loss: 10 },
+        },
+        rate: { positive: 20, negative: 80 },
+      },
+    },
+  },
+};
+
+describe('the Everything level', () => {
+  test('widens a kind only once that kind is ready, and acts as Most things before', () => {
+    expect(resolveAutopilotLevel({ ...FACTS, ready: false }, { ...ON, level: 'everything' })).toBe('most');
+    expect(resolveAutopilotLevel({ ...FACTS, ready: true }, { ...ON, level: 'everything' })).toBe(
+      'everything'
+    );
+    expect(resolveAutopilotLevel({ ...FACTS, ready: true }, { ...ON, level: 'balanced' })).toBe('balanced');
+  });
+
+  test('approves a plan of any size for a ready kind', () => {
+    const large = { gate: 'plan' as const, scope: { phases: 8, files: 40 } };
+    expect(act(large, EVERYTHING)).toMatchObject({ allowed: false });
+    expect(act({ ...large, ready: true }, EVERYTHING)).toEqual({ allowed: true });
+    expect(act({ ...large, ready: true, heldPlan: true }, EVERYTHING)).toMatchObject({
+      allowed: false,
+      setting: true,
+    });
+  });
+
+  test('approves and merges high risk only with high confidence, and never what you approved', () => {
+    const risky = { urgent: false, presence: { ...AWAY, active: true } };
+    expect(act({ ...risky, gate: 'review' }, EVERYTHING)).toMatchObject({ allowed: false });
+    expect(act({ ...risky, gate: 'review', ready: true }, EVERYTHING)).toEqual({ allowed: true });
+    expect(act({ ...risky, gate: 'merge', ready: true }, EVERYTHING)).toEqual({ allowed: true });
+    expect(act({ ...risky, gate: 'merge', ready: true, confidence: 'medium' }, EVERYTHING)).toMatchObject({
+      allowed: false,
+    });
+    expect(act({ ...risky, gate: 'merge', ready: true, approvedByYou: true }, EVERYTHING)).toMatchObject({
+      allowed: false,
+      setting: true,
+    });
+    expect(act({ ...risky, gate: 'review', ready: true, escalatedReview: true }, EVERYTHING)).toMatchObject({
+      allowed: false,
+    });
+  });
+
+  test('gives your OK on any task once ready, under the Proposals switch', () => {
+    const yours = { gate: 'proposal' as const, watchdog: false };
+    expect(act(yours, EVERYTHING)).toEqual({
+      allowed: false,
+      reason: 'Below Everything, Autopilot gives your OK only on tasks a watchdog filed.',
+      setting: true,
+    });
+    expect(act({ ...yours, ready: true }, EVERYTHING)).toEqual({ allowed: true });
+    expect(act({ ...yours, ready: true }, { ...EVERYTHING, gates: ['watchdogTasks'] })).toMatchObject({
+      reason: 'Autopilot does not act on this kind of gate.',
+    });
+    expect(act({ gate: 'proposal', ready: true }, { ...EVERYTHING, gates: ['watchdogTasks'] })).toEqual({
+      allowed: true,
+    });
+  });
+
+  test('handles a failed step only at Everything, once ready, under the Failures switch', () => {
+    expect(act({ gate: 'failure', ready: true }, { level: 'most' })).toEqual({
+      allowed: false,
+      reason: 'Below Everything, failed steps wait for you.',
+      setting: true,
+    });
+    expect(act({ gate: 'failure' }, EVERYTHING)).toMatchObject({ allowed: false });
+    expect(act({ gate: 'failure', ready: true }, EVERYTHING)).toEqual({ allowed: true });
+    expect(act({ gate: 'failure', ready: true }, { ...EVERYTHING, gates: ['plans'] })).toMatchObject({
+      allowed: false,
+      setting: true,
+    });
+  });
+
+  test('judges review findings only at Everything, under the Findings switch, once findings are ready', () => {
+    const state = { autopilotProfile: EMPTY_AUTOPILOT_PROFILE };
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, enabled: false })).toMatchObject({
+      reason: 'Autopilot is off.',
+    });
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, gates: ['plans'] })).toMatchObject({
+      reason: 'Autopilot does not judge review findings.',
+    });
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, ON)).toMatchObject({
+      reason: 'Below Everything, review findings wait for you.',
+    });
+    expect(resolveAutopilotFindingLimit(state, { ...ON, ...EVERYTHING })).toEqual({
+      allowed: false,
+      reason: 'Autopilot does not know how you judge review findings well enough yet.',
+      setting: false,
+    });
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, ...EVERYTHING })).toEqual({ allowed: true });
+  });
+
+  test('reads whether the gate’s kind is ready from your profile', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = harness.task(taskId);
+    const ready = { ...harness.state, ...READY_FINDINGS };
+    expect(resolveAutopilotFacts(ready, task, 'plan', harness.now, harness.now).ready).toBe(false);
+    expect(resolveAutopilotFacts(ready, task, 'question', harness.now, harness.now).ready).toBe(false);
   });
 });

@@ -1,10 +1,10 @@
 import { Option } from 'effect';
 import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
 import { selectAutopilotEstimate } from '../autopilot/examples.ts';
+import { describeAutopilotFindingCall, selectAutopilotFindingCall } from '../autopilot/findings.ts';
 import { resolveLessonLimit } from '../autopilot/lessons.ts';
 import {
   isUrgentTask,
-  isWatchdogTask,
   resolveAutopilotFacts,
   resolveAutopilotLimits,
   resolveAutopilotSuggestionLimit,
@@ -12,6 +12,8 @@ import {
 import type { AutopilotModelGuess } from '../autopilot/model/schema.ts';
 import { selectJudgedGateKind } from '../autopilot/prompt.ts';
 import {
+  AUTOPILOT_COMBINE_LIMITS,
+  AUTOPILOT_GATE_VERDICTS,
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LIMITS,
   AUTOPILOT_SCORED_KINDS,
@@ -207,11 +209,16 @@ function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): 
   return block === null ? null : { reason: MERGE_BLOCK_TEXT[block], teaches: false, guesses };
 }
 
+export function syncAutopilotFailures(decider: Decider, before: ShinsaState) {
+  for (const gate of listOpenGates(decider.state)) {
+    if (gate.type === 'failure' && before.gates[gate.id] === undefined) askAutopilot(decider, gate);
+  }
+}
+
 export function askAutopilot(decider: Decider, gate: Gate) {
   if (!resolveAutopilotPolicy(decider.state.settings).enabled) return;
   const kind = Option.getOrNull(selectJudgedGateKind(gate));
   if (!kind) return;
-  if (kind === 'proposal' && !isWatchdogTask(decider.task(gate.taskId))) return;
   const refusal = resolveRefusal(decider, gate, kind);
   if (refusal === null) {
     requestJudgment(decider, gate.id);
@@ -245,12 +252,57 @@ function describeVeto(guess: AutopilotModelGuess) {
   return `From ${similar} decisions like this one, Autopilot puts the chance you would approve it at only ${share}%, so it waits for you.`;
 }
 
+function describeCancelVeto(guess: AutopilotModelGuess) {
+  const share = Math.round(guess.p * 100);
+  const similar = Math.round(guess.similar);
+  return `From ${similar} decisions like this one, Autopilot puts the chance you would retry it at ${share}%, so it does not cancel the task and it waits for you.`;
+}
+
+function isCancelVeto(guess: AutopilotModelGuess | null): guess is AutopilotModelGuess {
+  if (!guess || guess.confidence < AUTOPILOT_COMBINE_LIMITS.confidence) return false;
+  return guess.p >= AUTOPILOT_COMBINE_LIMITS.veto;
+}
+
+function resolveVerdict(kind: AutopilotGateKind, verdict: AutopilotVerdict): AutopilotVerdict {
+  return AUTOPILOT_GATE_VERDICTS[kind].includes(verdict) ? verdict : 'forward';
+}
+
+const CANCEL_REASON = 'Autopilot judged you would drop this task after the failure.';
+
+function cancelForYou(decider: Decider, gate: Gate, kind: AutopilotGateKind, reason: string) {
+  const estimate = selectGateEstimate(decider, gate, kind);
+  recordGuess(decider, gate, kind, 'cancel', estimate);
+  if (isCancelVeto(estimate)) {
+    forward(decider, gate.id, { reason: describeCancelVeto(estimate), teaches: true, guesses: true });
+    return;
+  }
+  answerGateForYou(decider, gate, 'reject', null, reason || CANCEL_REASON);
+}
+
+function answerReviewForYou(decider: Decider, gate: Gate, reason: string) {
+  const task = decider.task(gate.taskId);
+  const call = Option.getOrNull(selectAutopilotFindingCall(decider.state, task, gate, decider.context.now));
+  if (!call) {
+    approveReviewAhead(decider, gate, reason);
+    return;
+  }
+  const why = `${reason} ${describeAutopilotFindingCall(call)}`;
+  if (call.verdict === 'fix') answerGateForYou(decider, gate, 'revise', null, why, call.verdicts);
+  else approveReviewAhead(decider, gate, why, call.verdicts);
+}
+
+function retryForYou(decider: Decider, gate: Gate, reply: string | null, reason: string) {
+  const guidance = clip(reply, AUTOPILOT_JUDGMENT_LIMITS.reply);
+  answerGateForYou(decider, gate, guidance ? 'reply' : 'approve', guidance || null, reason);
+}
+
 export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'autopilot.judgment'>) {
   const found = selectJudgedGate(decider, command);
   if (!found) return;
   const { gate, kind } = found;
+  const verdict = resolveVerdict(kind, command.verdict);
   if (command.shadow) {
-    recordGuess(decider, gate, kind, command.verdict);
+    recordGuess(decider, gate, kind, verdict);
     return;
   }
   const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason);
@@ -259,10 +311,14 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
     : { reason: 'Autopilot is off.', teaches: false, guesses: true };
   if (refusal !== null) {
     forward(decider, gate.id, refusal);
-    if (refusal.guesses) recordGuess(decider, gate, kind, command.verdict);
+    if (refusal.guesses) recordGuess(decider, gate, kind, verdict);
     return;
   }
-  if (command.verdict === 'forward') {
+  if (verdict === 'cancel') {
+    cancelForYou(decider, gate, kind, reason);
+    return;
+  }
+  if (verdict === 'forward') {
     recordGuess(decider, gate, kind, 'forward');
     forward(decider, gate.id, {
       reason: reason || 'Autopilot judged this needs you.',
@@ -284,10 +340,13 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
       answerGateForYou(decider, gate, 'approve', null, why);
       return;
     case 'review':
-      approveReviewAhead(decider, gate, why);
+      answerReviewForYou(decider, gate, why);
       return;
     case 'merge':
       mergeForYou(decider, gate, why);
+      return;
+    case 'failure':
+      retryForYou(decider, gate, command.reply, why);
       return;
     case 'question': {
       const reply = clip(command.reply, AUTOPILOT_JUDGMENT_LIMITS.reply);

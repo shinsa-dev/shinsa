@@ -3,12 +3,12 @@ import type { Gate, GateType, Task, TaskSuggestion } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { describeAutopilotEstimate, listAutopilotExampleLines, selectAutopilotEstimate } from './examples.ts';
 import { listAutopilotLessonLines } from './lessons.ts';
-import { resolveAutopilotFacts } from './limits.ts';
+import { isAutopilotJudgedFailure, resolveAutopilotFacts } from './limits.ts';
 import { listAutopilotKindLines, listAutopilotSteeringLines } from './profile.ts';
 import {
+  AUTOPILOT_GATE_VERDICTS,
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_SUGGESTION_VERDICTS,
-  AUTOPILOT_VERDICTS,
   type AutopilotFacts,
   type AutopilotGateKind,
 } from './schema.ts';
@@ -16,12 +16,14 @@ import {
 export const AUTOPILOT_JUDGE_SYSTEM = [
   'You are Autopilot, the delegate of one developer who runs coding agents in Shinsa.',
   'Like a trusted employee, you handle what you are sure about and bring the rest to your boss.',
-  'You are asked about one point where the work waits for the developer: a plan, an agent’s question, a review, a merge, or an agent’s proposal on a task a watchdog filed.',
+  'You are asked about one point where the work waits for the developer: a plan, an agent’s question, a review, a merge, an agent’s proposal, or a step that failed.',
   'Shinsa has already checked its hard limits: you may act here, but you never have to.',
   'Act only when the work is clear, small and low risk, and the developer would almost surely decide the same.',
   'Bring it to the developer when the scope is unclear, the change is large, the reviewer had doubts, the question needs their taste or knowledge, or you are unsure.',
   'An urgent fix a watchdog found while the developer is away may merge, when the reviewer rated it high confidence.',
   'To answer an agent’s question, write the reply the developer would give, in plain words, in `reply`; otherwise leave `reply` empty.',
+  'On a failed step, `act` retries it: to retry with guidance for the agent, write it in `reply` as the developer would. `cancel` cancels the task: only when the developer would clearly drop it.',
+  'Answer only with a verdict the decision lists.',
   `Write \`reason\` as one plain sentence the developer reads later, at most ${AUTOPILOT_JUDGMENT_LIMITS.reason} characters.`,
   'Weigh what the developer taught you at earlier decisions like this one: do what they approved, bring what they changed.',
   'Weigh their personal model’s estimate and the earlier decisions most like this one: what they did there, and their words, is what they would do here.',
@@ -34,7 +36,8 @@ const GATE_NAME: Record<AutopilotGateKind, string> = {
   question: 'Answer the agent’s question',
   review: 'Approve the reviewed change',
   merge: 'Merge the pull request',
-  proposal: 'Give your OK on the agent’s proposal for a task a watchdog filed',
+  proposal: 'Give your OK on the agent’s proposal',
+  failure: 'Retry the failed step or cancel the task',
 };
 
 function clip(text: string, limit: number) {
@@ -102,7 +105,7 @@ function describeShadow(shadow: boolean) {
 }
 
 export const AUTOPILOT_SHADOW_NOTE =
-  'Autopilot will not act here: this point is the developer’s. Guess what they will do: `act` if they approve it as it is, `forward` if they change or reject it.';
+  'Autopilot will not act here: this point is the developer’s. Guess what they will do: `act` if they approve it as it is or retry a failed step, `forward` if they change, reject or cancel it.';
 
 export function resolveAutopilotJudgePrompt(
   task: Task,
@@ -115,6 +118,7 @@ export function resolveAutopilotJudgePrompt(
   const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
   return [
     `Decision: ${GATE_NAME[facts.gate]}`,
+    `Verdicts: ${AUTOPILOT_GATE_VERDICTS[facts.gate].join(', ')}`,
     '',
     `Task: ${task.title}`,
     `Request: ${clip(task.request, limit)}`,
@@ -139,9 +143,11 @@ const JUDGED_GATES: Partial<Record<GateType, AutopilotGateKind>> = {
   review: 'review',
   merge: 'merge',
   proposal: 'proposal',
+  failure: 'failure',
 };
 
 export function selectJudgedGateKind(gate: Gate): Option.Option<AutopilotGateKind> {
+  if (gate.type === 'failure' && !isAutopilotJudgedFailure(gate)) return Option.none();
   return Option.fromNullishOr(JUDGED_GATES[gate.type]);
 }
 
@@ -166,7 +172,7 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
     return {
       system: AUTOPILOT_JUDGE_SYSTEM,
       prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, history, shadow),
-      verdicts: AUTOPILOT_VERDICTS,
+      verdicts: AUTOPILOT_GATE_VERDICTS[kind],
     };
   });
 }

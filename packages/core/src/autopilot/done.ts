@@ -2,7 +2,19 @@ import { Option } from 'effect';
 import type { Gate } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { selectJudgedGateKind } from './prompt.ts';
-import { AUTOPILOT_DONE_LIMIT, type AutopilotDone } from './schema.ts';
+import {
+  AUTOPILOT_DONE_LIMIT,
+  type AutopilotDone,
+  type AutopilotDoneAction,
+  type AutopilotGateKind,
+} from './schema.ts';
+
+function resolveDoneAction(gate: Gate, kind: AutopilotGateKind): AutopilotDoneAction {
+  if (kind === 'failure') return gate.decision === 'reject' ? 'cancelled' : 'retried';
+  if (gate.decision === 'revise') return 'revised';
+  if (kind === 'merge') return 'merged';
+  return kind === 'question' ? 'replied' : 'approved';
+}
 
 export function isAutopilotDoneSeeable(gate: Gate) {
   return gate.status === 'answered' && gate.autopilotAnswer !== undefined && gate.autopilotSeen !== true;
@@ -18,6 +30,7 @@ export function listAutopilotDone(state: ShinsaState): AutopilotDone[] {
       gateId: gate.id,
       taskId: task.id,
       gate: kind,
+      action: resolveDoneAction(gate, kind),
       title: gate.title,
       reason: gate.autopilotAnswer ?? '',
       at: gate.answeredAt ?? gate.openedAt,

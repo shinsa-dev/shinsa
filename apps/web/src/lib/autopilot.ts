@@ -594,6 +594,7 @@ const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
   review: 'Autopilot approved the review for you.',
   merge: 'Autopilot started the merge for you.',
   proposal: 'Autopilot gave your OK on a watchdog task’s fix.',
+  failure: 'Autopilot handled a failed step for you.',
 };
 
 const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
@@ -602,6 +603,7 @@ const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone
   review: { icon: 'IconCheckCircle2', tone: 'blue' },
   merge: { icon: 'IconMerged', tone: 'green' },
   proposal: { icon: 'IconCheckCircle2', tone: 'purple' },
+  failure: { icon: 'IconCheckCircle2', tone: 'orange' },
 };
 
 export interface DoneForYouRow {
