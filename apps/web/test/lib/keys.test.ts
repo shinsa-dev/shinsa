@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { isCancelKey, isSubmitKey } from '@/lib/keys.ts';
+import { isCancelKey, isSubmitKey, isTyping } from '@/lib/keys.ts';
 
 function press(key: string, shiftKey = false, isComposing = false) {
   return { key, shiftKey, nativeEvent: { isComposing } };
@@ -34,5 +34,18 @@ describe('isCancelKey', () => {
 
   it('ignores other keys', () => {
     expect(isCancelKey(press('Enter'))).toBe(false);
+  });
+});
+
+describe('isTyping', () => {
+  it('is true in a text field or editable element and false elsewhere', () => {
+    const editable = document.createElement('div');
+    editable.contentEditable = 'true';
+    expect(isTyping(document.createElement('input'))).toBe(true);
+    expect(isTyping(document.createElement('textarea'))).toBe(true);
+    expect(isTyping(document.createElement('select'))).toBe(true);
+    expect(isTyping(editable)).toBe(editable.isContentEditable);
+    expect(isTyping(document.createElement('button'))).toBe(false);
+    expect(isTyping(null)).toBe(false);
   });
 });
