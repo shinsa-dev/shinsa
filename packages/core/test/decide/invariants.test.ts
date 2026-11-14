@@ -1643,9 +1643,13 @@ function simulate(
 
 function listComposedRoundMarks(state: ShinsaState) {
   return Object.values(state.tasks).flatMap((task) => {
-    if (resolveCurrentRound(task).number === 1) return [];
+    const closed = task.activity.some((entry) => entry.text.startsWith('Closed round '))
+      ? 'later round closed back to the merge'
+      : null;
+    if (resolveCurrentRound(task).number === 1) return [closed];
     const changes = task.shapeChanges ?? [];
     return [
+      closed,
       changes.some((change) => change.by === 'agent') ? 'composed later round' : null,
       changes.some((change) => change.by === 'you') ? 'later round vetoed' : null,
       changes.some((change) => change.by === 'agent') && task.pullRequest?.state === 'open'
@@ -2041,6 +2045,7 @@ describe('decide under random command sequences', () => {
       expect([...reached].sort()).toEqual([
         'composed later round',
         'composed onto an open pull request',
+        'later round closed back to the merge',
         'later round vetoed',
       ]);
     },

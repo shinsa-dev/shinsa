@@ -48,7 +48,7 @@ function toMergeStep(step: MergeStep): MergeStep {
 
 function isCarriedDue(task: MergeStepSource, step: CarriedMergeStep) {
   const status = resolveTaskRounds(task).find((round) => round.number === step.round)?.status;
-  if (step.when === 'pre_merge') return status === 'shipped';
+  if (step.when === 'pre_merge') return status === 'shipped' || status === 'active';
   return status === 'merged' || status === 'finished';
 }
 

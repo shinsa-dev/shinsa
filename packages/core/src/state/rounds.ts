@@ -8,6 +8,7 @@ import {
   type RoundOutcome,
   type RoundPullRequest,
   resolveCurrentRound,
+  resolveRoundWork,
   resolveSettledStatus,
   resolveTaskPipeline,
   resolveTaskRounds,
@@ -16,7 +17,7 @@ import {
   toRoundPullRequest,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
-import { listCarriedMergeSteps } from '../report/merge-steps.ts';
+import { listCarriedMergeSteps, resolveMergeStepKey } from '../report/merge-steps.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
 
@@ -84,7 +85,7 @@ function endRound(task: Task, round: Round, status: Round['status'], at: number)
     pullRequest: task.pullRequest
       ? keepMergedAt(round.pullRequest, toRoundPullRequest(task.pullRequest))
       : round.pullRequest,
-    outcome: resolveRoundOutcome(task),
+    outcome: round.outcome ?? resolveRoundOutcome(task),
   };
 }
 
@@ -208,7 +209,8 @@ function applyRoundStarted(state: ShinsaState, event: EventOf<'round.started'>) 
   };
   const updated = rounds.map((round) => {
     if (round.number === event.number) return started;
-    return round.status === 'active' ? endRound(task, round, 'shipped', event.at) : round;
+    if (round.status !== 'active') return round;
+    return { ...endRound(task, round, 'shipped', event.at), work: resolveRoundWork(task) };
   });
   writeRounds(state, task, event.at, updated, patch);
   record(state, task.id, event.at, {
@@ -259,7 +261,7 @@ function applyRoundPullRequestMerged(state: ShinsaState, event: EventOf<'round.p
   const rounds = resolveTaskRounds(task).map((round): Round => {
     if (round.number === current) return { ...round, branch: event.branch, base: null, pullRequest: null };
     if (round.status !== 'shipped' || round.pullRequest?.number !== event.pullRequest) return round;
-    return { ...round, status: 'merged', pullRequest: markMerged(round.pullRequest, event.at) };
+    return { ...round, status: 'merged', pullRequest: markMerged(round.pullRequest, event.at), work: null };
   });
   const patch = resolveBranchPatch(task, choice, needsWorktree(resolveTaskPipeline(task)), event.at);
   writeRounds(state, task, event.at, rounds, patch);
@@ -270,6 +272,56 @@ function applyRoundPullRequestMerged(state: ShinsaState, event: EventOf<'round.p
   });
 }
 
+function resolveClosedRoundWork(task: Task, to: Round) {
+  if (!to.work) return {};
+  const ticks = new Map(
+    (task.carriedMergeSteps ?? []).map((step) => [resolveMergeStepKey(step), step.done] as const)
+  );
+  const own = new Set(
+    (task.carriedMergeSteps ?? [])
+      .filter((step) => step.round === to.number)
+      .map((step) => resolveMergeStepKey(step))
+  );
+  const earlierDone = (to.work.mergeStepsDone ?? []).filter((key) => !own.has(key));
+  const ownDone = [...own].filter((key) => ticks.get(key));
+  return {
+    ...to.work,
+    mergeStepsDone: [...earlierDone, ...ownDone],
+    carriedMergeSteps: (to.work.carriedMergeSteps ?? []).map((step) => {
+      const done = ticks.get(resolveMergeStepKey(step));
+      return done === undefined ? step : { ...step, done };
+    }),
+  };
+}
+
+function applyRoundClosed(state: ShinsaState, event: EventOf<'round.closed'>) {
+  const task = state.tasks[event.taskId];
+  const rounds = task ? resolveTaskRounds(task) : [];
+  const to = rounds.find((round) => round.number === event.to);
+  if (!task || !to) return;
+  const choice = { branch: to.branch, base: to.base, onto: to.pullRequest?.number ?? null };
+  const updated = rounds.map((round): Round => {
+    if (round.number === event.number) return endRound(task, round, 'finished', event.at);
+    if (round.number === event.to) return { ...round, status: 'active', endedAt: null, work: null };
+    return round;
+  });
+  writeRounds(state, task, event.at, updated, {
+    ...resolveClosedRoundWork(task, to),
+    pipeline: [...to.pipeline],
+    result: null,
+    proposal: null,
+    shapeChanges: [],
+    ...resolveBranchPatch(task, choice, needsWorktree(to.pipeline), event.at),
+  });
+  record(state, task.id, event.at, {
+    actor: 'you',
+    kind: 'round',
+    text: choice.onto
+      ? `Closed round ${event.number}, back to the merge of #${choice.onto}`
+      : `Closed round ${event.number}, back to round ${event.to}`,
+  });
+}
+
 function resolveSettledRound(task: Task, round: Round, stage: TaskStage, at: number): Round {
   if (round.status === 'active') return endRound(task, round, resolveSettledStatus(stage), at);
   if (round.status === 'shipped' && stage === 'merged') {
@@ -277,6 +329,7 @@ function resolveSettledRound(task: Task, round: Round, stage: TaskStage, at: num
       ...round,
       status: 'merged',
       pullRequest: round.pullRequest ? markMerged(round.pullRequest, at) : null,
+      work: null,
     };
   }
   if ((round.status === 'shipped' && stage === 'cancelled') || round.status === 'waiting') {
@@ -339,6 +392,7 @@ export function recordRoundPullRequest(state: ShinsaState, taskId: string, at: n
         ...round,
         status: merged ? 'merged' : round.status,
         pullRequest: keepMergedAt(round.pullRequest, toRoundPullRequest(pullRequest)),
+        work: merged ? null : round.work,
       };
     })
   );
@@ -440,6 +494,7 @@ type RoundEvent = Extract<
       | 'round.pull_request_merged'
       | 'round.updated'
       | 'round.removed'
+      | 'round.closed'
       | 'task.retitled';
   }
 >;
@@ -463,6 +518,9 @@ export function applyRoundEvent(state: ShinsaState, event: RoundEvent) {
       return;
     case 'round.removed':
       applyRoundRemoved(state, event);
+      return;
+    case 'round.closed':
+      applyRoundClosed(state, event);
       return;
     case 'task.retitled':
       applyTaskRetitled(state, event);

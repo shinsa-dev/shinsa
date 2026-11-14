@@ -50,6 +50,7 @@ import type { Decider } from './decider.ts';
 import { answerIteration, suggestActions } from './iterations.ts';
 import { startLeadPlan, startLeadTurn } from './leads.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
+import { closeLaterRound } from './rounds.ts';
 import { findCurrentRun } from './runs.ts';
 import { requestWorkspace } from './workspaces.ts';
 
@@ -376,7 +377,7 @@ function finishInquiry(
     requestYourOk(decider, taskId, runId, proposal, recommend ?? 'go_on');
     return;
   }
-  if (pipeline.includes('plan') && recommend === 'close' && !hasOpenPullRequest(task)) {
+  if (pipeline.includes('plan') && recommend === 'close') {
     reshapeTask(decider, taskId, [step, 'your_ok', ...pipeline.slice(1)], 'agent', NOTHING_TO_CHANGE);
     requestYourOk(decider, taskId, runId, null, 'close');
     return;
@@ -399,6 +400,7 @@ function openResultGate(decider: Decider, taskId: string, step: InquiryStep) {
 }
 
 export function closeResult(decider: Decider, taskId: string) {
+  if (closeLaterRound(decider, taskId)) return;
   settleTask(decider, taskId, 'done', 'closed by you');
 }
 
@@ -527,6 +529,7 @@ export function answerProposal(decider: Decider, gate: Gate, decision: GateDecis
   if (decision === 'reject') {
     decider.emit({ type: 'task.change_declined', taskId: task.id });
     reshapeTask(decider, task.id, [step], 'you', DECLINED_REASON[step]);
+    if (closeLaterRound(decider, task.id)) return;
     settleTask(decider, task.id, 'done', DECLINED_REASON[step]);
     return;
   }

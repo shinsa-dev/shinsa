@@ -36,12 +36,13 @@ import { describePlanCard } from '@/lib/tasks/backlog.ts';
 import {
   type AnswerExtras,
   replyToGate,
+  replyToTaskGate,
   resolveApprovalReply,
   resolvePlanReply,
   resolveRetryLabel,
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
-import { type ChangeReply, describeChangeGate } from '@/lib/tasks/shapes.ts';
+import { type ChangeReply, describeChangeGate, resolveCloseLabel } from '@/lib/tasks/shapes.ts';
 import { countSplitTasks, KEEP_ONE_TASK_MESSAGE } from '@/lib/tasks/split.ts';
 import { resolveGateGlyph } from '@/lib/tasks/status.ts';
 import { hasReview, type TaskTab } from '@/lib/tasks/tabs.ts';
@@ -465,7 +466,7 @@ function listChangeCommands(task: Task, gate: Gate): Command[] {
       hint: change.title,
       icon: resolveGateGlyph(gate).icon,
       keywords: CHANGE_KEYWORDS[change.primary.reply],
-      run: () => void replyToGate(gate, change.primary.reply),
+      run: () => void replyToTaskGate(task, gate, change.primary.reply),
     },
     {
       kind: 'run',
@@ -473,7 +474,7 @@ function listChangeCommands(task: Task, gate: Gate): Command[] {
       label: change.quiet.label,
       icon: 'IconCheckCircle2',
       keywords: CHANGE_KEYWORDS[change.quiet.reply],
-      run: () => void replyToGate(gate, change.quiet.reply),
+      run: () => void replyToTaskGate(task, gate, change.quiet.reply),
     },
   ];
 }
@@ -530,16 +531,16 @@ function listOperationCommands(gate: Gate): Command[] {
   ];
 }
 
-function listResultCommands(gate: Gate): Command[] {
+function listResultCommands(task: Task, gate: Gate): Command[] {
   return [
     {
       kind: 'run',
       id: `${resolveGateId(gate)}.close`,
-      label: 'Close',
+      label: resolveCloseLabel(task),
       hint: gate.title,
       icon: 'IconCheckCircle2',
       keywords: ['close', 'done', 'read', 'answered', 'answer', 'report', 'diagnosis'],
-      run: () => void replyToGate(gate, 'closeResult'),
+      run: () => void replyToTaskGate(task, gate, 'closeResult'),
     },
   ];
 }
@@ -571,7 +572,7 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
     case 'post_merge':
       return listPostMergeCommands(task, gate);
     case 'result':
-      return listResultCommands(gate);
+      return listResultCommands(task, gate);
   }
 }
 

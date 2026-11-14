@@ -71,12 +71,18 @@ import {
   type GateReplier,
   type GateReply,
   replyToGate,
+  replyToTaskGate,
   resolvePlanReply,
   resolveRetryLabel,
   resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
 import { describeMergeable, describePullRequestChecks } from '@/lib/tasks/pull-request.ts';
-import { type ChangeReply, describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
+import {
+  type ChangeReply,
+  describeChangeGate,
+  resolveCloseLabel,
+  resolvePlannedOperation,
+} from '@/lib/tasks/shapes.ts';
 import { KEEP_ONE_TASK_MESSAGE, listSplitParts } from '@/lib/tasks/split.ts';
 
 function PlannedOperation({ task }: { task: Task }) {
@@ -318,7 +324,7 @@ export function ChangeCard({
   state,
   task,
   gate,
-  onReply = (key) => replyToGate(gate, key),
+  onReply = (key) => replyToTaskGate(task, gate, key),
 }: {
   state: ShinsaState;
   task: Task;
@@ -544,7 +550,7 @@ function GateCard({
   }
 }
 
-function CloseButton({ onReply }: { onReply: GateReplier }) {
+function CloseButton({ label, onReply }: { label: string; onReply: GateReplier }) {
   const { busy, run } = useBusy<'closeResult'>();
   return (
     <Button
@@ -552,7 +558,7 @@ function CloseButton({ onReply }: { onReply: GateReplier }) {
       loading={busy === 'closeResult'}
       onClick={() => void run('closeResult', () => onReply('closeResult'))}
     >
-      Close
+      {label}
     </Button>
   );
 }
@@ -562,7 +568,7 @@ export function ResultCard({
   task,
   gate,
   onOpen,
-  onReply = (key) => (gate ? replyToGate(gate, key) : Promise.resolve(false)),
+  onReply = (key) => (gate ? replyToTaskGate(task, gate, key) : Promise.resolve(false)),
 }: {
   state: ShinsaState;
   task: Task;
@@ -583,7 +589,7 @@ export function ResultCard({
         gate && (
           <>
             <SuggestedReplies state={state} task={task} />
-            <CloseButton onReply={onReply} />
+            <CloseButton label={resolveCloseLabel(task)} onReply={onReply} />
           </>
         )
       }

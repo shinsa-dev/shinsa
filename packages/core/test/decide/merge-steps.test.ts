@@ -26,8 +26,11 @@ import {
   pullRequest,
   pushed,
   REPLY,
+  reachReviewGate,
   reachShipping,
   readyWorktree,
+  resolveReply,
+  verifySetup,
 } from '../harness.ts';
 
 const SECRET: MergeStep = {
@@ -137,6 +140,26 @@ function tick(harness: Harness, taskId: string, step: MergeStep, done = true, on
     { type: 'merge_step.tick', taskId, key: resolveMergeStepKey(step), done },
     { onBehalf }
   );
+}
+
+function closeLookingRound(harness: Harness, taskId: string) {
+  verifySetup(harness, taskId);
+  if (harness.task(taskId).stage === 'triage') readyWorktree(harness, taskId);
+  const runId = harness.activeRun(taskId).id;
+  harness.send({
+    type: 'agent.deliver',
+    runId,
+    step: 'investigate',
+    body: 'Nothing to fix.',
+    recommend: 'close',
+    ...resolveReply(harness, runId),
+  });
+  harness.send({
+    type: 'gate.answer',
+    gateId: harness.openGate(taskId).id,
+    decision: 'reject',
+    response: null,
+  });
 }
 
 describe('the steps around the merge', () => {
@@ -296,6 +319,78 @@ describe('the steps around the merge', () => {
       code: 'task_settled',
       message: 'This task is finished.',
     });
+  });
+
+  test('a step ticked while a later round looked, then closed, stays ticked for the merge', () => {
+    const { harness, taskId } = reachMergeGate();
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Why is the export slow?',
+      kind: 'new_round',
+      title: 'Why the export is slow',
+      shape: 'fix',
+    });
+    tick(harness, taskId, SECRET);
+    closeLookingRound(harness, taskId);
+    expect(listOpenMergeSteps(harness.task(taskId), 'pre_merge')).toEqual([]);
+    expect(listMergeSteps(harness.task(taskId)).map((step) => [step.title, step.done])).toEqual([
+      ['Set STRIPE_WEBHOOK_SECRET', true],
+      ['Run the migration', false],
+    ]);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    expect(harness.openGate(taskId).type).toBe('merge');
+    approve(harness, taskId);
+    expect(harness.task(taskId).stageReason).toBe('merging');
+  });
+
+  test('a step ticked before a later round started stays ticked once that round closes', () => {
+    const { harness, taskId } = reachMergeGate();
+    tick(harness, taskId, SECRET);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Why is the export slow?',
+      kind: 'new_round',
+      title: 'Why the export is slow',
+      shape: 'fix',
+    });
+    closeLookingRound(harness, taskId);
+    expect(listMergeSteps(harness.task(taskId)).map((step) => [step.title, step.done])).toEqual([
+      ['Set STRIPE_WEBHOOK_SECRET', true],
+      ['Run the migration', false],
+    ]);
+  });
+
+  test('a step carried from an earlier merge and ticked while a later round looked stays ticked once it closes', () => {
+    const { harness, taskId } = reachMergeGate([MIGRATION]);
+    approve(harness, taskId);
+    merge(harness, taskId);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Add a CSV export',
+      kind: 'new_round',
+      shape: 'change',
+      title: 'CSV',
+    });
+    verifySetup(harness, taskId);
+    readyWorktree(harness, taskId);
+    reachReviewGate(harness, taskId);
+    approveGate(harness, taskId, 'review');
+    pushed(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ number: 43 }) });
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Why is the export slow?',
+      kind: 'new_round',
+      title: 'Why the export is slow',
+      shape: 'fix',
+    });
+    tick(harness, taskId, MIGRATION);
+    closeLookingRound(harness, taskId);
+    expect(harness.task(taskId).carriedMergeSteps).toEqual([{ ...MIGRATION, round: 1, done: true }]);
   });
 
   test('a merge gate that opens while steps after an earlier merge wait leads over them', () => {
@@ -482,5 +577,29 @@ describe('the steps around the merge', () => {
     expect(resolveTaskPipeline(harness.task(taskId))).toContain('pre_merge');
     tick(harness, taskId, SECRET);
     expect(listOpenMergeSteps(harness.task(taskId), 'pre_merge')).toEqual([]);
+  });
+
+  test('steps before the merge stay due once a later round that found nothing closes back to the merge', () => {
+    const { harness, taskId } = reachMergeGate([SECRET]);
+    harness.send({ type: 'task.message', taskId, text: 'Why is it slow?', kind: 'new_round', shape: 'fix' });
+    readyWorktree(harness, taskId);
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'investigate',
+      body: 'Nothing to fix.',
+      recommend: 'close',
+    });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'reject',
+      response: null,
+    });
+    const steps = listMergeSteps(harness.task(taskId));
+    expect(steps.map((step) => [step.title, step.round, step.due])).toEqual([
+      ['Set STRIPE_WEBHOOK_SECRET', 1, true],
+    ]);
+    expect(listOpenMergeSteps(harness.task(taskId), 'pre_merge')).toHaveLength(1);
   });
 });

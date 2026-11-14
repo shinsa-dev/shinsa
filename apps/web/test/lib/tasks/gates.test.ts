@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { replyToGate, resolveApprovalReply, resolvePlanReply } from '@/lib/tasks/gates.ts';
+import {
+  replyToGate,
+  replyToTaskGate,
+  resolveApprovalReply,
+  resolvePlanReply,
+  resolveReplyDone,
+} from '@/lib/tasks/gates.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createRoundOntoOpenPullRequest } from '../../support/rounds.ts';
 import { createGate, createTask } from '../../support/state.ts';
 
 describe('resolvePlanReply', () => {
@@ -65,6 +72,23 @@ describe('replyToGate', () => {
       [
         { type: 'gate.answer', gateId: 'g', decision: 'revise', response: null },
         'Sent. The agent works on what you kept.',
+      ],
+    ]);
+  });
+
+  it('says a later round’s close brings back the earlier merge, and the task is done otherwise', async () => {
+    const later = createTask({ id: 't', rounds: createRoundOntoOpenPullRequest(276) });
+    const alone = createTask({ id: 't' });
+    expect(resolveReplyDone(later, 'closeProposal')).toBe('Round closed. Back to #276.');
+    expect(resolveReplyDone(later, 'keepAsIs')).toBe('Round closed. Back to #276.');
+    expect(resolveReplyDone(later, 'closeResult')).toBe('Round closed. Back to #276.');
+    expect(resolveReplyDone(later, 'makeChange')).toBe('Approved. Planning the change now.');
+    expect(resolveReplyDone(alone, 'closeProposal')).toBe('Closed. The task is done.');
+    await replyToTaskGate(later, createGate({ id: 'g', taskId: 't', type: 'proposal' }), 'closeProposal');
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'gate.answer', gateId: 'g', decision: 'reject', response: null },
+        'Round closed. Back to #276.',
       ],
     ]);
   });
