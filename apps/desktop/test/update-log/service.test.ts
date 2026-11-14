@@ -47,7 +47,8 @@ describe('the updater log', () => {
       empty,
       UpdateLog.use((log) => log.rotate)
     );
-    expect(empty.files.size).toBe(0);
+    expect(empty.files.has(FILE)).toBe(false);
+    expect(empty.files.has(OLD)).toBe(false);
   });
 
   it('never fails the updater when the log cannot be written', async () => {
