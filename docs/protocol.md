@@ -294,6 +294,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `approveAfterFix?` | boolean | you asked for changes with Fix N findings and approve (`gate.answered` with `thenApprove`): the next review gate that opens without an escalation is approved at once (`ahead`); written by every review answer, false in a new round |
+| `mergeAhead?` | boolean | you chose Approve and merge (`gate.answered` with `thenMerge`): once the pull request is ready, its merge gate is approved at once (`ahead`), or at the last tick of a step before the merge; written by every review answer, false once the merge gate is answered, after `task.merge_gate_kept` and in a new round |
 | `reviewRatings?` | `ReviewRatings` \| null | the last agent review's `confidence` and `risk` (`review.reported`'s `ratings`); a new round clears them |
 | `priorityOnBehalf?` | boolean | the priority was last set on your behalf by an agent (`task.prioritized` or `task.created` with `onBehalf`); Autopilot then treats the task as not urgent |
 | `autopiloted?` | `{ at, reason }` \| null | Autopilot approved this round's review for you (`gate.answered` with `autopilot`), why; cleared by the next review gate or a new round. Only such a change merges for you; a follow-up Autopilot sent (`gate.answered` `revise` with `autopilot`) never sets it |
@@ -905,9 +906,10 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `watchdog.stop` | stops a watchdog, and its check if one runs | `watchdogs stop` | agent |
 | `watchdog.connect` | gives a watchdog that waits for a source its server (`server`, `data`), adds it to the project's sources for the repository, and starts its window | `watchdogs connect` | agent |
 | `watch_source.write`, `watch_source.remove` | adds, changes or removes an integration the project uses (`server`, `data`, `repoIds`); at most 20 (`too_many_sources`) | `sources write`, `sources remove` | agent |
+| `task.keep_merge_gate` | undoes Approve and merge (`task.merge_gate_kept`): the merge gate waits for you again; refused for a finished task (`task_settled`) or one that already waits (`merge_gate_kept`) | `merges keep-gate` | **human** |
 | `task.complete` | marks it done without merging, and stops its watchdogs; sent for you, refused while one watches or waits for a source (`task_open`) | `tasks done` | agent |
 | `task.bind_account` | binds it to an account, or any | `tasks bind` | agent |
-| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); at a review gate, `revise` may carry `thenApprove: true`, which approves the next review that opens without an escalation by itself (`then_approve_invalid`, `then_approve_conflict`); approving a merge gate needs every step before the merge ticked, on every task of its bundle too (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
+| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); at a review gate, `revise` may carry `thenApprove: true`, which approves the next review that opens without an escalation by itself (`then_approve_invalid`, `then_approve_conflict`), and `approve`, or `revise` with `thenApprove`, may carry `thenMerge: true`, which merges once the pull request is ready (`then_merge_invalid`, `then_merge_conflict`); approving a merge gate needs every step before the merge ticked, on every task of its bundle too (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
 | `merge_step.tick` | ticks or unticks a step around the merge (`key`, `done`); a step that is not due is refused (`merge_step_early`: one after the merge before its pull request merged, one before the merge once it merged), a step the task does not have is refused (`merge_step_not_found`), and a closed task's not at all (`task_settled`); ticking the last open step after the merge withdraws the Post-merge gate | `merges tick [--undo]` | **human** |
 | `suggestion.accept` | adds a suggested task, optionally waiting on this one (`waitsOnThis`), bundled with it (`stackOnThis`, stacked on this task) or in the backlog (`backlog`) | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
@@ -1186,6 +1188,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.overlapped` | the task and another open one (`otherTaskId`) both change `paths`, none of them recorded before; adds them to `overlaps` and its `untold` |
 | `task.overlaps_told` | a steer or a new Agent run's prompt named the untold overlaps; clears every `untold` |
 | `task.edits_committed` | Shinsa committed your edits before a push or the checks; clears `editedPaths` |
+| `task.merge_gate_kept` | you kept the merge gate: `mergeAhead` is off |
 | `task.edits_approved` | `gate`: the review or merge you approved with uncommitted edits (`approvedEdits`), or null once the checks or CI it waited for passed |
 | `plan.proposed`, `plan.answered`, `plan.approved` | a plan version was proposed; you answered it; approved |
 | `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`, and the last phase's `walkthrough`) |
@@ -1213,7 +1216,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `evidence.attached` | evidence was attached (`checkId` on a check's output or a linked check; `replaces`: the ids of the pieces it replaced, which get `replacedBy`) |
 | `evidence.removed` | an agent removed evidence that no longer applies (`ids`, `reason`, `runId`; each piece gets `removedAt` and `removedReason`) |
 | `evidence.uploaded` | pieces were uploaded to GitHub for the pull request description (`taskId`, `uploads`; each piece gets `uploadUrl`) |
-| `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `ahead` when that approval was made for you, `autopilot` with the reason when Autopilot made it, a `revise` with `autopilot` being its follow-up in `response`), withdrawn, or replaced by your message |
+| `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered (`thenApprove` when you asked to approve after the fix, `thenMerge` when you asked to merge once ready, `ahead` when that approval or merge was made for you, `autopilot` with the reason when Autopilot made it, a `revise` with `autopilot` being its follow-up in `response`), withdrawn, or replaced by your message |
 | `autopilot.scheduled` | an open merge gate's next Autopilot check was set or cleared (`gateId`, `due` or null) |
 | `autopilot.judging` | Autopilot asked for a judgment on a gate (`gateId`; `followUpOnly`, why it may not approve, when it may only follow up) |
 | `autopilot.forwarded` | Autopilot brought a gate to you (`gateId`, `reason`, `teaches`) |
@@ -1464,7 +1467,7 @@ offers nothing an engine cannot do (`docs/engine.md` → Remote access, What eac
 | `version` | The engine's build, `0.0.0` in development (`DEVELOPMENT_VERSION`) |
 | `protocol` | `ENGINE_PROTOCOL`, raised only when an older page and this engine cannot talk at all (a changed state shape) |
 | `commands` | Every user command type it parses, `USER_COMMAND_TYPES` itself, so a new command is announced the moment it exists |
-| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `message.line_comments`, `changelog`, `remote.terminals`, `attention` and `worktree-root` today) that are not a command, such as a route or a setting an older engine ignores |
+| `features` | The named capabilities in `ENGINE_FEATURES` (`task.share`, `feedback`, `teams`, `review.approve_after_fix`, `review.approve_and_merge`, `message.line_comments`, `changelog`, `remote.terminals`, `attention` and `worktree-root` today) that are not a command, such as a route or a setting an older engine ignores |
 
 `ENGINE_BASELINE_COMMANDS` is frozen: the commands every engine has had since before the `engine` message, which a page
 sends to any engine, one that never announced included (`resolveEngineCommands(null)`). A command added since is

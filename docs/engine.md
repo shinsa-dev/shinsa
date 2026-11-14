@@ -2322,6 +2322,21 @@ checks it ran.
   the fix, as you asked". An escalated review, or a failure gate when checks run out of fixes, still stops for you.
   Every later answer at a review gate writes the flag again (on only for another Fix N findings and approve), and a
   new round clears it. The web shows the chevron only on an engine with `review.approve_after_fix`.
+- Approve and merge, from the Approve button's chevron, is `approve` with `thenMerge: true`; Fix N findings, approve
+  and merge is `revise` with `thenApprove` and `thenMerge` (refused at any other gate, `then_merge_invalid`, or with
+  any other decision, `then_merge_conflict`). It is your one decision for both gates: the `gate.answered` fold sets
+  `task.mergeAhead`, and the review approves (now, or after the fix as above). When the pull request is ready, CI
+  green, no conflict and no unread comment, `openMergeGate` opens the merge gate as always and `mergeOnceReady`
+  answers it `approve` at once (`approveMergeAhead`, `gate.answered` with `ahead: true`), then merges through the
+  same `approveMerge` path your click takes, so a merge queue, edits that wait for CI and a bundle behave the same.
+  The activity says "Merged once ready, as you asked". Steps before the merge you must tick still hold it: the gate
+  stays open, and the last `merge_step.tick` on the task or any task of its bundle merges it (`mergeOnceTicked`). In a
+  bundle the lead's merge gate decides, so only the lead's `mergeAhead` counts and the web offers the choice only on
+  the lead. Every later review answer writes the flag again, answering the merge gate clears it, and a new round
+  clears it. `task.keep_merge_gate` (Keep the merge gate on the Now card, `shinsa merges keep-gate`) turns it off and
+  the merge gate waits for you as before. Only you choose it: it rides on `gate.answer` and `task.keep_merge_gate`,
+  both human-only, and Autopilot never sends `thenMerge`. The web shows the choice only on an engine with
+  `review.approve_and_merge`.
 - Dismissed findings are kept on the task (`dismissedFindings`, the last 30) and every later
   reviewer is told not to report them again unless the code around them changed. Your decision
   resets the round count.
@@ -4384,7 +4399,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   Shinsa on <name> to use this." (the local app: "Update Shinsa to use this."). Anything else that needs a newer
   engine asks `useEngineCommand(type, id)` or `useEngineFeature(feature, id)`, a name in `ENGINE_FEATURES` (`task.share`,
   `feedback` for `GET /api/feedback`, `teams` for the team routes and `GET /api/teams/tasks`, and
-  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `message.line_comments` for `task.message`'s
+  `review.approve_after_fix` for `gate.answer`'s `thenApprove`, `review.approve_and_merge` for its `thenMerge` and `task.keep_merge_gate`, `message.line_comments` for `task.message`'s
   `comments`, `changelog` for `GET /api/changelog`, `remote.terminals` for terminal streams on the sealed channel,
   `attention` for routing notifications to the device you use, `worktree-root` for the worktree folder and
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
