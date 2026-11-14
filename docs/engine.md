@@ -1420,9 +1420,9 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   it stacks on, ties broken oldest first (`sortParentsFirst`). `task.stack_on_tasks` refuses, for each task in the
   list, a task stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task
   (`stack_parent_settled`), on one that opens no pull request (`stack_no_pull_request`), on one in another repository
-  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). The bundle can change only
-  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
-  planning run and plans again once released (Taking a task out, below).
+  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). A task can stack on more
+  tasks only until it builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
+  planning run and plans again once released. Taking it out works at any time (Taking a task out, below).
 - **Ready instead of merged.** Every task of a bundle is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
   it is ready at) when the watch finds its pull request clean, where the merge gate would open, and keeps watching: a
   read that is not clean on the same head, or a new head, takes ready away and starts the usual fix (CI, comments,
@@ -1512,8 +1512,11 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   work until the task builds. A task still waiting starts at once from what it still stacks on, or the default branch.
   A task already planning on the branches below loses those bases, its planning run is cancelled, and
   `worktree.create` resets its worktree before it plans again; a task below with nothing stacked on it any more goes
-  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so the bundle no
-  longer changes; cancel the task or let the bundle merge.
+  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so it can no longer
+  stack on more tasks, but it can still leave (`leaveStartedStack`): each task it leaves becomes a wait (`waitsOn`, a
+  cancelled one is dropped), its bases go, and an open pull request is watched again and retargeted onto the default
+  branch, so it merges on its own once the tasks it left have merged. Until then its pull request shows their commits
+  too. This is how a stacked initiative becomes tasks that merge on their own.
 - **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
   description says so). Stack when the later task builds directly on these tasks' code in the same repository and
   ships with them: the next piece of one feature, a schema then its API and its screen in parallel then the screen
@@ -1575,8 +1578,13 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   already in another initiative stays there; a task already in one is refused (`initiative_exists`). This is how an
   effort like SW-101's chat split moves in after the fact.
 - **A plan can propose one.** A plan with a `split` may set `initiative: true` when the parts are one effort that will
-  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). The plan card
-  and its markdown say so under the other tasks (`PLAN_INITIATIVE_NOTE`), and approving the plan splits the parts off
+  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). An initiative
+  is never a bundle: its tasks each merge on their own, so its parts start `parallel` or `waits_on` the part whose merge
+  they need, each with the `phase` it belongs to, and a plan that sets `initiative` with a `stacks_on` part is refused,
+  as is a lead's own plan with one (`validatePlanRules`). The plan card says so: "The agent
+  wants to start this as an initiative of N tasks", Start initiative, and that each task merges on its own while a lead
+  keeps track of them (`describePlanCard`, `lib/tasks/backlog.ts`); its markdown says so under the other tasks
+  (`PLAN_INITIATIVE_NOTE`). Approving the plan splits the parts off
   and then adopts the task (`startPlanInitiative`), so the task, its parts and a lead forked from it become the
   initiative in one click. A task already in an initiative keeps it, and its parts join it.
 - **The sheet** (`resolveInitiativeSheet`, pure, no model call) is the lead task's Overview, `shinsa initiatives show`
@@ -1597,7 +1605,7 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   tools. It is the task's one Agent session (the engine's first rule), and it keeps a task's notions: a plan, your
   answers, its chat.
   - **It plans first.** A new initiative's lead plans like any task (`purpose: plan`, `resolveLeadPlanningPrompt`,
-    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead): its `phases` are the
+    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead, and `resolveWorkspace` sends every lead run there even when the lead has a repository, as an adopted one does): its `phases` are the
     initiative's phases and its `split` the first tasks to file, each with the `phase` it belongs to (its number) and a
     request naming its repository. `validatePlanRules` lets a lead's plan split but refuses `files` and `initiative`.
     The split always opens the plan gate. Approving it files the parts (`startPlanSplit`, forked from the lead's chat,
@@ -1759,7 +1767,8 @@ stacked as a bundle, which is how most splits end; in parallel only for a part w
 alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
 Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
 every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
-`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle. A plan
+that starts an initiative says initiative instead, never bundle (Start initiative, Initiatives, above).
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
