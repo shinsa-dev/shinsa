@@ -8,6 +8,7 @@ import {
   useExplorerSide,
   useExplorerWidth,
   useHideViewed,
+  useMarkdownPreview,
   useUnifiedDiff,
   useViewedFiles,
   writeExplorerSide,
@@ -104,5 +105,18 @@ describe('code preferences', () => {
     expect(readViewedFiles('t1', 'h1')).toEqual(['a.ts']);
     localStorage.setItem('shinsa.viewed.t1.h1', '{"a":1}');
     expect(readViewedFiles('t1', 'h1')).toEqual([]);
+  });
+
+  it('shows a Markdown file as a preview and its diff as source, each remembered on its own', () => {
+    const file = renderHook(() => useMarkdownPreview(false));
+    const diff = renderHook(() => useMarkdownPreview(true));
+    expect(file.result.current[0]).toBe(true);
+    expect(diff.result.current[0]).toBe(false);
+    act(() => diff.result.current[1]());
+    expect(diff.result.current[0]).toBe(true);
+    expect(file.result.current[0]).toBe(true);
+    act(() => file.result.current[1]());
+    expect(file.result.current[0]).toBe(false);
+    expect(localStorage.getItem('shinsa.code-preview-diff')).toBe('true');
   });
 });

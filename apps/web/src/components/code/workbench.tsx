@@ -28,6 +28,7 @@ import {
   resolveOpenPatch,
   resolveSearchPatch,
 } from '@/lib/code/location.ts';
+import { isMarkdownPath } from '@/lib/code/markdown.ts';
 import { CODE_MARKS, markCode } from '@/lib/code/marks.ts';
 import {
   prefetchAncestors,
@@ -39,7 +40,7 @@ import {
 } from '@/lib/code/prefetch.ts';
 import { recordRecentFile, resolveQuickOpenRecent, useRecentFiles } from '@/lib/code/recent.ts';
 import { resolveViewRef } from '@/lib/code/refs.ts';
-import { resolveFileSource } from '@/lib/code/source.ts';
+import { type FileSource, resolveFileSource } from '@/lib/code/source.ts';
 import { listCodeCommands } from '@/lib/command/code.ts';
 import { listEditorCommands } from '@/lib/command/editor.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
@@ -50,6 +51,7 @@ import {
   useExplorerSide,
   useExplorerWidth,
   useHideViewed,
+  useMarkdownPreview,
   useUnifiedDiff,
   useViewedFiles,
   writeExplorerSide,
@@ -61,6 +63,11 @@ import type { ExplorerMode } from '@/lib/tasks/tabs.ts';
 
 const INSTANT =
   '[&_*:not([data-motion=move])]:transition-none! [&_*::before]:transition-none! [&_*::after]:transition-none!';
+
+function useActivePreview(active: FileSource | null) {
+  const [shown, toggle] = useMarkdownPreview(active?.change != null);
+  return [active?.headPath && isMarkdownPath(active.headPath) ? shown : null, toggle] as const;
+}
 
 export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; modes: ExplorerMode[] }) {
   const { location, apply } = useCodeLocation(modes);
@@ -113,6 +120,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   }, [draft.comments]);
   const active = location.active ? resolveFileSource(location.active, diffValue) : null;
   const changed = React.useMemo(() => new Set(diffValue?.files.map((file) => file.path) ?? []), [diffValue]);
+  const [preview, togglePreview] = useActivePreview(active);
 
   const ahead = React.useRef({ task, refs, diffValue });
   ahead.current = { task, refs, diffValue };
@@ -143,7 +151,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     }
   }
 
-  function openLine(path: string, line: number) {
+  function openLine(path: string, line: number | null) {
     open({ kind: changed.has(path) ? 'diff' : 'file', path }, { line });
   }
 
@@ -195,6 +203,8 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       applyMode,
       copyPath,
       showInFiles: canShowInFiles ? showInFiles : null,
+      preview,
+      togglePreview,
       run: (key) => run[key](),
       toggleSplit,
       toggleHideViewed,
@@ -307,6 +317,9 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
             handle={editor}
             session={session}
             toolbar={explorerButton}
+            preview={preview}
+            onPreview={togglePreview}
+            onOpenPath={openLine}
             onShowInFiles={canShowInFiles ? showInFiles : null}
           />
         ) : (

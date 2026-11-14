@@ -11,6 +11,7 @@ import type {
   EditorReveal,
   EditorSessionHolder,
 } from '@/components/code/editor/code-editor.tsx';
+import { MarkdownPreview } from '@/components/code/markdown-preview.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { HintButton } from '@/components/controls/hint-button.tsx';
@@ -182,21 +183,36 @@ function LayoutToggle({ split, onToggle }: { split: boolean; onToggle: () => voi
   );
 }
 
+function PreviewToggle({ preview, onToggle }: { preview: boolean; onToggle: () => void }) {
+  return (
+    <HintButton
+      label={preview ? 'Show source' : 'Show preview'}
+      size='icon-sm'
+      icon={preview ? 'IconCode' : 'IconEyeOpen'}
+      onClick={onToggle}
+    />
+  );
+}
+
 function PaneToolbar({
   source,
   split,
   showLayout,
   saving,
+  preview,
   toolbar,
   onSplit,
+  onPreview,
   onShowInFiles,
 }: {
   source: FileSource;
   split: boolean;
   showLayout: boolean;
   saving: boolean;
+  preview: boolean | null;
   toolbar: React.ReactNode;
   onSplit: (() => void) | null;
+  onPreview: () => void;
   onShowInFiles: (() => void) | null;
 }) {
   const path = source.file.path;
@@ -216,6 +232,7 @@ function PaneToolbar({
       <span className='flex-1' />
       {saving && <span className='shrink-0 text-2xs text-fg-2'>Saving…</span>}
       {showLayout && onSplit && <LayoutToggle split={split} onToggle={onSplit} />}
+      {preview !== null && <PreviewToggle preview={preview} onToggle={onPreview} />}
       <CopyButton text={path} label='Copy path' size='icon-sm' />
       {onShowInFiles && (
         <HintButton label='Show in Files' size='icon-sm' icon='IconFolderOpen' onClick={onShowInFiles} />
@@ -233,6 +250,26 @@ function PaneNotice({ text, readOnly }: { text: string; readOnly: boolean }) {
   );
 }
 
+function usePanePreview(input: {
+  preview: boolean | null;
+  content: PaneContent;
+  headPath: string | null;
+  guard: string | null;
+  start: string | null;
+  buffer: React.RefObject<EditorHandle | null>;
+}) {
+  const latest = React.useRef<string | null>(null);
+  if (input.preview !== null && input.buffer.current) latest.current = input.buffer.current.readText();
+  const readable = input.content.kind === 'text' && input.headPath !== null && input.guard === null;
+  if (!readable || input.content.kind !== 'text')
+    return { shown: null, text: null, editing: input.guard === null };
+  return {
+    shown: input.preview,
+    text: input.preview ? (latest.current ?? input.start ?? input.content.content) : null,
+    editing: !input.preview,
+  };
+}
+
 export function EditorPane({
   task,
   refs,
@@ -245,6 +282,9 @@ export function EditorPane({
   handle,
   session,
   toolbar,
+  preview,
+  onPreview,
+  onOpenPath,
   onShowInFiles,
 }: {
   task: Task;
@@ -258,6 +298,9 @@ export function EditorPane({
   handle: React.RefObject<EditorHandle | null>;
   session?: EditorSessionHolder;
   toolbar: React.ReactNode;
+  preview: boolean | null;
+  onPreview: () => void;
+  onOpenPath: (path: string, line: number | null) => void;
   onShowInFiles: (() => void) | null;
 }) {
   const draft = useReviewDraft();
@@ -313,6 +356,14 @@ export function EditorPane({
   });
   const spots = pinned ? listSpotMarks(targets, path, location.spot) : [];
   const { reveal, focus } = useLinkFocus(path, location);
+  const markdown = usePanePreview({
+    preview,
+    content,
+    headPath: source.headPath,
+    guard,
+    start: saver.start,
+    buffer,
+  });
 
   function renderNote(note: CodeNote) {
     return (
@@ -348,11 +399,15 @@ export function EditorPane({
         split={split}
         showLayout={diffing && !oneSide && content.kind === 'text'}
         saving={saver.state.saving}
+        preview={markdown.shown}
         toolbar={toolbar}
         onSplit={onSplit}
+        onPreview={onPreview}
         onShowInFiles={onShowInFiles}
       />
-      {content.kind === 'text' && notice && !guard && <PaneNotice text={notice} readOnly={!editable} />}
+      {content.kind === 'text' && markdown.editing && notice && (
+        <PaneNotice text={notice} readOnly={!editable} />
+      )}
       {guard && (
         <EmptyState
           size='sm'
@@ -370,7 +425,10 @@ export function EditorPane({
       {content.kind === 'absent' && (
         <NoText task={task} refs={refs} gitRef={gitRef} source={source} head={content.head} />
       )}
-      {content.kind === 'text' && !guard && (
+      {markdown.text !== null && (
+        <MarkdownPreview task={task} gitRef={gitRef} path={path} text={markdown.text} onOpen={onOpenPath} />
+      )}
+      {content.kind === 'text' && markdown.editing && (
         <CodeEditor
           path={path}
           docKey={resolvePaneKey(gitRef, source.file)}

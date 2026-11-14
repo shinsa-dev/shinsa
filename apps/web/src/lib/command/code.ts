@@ -16,6 +16,8 @@ export interface CodeCommandContext {
   applyMode: (mode: CodeMode) => void;
   copyPath: (() => void) | null;
   showInFiles: (() => void) | null;
+  preview: boolean | null;
+  togglePreview: () => void;
   run: (key: CodeKey) => void;
   toggleSplit: () => void;
   toggleHideViewed: () => void;
@@ -100,6 +102,16 @@ export function listCodeCommands(context: CodeCommandContext): CommandSection {
         run: context.toggleSplit,
       }
     );
+  }
+  if (context.preview !== null) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.preview`,
+      label: context.preview ? 'Show source' : 'Show preview',
+      icon: context.preview ? 'IconCode' : 'IconEyeOpen',
+      keywords: ['markdown', 'preview', 'render', 'readme', 'source'],
+      run: context.togglePreview,
+    });
   }
   if (context.copyPath) {
     keys.push({

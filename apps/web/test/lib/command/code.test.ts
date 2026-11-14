@@ -14,6 +14,8 @@ function context(overrides: Partial<CodeCommandContext> = {}): CodeCommandContex
     applyMode: mock(() => {}),
     copyPath: mock(() => {}),
     showInFiles: mock(() => {}),
+    preview: null,
+    togglePreview: mock(() => {}),
     run: mock(() => {}),
     toggleSplit: mock(() => {}),
     toggleHideViewed: mock(() => {}),
@@ -70,6 +72,18 @@ describe('listCodeCommands', () => {
       'Show diffs unified'
     );
     expect(section.commands.find((command) => command.label === 'Go to file…')?.trailing).toBe('Ctrl+P');
+  });
+
+  it('toggles the Markdown preview of an open Markdown file', () => {
+    const shown = context({ preview: true });
+    const command = listCodeCommands(shown).commands.find((entry) => entry.id.endsWith('.preview'));
+    expect(command).toMatchObject({ label: 'Show source', icon: 'IconCode' });
+    if (command?.kind === 'run') command.run();
+    expect(shown.togglePreview).toHaveBeenCalledTimes(1);
+    expect(
+      listCodeCommands(context({ preview: false })).commands.find((entry) => entry.id.endsWith('.preview'))
+    ).toMatchObject({ label: 'Show preview', icon: 'IconEyeOpen' });
+    expect(listCodeCommands(context()).commands.some((entry) => entry.id.endsWith('.preview'))).toBe(false);
   });
 
   it('leaves out what needs an open file', () => {

@@ -80,3 +80,7 @@ export function useViewedFiles(taskId: string, head: string | null) {
   );
   return new Set(serialized && head ? readViewedFiles(taskId, head) : []);
 }
+
+export function useMarkdownPreview(diffing: boolean) {
+  return useStoredToggle(diffing ? 'shinsa.code-preview-diff' : 'shinsa.code-preview-file', !diffing);
+}

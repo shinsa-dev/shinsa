@@ -496,6 +496,10 @@ describe('search and quick open', () => {
 });
 
 describe('editing in place', () => {
+  beforeEach(() => {
+    localStorage.setItem('shinsa.code-preview-file', 'false');
+  });
+
   it('shows a diff side by side first, and unified once you pick it, remembered', async () => {
     renderCode(nextTask());
     fireEvent.click(await screen.findByRole('button', { name: 'Show unified' }));
@@ -620,6 +624,42 @@ describe('editing in place', () => {
         'This is an earlier commit, so it is read-only. Pick Head of the branch to edit.'
       )
     ).toBeDefined();
+  });
+});
+
+describe('Markdown preview', () => {
+  it('shows a Markdown file rendered, and its source once you pick it, remembered', async () => {
+    renderCode(nextTask(), '&mode=files&file=README.md');
+    const preview = await screen.findByRole('article', { name: 'Preview of README.md' });
+    expect(within(preview).getByRole('heading', { level: 1 }).textContent).toBe('Sample');
+    expect(document.querySelector('.cm-editor')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show source' }));
+    await findLine('# Sample');
+    expect(screen.queryByRole('article', { name: 'Preview of README.md' })).toBeNull();
+    expect(localStorage.getItem('shinsa.code-preview-file')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    expect(await screen.findByRole('article', { name: 'Preview of README.md' })).toBeDefined();
+  });
+
+  it('offers no preview for a file that is not Markdown', async () => {
+    renderCode(nextTask(), '&mode=files&file=docs/beta.txt');
+    await findLine('guard');
+    expect(screen.queryByRole('button', { name: 'Show preview' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show source' })).toBeNull();
+  });
+
+  it('opens a file the preview links to in the Code tab, at its line', async () => {
+    HEAD_FILES['docs/guide.md'] = 'See [the alpha notes](alpha.txt#L2) and [the readme](../README.md).\n';
+    try {
+      renderCode(nextTask(), '&mode=files&file=docs/guide.md');
+      const preview = await screen.findByRole('article', { name: 'Preview of docs/guide.md' });
+      fireEvent.click(within(preview).getByRole('link', { name: 'the alpha notes' }));
+      await waitFor(() => expect(params().get('file')).toBe('docs/alpha.txt'));
+      expect(params().get('diff')).toBe('1');
+      expect(params().get('line')).toBe('2');
+    } finally {
+      delete HEAD_FILES['docs/guide.md'];
+    }
   });
 });
 
