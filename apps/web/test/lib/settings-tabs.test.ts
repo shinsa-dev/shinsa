@@ -14,41 +14,38 @@ describe('settings tabs', () => {
   it('lists the tabs in order', () => {
     expect(listSettingsTabs().map((tab) => tab.label)).toEqual([
       'General',
-      'Statistics',
       'Agents',
-      'Agent Usage',
+      'Autopilot',
+      'Cloud',
+      'Usage',
+      'Statistics',
       'Projects',
+      'Browser',
       'Integrations',
       'Automations',
     ]);
   });
 
-  it('lists Machines and Teams in place of Remote access, Teams and Slack on the hosted page', () => {
-    expect(listConnectionSections(true)).toEqual(['Machines', 'Teams']);
-    expect(listConnectionSections(false)).toEqual(['Remote access', 'Teams', 'Slack']);
+  it('lists Machines, Teams and Sharing in place of Remote access, Teams, Sharing and Slack on the hosted page', () => {
+    expect(listConnectionSections(true)).toEqual(['Machines', 'Teams', 'Sharing']);
+    expect(listConnectionSections(false)).toEqual(['Remote access', 'Teams', 'Sharing', 'Slack']);
   });
 
-  it('finds a tab by id', () => {
+  it('gives each tab its own sections', () => {
     expect(findSettingsTab('general').sections).toEqual([
       'Appearance',
-      'Attention',
       'Notifications',
-      'Context',
-      'Remote access',
-      'Teams',
-      'Slack',
-      'Setup',
       'Updates',
+      'Versions',
     ]);
+    expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Context', 'Memory']);
+    expect(findSettingsTab('autopilot').sections).toEqual(['Autopilot', 'Your hours']);
+    expect(findSettingsTab('cloud').sections).toEqual(['Remote access', 'Teams', 'Sharing', 'Slack']);
+    expect(findSettingsTab('usage').sections).toEqual(['Accounts', 'Auto pace', 'Forecast', 'Limits']);
     expect(findSettingsTab('statistics').sections).toEqual(['Shipping', 'Token usage']);
-    expect(findSettingsTab('accounts').sections).toEqual(['Accounts', 'Limits']);
-    expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Memory', 'Versions']);
-    expect(findSettingsTab('projects').sections).toEqual([
-      'Repository folders',
-      'Worktrees',
-      'Projects',
-      'Browser',
-    ]);
+    expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Worktrees', 'Projects']);
+    expect(findSettingsTab('browser').sections).toEqual(['Browser']);
+    expect(findSettingsTab('automations').sections).toEqual(['Watchdogs', 'Schedules']);
   });
 
   it('opens Integrations for a link to the context optimizer', () => {
@@ -61,24 +58,41 @@ describe('settings tabs', () => {
     expect(resolveSettingsTab('statistics')).toBe('statistics');
     expect(resolveSettingsTab(null, '#shipping')).toBe('statistics');
     expect(resolveSettingsTab(null, '#token-usage')).toBe('statistics');
-    expect(resolveSettingsTab(null, '#limits')).toBe('accounts');
-    expect(resolveSettingsTab(null, '#accounts')).toBe('accounts');
+    expect(resolveSettingsTab(null, '#limits')).toBe('usage');
+    expect(resolveSettingsTab(null, '#accounts')).toBe('usage');
     expect(resolveSettingsTab(null, '#models')).toBe('agents');
     expect(resolveSettingsTab('nonsense', '#repository-folders')).toBe('projects');
     expect(resolveSettingsTab('integrations')).toBe('integrations');
     expect(resolveSettingsTab(null, '#mcps')).toBe('integrations');
     expect(resolveSettingsTab(null, '#nothing-here')).toBe('general');
     expect(resolveSettingsTab(null)).toBe('general');
-    expect(resolveSettingsTab('nonsense', '#context')).toBe('general');
+    expect(resolveSettingsTab('accounts')).toBe('general');
+  });
+
+  it('opens the tab that now holds a section moved to another tab', () => {
+    expect(resolveSettingsTab(null, '#updates')).toBe('general');
+    expect(resolveSettingsTab(null, '#versions')).toBe('general');
+    expect(resolveSettingsTab('about', '#updates')).toBe('general');
+    expect(resolveSettingsTab(null, '#remote-access')).toBe('cloud');
+    expect(resolveSettingsTab(null, '#teams')).toBe('cloud');
+    expect(resolveSettingsTab(null, '#sharing')).toBe('cloud');
+    expect(resolveSettingsTab('connections', '#slack')).toBe('cloud');
+    expect(resolveSettingsTab('nonsense', '#context')).toBe('agents');
+    expect(resolveSettingsTab(null, '#autopilot')).toBe('autopilot');
+    expect(resolveSettingsTab(null, '#your-hours')).toBe('autopilot');
+    expect(resolveSettingsTab(null, '#watchdogs')).toBe('automations');
+    expect(resolveSettingsTab(null, '#browser')).toBe('browser');
+    expect(resolveSettingsTab(null, '#auto-pace')).toBe('usage');
+    expect(resolveSettingsTab(null, '#forecast')).toBe('usage');
   });
 
   it('knows which tab holds a section, and orders sections the way the tabs show them', () => {
     expect(resolveSectionTab('Schedules')).toBe('automations');
-    expect(resolveSectionTab('Context')).toBe('general');
+    expect(resolveSectionTab('Context')).toBe('agents');
     expect(resolveSectionTab('Notifications')).toBe('general');
     expect(resolveSectionTab('Somewhere else')).toBe('general');
     expect(resolveSectionRank('Appearance')).toBe(0);
-    expect(resolveSectionRank('Setup')).toBeGreaterThan(resolveSectionRank('Notifications'));
+    expect(resolveSectionRank('Schedules')).toBeGreaterThan(resolveSectionRank('Watchdogs'));
     expect(resolveSectionRank('Somewhere else')).toBe(Number.POSITIVE_INFINITY);
   });
 
@@ -86,7 +100,7 @@ describe('settings tabs', () => {
     expect(resolveSettingsTabParam('general')).toBeNull();
     expect(resolveSettingsTabParam('agents')).toBe('agents');
     expect(resolveSettingsPath('general')).toBe('/settings');
-    expect(resolveSettingsPath('accounts', 'Limits')).toBe('/settings?tab=accounts#limits');
+    expect(resolveSettingsPath('usage', 'Limits')).toBe('/settings?tab=usage#limits');
     expect(resolveSettingsPath('projects', 'Repository folders')).toBe(
       '/settings?tab=projects#repository-folders'
     );

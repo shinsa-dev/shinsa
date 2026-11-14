@@ -7,6 +7,7 @@ import {
   isListedInFocus,
   isRetryArmed,
   isTaskComplete,
+  isWatchCheck,
   resolveAutoPace,
   resolveActiveHours,
   type ShinsaState,
@@ -20,7 +21,9 @@ import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import type { QueueSection } from '@/lib/queue.ts';
 import { isResolvingConflicts } from '@/lib/tasks/status.ts';
 
-const RECENT_LIMIT = 5;
+const RECENT_CONVERSATIONS_LIMIT = 5;
+
+const RECENTLY_FINISHED_LIMIT = 10;
 
 const FINISHED_WINDOW_MS = DAY_MS;
 
@@ -52,7 +55,7 @@ export function listRecentConversations(state: ShinsaState, now: number, shown: 
       );
     if (entry) latest.push({ task, entry });
   }
-  return latest.sort((a, b) => b.entry.at - a.entry.at).slice(0, RECENT_LIMIT);
+  return latest.sort((a, b) => b.entry.at - a.entry.at).slice(0, RECENT_CONVERSATIONS_LIMIT);
 }
 
 export function listRecentlyFinished(state: ShinsaState, now: number, shown: ReadonlySet<string>) {
@@ -60,12 +63,12 @@ export function listRecentlyFinished(state: ShinsaState, now: number, shown: Rea
     .filter(
       (task) =>
         !shown.has(task.id) &&
-        isTaskComplete(task) &&
+        (isTaskComplete(task) || isWatchCheck(task)) &&
         now - task.stageChangedAt <= FINISHED_WINDOW_MS &&
         isListedInFocus(state, task, now)
     )
     .sort((a, b) => b.stageChangedAt - a.stageChangedAt)
-    .slice(0, RECENT_LIMIT);
+    .slice(0, RECENTLY_FINISHED_LIMIT);
 }
 
 export function resolveHomeSectionId(key: QueueSection['key'] | 'finished' | 'conversations' | 'done') {

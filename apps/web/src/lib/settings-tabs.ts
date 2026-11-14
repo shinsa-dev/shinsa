@@ -1,4 +1,8 @@
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import { AUTO_PACE_LABEL } from '@/lib/accounts/auto-pace.ts';
+import { FORECAST_TITLE } from '@/lib/accounts/forecast.ts';
+import { ACTIVE_HOURS_LABEL } from '@/lib/active-hours.ts';
+import { AUTOPILOT_TITLE } from '@/lib/autopilot.ts';
 import { BROWSER_SECTION } from '@/lib/browser.ts';
 import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import { isRemoteBuild, MACHINES_SECTION } from '@/lib/remote/mode.ts';
@@ -7,8 +11,10 @@ import {
   MODELS_TITLE,
   resolveHashSectionId,
   resolveSectionId,
+  WATCHDOG_SETTINGS_TITLE,
   WORKTREES_TITLE,
 } from '@/lib/settings.ts';
+import { SHARING_SECTION } from '@/lib/share/dialog.ts';
 import { SLACK_SECTION } from '@/lib/slack.ts';
 import { SHIPPING_SECTION } from '@/lib/stats/shipping.ts';
 import { USAGE_SECTION } from '@/lib/stats/usage.ts';
@@ -18,10 +24,13 @@ import { VERSIONS_SECTION } from '@/lib/versions.ts';
 
 export type SettingsTabId =
   | 'general'
-  | 'statistics'
   | 'agents'
-  | 'accounts'
+  | 'autopilot'
+  | 'cloud'
+  | 'usage'
+  | 'statistics'
   | 'projects'
+  | 'browser'
   | 'integrations'
   | 'automations';
 
@@ -32,42 +41,51 @@ interface SettingsTab {
 }
 
 export function listConnectionSections(remote: boolean) {
-  return remote ? [MACHINES_SECTION, TEAMS_SECTION] : [REMOTE_ACCESS_SECTION, TEAMS_SECTION, SLACK_SECTION];
+  return remote
+    ? [MACHINES_SECTION, TEAMS_SECTION, SHARING_SECTION]
+    : [REMOTE_ACCESS_SECTION, TEAMS_SECTION, SHARING_SECTION, SLACK_SECTION];
 }
 
 const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   general: {
     id: 'general',
     label: 'General',
-    sections: [
-      'Appearance',
-      'Attention',
-      'Notifications',
-      'Context',
-      ...listConnectionSections(isRemoteBuild()),
-      'Setup',
-      UPDATES_SECTION,
-    ],
+    sections: ['Appearance', 'Notifications', UPDATES_SECTION, VERSIONS_SECTION],
+  },
+  agents: {
+    id: 'agents',
+    label: 'Agents',
+    sections: [MODELS_TITLE, 'Engine', 'Context', 'Memory'],
+  },
+  autopilot: {
+    id: 'autopilot',
+    label: AUTOPILOT_TITLE,
+    sections: [AUTOPILOT_TITLE, ACTIVE_HOURS_LABEL.title],
+  },
+  cloud: {
+    id: 'cloud',
+    label: 'Cloud',
+    sections: listConnectionSections(isRemoteBuild()),
+  },
+  usage: {
+    id: 'usage',
+    label: 'Usage',
+    sections: [ACCOUNT_LABEL.section, AUTO_PACE_LABEL.title, FORECAST_TITLE, 'Limits'],
   },
   statistics: {
     id: 'statistics',
     label: 'Statistics',
     sections: [SHIPPING_SECTION, USAGE_SECTION],
   },
-  agents: {
-    id: 'agents',
-    label: 'Agents',
-    sections: [MODELS_TITLE, 'Engine', 'Memory', VERSIONS_SECTION],
-  },
-  accounts: {
-    id: 'accounts',
-    label: 'Agent Usage',
-    sections: [ACCOUNT_LABEL.section, 'Limits'],
-  },
   projects: {
     id: 'projects',
     label: 'Projects',
-    sections: [FOLDERS_TITLE, WORKTREES_TITLE, 'Projects', BROWSER_SECTION],
+    sections: [FOLDERS_TITLE, WORKTREES_TITLE, 'Projects'],
+  },
+  browser: {
+    id: 'browser',
+    label: BROWSER_SECTION,
+    sections: [BROWSER_SECTION],
   },
   integrations: {
     id: 'integrations',
@@ -77,7 +95,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   automations: {
     id: 'automations',
     label: 'Automations',
-    sections: ['Schedules'],
+    sections: [WATCHDOG_SETTINGS_TITLE, 'Schedules'],
   },
 };
 

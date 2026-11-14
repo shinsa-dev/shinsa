@@ -1,4 +1,4 @@
-import { isSummarizedTask, type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
+import { isSummarizedTask, type ShinsaState, type Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -28,7 +28,7 @@ import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { resolveLineComments } from '@/lib/tasks/messages.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
 import { resolveTeamTaskPath, resolveTeamTaskTarget, selectTeamFeedTask } from '@/lib/teams/feeds.ts';
-import { replaceRoute, resolveAutomationPath, resolveCanonicalTaskPath } from '@/router.ts';
+import { replaceRoute, resolveAutomationPath, resolveCanonicalTaskPath, selectRouteTask } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
 import { CodeTab, prefetchCode, usePrefetchCode } from './lazy-code.tsx';
 import { OverviewTab } from './overview.tsx';
@@ -241,7 +241,7 @@ function useCarryEndsWithPage(taskId: string | null) {
 }
 
 export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string }) {
-  const resolved = selectTaskByReference(state, taskId);
+  const resolved = selectRouteTask(state, taskId);
   const view = useTaskView(state, resolved?.id ?? taskId);
   const { task } = view;
   useCanonicalPath(state, task, taskId);

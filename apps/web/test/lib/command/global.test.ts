@@ -48,7 +48,7 @@ function pick(command: Command, value: string) {
 
 describe('listGlobalSections', () => {
   it('groups Go to, Focus and Appearance in that order', () => {
-    const sections = listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []);
+    const sections = listGlobalSections(focused(null), { name: 'home' }, 'system', ALL_COMMANDS, []);
     expect(sections.map((section) => [section.heading, section.rank])).toEqual([
       ['Go to', 50],
       ['Focus', 51],
@@ -58,14 +58,7 @@ describe('listGlobalSections', () => {
 
   it('marks the page you are on', () => {
     rememberTerminalPath('/terminal');
-    const sections = listGlobalSections(
-      focused(null),
-      { name: 'settings' },
-      'system',
-      'cards',
-      ALL_COMMANDS,
-      []
-    );
+    const sections = listGlobalSections(focused(null), { name: 'settings' }, 'system', ALL_COMMANDS, []);
     expect(sections[0]?.commands.map((command) => [command.label, command.current])).toEqual([
       ['Home', false],
       ['All tasks', false],
@@ -85,7 +78,7 @@ describe('listGlobalSections', () => {
   it('opens the feedback popover on the button that is shown', () => {
     registerFeedbackOpener('header', () => true);
     const command = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []),
+      listGlobalSections(focused(null), { name: 'home' }, 'system', ALL_COMMANDS, []),
       'feedback.open'
     );
     if (command.kind !== 'run') throw new Error('Expected a run command');
@@ -98,7 +91,6 @@ describe('listGlobalSections', () => {
       focused(null),
       { name: 'home' },
       'system',
-      'cards',
       resolveEngineCommands(null),
       []
     );
@@ -109,7 +101,7 @@ describe('listGlobalSections', () => {
 describe('the focus choice', () => {
   it('lists your work and every project by name with its dot, on your work by default', () => {
     const focus = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []),
+      listGlobalSections(focused(null), { name: 'home' }, 'system', ALL_COMMANDS, []),
       'focus.switch'
     );
     if (focus.kind !== 'choice') throw new Error('Expected a choice');
@@ -124,7 +116,7 @@ describe('the focus choice', () => {
 
   it('switches focus with a toast naming the project', () => {
     const focus = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []),
+      listGlobalSections(focused(null), { name: 'home' }, 'system', ALL_COMMANDS, []),
       'focus.switch'
     );
     pick(focus, 'web');
@@ -138,14 +130,7 @@ describe('the focus choice', () => {
   });
 
   it('shows the current project and offers timed focus only while typing', () => {
-    const sections = listGlobalSections(
-      focused('web'),
-      { name: 'home' },
-      'system',
-      'cards',
-      ALL_COMMANDS,
-      []
-    );
+    const sections = listGlobalSections(focused('web'), { name: 'home' }, 'system', ALL_COMMANDS, []);
     const focus = find(sections, 'focus.switch');
     expect(focus).toMatchObject({ hint: 'Web', value: 'web' });
     expect(find(sections, 'focus.hours')).toMatchObject({
@@ -159,14 +144,7 @@ describe('the focus choice', () => {
   });
 
   it('keeps the project in focus for two hours or until tonight', () => {
-    const sections = listGlobalSections(
-      focused('web'),
-      { name: 'home' },
-      'system',
-      'cards',
-      ALL_COMMANDS,
-      []
-    );
+    const sections = listGlobalSections(focused('web'), { name: 'home' }, 'system', ALL_COMMANDS, []);
     for (const id of ['focus.hours', 'focus.tonight']) {
       const command = find(sections, id);
       if (command.kind === 'run') command.run();
@@ -193,7 +171,7 @@ describe('the focus choice', () => {
       patch: { focus: { projectIds: ['api', 'web'], except: false, teamId: null, until: null } },
     });
     const sectionsOf = (state: ShinsaState) =>
-      listGlobalSections(state, { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []);
+      listGlobalSections(state, { name: 'home' }, 'system', ALL_COMMANDS, []);
     expect(find(sectionsOf(both), 'focus.switch')).toMatchObject({ hint: 'API and Web', value: '' });
     expect(find(sectionsOf(allBut), 'focus.switch')).toMatchObject({ hint: 'All but Web', value: '' });
     const keep = find(sectionsOf(allBut), 'focus.hours');
@@ -220,8 +198,8 @@ describe('the focus choice', () => {
       patch: { focus: { projectIds: ['web'], except: false, teamId: null, until: NOW - 1 } },
     });
     for (const state of [focused(null), expired]) {
-      const ids = listGlobalSections(state, { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []).flatMap(
-        (section) => section.commands.map((command) => command.id)
+      const ids = listGlobalSections(state, { name: 'home' }, 'system', ALL_COMMANDS, []).flatMap((section) =>
+        section.commands.map((command) => command.id)
       );
       expect(ids).not.toContain('focus.hours');
     }
@@ -240,7 +218,7 @@ function focusedOnTeam(teamId: string, until: number | null = null): ShinsaState
 describe('the focus choice with teams', () => {
   it('lists your teams after the projects and shows a focused team as the current choice', () => {
     const focus = find(
-      listGlobalSections(focusedOnTeam('team-1'), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, TEAMS),
+      listGlobalSections(focusedOnTeam('team-1'), { name: 'home' }, 'system', ALL_COMMANDS, TEAMS),
       'focus.switch'
     );
     if (focus.kind !== 'choice') throw new Error('Expected a choice');
@@ -256,7 +234,7 @@ describe('the focus choice with teams', () => {
 
   it('switches to a team, naming it, or to a team it no longer knows', () => {
     const focus = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, TEAMS),
+      listGlobalSections(focused(null), { name: 'home' }, 'system', ALL_COMMANDS, TEAMS),
       'focus.switch'
     );
     pick(focus, 'team:team-1');
@@ -274,7 +252,6 @@ describe('the focus choice with teams', () => {
       focusedOnTeam('team-1'),
       { name: 'home' },
       'system',
-      'cards',
       ALL_COMMANDS,
       TEAMS
     );
@@ -297,36 +274,14 @@ describe('the focus choice with teams', () => {
 });
 
 describe('appearance', () => {
-  it('shows the current layout and switches it', () => {
-    const cards = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []),
-      'appearance.layout'
-    );
-    expect(cards).toMatchObject({ hint: 'Desk', icon: 'IconLayoutGrid1', value: 'cards' });
-    if (cards.kind !== 'choice') throw new Error('Not a choice');
-    expect(cards.options.map((option) => [option.value, option.label])).toEqual([
-      ['cards', 'Desk'],
-      ['sidebar', 'Shelf'],
-    ]);
-    const sidebar = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'system', 'sidebar', ALL_COMMANDS, []),
-      'appearance.layout'
-    );
-    expect(sidebar).toMatchObject({ hint: 'Shelf', icon: 'IconSidebar', value: 'sidebar' });
-    pick(cards, 'sidebar');
-    expect(localStorage.getItem('shinsa.layout')).toBe('sidebar');
-    pick(cards, 'cards');
-    expect(localStorage.getItem('shinsa.layout')).toBe('cards');
-  });
-
   it('shows the current theme and changes it', () => {
     const dark = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'dark', 'cards', ALL_COMMANDS, []),
+      listGlobalSections(focused(null), { name: 'home' }, 'dark', ALL_COMMANDS, []),
       'appearance.theme'
     );
     expect(dark).toMatchObject({ hint: 'Dark', icon: 'IconMoon', value: 'dark' });
     const light = find(
-      listGlobalSections(focused(null), { name: 'home' }, 'light', 'cards', ALL_COMMANDS, []),
+      listGlobalSections(focused(null), { name: 'home' }, 'light', ALL_COMMANDS, []),
       'appearance.theme'
     );
     expect(light).toMatchObject({ hint: 'Light', icon: 'IconSun' });
@@ -348,7 +303,7 @@ describe('the focus choice with initiatives', () => {
 
   it('lists the initiatives last and shows a focused one as the current choice', () => {
     const focus = find(
-      listGlobalSections(focusedOnInitiative('split'), { name: 'home' }, 'system', 'cards', ALL_COMMANDS, []),
+      listGlobalSections(focusedOnInitiative('split'), { name: 'home' }, 'system', ALL_COMMANDS, []),
       'focus.switch'
     );
     if (focus.kind !== 'choice') throw new Error('Expected a choice');
@@ -365,7 +320,6 @@ describe('the focus choice with initiatives', () => {
       focusedOnInitiative('split'),
       { name: 'home' },
       'system',
-      'cards',
       ALL_COMMANDS,
       []
     );

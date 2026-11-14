@@ -2,6 +2,7 @@ import type {
   AutopilotBenchmarkKind,
   AutopilotBenchmarkRow,
   AutopilotBenchmarkScope,
+  AutopilotFollowUpMatch,
   AutopilotTrack,
 } from '../../packages/core/src/index.ts';
 import type { BenchmarkReplay } from './schema.ts';
@@ -12,6 +13,7 @@ const KIND_LABEL: Record<AutopilotBenchmarkKind, string> = {
   review: 'Reviews',
   merge: 'Merges',
   proposal: 'Your OK',
+  failure: 'Failed steps',
   finding: 'Findings',
   suggestion: 'Suggested tasks',
   message: 'Messages',
@@ -64,6 +66,13 @@ function describeNothingScored(decisions: number) {
   return `The log holds ${decisions} decisions, and none is a plan, a review, a merge, your OK, a finding or a suggested task, so there is nothing to score yet.`;
 }
 
+function describeFollowUps({ scored, matched }: AutopilotFollowUpMatch) {
+  if (scored === 0)
+    return 'Follow-ups: none to compare yet. A follow-up counts once you ask for a change on a topic Autopilot knows after it guessed one.';
+  const share = ((matched / scored) * 100).toFixed(1);
+  return `Follow-ups: ${matched} of ${scored} raised a topic you raised yourself (${share}%).`;
+}
+
 export function serializeBenchmark(replay: BenchmarkReplay) {
   const { benchmark } = replay;
   const lines = [
@@ -80,6 +89,7 @@ export function serializeBenchmark(replay: BenchmarkReplay) {
     const rows = benchmark.rows.filter((row) => row.scope === scope);
     if (rows.length > 0) lines.push('', SCOPE_TITLE[scope], ...formatTable(rows));
   }
+  lines.push('', describeFollowUps(benchmark.followUps));
   lines.push(
     '',
     'Agreed is how often the guess matched what you did. Log loss is lower when a guesser is sure only when it is right.'

@@ -216,7 +216,7 @@ function describeOwnerSignIn(owner: TaskOwner | null) {
   return {
     title: `Paused: ${who} ${verb} a Claude account on this machine`,
     reason: owner
-      ? `This is a shared machine, so the task runs only on ${who}'s own Claude accounts, and ${who} has none signed in here. ${who} can sign one in from Settings → Accounts. Signing in starts the step again.`
+      ? `This is a shared machine, so the task runs only on ${who}'s own Claude accounts, and ${who} has none signed in here. ${who} can sign one in from Settings → Usage. Signing in starts the step again.`
       : `This is a shared machine, so the task runs only on its owner's Claude accounts, and you have none signed in here. Signing in starts the step again.`,
   };
 }

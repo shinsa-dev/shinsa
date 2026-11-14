@@ -1,6 +1,10 @@
 import {
+  AUTOPILOT_READINESS_TRACK,
+  type AutopilotAgreement,
   type AutopilotDecision,
   type AutopilotProfile,
+  type AutopilotReadinessKind,
+  EMPTY_AUTOPILOT_PROFILE,
   type AutopilotTally,
   createState,
   type Evidence,
@@ -122,6 +126,32 @@ function byId<T extends { id: string }>(items: T[] = []) {
   return Object.fromEntries(items.map((item) => [item.id, item]));
 }
 
+export function createAutopilotKindsProfile(
+  kinds: Partial<
+    Record<AutopilotReadinessKind, Pick<AutopilotAgreement, 'scored' | 'agreed'> & { base: number }>
+  >
+): AutopilotProfile {
+  const entries = Object.entries(kinds).map(([kind, { scored, agreed, base }]) => {
+    const track = AUTOPILOT_READINESS_TRACK[kind as AutopilotReadinessKind];
+    const agreement = {
+      scored,
+      agreed,
+      weight: scored,
+      agreedWeight: agreed,
+      baseWeight: base * scored,
+      loss: 0,
+    };
+    return [
+      kind,
+      {
+        tracks: { ...EMPTY_AUTOPILOT_PROFILE.tracks, [track]: agreement },
+        rate: EMPTY_AUTOPILOT_PROFILE.rates.gate,
+      },
+    ];
+  });
+  return { ...EMPTY_AUTOPILOT_PROFILE, kinds: Object.fromEntries(entries) };
+}
+
 export function createAutopilotProfile(parts: {
   agreed: number;
   disagreed: number;
@@ -147,6 +177,7 @@ export function createAutopilotProfile(parts: {
     watchdog: false,
     touched: false,
     guess,
+    followUp: null,
     note: null,
     facts: null,
     estimate: guess === null ? null : modelGuess,

@@ -70,11 +70,11 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority, the tasks it waits on with the kind of wait, and the open change it stacks on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`), the task's steps composed anew (`reshape_task`, Task shapes, below) or the task moved to another repository of its project (`move_to_repository`, Work across repositories, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`), the task's steps composed anew (`reshape_task`, Task shapes, below) or the task moved to another repository (`move_to_repository`, Work across repositories, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
-| Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
-| Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
-| Researcher | the Answerer's | the task's session, cannot edit, in the worktree when the task has one, else the repository, else a scratch folder | a report (`submit_report`), optionally a proposed change |
+| Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below), or the task moved to another repository (`move_to_repository`) |
+| Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix, or the task moved (`move_to_repository`) |
+| Researcher | the Answerer's | the task's session, cannot edit, in the worktree when the task has one, else the repository, else a scratch folder | a report (`submit_report`), optionally a proposed change, or the task moved (`move_to_repository`) |
 | Writer | Sonnet | one call, no thinking | the Home guide: now, up next, a heads-up |
 
 Besides its hand-over tool, every working role can ask (`ask`; never the reviewer, which cannot ask the human
@@ -450,7 +450,7 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
    (`planFirst`: `shinsa do --plan-first`) or kept in the backlog (Scheduling → The backlog, below)
    always waits at a plan gate; otherwise Settings → Agents →
-   Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
+   Engine, Approve plans (`approvePlans`: `when_asked`, `large`, the default, or `always`) decides: on Large plans a
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
    not. The size is the plan's, never triage's guess from the request. A decision
@@ -789,24 +789,36 @@ them in the order they need:
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
   task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
 - **A task in the wrong repository moves.** Triage picks the repository from the request's text, so it can guess
-  wrong (a screenshot of another app it cannot read). When all of the work is in another repository of the project
-  and nothing changes in this one, the Agent calls `move_to_repository` (`repository`, by name like `create_task`'s,
-  registered from the folders when named; `reason`) while it plans, instead of filing a second task. The guide and
-  `create_task`'s description say so. Core (`decide/moves.ts`) refuses it for the repository the task works in
-  (`same_repository`), one of another project (`other_project`, so the handle never changes), once a phase reported,
-  a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`);
-  each but the first points at `create_task`. The move takes two events, because removing a worktree reads the
+  wrong (a screenshot of another app it cannot read). Until real work exists, a task moves to any registered
+  repository, in any project, instead of becoming a second task. The Agent calls `move_to_repository` (`repository`,
+  by name like `create_task`'s: the task's own project's repository first, then any registered one, then a folder
+  of the project's folders, registered when named; `reason`) while it plans, answers, investigates or researches; the
+  guide and `create_task`'s description say so. You move it yourself with Move to another repository on the task page
+  (the repository fact and the task menu) or `shinsa tasks move <task> --repo <name>` (`task.move_to_repository`),
+  which also cancels the running agent and withdraws the open gates. Core (`decide/moves.ts`,
+  `resolveMoveRefusal` in `state/queries.ts`, which the web also reads to offer the action) refuses it for the
+  repository the task works in (`same_repository`), a task already moving (`task_moving`), once building or an
+  operation started, a phase reported, a file was edited, a pull request exists or an earlier round shipped
+  (`work_started`, so nothing in the old worktree is lost), for a task in a bundle (`task_stacked`) and, for
+  your move, once the task handed over its result (`result_handed_over`), or for a settled task (`task_settled`);
+  the work-related refusals say to file a new task. The move takes two events, because removing a worktree reads the
   task's repository:
 
   ```
   move_to_repository ─► run ends, task.moving {repoId}   movingTo set,
-                        worktree.remove                  stage triage
-  worktree.gone ─────► worktree.removed, task.moved      repoId changes
+  (or task.move_to_      worktree.remove                 stage triage
+   repository: runs cancelled, gates withdrawn)
+  worktree.gone ─────► worktree.removed, task.moved      repoId changes, and
+                        {projectId, handle} when the     the project and handle
+                        repository is in another project when it crosses one
                         startWork ─► setup verification ─► worktree in
-                        the new repository ─► plan run, same session
+                        the new repository ─► the same step, same session
   ```
 
-  The task keeps its handle, title and branch name; the old branch stays in the old repository with no commits.
+  The task keeps its title, branch name and session; in another project it takes that project's next handle, the
+  way a pick at the setup gate does (`task.repo_bound`). A task page open on the old handle follows the task to the
+  new one: the web remembers which task each address it opened resolved to (`selectRouteTask` in `router.ts`) and
+  replaces the address with the new handle. The old branch stays in the old repository with no commits.
   `readyWorktree` ignores a late `worktree.ready` while `movingTo` is set. The resumed run starts in the new
   worktree, so its turn ends with the note that its folder changed (`resolveMovedNote`).
 
@@ -1420,9 +1432,9 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   it stacks on, ties broken oldest first (`sortParentsFirst`). `task.stack_on_tasks` refuses, for each task in the
   list, a task stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task
   (`stack_parent_settled`), on one that opens no pull request (`stack_no_pull_request`), on one in another repository
-  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). The bundle can change only
-  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
-  planning run and plans again once released (Taking a task out, below).
+  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). A task can stack on more
+  tasks only until it builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
+  planning run and plans again once released. Taking it out works at any time (Taking a task out, below).
 - **Ready instead of merged.** Every task of a bundle is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
   it is ready at) when the watch finds its pull request clean, where the merge gate would open, and keeps watching: a
   read that is not clean on the same head, or a new head, takes ready away and starts the usual fix (CI, comments,
@@ -1512,8 +1524,11 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   work until the task builds. A task still waiting starts at once from what it still stacks on, or the default branch.
   A task already planning on the branches below loses those bases, its planning run is cancelled, and
   `worktree.create` resets its worktree before it plans again; a task below with nothing stacked on it any more goes
-  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so the bundle no
-  longer changes; cancel the task or let the bundle merge.
+  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so it can no longer
+  stack on more tasks, but it can still leave (`leaveStartedStack`): each task it leaves becomes a wait (`waitsOn`, a
+  cancelled one is dropped), its bases go, and an open pull request is watched again and retargeted onto the default
+  branch, so it merges on its own once the tasks it left have merged. Until then its pull request shows their commits
+  too. This is how a stacked initiative becomes tasks that merge on their own.
 - **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
   description says so). Stack when the later task builds directly on these tasks' code in the same repository and
   ships with them: the next piece of one feature, a schema then its API and its screen in parallel then the screen
@@ -1575,8 +1590,13 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   already in another initiative stays there; a task already in one is refused (`initiative_exists`). This is how an
   effort like SW-101's chat split moves in after the fact.
 - **A plan can propose one.** A plan with a `split` may set `initiative: true` when the parts are one effort that will
-  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). The plan card
-  and its markdown say so under the other tasks (`PLAN_INITIATIVE_NOTE`), and approving the plan splits the parts off
+  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). An initiative
+  is never a bundle: its tasks each merge on their own, so its parts start `parallel` or `waits_on` the part whose merge
+  they need, each with the `phase` it belongs to, and a plan that sets `initiative` with a `stacks_on` part is refused,
+  as is a lead's own plan with one (`validatePlanRules`). The plan card says so: "The agent
+  wants to start this as an initiative of N tasks", Start initiative, and that each task merges on its own while a lead
+  keeps track of them (`describePlanCard`, `lib/tasks/backlog.ts`); its markdown says so under the other tasks
+  (`PLAN_INITIATIVE_NOTE`). Approving the plan splits the parts off
   and then adopts the task (`startPlanInitiative`), so the task, its parts and a lead forked from it become the
   initiative in one click. A task already in an initiative keeps it, and its parts join it.
 - **The sheet** (`resolveInitiativeSheet`, pure, no model call) is the lead task's Overview, `shinsa initiatives show`
@@ -1587,7 +1607,7 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   first, at most 100). A lead is never one of the initiative's tasks there or in any count (`listInitiativeWork`).
   The Overview shows these as the All tasks list does (a gate's group, In progress, one section per phase named after it, Done and
   Cancelled) and puts Decisions into the lead's Activity (`listInitiativeTaskSections`, `listInitiativeActivity` in
-  `apps/web/src/lib/initiatives/view.ts`). Home and the queue list the members where any task sits and leave the lead out, so an initiative never stands in for its tasks (`listQueueSections`, `apps/web/src/lib/queue.ts`); both routes are
+  `apps/web/src/lib/initiatives/view.ts`). Home and the queue list the members where any task sits and leave the lead out, so an initiative never stands in for its tasks; in every section, Needs you included, two or more of one open initiative sit under its row, and in Needs you a decision of the lead's own is that group's first row (`listQueueSections`, `apps/web/src/lib/queue.ts`); both routes are
   behind the `initiatives` engine feature, whose views link the lead task.
 - **Focus.** `Focus.initiativeId` is a third focus target beside projects and a team, one at a time (`focus_refused`
   for two), from the Focus menu, ⌘K or `shinsa focus initiative`. `resolveQueue` then keeps only the initiative's
@@ -1597,7 +1617,7 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   tools. It is the task's one Agent session (the engine's first rule), and it keeps a task's notions: a plan, your
   answers, its chat.
   - **It plans first.** A new initiative's lead plans like any task (`purpose: plan`, `resolveLeadPlanningPrompt`,
-    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead): its `phases` are the
+    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead, and `resolveWorkspace` sends every lead run there even when the lead has a repository, as an adopted one does): its `phases` are the
     initiative's phases and its `split` the first tasks to file, each with the `phase` it belongs to (its number) and a
     request naming its repository. `validatePlanRules` lets a lead's plan split but refuses `files` and `initiative`.
     The split always opens the plan gate. Approving it files the parts (`startPlanSplit`, forked from the lead's chat,
@@ -1620,7 +1640,8 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   initiative (`initiative.milestones_queued`, the last 40) and emits an `initiative.wake` effect. The engine's
   `LeadWakes` debounces it per initiative (30 s, `LeadWakeDebounce`, one waiting fiber per initiative), then sends
   `initiative.wake_lead`, which starts a turn only when the lead rests idle in `leading`; a lead that is busy gets
-  the queue on the wake its next report asks for, and on start the engine reschedules every initiative with milestones queued. The
+  the queue on the wake its next report asks for, a lead whose failed run waits on its automatic retry
+  (`isRetryArmed`) gets it on the turn that retry starts, so member milestones never spend its retries early, and on start the engine reschedules every initiative with milestones queued. The
   turn's prompt carries the digest of the sheet and the milestones since the last turn at the tail of the user turn,
   and `initiative.lead_woken` empties the queue, so the session's cached prefix never changes (Caching). A message to
   the lead, yours or a member's (`tasks_message`), starts a turn straight away (`answering your message`, or
@@ -1759,7 +1780,8 @@ stacked as a bundle, which is how most splits end; in parallel only for a part w
 alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
 Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
 every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
-`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle. A plan
+that starts an initiative says initiative instead, never bundle (Start initiative, Initiatives, above).
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
@@ -1800,8 +1822,10 @@ out, and a signed-out account.
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
 behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below). The one
-exception is the pre-approval you give yourself: with Autopilot on, a review or merge gate may be approved for you
-by the policy you set, and only those two (Process and structure → Autopilot).
+exception is the pre-approval you give yourself: with Autopilot on, a plan, question, review, merge or your OK
+gate may be answered for you by the policy you set, and at Everything also a failure gate and a review's
+findings, each kind only once its score clears the bar; secret, Sign in, setup, operation, result and post-merge
+gates never are (Process and structure → Autopilot).
 
 Each gate takes only the answers that mean something for it (`gate.answer` refuses the rest):
 a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
@@ -2087,7 +2111,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 - **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
   doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
   of the current window, `countWindowChecks`, so a window that starts again backs off from the start), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
-  leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
+  leaves out comes from three settings (Settings → Automations → Watchdogs, `settings.change`): `watchdogHours` (72 by
   default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
   read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
 - **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
@@ -2122,7 +2146,10 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
   (`isReadOnlyRun`), in the repository itself, in the task's watch session (`Decider.taskSession` with purpose `watch`):
   the first check starts it with the round brief, so it knows what shipped, and later checks resume it. The Agent's
-  own session never resumes a check, and a check never resumes the Agent's. A check is a read of a data source like a watch's (Schedules and webhooks, below), scoped to the shipped
+  own session never resumes a check, and a check never resumes the Agent's. Everything that lists tasks reads a check
+  as the task at rest (`isWatchCheck`, `resolveShownStage`: `watching` shows as `merged`, or `done` when nothing
+  merged): the queue leaves it out of `working`, All tasks keeps it in Done, the counts count it done, and moving into
+  or out of `watching` keeps `stageChangedAt`, so the task keeps its place in Done and in Recently finished. A check is a read of a data source like a watch's (Schedules and webhooks, below), scoped to the shipped
   change: its prompt (`resolveWatchPrompt`, on the skeleton both share, `resolveReadPrompt` in `prompts/reads.ts`)
   names the watchdog, its check as what to look for, its source, what arrived since its last check (or since the
   window started), its last checks and the last 10 tasks filed from that server in the project.
@@ -2303,7 +2330,7 @@ checks it ran.
 
 Autopilot is your delegate: at each point where a task would wait for you it decides, like a trusted colleague,
 whether to act for you, bring it to you, or, as a last resort, send it to your team. It is a pre-approval you give,
-never a power Shinsa takes: the policy is the human-only setting `autopilot` (Settings → Agents → Autopilot,
+never a power Shinsa takes: the policy is the human-only setting `autopilot` (Settings → Autopilot,
 `AutopilotPolicy` in `domain/settings.ts`), off by default, and every action it takes is recorded with its reason.
 Two layers decide: core's hard limits, which a model can never cross, and inside them a short model call that
 judges the case. The rules are core's (`autopilot/` for the facts, limits, prompt, lessons, your decision profile,
@@ -2317,7 +2344,8 @@ gate opens ──► askAutopilot
                  └─ allowed ──► autopilot.judging ──► autopilot.judge (quick call)
                                    └─► autopilot.judgment {verdict, reason, reply}
                                          ├─ limits checked again; forward ──► waits for you
-                                         └─ act ──► approve / reply / merge, with the reason
+                                         ├─ cancel (a failed step) ──► cancel the task
+                                         └─ act ──► approve / reply / merge / retry, with the reason
 you answer it later ──► lesson (autopilot.learned) ──► next judgment's prompt
 you answer any gate ──► autopilot.decided ──► model guesses, then learns
                                          └─► estimate + examples ──► prompt
@@ -2333,23 +2361,26 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Urgency is the task's priority.** A task you mark urgent is urgent; a watchdog check or a watch's read may set
   `urgency` on `file_report` (a `TaskPriority`), which becomes the filed task's priority instead of the watched task's.
 - **The policy.** `enabled` (false); `level`, how much it may do alone (`AutopilotLevel`: `ask_first`, `balanced` by
-  default, or `most`); `gates`, which of your decisions it may act on (`AutopilotGate`: `plans`, `questions`,
-  `reviews`, `suggestions` and `watchdogTasks`; all but `suggestions` by default); `autoMerge` (`AutoMerge`: `off`, `low_risk` by default, or `approved`, every
+  default, `most` or `everything`, the last offered only once a kind of gate is ready, Everything, below); `gates`,
+  which of your decisions it may act on (`AutopilotGate`: `plans`, `questions`, `reviews`, `suggestions`,
+  `watchdogTasks`, and for Everything `proposals` (your OK on any other task), `failures` and `findings`; all but
+  `suggestions` by default); `autoMerge` (`AutoMerge`: `off`, `low_risk` by default, or `approved`, every
   change it approved); `escalate` (true), whether it may send an urgent change to your team; `ignoreUsageLimits`
   (true), whether an urgent task's runs skip the usage and cost limits; `contacts`, who in Slack also hears of an
   escalation (none by default, at most `MAX_AUTOPILOT_CONTACTS`, 5; each an `AutopilotContact`, a `slack_channel`
   or `slack_person` with its workspace `teamId`, Slack `id` and `name`, listed once, `isSameAutopilotContact`;
   Escalating in Slack, below). `settings.change` takes a partial `autopilot` and merges it into the current policy,
   `gates` and `contacts` replaced whole.
-- **The facts.** For a plan, question, review, merge or your OK gate (`selectJudgedGateKind`; your OK only on a
-  task a watchdog filed, below), `resolveAutopilotFacts`
+- **The facts.** For a plan, question, review, merge, your OK or failure gate (`selectJudgedGateKind`; a failure
+  only with no cause, an agent's wait that ran out (`monitor`) or a failed pre-push hook (`push_hook`),
+  `AUTOPILOT_JUDGED_FAILURE_CAUSES`, `isAutopilotJudgedFailure`), `resolveAutopilotFacts`
   gathers what a colleague would weigh: urgency (`isUrgentTask`: urgent and not set on your behalf), whether a
   watchdog filed it, the reviewer's confidence and risk, the plan's size (phases and files), whether the plan asks
   for you (it runs an operation, splits, is in the backlog, was created plan first or asks for `approval`), whether
   you approved the review yourself, how long the gate has waited, and where you are (`resolveAutopilotPresence`):
   inside your usual hours or not (Your hours, below), active when you were seen in the last 30 minutes
   (`AUTOPILOT_LIMITS.activeMinutes`; anything you do in Shinsa or on your Mac counts, `state.presence`), and how
-  long you have been away.
+  long you have been away, and whether that kind of gate is ready for Everything (`ready`, below).
 - **The hard limits** (`resolveAutopilotLimits`, a ceiling per level in `AUTOPILOT_CEILINGS`):
 
   | Level | Risk it acts on | Risk when urgent | Largest plan it approves |
@@ -2357,6 +2388,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   | `ask_first` (Ask me first) | low | low | 2 phases, 4 files |
   | `balanced` (Balanced) | low | medium | 4 phases, 10 files |
   | `most` (Most things) | medium | high | 6 phases, 20 files |
+  | `everything` (Everything) | high | high | any size |
 
   A gate whose kind is not in `gates` waits for you. A plan within the size and not held for you may be approved;
   a question may be answered; a review needs `high` confidence and a risk within the ceiling (the urgent one for an
@@ -2365,24 +2397,82 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   within `low` (`low_risk`) or the level's ceiling (`approved`), or the urgent ceiling once you have been away 60
   minutes of the wait (`AUTOPILOT_LIMITS.awayMinutes`); and nothing that refuses a merge (`resolveMergeRefusal`: an
   open pre-merge step of it or its bundle, or edits not pushed). Each refusal carries why ("The reviewer’s
-  confidence is medium.") and whether a setting made it.
+  confidence is medium.") and whether a setting made it. Below Everything, your OK waits for you except on a task
+  a watchdog filed, and every failure gate waits for you.
+- **Everything, earned per kind** (`resolveAutopilotReadiness`, `isAutopilotKindReady`, `AUTOPILOT_READINESS_LIMITS`).
+  Each kind of gate Everything widens (plan, review, merge, your OK, failure and finding, `AUTOPILOT_READINESS_KINDS`)
+  is scored on its own track in the profile (`AutopilotProfile.kinds`, below): `combined` for the gates, `model` for
+  findings, which no model call judges (`AUTOPILOT_READINESS_TRACK`). A kind is ready once at least 100 of its own
+  decisions are scored, it agrees with you on at least 90% and it is at least 5 points ahead of your usual answer for
+  that kind (its own `rate`, so merges you nearly always approve do not make plans look easy). Settings offers
+  Everything once any kind is ready, or while it is already your level. The lock is core's, not the page's: at every
+  gate `resolveAutopilotLevel` reads `everything` as `most` for a kind that is not ready, so a kind that later drops
+  below the bar falls back on its own while your level stays where you set it. A ready kind at Everything may approve
+  a plan of any size not held for you, approve a review or merge of any risk with `high` confidence (Auto merge still
+  applies), give your OK on any task, retry a failed step or cancel the task, and set the review's findings. Below
+  Everything nothing changes. Questions are not score-gated: Autopilot answers them at every level and a reply has
+  no yes or no to score. What it never answers is in Who can change Shinsa, below.
 - **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
   and asks for `autopilot.judge {taskId, gateId, shadow: false}`, a replay-safe effect on lane `task:<id>`: the engine builds the
   prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
   task's request, plan goal or question, the facts, the last 8 lessons of that kind of gate and your decision profile
   for it, below, in the user prompt)
   and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
-  'forward', reason, reply}`. It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
+  'revise' | 'forward' | 'cancel', reason, reply}`; the user turn lists the verdicts the gate takes
+  (`AUTOPILOT_GATE_VERDICTS`: `revise` on a plan, review or merge only, Follow-ups below; `cancel` only on a
+  failure), the system prompt says what each means, and core reads any other verdict as `forward` (a `revise` where
+  it does not apply is refused by the follow-up limit). It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
   ("Autopilot could not reach a model, so this waits for you."). Core ignores a judgment for a gate no longer open
   or no longer judging, checks the limits again (the state may have moved), and then acts: a plan is approved
   (`answerGateForYou`), a question answered with the reply (with no reply it waits for you: "Autopilot was not sure
   what to answer"), a review approved as "Fix and approve" does (`approveReviewAhead`), a merge started
-  (`gate.answered` `ahead`, then the usual merge). Every action is `gate.answered` with `autopilot: <reason>`
+  (`gate.answered` `ahead`, then the usual merge), your OK given, a failed step retried (`approve`, or `reply` with
+  the judge's guidance for the agent) or, on `cancel`, the task cancelled (`reject`), unless a confident model puts
+  the chance you would retry at 50% or more, which brings it to you instead. Autopilot retries a task's failed step
+  at most once a round (`AUTOPILOT_LIMITS.retriesPerRound`, counted from the round's failure gates it answered,
+  `AutopilotFacts.retried`): your own answer to a failure gate clears the automatic retries, so a second retry for
+  you would start them over and could loop, and the next failure of that round waits for you ("Autopilot already
+  retried this task once and it failed again."). At Everything, with `findings` on and
+  findings ready, approving a review also sets a verdict on each open finding from the local model, each judged on
+  its own (`selectAutopilotFindingCall`, `autopilot/findings.ts`: a probe per finding with that finding's severity
+  as its counts, `fix` when it puts the chance you fix it at 50% or more, `dismiss` below, and no verdicts at all
+  unless every finding has confidence at least 0.5): any `fix` asks for changes on the review (`revise`, with the
+  verdicts) instead of approving it, all `dismiss` approves it with them; the reason says which and why. A finding
+  you mark is learned with its own severity (`DecisionDraft.finding`), not the review's counts, so the model can
+  tell your findings apart. Every action is `gate.answered` with `autopilot: <reason>`
   (the reason clipped to 240 characters, the reply to 2,000), shown in the activity as done for you by Autopilot
   with the reason as its detail. A forward keeps why on the gate (`autopilot.forwarded`, `Gate.autopilotHeld`) and
   waits for you as always. While a task is a review candidate, `reactToFindings` sends the review's `should_fix`
   findings to the Agent as well as its blocking ones (`isFindingFixedBeforeReview`), so it never approves past a
   finding you would have fixed.
+- **Follow-ups** (`revise`, `autopilot/follow-ups.ts`). At a plan, review or merge (`AUTOPILOT_FOLLOW_UP_GATES`) the
+  judge may answer `revise` with one follow-up question or change request in `reply`, written in your voice ("How
+  does this handle auth on the new endpoint?"). Autopilot answers the gate as your Request changes does
+  (`answerGateForYou` with `revise`, the same `reviseWork`), `gate.answered` with `autopilot: <reason>`, shown in the
+  activity as "Followed up for you by Autopilot" with the reason and the words it sent. A follow-up never sets
+  `Task.autopiloted`, so it never unlocks an auto merge. It has its own hard limit beside `act`
+  (`AutopilotLimits.revise`): it may go past the level's risk and size ceilings, since it approves nothing, but
+  never on a gate kind turned off in `gates`, a plan held for you, an escalated review, a paused kind (the lesson
+  limit), or a merge with `autoMerge` off or of a review you approved yourself. At most 2 follow-ups per gate in a
+  round (`AUTOPILOT_FOLLOW_UP_LIMITS.perGate`, `resolveFollowUpLimit`), counted since you last answered that kind of
+  gate on the task; then the gate comes to you ("Autopilot already followed up 2 times here, so this waits for
+  you."). A gate refused only for approving gets a live judgment that may only follow up (`autopilot.judging` with
+  `followUpOnly`, `Gate.autopilotFollowUpOnly`, the prompt told why it may not approve); an `act` there forwards with
+  the limit's reason, and its verdict is still kept as the guess. The prompt lists the follow-ups already sent at
+  this gate, oldest first, so it never asks the same twice; a `revise` with no words forwards. Handled by Autopilot
+  quotes the follow-up (`AutopilotDone.followUp`). Your later answer to that gate is a `revised` lesson: rejecting
+  it corrects Autopilot, approving or asking more keeps the call.
+- **The topics you probe** (`autopilot/topics.ts`, `AutopilotProfile.topics`). Each note you write when you ask for
+  changes or reply (`revised` or `replied` on a plan, question, review, merge or your OK) is read against a fixed
+  table of word patterns (`AUTOPILOT_TOPICS`: security, migrations, data loss, tests, error handling, performance,
+  compatibility, concurrency, privacy, docs; `listNoteTopics`), plain and replay-safe, no model call. Patterns match
+  whole words in any form (migrating, deleting, retried), and a word with another sense counts only in its topic's
+  context (drop or delete a table, rows or data; escape the input; row or table locks), so the Escape key, dropping
+  padding or a lock icon raise nothing. Each topic keeps
+  its count and a recency-weighted count with the profile's 30-day half-life (`AutopilotTopicTally`). Every judgment's
+  prompt lists the topics raised at least twice, at most 5, the ones raised lately first
+  (`listAutopilotTopicLines`, `AUTOPILOT_TOPIC_LIMITS`), so the judge raises them the way you would. Settings shows
+  the first three as What you ask about.
 - **It learns from you** (`autopilot/lessons.ts`). When you answer a gate after Autopilot acted on the task
   (approved its plan or review, answered its question) or brought it to you for a reason it could judge (not a
   setting), each answer becomes a lesson (`listAutopilotLessonsToLearn`, `autopilot.learned`,
@@ -2429,7 +2519,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   folded on every `autopilot.decided` (`state/autopilot.ts`, `learnAutopilotDecisions`): no hosted model, no
   fine-tuning, nothing leaves your machine, and replaying the log rebuilds it exactly, since it is plain arithmetic
   in a fixed order. It is an online logistic regression with three heads (`AUTOPILOT_HEAD_OF_KIND`): `gate` (plan,
-  review, merge and your OK; approved is yes), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
+  review, merge, your OK and failed steps; approved is yes, and so is a retry with your guidance, `replied`), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
   Messages, edits, filed tasks, priority changes and cancellations train no head. `listAutopilotFeatures` turns a
   decision into features: the kind, risk, reviewer's confidence, shape and hour band one-hot, the plan's scope and
   the findings log-scaled, the flags (urgent, watchdog, active, in your hours, the plan you always approve), the project and repository hashed into 16 buckets, and a few crosses (kind × risk, kind × confidence,
@@ -2461,24 +2551,36 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   leaves the model call to decide alone, so a new install or a new project still works. A veto brings the gate to
   you with the estimate as the reason ("From 40 decisions like this one, Autopilot puts the chance you would
   approve it at only 12%, so it waits for you."). With no model call, the gate comes to you, as before.
-- **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
-  merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
-  (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
-  stored on the gate (`autopilot.guessed {verdict, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotEstimate`) and
+- **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review,
+  merge, your OK or judged failure gate to you (`AUTOPILOT_SCORED_KINDS`; a failure is asked as it opens,
+  `syncAutopilotFailures`), it judges it anyway, once per gate, in the background
+  (`autopilot.judge` with `shadow: true`, the prompt told it will not act and to guess `act`, `revise` with the
+  follow-up you would write, `cancel` for a failure you would cancel, or `forward`, `AUTOPILOT_SHADOW_NOTE`); the answer is
+  stored on the gate (`autopilot.guessed {verdict, followUp, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotFollowUp`, `Gate.autopilotEstimate`) and
   acts on nothing. `estimate` is the model's estimate at that moment, the same one a live judgment reads for its
   veto, so the combined track scores exactly what Autopilot did or would have done. A gate it judged and then
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
-  (`AutopilotDecision.guess`). Approving agrees with `act`, changing or rejecting with `forward`; questions are not
-  scored, since a reply has no yes or no.
+  (`AutopilotDecision.guess`, and the follow-up it would have sent as `AutopilotDecision.followUp`). Approving, or
+  retrying a failed step with or without guidance, agrees with `act`; asking for changes with `revise` or `forward`;
+  rejecting or cancelling with `forward` or `cancel`, and `cancel` agrees only with your cancel
+  (`isAutopilotAgreement`), so the readiness of failures measures its cancels too. The combined verdict keeps a
+  `cancel` unless a confident model vetoes it (`isAutopilotCancelVeto`); questions are not scored, since a reply has
+  no yes or no. A failure gate counts as a decision only when Autopilot could judge it. **The follow-up match**
+  (`AutopilotProfile.followUps`, `scoreFollowUp`, `resolveAutopilotFollowUpScore`): when Autopilot guessed `revise`
+  and you asked for changes in words that name a topic, it counts whether its follow-up named one of the same
+  topics; Settings shows the share as Its follow-ups, and the benchmark prints it. Guesses and decisions from before
+  follow-ups get `followUp: null` from the `follow-ups` log migration.
 - **Four tracks** (`AutopilotProfile.tracks`, `AUTOPILOT_TRACKS`). Each decision is scored against four guessers,
   each a running agreement in which an older decision counts half as much after 50 newer ones
   (`AUTOPILOT_SCORE_LIMITS.halfLife`): `model`, the local model's guess (`p` of at least 0.5 is a yes), on every
   plan, review, merge, your OK, finding and suggested task, Autopilot on or off; `call`, the model call's guess; `combined`, the verdict
   the rule above makes from the call's guess and the estimate stored with it (`AutopilotDecision.estimate`), never
   from the fold's later `modelGuess`, which has newer weights; and `base`, always your usual answer for that head lately (`AutopilotProfile
-  .rates`, the decayed share of yes, before this decision). Each track also counts how often `base` was right on the
+  .rates`, the decayed share of yes, before this decision). The same four tracks are kept per kind
+  (`AutopilotProfile.kinds`, `AutopilotKindProfile`, each with its own `rate` for `base`), which is what Everything
+  reads. Each track also counts how often `base` was right on the
   same decisions (`baseWeight`), so its `margin` over your usual answer compares like with like, and a log loss
   (a flat verdict counts as 99% sure, `clamp`), for the benchmark. `resolveAutopilotScore` reads `combined`, what
   Autopilot does: `progress`, from 0 to 1, the lesser of how many were scored against 50 and the weighted agreement
@@ -2504,10 +2606,11 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Watchdog tasks** (`watchdogTasks` gate, on by default). On a task a watchdog filed (`isWatchdogTask`), your OK
   gate on its proposal is judged like any other gate and Autopilot may give your OK, unless the plan asks for you
   (`limitProposal`). Everything after still passes its own gates under the same policy. Your OK on any other task
-  is always yours.
-- **Handled by Autopilot on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
+  is yours below Everything; at Everything the `proposals` gate covers it once your OK is ready.
+- **Handled by Autopilot on Home** (`autopilot/done.ts`). Every gate Autopilot answered for you
   that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Handled by Autopilot, first on Home above
-  Needs you: what it did, the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
+  Needs you: what it did (`AutopilotDone.action`: `approved`, `replied`, `merged`, `revised`, `retried` or
+  `cancelled`, each worded and drawn on its own; a follow-up quotes the words it sent), the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
   stays in Recently finished); with two or more rows, Mark all seen clears them (`autopilot.seen {gateIds}`, human-only, `Gate.autopilotSeen`; `shinsa autopilot seen`). Each notifies once when
   it happens and its notification closes when you mark it seen; none counts in the Needs you badge.
 - **Urgent merges while you are away.** With the policy on, an urgent task's open merge gate is checked every hour
@@ -2536,7 +2639,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   let them answer decisions on your tasks; otherwise they review it read-only and reach you. The
   escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in
   no team escalates only in its own activity and Overview ("Sent to your team"), so while none of your projects is
-  in a team, Settings → Agents → Autopilot says "No project shared with a team" in Who it asks.
+  in a team, Settings → Autopilot says "No project shared with a team" in Who it asks.
 - **Escalating in Slack.** The team escalation always happens; each of `contacts` adds one Slack message to it, so
   a channel and a teammate, or several of each, are asked at once. Without a project shared with a team and with no
   contacts there is no one to ask, so the Your team row shows a warning while `escalate` is on (`isAskWaiting`). `escalate()` asks for one
@@ -2558,7 +2661,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   with each watchdog's state and the steps still to do after the merge, and to keep an eye on it too (or, with no
   watchdog, only to keep an eye on it). The reply's ts is kept with `slack.record_escalation_follow_up`
   (`slack.escalation_followed_up`), and every later watchdog event or ticked step edits it, as the merge message of a
-  thread is. The contacts are chosen in Settings → Agents → Autopilot, in the Who it asks block (Settings, below): your team in Shinsa
+  thread is. The contacts are chosen in Settings → Autopilot, in the Who it asks block (Settings, below): your team in Shinsa
   first, "Always on" or "No project shared with a team", then each Slack channel (its name, no #) and person (their Slack
   picture, `image` from `users.list`'s `image_72`, kept on the contact) with a button to remove it. Add from Slack
   opens one search over Channels and People (`listContactOptions`, the chosen ones ticked, the rest disabled at five,
@@ -2575,7 +2678,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **What it never does.** It never closes an operation, result, secret, failure, setup or Sign in gate, an
   escalated review, a plan held for you, or your OK on a task no watchdog filed, never ticks a step around the merge, never acts while the hard limits
   refuse whatever the model says, and never gets past GitHub: a merge GitHub refuses opens the usual failure gate.
-- **Settings** (Settings → Agents → Autopilot, `AutopilotSettings`, `lib/autopilot.ts`). The header has Turn on while
+- **Settings** (Settings → Autopilot, `AutopilotSettings`, `lib/autopilot.ts`). The header has Turn on while
   it is off, with one line on what it does, and the on and off choice once on. Acting for you: On its own (the
   level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews,
   Suggested tasks, Watchdog tasks: Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
@@ -2721,7 +2824,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   run that would start past a limit does not start, and the task pauses with a failure gate (`cause: budget`)
   whose body names the limit it reached, not what the task spent ("This task reached its $5.00 cost limit, so the
   next step did not start.").
-  Settings → Agent usage → Limits, Usage limit per task (`taskUsageLimit`, a whole percentage) counts the task's
+  Settings → Usage → Limits, Usage limit per task (`taskUsageLimit`, a whole percentage) counts the task's
   share of the weekly window, as above ("Reached its usage limit"); it is what a subscription has. On an account
   still learning its rate it counts the early estimate (`TaskBudget.estimated`), and its gate adds "The share is an
   early estimate while Shinsa learns the account's rate."; a run with no estimate yet (no usable observation on its
@@ -2747,7 +2850,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   Both are a percentage of one account's weekly limit, like the task limit, any amount above zero, so a pool of
   accounts can allow more than 100 a day. Each provider counts only its own usage against them: a step on Claude
   is held by Claude's last 24 hours, a step on Codex by Codex's, since a percentage of one provider's weekly limit
-  means nothing on another. Settings → Agent usage → Limits, Daily usage limit counts every task; a
+  means nothing on another. Settings → Usage → Limits, Daily usage limit counts every task; a
   project's usage limit (its dialog, or `shinsa projects write --usage-limit`, 0 for off) counts only its tasks.
   An urgent task skips them, and its own limits, while Autopilot ignores usage limits (Process and structure →
   Autopilot).
@@ -2771,7 +2874,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   `HUMAN_ONLY_SETTINGS`, since it decides how much usage a check may spend): a run with `purpose: watch` skips
   `holdForBudget` and `holdForPace` (`isExemptWatchCheck` in `decide/costs.ts`), so a check starts on time at the task
   usage, cost, daily and project limits, and its usage still counts toward each of them for the steps that follow.
-  Settings → Agent usage → Limits, Watchdogs ("Ignore usage limits" or "Follow usage limits", and the same choice in
+  Settings → Usage → Limits, Watchdogs ("Ignore usage limits" or "Follow usage limits", and the same choice in
   ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
   held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
   watchdog files are ordinary tasks that follow every limit.
@@ -2813,7 +2916,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
     `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace_resets`): then an urgent or high build
     uses `resetPace`, and while a usable reset ends within 3 days a normal or low build uses `endingPace`, which counts
     only those ending resets, so none is left to end unused (`resolveAdmissionPace`). Normal and low builds never count
-    on a reset that ends later. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Agent usage → Auto pace
+    on a reset that ends later. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Usage → Auto pace
     says so under the provider's budget ("Urgent and high-priority builds may use up to 160%, counting on you using a
     reset in Claude", or "A usage reset ends in 2 days, so every build may use up to 130%, counting on you using it in Claude"). A build fits when its estimate does; one
     larger than the whole budget counts as the budget, so it starts once nothing else is using it.
@@ -2830,7 +2933,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
     `paceLimitsIgnored`, as for the other pace holds. Switching Auto pace off releases every admission hold. A build
     admitted still stops at the daily and project limits.
   - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
-    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace has its own section in Settings → Agent usage, right above the Forecast
+    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace has its own section in Settings → Usage, right above the Forecast
     it follows (`AutoPaceSettings`): its switch, and while it is on, one row per provider with what is left for its
     builds in the next 24 hours, the reserve and how many builds wait (`selectPaceBudget`). Home's guide leaves waiting builds out of the
     running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
@@ -2861,7 +2964,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
     (`source: 'override'`) until you clear it with null.
   - **Reading it.** `isActiveAt(hours, at)` (true with none: unknown counts as here) and
     `resolveNextActiveChange(hours, at)`, the next 15-minute step where you go from here to away or back, or none
-    when the week never changes. Settings → Agents → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) is laid
+    when the week never changes. Settings → Autopilot → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) is laid
     out like the Forecast card: a header with your hours a week, a line on whether you are usually active now and
     until when (on your hours' time zone), a week timeline (a row per weekday from Monday on a 24-hour track, your
     usual hours filled, Now marked on today, a legend), where they come from, or that it is still learning; it
@@ -2891,7 +2994,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
   limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
   The account picker follows the same order when it switches: past the switch threshold, the account whose weekly
-  limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
+  limit resets soonest takes over (Accounts and usage limits, below). Settings → Usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
   it runs out, a small gap before each reset, each limit window its own bar, and an orange band wherever every account is out at once: `outages`), drawn at a
@@ -3199,7 +3302,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   the channels the bot is in, in the workspaces linked to this machine, a private one only when a person linked
   to this machine is a member of it (`Slack.channels`, `GET /__remote/slack/channels`). It refuses with what
   to do: remote access off (`SLACK_NOT_CONNECTED`), no channel at all, which is Slack not linked or @Shinsa
-  invited nowhere ("Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa
+  invited nowhere ("Connect Slack in Settings → Cloud → Slack if it is not connected yet, invite @Shinsa
   to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
   is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--no-slack-updates` or
   `--slack-updates=false` on the command line, whose boolean flags take no separate value), which
@@ -3640,6 +3743,14 @@ running when the window closes or the app quits, and a page that comes back find
   would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
   its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
   one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
+- **Unused terminals close on their own.** Every minute (`TerminalTimings.sweep`), `Terminals.sweep` asks
+  `resolveAutoClose` (`sweep.ts`, pure) about each terminal and closes what it picks, as Close would. Each session
+  records when it was last active: output, your typing, a page attaching or leaving, a start. A shell that `exited`
+  closes once it has been quiet and unseen for 10 minutes; a shell that has been quiet for 8 hours closes too, a
+  running one only when nothing runs in front of it (the foreground check below), and so does one a restart left
+  `stopped` (`AUTO_CLOSE_LIMITS`). The clock starts when the engine makes the session, so after a start every
+  terminal it kept gets its full window, however long the machine was off. A terminal a page has open is never closed, and neither is a service run: it stops
+  only when you stop the service. Inspect mode and a stopping engine close nothing.
 - **When the engine stops.** `stop()` hangs up every shell and its process group (`SIGHUP` and the PTY closed, as
   closing a terminal window does, then `SIGKILL` after 3 s) and waits until each group is empty, so nothing it started
   outlives the engine, and saves each screen. A restarted
@@ -3706,7 +3817,8 @@ beside your run (Runs for a task, below).
   servers you add (`extensions.json`) and the terminals themselves. They are written whenever they change and read
   once at start; a broken file is logged and read as empty.
 - **States.** `resolveServiceState` (core) reads the service's terminal: none or `stopped` is stopped; running is
-  starting for its first 3 s (`SERVICE_LIMITS.startingMs`) and running after; exited with 0 is exited; exited with
+  starting for its first 3 s (`SERVICE_LIMITS.startingMs`) and running after, and a service with a preview URL stays
+  starting while its terminal says `answering: false`; exited with 0 is exited; exited with
   130 or 143 (an interrupt or a terminate you sent) is stopped; any other code, or none, is failed. `resolveServiceView`
   adds how long it has been so, `resolveServicesSummary` the counts the header shows.
 - **Start, stop, restart.** `POST /api/services/<id>/start` opens the service's terminal the first time and starts its
@@ -3760,8 +3872,18 @@ beside your run (Runs for a task, below).
   restarts and under the service's own variables and its port.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
   engine starts it again (`Terminals.resumeServices`, from `serve/work.ts`), where its folder is still one of its project's; a
-  task's run starts again only while the task is open and still holds the folder. Plain
+  task's run starts again only while the task is open and still holds the folder. Each service starts on its own: one
+  that cannot (its folder is gone, no port is free, its command cannot be launched) is logged, writes the reason in its
+  tab and ends `exited` with no code, so it shows as failed, and the rest still start; the engine's start never waits on
+  or fails for it. A spawn that throws is a `SpawnFailed` and never leaves the terminal `running`. Plain
   shells come back as `stopped`, as before. Inspect mode starts nothing.
+- **Starting until the port answers.** A service run with a preview URL and a port starts with `answering: false` on
+  its `TerminalInfo`. A fiber per run (`Terminals.watchAnswer`) asks `TerminalPty.isAnswering`, a TCP connect to
+  127.0.0.1 and then ::1 with a 250 ms timeout (`ANSWER_TIMEOUT`), every 500 ms (`TerminalTimings.answer`) until the
+  port accepts, the process ends or 10 minutes pass (`TerminalTimings.answerLimit`); then `answering` turns true and
+  the service shows as running, so a build after an update reads as starting rather than a dead preview. A new start,
+  a closed tab and the engine's stop interrupt the fiber. A service without a preview has no `answering` and keeps the
+  3 s rule. The field is never read back from `terminals.json`.
 - **Found for you.** `GET /api/services/suggestions?projectId=` (`detect.ts`, `listServiceSuggestions`) reads each of
   the project's repositories and folders, fast enough to run when the Services popover turns to Add services (a few file reads,
   no process): the run script of every workspace the root `package.json` names (`workspaces` as a list or
@@ -4110,7 +4232,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Pausing and removing**: `shinsa remote disable` closes the relay socket, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
-- **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
+- **Settings → Cloud → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Not connected when it is on and its relay socket is not open, Reconnecting, Paused,
   Removed) with Turn on, Cancel, Pause, Resume and Remove, the
@@ -4230,7 +4352,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   no longer spins. Opening the link again on a device that already asked picks up that one request with its key and
   name instead of asking again, and on a device already added says so with Open Shinsa, unless the account no longer has that machine (a member removed), when it asks again with a new key. A device that left while it waited shows Waiting for an answer
   in the dashboard and in Settings → Machines until the machine accepts it, which opens it there, or declines it,
-  which forgets its key. Settings → General → Machines lists every machine in rows like
+  which forgets its key. Settings → Cloud → Machines lists every machine in rows like
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
@@ -4268,7 +4390,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
   `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `usage.auto_pace_resets` for `autoPaceResets`, `focus.projects` for `focus.change`'s `projectIds`
   and `except`, `autopilot` for the `autopilot` setting and `autopilot-slack` for its Slack `contacts`,
-  `GET /api/slack/directory` and `POST /api/slack/test`, today; Settings → Teams, Settings → Agents → Autopilot,
+  `GET /api/slack/directory` and `POST /api/slack/test`, today; Settings → Teams, Settings → Autopilot,
   the review's Fix and approve choice and
   What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
   `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
@@ -4420,7 +4542,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   ends every open link at once, and that link never works again: sharing the task again makes a new link with a new
   id and key.
 - **How long it is shared.** `TaskShare.limit` is `until_done` (the default), `hour`, `day`, `week` or `none` (until you
-  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → General → Sharing, human-only,
+  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → Cloud → Sharing, human-only,
   so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
   cancelled) with `until_done` stops sharing in the same decision (`syncShares`, `task.unshared` with `reason: 'done'`);
   a time limit is ended by `ShareClock` (`apps/engine/src/remote/share-clock/service.ts`, a clock on `makeEngineClock`) with `share.expire`
@@ -4443,7 +4565,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   `resolveShareScopes` adds it and puts the list in order). The presets are scope lists in `SHARE_PRESET_SCOPES`
   (`share/presets.ts`, from `ACCESS_PRESETS`): Status is identity, description and progress; Standard (the default)
   every scope but messages; Full access every scope. `task.share` takes `preset` (a name; the `sharePreset` setting,
-  Settings → General → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
+  Settings → Cloud → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
   A preset's name is never kept: a share's label is worked out from its list (`resolveShareScopesPreset`, through
   `resolvePreset`), Status, Standard, Full access, or Custom for any other list.
 - **Custom in Share task.** Share as lists Status, Standard, Full access and Custom, then Hand off. A preset shows
@@ -4566,7 +4688,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   ("Remote access on the machine that shares this task was turned off."). A machine that is offline, asleep or
   paused shows nothing new: the page says the machine is offline and opens the channel again on its own (1, 2, 5,
   then every 10 seconds), keeping what it already showed.
-- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → General to share this
+- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → Cloud to share this
   task…" (`SHARE_NOT_PAIRED`) and `share.fail` keeps it on `TaskShare.failure` for Share task to show with Try again
   (`task.share` again asks for a link); it opens no failure gate, since nothing in the task waits on it. Once the
   machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
@@ -5015,7 +5137,7 @@ hand it to them, under Teams → Teammates act on team tasks.
   `task.handed_off` (`TaskHandoff`: `at`, `url` null, `guest` null) and queues `handoff.link`; again on a failed link it
   asks for the link once more, and otherwise does nothing.
 - **The link** (`apps/engine/src/remote/handoffs/service.ts`, `Remote.createHandoff`). Remote access must be on (else the link
-  fails at once with "Turn on remote access in Settings → General to hand off this task…", kept on
+  fails at once with "Turn on remote access in Settings → Cloud to hand off this task…", kept on
   `TaskHandoff.failure` for Share task's Try again). The engine asks app.shinsa.dev for a hand-off token
   (`POST /__remote/machine/handoffs`, `apps/cloud/CLAUDE.md` → Guests), makes a secret, keeps both with the task's id in
   `remote.json` (`handoffs`), and records the URL with `handoff.record`. It is the enroll link's fragment with a
@@ -5305,7 +5427,7 @@ engine ──its watched channels, on every change──►
          app.shinsa.dev /__remote/slack/watches
 ```
 
-- **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
+- **Connecting** (Settings → Cloud → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
   with GitHub there if you are not, then with Slack (OAuth v2, `oauth.v2.access`), which asks for your own
   read-only user scopes `channels:history`, `groups:history`, `channels:read` and `groups:read` (`SLACK_USER_SCOPES`)
@@ -5649,7 +5771,17 @@ plainly what protects what.
 - **Decisions only you make.** These are human-only:
   - closing any gate: a plan, review, merge or operation, your OK on a proposal, an agent's question or secret request,
     a failure, setup or Sign in gate, in any way (`plans *`, `reviews *`, `merges *`, `operations *`, `questions
-    answer`, `gates answer`, `command`, which can send any gate answer);
+    answer`, `gates answer`, `command`, which can send any gate answer). The one exception is Autopilot, a
+    pre-approval you give in the human-only `autopilot` setting: inside core's hard limits it may close a gate as
+    you, and since Everything it may close gates you never see, because nothing about them asks for you: a plan of
+    any size, a review or merge of any risk the reviewer is highly confident in, your OK on any task, a failed step
+    (retry or cancel the task) and the review's findings, each kind only once its own score clears the bar
+    (Process and structure → Autopilot). So "every gate is yours" now reads "every gate is yours or your
+    Autopilot's". The pre-approval never reaches what protects you: secret, Sign in, setup, operation, result and
+    post-merge gates, a failure caused by a usage or cost limit, an account, GitHub SSO or your own pause, a plan you
+    asked to see, an escalated review and the merge of a review you approved yourself always wait for you; every
+    answer it gives is `gate.answered` with its reason, in the activity and in Handled by Autopilot; and turning
+    the setting off stops it at once, since core reads the policy at every gate and every judgment;
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
@@ -6629,7 +6761,7 @@ Claude to Codex and back alike (The agent loop, below).
 
 ### Versions and updates
 
-Settings → Agents → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
+Settings → General → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
 (`apps/engine/src/versions/`, after Kanna's `provider-auth.ts`, its latest-version check at 539-586 and its install at
 592-668, and `claude-executable.ts:13-16`, 59-65). A newer Claude Code or Codex brings new features, and the Agent
 SDK is built against one Claude Code (`claudeCodeVersion`; SDK 0.3.N pairs with Claude Code 2.1.N), so the program
@@ -6688,7 +6820,7 @@ update (`apps/web/src/lib/changelog.ts`, `components/changelog/dialog.tsx`).
   (`resolveWhatsNew`: released versions above the seen one, up to the engine's). Its hint names the version you
   last saw. It never opens a dialog by itself.
 - **The dialog** lists those releases, each a card with its version and date and its entries under New, Improved
-  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → Updates → Changelog, records the
+  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → General → Updates → Changelog, records the
   engine's version as seen, so the button goes away. From ⌘K or Settings it lists every release.
 
 ## MCP servers, plugins and skills
@@ -6954,7 +7086,7 @@ you: Settings → Browser ─────────┤
   and a guest or a teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page
   first, to use the repository's own test users where it has them, never to launch a browser of their own to sign in,
   and for a local dev server to ask with the exact address of the run they screenshot and keep that run.
-- **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
+- **Settings → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
   started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
   never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
   button that signs the browser out of that one site (`sites/remove {site}`: every cookie on the site set to expire
@@ -7101,7 +7233,7 @@ the build, fix and operate runs and the investigator are not, and each resumes t
 **Executable discovery** (`executable.ts`). Runs use the user's `claude`, never the SDK's bundled copy:
 `CLAUDE_EXECUTABLE` (with `~` expanded) wins and is trusted as is; otherwise `claude` on the `PATH`, whose
 `--version` is read once per binary and again only when the file changes. A `claude` older than the SDK's
-`claudeCodeVersion` is refused with "Update it from Settings → Agents, or run `claude update`" (the Update there
+`claudeCodeVersion` is refused with "Update it from Settings → General, or run `claude update`" (the Update there
 is Versions and updates, below); an unreadable version is let through. Finding the binary (`locateClaude`, and
 `locateCodex` for Codex) is `locateProgram` in `providers/versions.ts`, which the updates read too.
 
@@ -7156,7 +7288,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   session reports for `run.meter` (cached input as cache reads, written cache as cache writes, the rest as input,
   priced by `CodexMeter`; Cost, above) and the last request's tokens and the model's window for the `context` notice.
   The prompt cache of a Codex thread lasts 5 minutes after its last request, 30 for GPT-5.6 and later
-  (`resolveCacheLifetimeMs`), which idle compaction reads. Compaction follows Settings → General → Context, Compaction: with
+  (`resolveCacheLifetimeMs`), which idle compaction reads. Compaction follows Settings → Agents → Context, Compaction: with
   Off the thread gets `model_auto_compact_token_limit` set past any window, so Codex never summarises and a full
   context fails the turn as `context_window_full` (a fresh session with the handoff, as for Claude); with any other
   choice Codex summarises on its own at its limit, since eunoe sits in front of the Anthropic API only. An idle
@@ -7166,7 +7298,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 - **Executable discovery** (`executable.ts`): `CODEX_EXECUTABLE` (with `~` expanded), else `codex` on the `PATH`; its
   `--version` (`codex-cli 0.153.4`) is read once per binary and again when the file changes. Older than
   `CODEX_MINIMUM_VERSION` (0.153.0, the version this adapter was built and checked against: `turn/steer`,
-  `outputSchema` and thread `config` overrides) is refused with "Update it from Settings → Agents, or run `codex
+  `outputSchema` and thread `config` overrides) is refused with "Update it from Settings → General, or run `codex
   update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
@@ -7247,7 +7379,7 @@ bucket that result wrote (`resolveCacheExpiry` reads `cache_creation.ephemeral_1
 the lifetime is unknown). When the Agent, an answerer, investigator or
 researcher finishes near its context limit (at least 80% of its window, `COMPACTION_NEAR_LIMIT`, from the
 context usage Claude reports at the end of the turn), `IdleCompaction` (`agents/compaction/service.ts`)
-sends `/compact` to that session 2 minutes before the cache expires (Settings → General → Context, Compact idle
+sends `/compact` to that session 2 minutes before the cache expires (Settings → Agents → Context, Compact idle
 sessions: never, the default, or 1 to 30 minutes before), so the next step resumes a small context instead of
 re-reading a cold large one. It exists only where the provider summarises itself (`hasNativeCompaction`,
 `resolveIdleCompaction(settings, providers)`): for Claude only with provider compaction, since `/compact` is
@@ -7263,7 +7395,7 @@ for it, so its `claude` never outlives the server.
 
 **Compaction and fast mode.** Shinsa does not use a provider's own summary by default: eunoe's core
 (`@chroxify/eunoe`, a library, served inside the engine between Claude Code and the Anthropic API) folds and
-compacts instead. Settings → General → Context, Management ("Context management" in ⌘K; `settings.compaction`, a `settings.change`
+compacts instead. Settings → Agents → Context, Management ("Context management" in ⌘K; `settings.compaction`, a `settings.change`
 event because replay must reproduce it):
 
 | Setting | What happens |
@@ -7483,7 +7615,7 @@ the run and else from a fresh usage read, so auto-resume works for Codex as for 
 sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or "an API key" is signed in, exit 1
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
-Agent usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
+Usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
 tools check no longer lists codex. **Which providers Shinsa uses** is `config.json`'s `providerLogins`
 (`{ codex: 'added' | 'removed' }`, decoded leniently): with no entry a provider shows only while it is signed in, and
 the first time it is seen signed in it is recorded as `added`, so a lapsed sign-in keeps its row and its Sign in gate;
@@ -7606,7 +7738,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember` (each with its resets left and total, the windows it clears, whether it is usable now and when it
   ends, and `givesBackWeekly` from `gives_back_weekly` with `weeklyShare`, the percent of the weekly limit the
   scoped limits used, summed from `weekly_scoped_shares[].used_percent_of_weekly`, only on a grant that gives back;
-  a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  a spent grant or one without an id is dropped). Settings → Usage shows extra usage On or Off, the
   credit only from one whole unit of its currency, and one Usage resets row whose value counts the resets left of each
   kind ("Weekly 2 · Fable 1", `listUsageNotes`: Weekly clears `seven_day`, Fable only the Fable limit, any other by its
   label); hovering a kind lists each of its grants (what it clears, as "Clears full weekly" or "Clears Fable weekly",
@@ -7690,7 +7822,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   next attempt leases afresh. When no account qualifies, the run ends with the failure, its account, and for a usage
   limit the earliest reset of the pool (or of the bound account).
 - **A run's failure shows on its account at once.** The mark a rejection makes (spent until the reset, or signed out)
-  is pushed in the same moment as the accounts snapshot on every socket, so Settings → Agent usage, the usage menu and
+  is pushed in the same moment as the accounts snapshot on every socket, so Settings → Usage, the usage menu and
   every account picker read "Out of usage until 3:40 PM" or "Needs sign-in" within a second, with no refresh; a
   sign-in that works again (the login flow, or a renewed login) clears it the same way. Codex, which has one login and
   no accounts to rotate, is marked too: a sign-out sets its `providers` entry to `signed_out` with the reason until the
@@ -7727,7 +7859,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   not the first one's receipt (core ignores a resume for a wait that is no longer armed); restart needs nothing, the
   clock reads the state. The resume starts the step again on the same session with the original brief and "Your
   previous turn stopped because the usage limit was reached. The limit has reset. Continue where you left off and
-  finish the step with the hand-over tool." A wait without auto-resume (Settings → Agent usage → Limits, After a usage
+  finish the step with the hand-over tool." A wait without auto-resume (Settings → Usage → Limits, After a usage
   limit, with `settings.snoozeLimited` on) opens a failure gate at the reset instead; with both off the limit opens
   the failure gate at once. A usage limit never fails a task on its own: a reset that is unknown or already past
   waits 15 minutes (`ESTIMATED_RESET_MS`), and a resumed step that hits a window no later than the one it waited for
@@ -8490,8 +8622,8 @@ have reached.
   came from, the projects as you changed them in words, and the help task), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
-- **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
-  opening `/onboarding`) starts a new run. When setup was done before, the run is a revisit (`revisit: true`): every
+- **Run setup again** (`{ type: 'restart' }`; the app no longer offers it, so only a direct call to
+  `/api/onboarding/flow` sends it) starts a new run. When setup was done before, the run is a revisit (`revisit: true`): every
   step is reached and shows the current settings `chosen`, so you can open any of them, and the web offers Close
   setup.
 

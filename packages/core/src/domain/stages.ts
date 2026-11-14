@@ -36,6 +36,15 @@ export function isTaskSettled(task: Pick<Task, 'stage'>) {
   return TERMINAL_STAGES.has(task.stage);
 }
 
+export function isWatchCheck(task: Pick<Task, 'stage'>) {
+  return task.stage === 'watching';
+}
+
+export function resolveShownStage(task: Pick<Task, 'stage' | 'pullRequest'>): TaskStage {
+  if (!isWatchCheck(task)) return task.stage;
+  return hasMergedPullRequest(task) ? 'merged' : 'done';
+}
+
 export function isRoundFinished(task: Pick<Task, 'stage'>) {
   return ROUND_FINISHED_STAGES.has(task.stage);
 }

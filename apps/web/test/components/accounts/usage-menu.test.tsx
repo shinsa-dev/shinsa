@@ -181,7 +181,7 @@ describe('the usage menu', () => {
     }
   });
 
-  it('reads Agent usage when the next account has no figure, and goes to Settings → Agent usage → Accounts on click', async () => {
+  it('reads Agent usage when the next account has no figure, and goes to Settings → Usage → Accounts on click', async () => {
     pushAccounts(
       createSnapshot({
         accounts: [

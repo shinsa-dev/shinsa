@@ -81,6 +81,12 @@ function renderProjects(state: ShinsaState, actions = createActions()) {
 
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
+async function openRepoSettings() {
+  for (const button of screen.getAllByRole('button', { name: /^Show the settings of / }))
+    fireEvent.click(button);
+  await settle();
+}
+
 async function openMenuItem(name: string) {
   fireEvent.click(screen.getByRole('button', { name: 'Project options' }));
   await settle();
@@ -318,9 +324,27 @@ describe('Settings → Projects', () => {
     await waitFor(() => expect(actions.remove).toHaveBeenCalledWith(SUPERWALL, 'Project removed.'));
   });
 
+  it('keeps each repository’s settings folded away until you open them', async () => {
+    renderProjects(superwallState());
+    await settle();
+    expect(screen.queryByRole('combobox', { name: 'Where agents work in web' })).toBeNull();
+    const show = screen.getByRole('button', { name: 'Show the settings of web' });
+    expect(show.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(show);
+    await settle();
+    expect(screen.getByRole('combobox', { name: 'Where agents work in web' })).toBeTruthy();
+    expect(screen.getByText('Always run before review')).toBeTruthy();
+    const hide = screen.getByRole('button', { name: 'Hide the settings of web' });
+    expect(hide.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(hide);
+    await settle();
+    expect(screen.queryByRole('combobox', { name: 'Where agents work in web' })).toBeNull();
+  });
+
   it('each repository says where agents work, and offers worktrees or the main checkout', async () => {
     const actions = renderProjects(superwallState());
     await settle();
+    await openRepoSettings();
     const web = screen.getByRole('combobox', { name: 'Where agents work in web' });
     expect(web.textContent).toContain('Worktrees');
     fireEvent.click(web);
@@ -339,6 +363,7 @@ describe('Settings → Projects', () => {
     detected = { web: { tool: 'Vitest', command: 'npx vitest run --coverage' } };
     const actions = renderProjects(superwallState());
     await settle();
+    await openRepoSettings();
     const web = screen.getByRole('combobox', { name: 'Test coverage in web' });
     expect(web.textContent).toContain('Auto coverage');
     fireEvent.click(web);
@@ -399,6 +424,7 @@ describe('Settings → Projects', () => {
       actions
     );
     await settle();
+    await openRepoSettings();
     fireEvent.click(screen.getByRole('button', { name: 'Edit the coverage command for web' }));
     await settle();
     const command = screen.getByLabelText('Command') as HTMLInputElement;
@@ -426,6 +452,7 @@ describe('Settings → Projects', () => {
       actions
     );
     await settle();
+    await openRepoSettings();
     const web = screen.getByRole('combobox', { name: 'Always run before review in web' });
     expect(web.textContent).toContain('1 command before review');
     expect(screen.getByRole('combobox', { name: 'Always run before review in notes' }).textContent).toContain(
@@ -463,6 +490,7 @@ describe('Settings → Projects', () => {
     const actions = createActions({ changeBaseline: mock(async () => false) });
     renderProjects(createShinsaState({ repos: [createRepo({ id: 'notes' })] }), actions);
     await settle();
+    await openRepoSettings();
     fireEvent.click(screen.getByRole('combobox', { name: 'Always run before review in notes' }));
     await settle();
     const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;

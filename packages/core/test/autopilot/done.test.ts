@@ -51,11 +51,36 @@ describe('what Autopilot did for you', () => {
         gateId: second.gateId,
         taskId: second.taskId,
         gate: 'review',
+        action: 'approved',
         title: harness.state.gates[second.gateId]?.title,
         reason: 'Small and clear.',
+        followUp: null,
         at: harness.state.gates[second.gateId]?.answeredAt,
       },
       expect.objectContaining({ gateId: first.gateId, gate: 'review' }),
+    ]);
+  });
+
+  test('keeps the words of a follow-up it sent for you', () => {
+    const harness = setup();
+    const taskId = reviewed(harness);
+    const gate = listOpenGates(harness.state, taskId).find((found) => found.autopilotJudging === true);
+    if (!gate) throw new Error('No gate waits for Autopilot.');
+    harness.send({
+      type: 'autopilot.judgment',
+      taskId,
+      gateId: gate.id,
+      verdict: 'revise',
+      reason: 'They always ask about auth.',
+      reply: 'How does this handle auth on the new endpoint?',
+      shadow: false,
+    });
+    expect(listAutopilotDone(harness.state)).toEqual([
+      expect.objectContaining({
+        gateId: gate.id,
+        reason: 'They always ask about auth.',
+        followUp: 'How does this handle auth on the new endpoint?',
+      }),
     ]);
   });
 

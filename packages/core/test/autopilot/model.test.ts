@@ -49,6 +49,7 @@ function decision(overrides: Partial<AutopilotDecision> = {}): AutopilotDecision
     watchdog: false,
     touched: false,
     guess: null,
+    followUp: null,
     note: null,
     facts: FACTS,
     estimate: null,
@@ -168,6 +169,11 @@ describe('the model', () => {
     expect(guess(model).p).toBe(0.5);
     expect(model.heads.gate.seen).toBe(0);
     expect(isAutopilotPositive('suggestion', decision({ kind: 'suggestion', answer: 'kept' }))).toBe(true);
+  });
+
+  test('learns a retry with your guidance as a retry, and a cancel as its opposite', () => {
+    expect(isAutopilotPositive('gate', decision({ kind: 'failure', answer: 'replied' }))).toBe(true);
+    expect(isAutopilotPositive('gate', decision({ kind: 'failure', answer: 'rejected' }))).toBe(false);
   });
 
   test('comes out the same whether it learns all at once or one decision at a time', () => {

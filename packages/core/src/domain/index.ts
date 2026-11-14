@@ -241,6 +241,7 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolvePlanApproval,
   resolveShareEnd,
   resolveShareLimit,
   resolveSharePreset,
@@ -324,7 +325,9 @@ export {
   isRoundFinished,
   isTaskComplete,
   isTaskSettled,
+  isWatchCheck,
   PRIORITY_RANK,
+  resolveShownStage,
   RUN_STAGES,
   TASK_PRIORITIES,
 } from './stages.ts';

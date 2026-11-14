@@ -23,6 +23,7 @@ import {
 } from '@/lib/share/dialog.ts';
 import { DUPLICATE_TITLE, openDuplicateDialog, startNotDuplicate } from '@/lib/tasks/duplicate.ts';
 import { FORK_TITLE, openForkDialog } from '@/lib/tasks/fork.ts';
+import { MOVE_TITLE, openMoveDialog } from '@/lib/tasks/move.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 export type TaskActionKey =
@@ -36,6 +37,7 @@ export type TaskActionKey =
   | 'fork'
   | 'share'
   | 'unshare'
+  | 'move'
   | 'moveToBacklog'
   | 'removeFromBacklog'
   | 'snooze'
@@ -58,6 +60,7 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   fork: { label: FORK_TITLE, icon: 'IconFork' },
   share: { label: SHARE_TITLE, icon: 'IconShareOs' },
   unshare: { label: UNSHARE_TITLE, icon: 'IconEyeSlash' },
+  move: { label: MOVE_TITLE, icon: 'IconFolder1' },
   moveToBacklog: { label: 'Move to the backlog', icon: 'IconArchive' },
   removeFromBacklog: { label: 'Remove from the backlog', icon: 'IconInboxEmpty' },
   snooze: { label: 'Snooze', icon: 'IconClockSnooze' },
@@ -81,6 +84,7 @@ export const TASK_ACTION_COMMAND: Record<TaskActionKey, EngineCommand | null> = 
   fork: 'task.create',
   share: 'task.share',
   unshare: 'task.unshare',
+  move: 'task.move_to_repository',
   moveToBacklog: 'task.move_to_backlog',
   removeFromBacklog: 'task.remove_from_backlog',
   snooze: 'task.snooze',
@@ -104,6 +108,7 @@ function isActionAllowed(
   teammate: TeammateMachine | null
 ) {
   if (key === 'fork' && teammate) return hasScope(teammate.scopes, 'fork');
+  if (key === 'move' && teammate) return false;
   return isActionSpoken(key, commands);
 }
 
@@ -117,7 +122,8 @@ export function listTaskActions(
   commands: ReadonlySet<string>,
   now = Date.now(),
   teammate: TeammateMachine | null = null,
-  pausable = false
+  pausable = false,
+  movable = false
 ): TaskActionKey[][] {
   const links: TaskActionKey[] = [];
   if (task.pullRequest) links.push('pullRequest');
@@ -125,7 +131,14 @@ export function listTaskActions(
   const worktree: TaskActionKey[] = task.worktreePath ? ['editor', 'terminal', 'finder'] : [];
   const lifecycle: TaskActionKey[] = isTaskSettled(task)
     ? listSettledActions(task)
-    : [...(pausable ? (['pause'] as const) : []), 'restart', 'complete', 'duplicate', 'cancel'];
+    : [
+        ...(movable ? (['move'] as const) : []),
+        ...(pausable ? (['pause'] as const) : []),
+        'restart',
+        'complete',
+        'duplicate',
+        'cancel',
+      ];
   const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
   const share = listShareActions(task, now);
   return [
@@ -186,6 +199,9 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
       return;
     case 'unshare':
       openUnshareConfirm(task.id);
+      return;
+    case 'move':
+      openMoveDialog(task.id);
       return;
     case 'moveToBacklog':
       void sendCommandWithToast({ type: 'task.move_to_backlog', taskId: task.id }, 'Moved to the backlog.');

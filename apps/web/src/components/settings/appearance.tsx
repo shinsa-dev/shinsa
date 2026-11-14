@@ -7,13 +7,6 @@ import {
   writeExplorerSide,
 } from '@/lib/preferences/code.ts';
 import {
-  LAYOUT_NAMES,
-  LAYOUT_ORDER,
-  type LayoutPreference,
-  useLayoutPreference,
-  writeLayoutPreference,
-} from '@/lib/preferences/layout.ts';
-import {
   THEME_ITEMS,
   type ThemePreference,
   useThemePreference,
@@ -33,7 +26,6 @@ export function AppearanceSettings() {
           onValueChange={writeThemePreference}
         />
       </SettingRow>
-      <LayoutSetting />
       <ExplorerSideSetting />
     </SettingsGroup>
   );
@@ -48,24 +40,6 @@ function ExplorerSideSetting() {
         items={EXPLORER_SIDES.map(({ value, label }) => ({ value, label }))}
         value={side}
         onValueChange={writeExplorerSide}
-      />
-    </SettingRow>
-  );
-}
-
-function LayoutSetting() {
-  const layout = useLayoutPreference();
-  return (
-    <SettingRow title='Layout'>
-      <Choice<LayoutPreference>
-        label='Layout'
-        items={LAYOUT_ORDER.map((value) => ({
-          value,
-          label: LAYOUT_NAMES[value].label,
-          hint: LAYOUT_NAMES[value].hint,
-        }))}
-        value={layout}
-        onValueChange={writeLayoutPreference}
       />
     </SettingRow>
   );

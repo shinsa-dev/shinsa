@@ -1,6 +1,10 @@
-import type { AccountsSnapshot, AgentProviderInfo, Settings } from '@shinsa/core';
+import {
+  type AccountsSnapshot,
+  type AgentProviderInfo,
+  resolvePlanApproval,
+  type Settings,
+} from '@shinsa/core';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
-import type * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -40,7 +44,6 @@ import {
   resolveGroupModelPatch,
   resolveGroupSpeed,
   resolveGroupSpeedPatch,
-  resolvePlanValue,
   resolveSpeedAvailability,
   resolveSpeedValue,
   resolveWatchdogSettingValue,
@@ -49,7 +52,6 @@ import {
   WATCHDOG_SETTING_FIELDS,
   WATCHDOG_SETTINGS_TITLE,
 } from '@/lib/settings.ts';
-import { AutopilotSettings } from './autopilot.tsx';
 import { DelegationLimitDialog } from './delegation-limit-dialog.tsx';
 import { DescribedRow, SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
 
@@ -236,15 +238,7 @@ function DelegationLimitField({ settings }: { settings: Settings }) {
   );
 }
 
-export function AgentSettings({
-  settings,
-  automatic,
-  afterAutopilot,
-}: {
-  settings: Settings;
-  automatic: boolean;
-  afterAutopilot?: React.ReactNode;
-}) {
+export function AgentSettings({ settings, automatic }: { settings: Settings; automatic: boolean }) {
   const providers = useAgentProviders();
   const accounts = useAccounts();
   return (
@@ -261,7 +255,7 @@ export function AgentSettings({
           <SelectField
             label='Approve plans'
             items={PLAN_ITEMS}
-            value={resolvePlanValue(settings)}
+            value={resolvePlanApproval(settings)}
             onValueChange={(approvePlans) => void updateSettings({ approvePlans })}
           />
         </SettingRow>
@@ -285,20 +279,23 @@ export function AgentSettings({
           />
         </SettingRow>
       </SettingsGroup>
-      <AutopilotSettings settings={settings} />
-      {afterAutopilot}
-      <SettingsGroup title={WATCHDOG_SETTINGS_TITLE}>
-        {WATCHDOG_SETTING_FIELDS.map((field) => (
-          <SettingRow key={field.key} title={field.title}>
-            <SelectField
-              label={field.title}
-              items={listWatchdogSettingItems(field, settings)}
-              value={resolveWatchdogSettingValue(field, settings)}
-              onValueChange={(value) => void updateSettings({ [field.key]: Number(value) })}
-            />
-          </SettingRow>
-        ))}
-      </SettingsGroup>
     </>
+  );
+}
+
+export function WatchdogSettings({ settings }: { settings: Settings }) {
+  return (
+    <SettingsGroup title={WATCHDOG_SETTINGS_TITLE}>
+      {WATCHDOG_SETTING_FIELDS.map((field) => (
+        <SettingRow key={field.key} title={field.title}>
+          <SelectField
+            label={field.title}
+            items={listWatchdogSettingItems(field, settings)}
+            value={resolveWatchdogSettingValue(field, settings)}
+            onValueChange={(value) => void updateSettings({ [field.key]: Number(value) })}
+          />
+        </SettingRow>
+      ))}
+    </SettingsGroup>
   );
 }

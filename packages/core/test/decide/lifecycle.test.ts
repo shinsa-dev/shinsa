@@ -148,7 +148,7 @@ describe('planning', () => {
   });
 
   test('a plan goes straight to phase one when plans need no approval', () => {
-    const harness = createHarness();
+    const harness = withApproval('when_asked');
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId, LARGE_PLAN);
     const task = harness.task(taskId);

@@ -261,6 +261,12 @@ picture {
   animation-direction: alternate-reverse;
 }
 
+:root:not(.dark) .koe-speed::before,
+:root:not(.dark) .koe-speed::after {
+  filter: blur(40px) saturate(1.3);
+  mix-blend-mode: multiply;
+}
+
 @keyframes koe-glow-a {
   from {
     opacity: 0.75;

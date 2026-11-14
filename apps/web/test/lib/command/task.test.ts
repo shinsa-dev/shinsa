@@ -667,9 +667,19 @@ describe('waiting on other tasks', () => {
     ] as never);
   });
 
-  it('offers no stacking once the task builds', () => {
+  it('offers only taking it out of the bundle once the task builds', () => {
     const { state, task } = setup(
       createTask({ id: 't1', stage: 'building', stacksOn: ['gone'] }),
+      [],
+      [createTask({ id: 't2' })]
+    );
+    const ids = sections(state, task).flatMap((entry) => entry.commands.map((command) => command.id));
+    expect(ids.filter((id) => id.includes('.stack.'))).toEqual(['task.t1.stack.off']);
+  });
+
+  it('offers no stacking for a task in no bundle once it builds', () => {
+    const { state, task } = setup(
+      createTask({ id: 't1', stage: 'building' }),
       [],
       [createTask({ id: 't2' })]
     );

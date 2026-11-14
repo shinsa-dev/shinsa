@@ -11,7 +11,6 @@ export const UPDATES_LABEL = {
   channel: 'Update channel',
   restart: 'Restart to update',
   downgrade: 'Download and install',
-  browser: 'Shinsa for Mac updates itself. Its version and update channel are in its own Settings.',
   engine: 'Engine',
   agents:
     'Updating or quitting the app never stops your agents. After an update the engine restarts into the new version on its own, and agents pick up where they were.',

@@ -879,7 +879,7 @@ function recordPace(
 function autoPaced(pace: number) {
   const harness = createHarness();
   learnUsageRate(harness);
-  harness.send({ type: 'settings.change', patch: { autoPace: true } });
+  harness.send({ type: 'settings.change', patch: { autoPace: true, approvePlans: 'when_asked' } });
   recordPace(harness, pace);
   return harness;
 }

@@ -5,7 +5,6 @@ import { resetOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { SettingsPage } from '@/routes/settings.tsx';
 import { createAccount, createSnapshot } from '../support/accounts.ts';
 import { readFetchCall } from '../support/fetch.ts';
-import { findTooltipText } from '../support/hover.ts';
 import { createOnboardingStatus } from '../support/onboarding.ts';
 import { createRound } from '../support/rounds.ts';
 import { clearAccounts, pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
@@ -57,17 +56,31 @@ describe('Settings tabs', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((tab) => tab.textContent)
-    ).toEqual(['General', 'Statistics', 'Agents', 'Agent Usage', 'Projects', 'Integrations', 'Automations']);
+    ).toEqual([
+      'General',
+      'Agents',
+      'Autopilot',
+      'Cloud',
+      'Usage',
+      'Statistics',
+      'Projects',
+      'Browser',
+      'Integrations',
+      'Automations',
+    ]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
-    for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', 'Updates'])
+    for (const section of ['Appearance', 'Notifications', 'Versions'])
       expect(screen.getByText(section)).toBeTruthy();
-    expect(screen.queryByText('Engine')).toBeNull();
+    for (const section of ['Attention', 'Layout', 'Setup', 'Updates', 'Engine', 'Remote access'])
+      expect(screen.queryByText(section)).toBeNull();
     fireEvent.click(within(tabs).getByRole('tab', { name: 'Agents' }));
     await settle();
     expect(location.search).toBe('?tab=agents');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Agents');
     expect(screen.getByText('Engine')).toBeTruthy();
-    expect(screen.getByText('Versions')).toBeTruthy();
+    expect(screen.getByText('Context')).toBeTruthy();
+    expect(screen.queryByText('Watchdogs')).toBeNull();
+    expect(screen.queryByText('Versions')).toBeNull();
     expect(screen.queryByText('Appearance')).toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
     expect(within(tabs).getByRole('tab', { name: 'Agents' }).getAttribute('aria-selected')).toBe('true');
@@ -77,12 +90,12 @@ describe('Settings tabs', () => {
     expect(screen.getByText('Appearance')).toBeTruthy();
   });
 
-  it('explains each layout on its option in Appearance', async () => {
-    await renderSettings();
-    const layouts = screen.getByRole('tablist', { name: 'Layout' });
-    expect(await findTooltipText(within(layouts).getByRole('tab', { name: 'Desk' }))).toBe(
-      'Pages sit centred with nothing at the sides, and a button at the top opens what needs you.'
-    );
+  it('keeps the heading and the tab bar outside the scroll area, so only the sections scroll', async () => {
+    const { container } = await renderSettings();
+    const viewport = container.querySelector('[data-slot="scroll-area-viewport"]');
+    expect(viewport?.contains(screen.getByText('Appearance'))).toBe(true);
+    expect(viewport?.contains(screen.getByRole('heading', { level: 1 }))).toBe(false);
+    expect(viewport?.contains(screen.getByRole('tablist', { name: 'Settings sections' }))).toBe(false);
   });
 
   it('opens the tab of a linked section and scrolls to it once the accounts are in', async () => {

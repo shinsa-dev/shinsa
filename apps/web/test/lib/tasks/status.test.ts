@@ -192,6 +192,25 @@ describe('a proposed change', () => {
   });
 });
 
+describe('a task a watchdog is checking', () => {
+  it('shows the stage it rests at, with the merged glyph once its pull request merged', () => {
+    const state = createShinsaState({});
+    const merged = createTask({
+      id: 'merged',
+      stage: 'watching',
+      pullRequest: createPullRequest({ number: 7, state: 'merged' }),
+    });
+    expect(resolveTaskStatus(state, merged)).toEqual({ label: 'Merged', tone: 'neutral' });
+    expect(resolveRowStatus(state, merged)).toEqual({ label: 'Merged', tone: 'neutral' });
+    expect(resolveTaskStatusIcon(state, merged)).toBe('IconMerged');
+    expect(resolveTaskGlyph(state, merged).icon).toBe('IconMerged');
+    const done = createTask({ id: 'done', stage: 'watching' });
+    expect(resolveTaskStatus(state, done)).toEqual({ label: 'Done', tone: 'neutral' });
+    expect(resolveTaskStatusIcon(state, done)).toBe('IconCheckCircle2');
+    expect(resolveTaskGlyph(state, done).icon).not.toBe('IconMerged');
+  });
+});
+
 describe('resolveTaskStatus', () => {
   it('shows a plan held in the backlog as Backlog, never as a plan to approve', () => {
     const { state, task } = withGate({ type: 'plan' }, { stage: 'awaiting_plan', backlog: { at: 1 } });
@@ -529,5 +548,24 @@ describe('a task in a bundle', () => {
       tone: 'green',
     });
     expect(resolveTaskStatus(state, merging)).toEqual({ label: 'Merging with its bundle', tone: 'green' });
+  });
+});
+
+describe('a task whose merge you approved', () => {
+  const merging = createTask({ id: 't', stage: 'awaiting_merge' });
+  const state = createShinsaState({ tasks: [merging] });
+
+  it('reads Merging in green with the merged icon', () => {
+    expect(resolveTaskStatus(state, merging)).toEqual({ label: 'Merging', tone: 'green' });
+    expect(resolveTaskStatusIcon(state, merging)).toBe('IconMerged');
+    expect(resolveTaskGlyph(state, merging)).toEqual({ icon: 'IconMerged', tone: 'purple' });
+  });
+
+  it('reads Ready to merge while the merge gate is open', () => {
+    const open = createShinsaState({
+      tasks: [merging],
+      gates: [createGate({ id: 'g', taskId: 't', type: 'merge' })],
+    });
+    expect(resolveTaskStatus(open, merging).label).toBe('Ready to merge');
   });
 });

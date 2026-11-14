@@ -9,6 +9,7 @@ import {
   parseChoiceValue,
   resolveDisplayPath,
   resolveModelLabel,
+  resolvePlanApproval,
   type Settings,
   serializeChoiceValue,
 } from '@shinsa/core';
@@ -200,7 +201,7 @@ function listMergeChoices(context: StepReadContext, answered: boolean) {
 }
 
 function listPlanChoices(context: StepReadContext, answered: boolean) {
-  const picked = answered ? (context.settings.approvePlans ?? 'when_asked') : RECOMMENDED_PLANS;
+  const picked = answered ? resolvePlanApproval(context.settings) : RECOMMENDED_PLANS;
   return PLAN_OPTIONS.map((option) =>
     createChoice(
       'plans',
@@ -213,8 +214,8 @@ function listPlanChoices(context: StepReadContext, answered: boolean) {
   );
 }
 
-function resolvePlanLabel(approval: PlanApproval | undefined) {
-  return PLAN_OPTIONS.find((option) => option.value === (approval ?? 'when_asked'))?.summary as string;
+function resolvePlanLabel(approval: PlanApproval) {
+  return PLAN_OPTIONS.find((option) => option.value === approval)?.summary as string;
 }
 
 const listDefaultGroups = Effect.fn('OnboardingSteps.listDefaultGroups')(function* (
@@ -264,11 +265,11 @@ const DEFAULTS: StepDefinition = {
     });
   }),
   summarize: (context) => {
-    const { defaultModel, mergeMethod, approvePlans } = context.settings;
+    const { defaultModel, mergeMethod } = context.settings;
     const parts = [
       defaultModel ? resolveModelLabel(defaultModel) : 'Each role’s own model',
       resolveMergeLabel(mergeMethod),
-      resolvePlanLabel(approvePlans),
+      resolvePlanLabel(resolvePlanApproval(context.settings)),
     ];
     return Effect.succeed(parts.join(' · '));
   },

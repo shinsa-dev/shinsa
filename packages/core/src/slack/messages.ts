@@ -4,6 +4,7 @@ import { capitalise, describeCount } from '../chat/text.ts';
 import { isTaskClosed, isTaskResting, resolveCurrentRound } from '../domain/rounds.ts';
 import type { DeliveringStep, TaskResult } from '../domain/shapes.ts';
 import type { SlackDecided } from '../domain/slack.ts';
+import { resolveShownStage } from '../domain/stages.ts';
 import type {
   Gate,
   GateDecision,
@@ -173,13 +174,8 @@ function resolveAttentionGate(gates: readonly Gate[]) {
   );
 }
 
-function resolveSlackStage(task: Task): TaskStage {
-  if (task.stage !== 'watching') return task.stage;
-  return task.pullRequest?.state === 'merged' ? 'merged' : 'done';
-}
-
 function resolveSlackTask(task: Task): Task {
-  return task.stage === 'watching' ? { ...task, stage: resolveSlackStage(task) } : task;
+  return task.stage === 'watching' ? { ...task, stage: resolveShownStage(task) } : task;
 }
 
 export function resolveSlackSessionStatus(watched: Task, gates: readonly Gate[]): SlackSessionStatus {
@@ -219,7 +215,7 @@ function serializeSlackStatusView(
 }
 
 function resolveStatusLabel(task: Task) {
-  if (task.stage === 'watching') return capitalise(STAGE_WORDS[resolveSlackStage(task)]);
+  if (task.stage === 'watching') return capitalise(STAGE_WORDS[resolveShownStage(task)]);
   return capitalise(task.stageReason.trim() || STAGE_WORDS[task.stage]);
 }
 
@@ -237,7 +233,7 @@ function hasGoneOnToChange(task: Task) {
 }
 
 function selectKeptResult(task: Task) {
-  if (!task.result || resolveSlackStage(task) !== 'done' || hasGoneOnToChange(task)) return null;
+  if (!task.result || resolveShownStage(task) !== 'done' || hasGoneOnToChange(task)) return null;
   return task.result;
 }
 
@@ -737,7 +733,7 @@ export const SLACK_ESCALATION_TEST_NOTE = 'A test from Shinsa’s Autopilot sett
 
 export function serializeSlackEscalationTest(settingsUrl: string, now: number) {
   return serializeSlackEscalationView(
-    { label: 'Settings → Agents → Autopilot', url: settingsUrl, pullRequest: null },
+    { label: 'Settings → Autopilot', url: settingsUrl, pullRequest: null },
     {
       title: 'Fix the checkout timeout',
       why: 'It is urgent and ready to merge.',

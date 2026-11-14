@@ -10,7 +10,7 @@ import {
   selectAutopilotJudgeRequest,
   selectJudgedGateKind,
 } from '../../src/index.ts';
-import { createHarness, createTask, proposePlan } from '../harness.ts';
+import { createHarness, createTask, PLAN, proposePlan } from '../harness.ts';
 
 const FACTS: AutopilotFacts = {
   gate: 'question',
@@ -22,6 +22,8 @@ const FACTS: AutopilotFacts = {
   heldPlan: false,
   escalatedReview: false,
   approvedByYou: true,
+  ready: false,
+  retried: 0,
   waitedMinutes: 0,
   presence: { inHours: null, active: true, awayMinutes: 0 },
 };
@@ -56,6 +58,7 @@ describe('the judge prompt', () => {
     expect(resolveAutopilotJudgePrompt(task, gate, FACTS)).toBe(
       [
         'Decision: Answer the agent’s question',
+        'Verdicts: act, forward',
         '',
         `Task: ${task.title}`,
         'Request: Fix the scroll in tab groups',
@@ -144,6 +147,48 @@ describe('the judge prompt', () => {
 });
 
 describe('the judge request', () => {
+  test('tells the judge when it may only follow up, and lists the follow-ups it sent here', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true, level: 'ask_first' } } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId, {
+      ...PLAN,
+      phases: [1, 2, 3].map((index) => ({ title: `Phase ${index}`, detail: 'Does it.' })),
+    });
+    const first = harness.openGate(taskId);
+    expect(first.autopilotFollowUpOnly).toBe('The plan is larger than Autopilot approves on its own.');
+    const prompt = Option.getOrNull(
+      selectAutopilotJudgeRequest(harness.state, first.id, harness.now)
+    )?.prompt;
+    expect(prompt).toContain(
+      'You may not approve this one: The plan is larger than Autopilot approves on its own. Answer `revise` with one follow-up, or `forward` it to the developer.'
+    );
+    expect(prompt).not.toContain('Follow-ups you already sent here');
+    harness.send({
+      type: 'autopilot.judgment',
+      taskId,
+      gateId: first.id,
+      verdict: 'revise',
+      reason: 'They probe migrations.',
+      reply: 'Which migration runs first?',
+      shadow: false,
+    });
+    proposePlan(harness, taskId, {
+      ...PLAN,
+      phases: [1, 2, 3].map((index) => ({ title: `Phase ${index}`, detail: 'Does it.' })),
+    });
+    const second = harness.openGate(taskId);
+    const next = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, second.id, harness.now))?.prompt;
+    expect(next).toContain(
+      'Follow-ups you already sent here (1 of 2), oldest first:\n- “Which migration runs first?”'
+    );
+    const shadow = { ...harness.state, gates: { [second.id]: { ...second, autopilotJudging: false } } };
+    expect(
+      Option.getOrNull(selectAutopilotJudgeRequest(shadow, second.id, harness.now, true))?.prompt
+    ).not.toContain('You may not approve this one');
+  });
+
   test('is made only for an open gate Autopilot is judging', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
@@ -157,7 +202,10 @@ describe('the judge request', () => {
     expect(Option.isNone(selectAutopilotJudgeRequest(harness.state, 'gone', harness.now))).toBe(true);
     const quiet = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotJudging: false } } };
     expect(Option.isNone(selectAutopilotJudgeRequest(quiet, gate.id, harness.now))).toBe(true);
-    const other = { ...harness.state, gates: { [gate.id]: { ...gate, type: 'failure' as const } } };
+    const other = {
+      ...harness.state,
+      gates: { [gate.id]: { ...gate, type: 'failure' as const, cause: 'budget' as const } },
+    };
     expect(Option.isNone(selectAutopilotJudgeRequest(other, gate.id, harness.now))).toBe(true);
     expect(Option.isNone(selectJudgedGateKind({ ...gate, type: 'secret' }))).toBe(true);
   });
@@ -171,6 +219,7 @@ describe('the judge request', () => {
     const gate = harness.openGate(taskId);
     const guess = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now, true));
     expect(guess?.prompt).toEndWith(AUTOPILOT_SHADOW_NOTE);
+    expect(AUTOPILOT_SHADOW_NOTE).toContain('`cancel` if they cancel the task after a failed step');
     expect(Option.isNone(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now))).toBe(true);
     const guessed = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotGuess: 'act' as const } } };
     expect(Option.isNone(selectAutopilotJudgeRequest(guessed, gate.id, harness.now, true))).toBe(true);
@@ -204,6 +253,7 @@ describe('the judge request', () => {
           watchdog: false,
           touched: false,
           guess: null,
+          followUp: null,
           note: 'Keep it smaller',
           facts: null,
           estimate: null,
@@ -221,6 +271,7 @@ describe('the judge request', () => {
           watchdog: false,
           touched: false,
           guess: null,
+          followUp: null,
           note: null,
           facts: null,
           estimate: null,
@@ -236,5 +287,44 @@ describe('the judge request', () => {
     );
     expect(prompt).toContain('- All messages to agents: 1 decided: sent 1; lately sent 100%');
     expect(prompt).not.toContain('- All plans:');
+  });
+
+  test('names the topics you raise most when you ask for changes', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true } } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const gate = harness.openGate(taskId);
+    const revised = {
+      at: 1,
+      taskId,
+      gateId: null,
+      kind: 'review',
+      answer: 'revised',
+      projectId: null,
+      risk: null,
+      scope: null,
+      urgent: false,
+      watchdog: false,
+      touched: false,
+      guess: null,
+      followUp: null,
+      facts: null,
+      estimate: null,
+    } as const;
+    harness.replay({
+      type: 'autopilot.decided',
+      decisions: [
+        { ...revised, note: 'How is auth checked?' },
+        { ...revised, note: 'Keep the token out of the logs.' },
+        { ...revised, note: 'Add a migration.' },
+      ],
+    });
+    const prompt = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now))?.prompt;
+    expect(prompt).toContain(
+      '\n\nTopics they raise most when they ask for changes or reply, the ones raised lately first: security (2).\n'
+    );
+    expect(prompt).not.toContain('migrations (1)');
   });
 });

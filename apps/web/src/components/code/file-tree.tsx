@@ -32,6 +32,7 @@ export function FileTree({
   task,
   gitRef,
   activePath,
+  reveal,
   changes,
   onOpen,
   onPrefetch,
@@ -40,6 +41,7 @@ export function FileTree({
   task: Task;
   gitRef: string;
   activePath: string | null;
+  reveal: number;
   changes: readonly DiffFile[];
   onOpen: (path: string) => void;
   onPrefetch: (path: string) => void;
@@ -100,6 +102,9 @@ export function FileTree({
   }, [shownRows]);
   if (!settled.current) return <CodeLoading label='Reading the files…' />;
   const { ref: shownRef, rows } = settled.current;
+  const activeIndex = activePath
+    ? rows.findIndex((row) => row.kind === 'entry' && row.entry.path === activePath)
+    : -1;
   const toggle = (path: string) => {
     markCode(CODE_MARKS.toggle, path);
     toggled.current = path;
@@ -113,7 +118,13 @@ export function FileTree({
   };
   return (
     <div role='tree' aria-label='Files' className={TREE_LIST}>
-      <VirtualRows key={shownRef} items={rows} rowHeight={TREE_ROW_HEIGHT} keyOf={resolveRowKey}>
+      <VirtualRows
+        key={shownRef}
+        items={rows}
+        rowHeight={TREE_ROW_HEIGHT}
+        keyOf={resolveRowKey}
+        reveal={{ index: activeIndex, key: `${reveal}:${activePath ?? ''}` }}
+      >
         {(row) => {
           if (row.kind === 'loading') return null;
           if (row.kind === 'error') {
