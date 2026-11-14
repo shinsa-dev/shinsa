@@ -36,6 +36,7 @@ export {
 } from './project.ts';
 export {
   canChangeStack,
+  canLeaveStack,
   findTask,
   isBundleFollower,
   isBundleMember,

@@ -1,6 +1,6 @@
 import {
   type AccountsSnapshot,
-  canChangeStack,
+  canLeaveStack,
   isTaskSettled,
   listDecisionOrder,
   listPendingDependencies,
@@ -126,7 +126,7 @@ function listStackCommands(state: ShinsaState, task: Task): Command[] {
       },
     });
   }
-  if ((task.stacksOn?.length ?? 0) > 0 && canChangeStack(task)) {
+  if (canLeaveStack(task)) {
     commands.push({
       kind: 'run',
       id: `${id}.off`,
