@@ -3,9 +3,7 @@ import { resolveTerminalEntry } from '@/lib/terminal/tabs.ts';
 
 export type AppShortcutTarget = 'home' | 'tasks' | 'settings' | 'terminal';
 
-type AppShortcutKeys =
-  | { kind: 'modifier'; key: string }
-  | { kind: 'chord'; first: string; then: string };
+type AppShortcutKeys = { kind: 'modifier'; key: string } | { kind: 'chord'; first: string; then: string };
 
 interface AppShortcut {
   target: AppShortcutTarget;
