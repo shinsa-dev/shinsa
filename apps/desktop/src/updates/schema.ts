@@ -1,3 +1,4 @@
+import { AppUpdateChannel } from '@shinsa/core/engine-api/schema';
 import { Duration, type Effect, Schedule, Schema } from 'effect';
 import { LogLevel } from '../update-log/schema.ts';
 
@@ -7,23 +8,19 @@ export const UPDATE_FEED = {
   useMultipleRangeRequest: false,
 } as const;
 
-export const UpdateChannel = Schema.Literals(['stable', 'beta', 'canary']);
-
-export type UpdateChannel = typeof UpdateChannel.Type;
-
 export const UPDATE_CHECK_INTERVAL = Duration.hours(4);
 
 export const UPDATE_CHECK_SCHEDULE = Schedule.spaced(UPDATE_CHECK_INTERVAL);
 
 export const INSTALL_TIMEOUT = Duration.seconds(15);
 
-export const CHANNEL_LABELS: Record<UpdateChannel, string> = {
+export const CHANNEL_LABELS: Record<AppUpdateChannel, string> = {
   stable: 'Stable',
   beta: 'Beta',
   canary: 'Canary',
 };
 
-export const CHANNEL_RANKS: Record<UpdateChannel, number> = { stable: 0, beta: 1, canary: 2 };
+export const CHANNEL_RANKS: Record<AppUpdateChannel, number> = { stable: 0, beta: 1, canary: 2 };
 
 export const UpdateState = Schema.Union([
   Schema.Struct({ status: Schema.Literal('idle') }),
@@ -94,7 +91,7 @@ export interface Download {
 
 export const UpdateSnapshot = Schema.Struct({
   state: UpdateState,
-  channel: UpdateChannel,
+  channel: AppUpdateChannel,
   supported: Schema.Boolean,
 });
 

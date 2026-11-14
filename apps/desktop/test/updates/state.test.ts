@@ -12,7 +12,7 @@ import {
   isUpdateBusy,
   isUpdateSupported,
   needsDiscard,
-  resolveDesktopUpdate,
+  resolveAppUpdate,
   resolveInstallTimeout,
   resolvePreparedUpdate,
   resolveStagedUpdate,
@@ -199,36 +199,36 @@ describe('describeUpdateFailure', () => {
   });
 });
 
-describe('resolveDesktopUpdate', () => {
+describe('resolveAppUpdate', () => {
   it('tells the page what the updater is doing, with the download’s whole percent', () => {
-    expect(resolveDesktopUpdate({ status: 'downloading', version: '0.3.0', percent: 40.7 })).toEqual({
+    expect(resolveAppUpdate({ status: 'downloading', version: '0.3.0', percent: 40.7 })).toEqual({
       status: 'downloading',
       version: '0.3.0',
       percent: 40,
     });
-    expect(resolveDesktopUpdate({ status: 'preparing', version: '0.3.0' })).toEqual({
+    expect(resolveAppUpdate({ status: 'preparing', version: '0.3.0' })).toEqual({
       status: 'preparing',
       version: '0.3.0',
     });
-    expect(resolveDesktopUpdate({ status: 'ready', version: '0.3.0' })).toEqual({
+    expect(resolveAppUpdate({ status: 'ready', version: '0.3.0' })).toEqual({
       status: 'ready',
       version: '0.3.0',
     });
-    expect(resolveDesktopUpdate({ status: 'installing', version: '0.3.0' })).toEqual({
+    expect(resolveAppUpdate({ status: 'installing', version: '0.3.0' })).toEqual({
       status: 'installing',
       version: '0.3.0',
     });
-    expect(resolveDesktopUpdate({ status: 'checking', manual: true })).toEqual({ status: 'checking' });
-    expect(resolveDesktopUpdate({ status: 'current', latest: '0.2.0' })).toEqual({ status: 'current' });
-    expect(resolveDesktopUpdate({ status: 'failed', message: 'offline' })).toEqual({
+    expect(resolveAppUpdate({ status: 'checking', manual: true })).toEqual({ status: 'checking' });
+    expect(resolveAppUpdate({ status: 'current', latest: '0.2.0' })).toEqual({ status: 'current' });
+    expect(resolveAppUpdate({ status: 'failed', message: 'offline' })).toEqual({
       status: 'failed',
       message: 'offline',
     });
-    expect(resolveDesktopUpdate({ status: 'downgrade', version: '1.2.0' })).toEqual({
+    expect(resolveAppUpdate({ status: 'downgrade', version: '1.2.0' })).toEqual({
       status: 'downgrade',
       version: '1.2.0',
     });
-    expect(resolveDesktopUpdate({ status: 'idle' })).toEqual({ status: 'none' });
+    expect(resolveAppUpdate({ status: 'idle' })).toEqual({ status: 'none' });
   });
 });
 
