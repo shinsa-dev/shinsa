@@ -99,6 +99,28 @@ describe('the task groups', () => {
     expect(screen.queryByText('Rename the settings page')).toBeNull();
   });
 
+  it('renders only the rows in view across every group, under sticky headers', () => {
+    const many = createShinsaState({
+      tasks: [
+        ...Array.from({ length: 200 }, (_, index) =>
+          createTask({ id: `work-${index}`, title: `Working task ${index}`, stage: 'building' })
+        ),
+        ...Array.from({ length: 200 }, (_, index) =>
+          createTask({ id: `done-${index}`, title: `Finished task ${index}`, stage: 'merged' })
+        ),
+      ],
+    });
+    renderPage(many);
+    const shown = rows().length;
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(100);
+    act(() => fireEvent.click(screen.getByRole('button', { name: /^Done/ })));
+    expect(screen.getByText('Finished task 0')).toBeTruthy();
+    expect(rows().length).toBeLessThan(200);
+    const header = screen.getByRole('button', { name: /^In progress/ });
+    expect(header.className).toContain('sticky');
+  });
+
   it('opens a task from its row', () => {
     renderPage();
     act(() => fireEvent.click(rowFor('Review the login fix')));

@@ -8,7 +8,7 @@ import { PAGE_BOTTOM, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/col
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.tsx';
-import { TaskGroupSection } from '@/components/tasks/group.tsx';
+import { TaskGroupList } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
 import { TeamFeedRefusals, useTeamTasks } from '@/components/teams/tasks.tsx';
 import { useTaskOwnership } from '@/hooks/use-task-ownership.ts';
@@ -100,22 +100,22 @@ export function TasksPage({ state }: { state: ShinsaState }) {
                 }
               />
             ) : (
-              sections.map(({ group, entries }) => (
-                <TaskGroupSection
-                  key={`${group.key}-${statusKey || 'all'}`}
-                  persistId={createDisclosureId(
+              <TaskGroupList
+                sections={sections.map(({ group, entries }) => ({
+                  key: `${group.key}-${statusKey || 'all'}`,
+                  persistId: createDisclosureId(
                     'tasks',
                     'group',
                     group.key,
                     ...(statusKey ? ['status', statusKey] : [])
-                  )}
-                  group={group}
-                  entries={entries}
-                  state={state}
-                  defaultOpen={group.defaultOpen || filters.status.length > 0}
-                  columns={columns}
-                />
-              ))
+                  ),
+                  group,
+                  entries,
+                  defaultOpen: group.defaultOpen || filters.status.length > 0,
+                }))}
+                state={state}
+                columns={columns}
+              />
             )}
           </div>
         </div>

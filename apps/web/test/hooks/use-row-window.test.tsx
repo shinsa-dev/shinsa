@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { act, fireEvent, render } from '@testing-library/react';
-import { WindowedRows } from '@/components/queue/windowed-rows.tsx';
+import * as React from 'react';
+import { useSectionWindows, WINDOW_ROWS_ATTRIBUTE } from '@/hooks/use-row-window.ts';
 
 const observers: (() => void)[] = [];
 const original = {
@@ -33,58 +34,102 @@ afterEach(() => {
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', original.clientHeight);
 });
 
-const ITEMS = Array.from({ length: 300 }, (_, index) => index);
+const SECTION_NAMES = ['first', 'second'];
 
-function rows(items: number[], gap?: number) {
+let remeasureSections = () => {};
+
+function Sections({ counts, shown = counts.map(() => true) }: { counts: number[]; shown?: boolean[] }) {
+  const list = React.useRef<HTMLDivElement>(null);
+  const { windows, remeasure } = useSectionWindows(list, counts, 36);
+  remeasureSections = remeasure;
   return (
-    <WindowedRows items={items} rowHeight={36} gap={gap}>
-      {(item) => (
-        <p key={item} data-testid='row'>
-          {item}
-        </p>
+    <div ref={list}>
+      {SECTION_NAMES.slice(0, counts.length).map((name, index) =>
+        shown[index] ? (
+          <div key={name} data-testid={`section-${index}`} {...{ [WINDOW_ROWS_ATTRIBUTE]: index }}>
+            {windows[index]?.start}-{windows[index]?.end}
+          </div>
+        ) : null
       )}
-    </WindowedRows>
+    </div>
   );
 }
 
-function listOf(view: ReturnType<typeof render>) {
-  return view.getAllByTestId('row')[0]?.parentElement as HTMLElement;
+function placeSection(view: ReturnType<typeof render>, index: number, top: number) {
+  view.getByTestId(`section-${index}`).getBoundingClientRect = () => ({ top }) as DOMRect;
 }
 
-describe('WindowedRows', () => {
-  it('renders the rows in view of its scroller and moves with the scroll', () => {
+describe('useSectionWindows', () => {
+  it('windows every section of its scroller from one scroll listener', () => {
     const view = render(
       <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
-        <section>{rows(ITEMS)}</section>
+        <Sections counts={[300, 40]} />
       </div>
     );
-    const scroller = view.getByTestId('scroller');
-    expect(view.getAllByTestId('row')).toHaveLength(24);
-    const list = listOf(view);
-    list.getBoundingClientRect = () => ({ top: -3600 }) as DOMRect;
+    expect(view.getByTestId('section-0').textContent).toBe('0-24');
+    placeSection(view, 0, -3600);
+    placeSection(view, 1, 2000);
     act(() => {
-      fireEvent.scroll(scroller);
+      fireEvent.scroll(view.getByTestId('scroller'));
     });
-    const shown = view.getAllByTestId('row');
-    expect(shown[0]?.textContent).toBe('88');
-    expect(shown).toHaveLength(40);
-    expect((list.firstElementChild as HTMLElement).style.height).toBe(`${88 * 36}px`);
-    expect((list.lastElementChild as HTMLElement).style.height).toBe(`${(300 - 128) * 36}px`);
+    expect(view.getByTestId('section-0').textContent).toBe('88-128');
+    expect(view.getByTestId('section-1').textContent).toBe('0-0');
+    placeSection(view, 1, 100);
     act(() => {
       for (const observer of observers) observer();
     });
-    expect(view.getAllByTestId('row')[0]?.textContent).toBe('88');
+    expect(view.getByTestId('section-1').textContent).toBe('0-24');
   });
 
-  it('follows the window when nothing scrolls, and spaces rows by their gap', () => {
-    const view = render(<div>{rows(ITEMS.slice(0, 50), 1)}</div>);
-    const list = listOf(view);
-    expect(list.style.gap).toBe('1px');
-    list.getBoundingClientRect = () => ({ top: -1850 }) as DOMRect;
+  it('covers a tall viewport with as many rows again on each side', () => {
+    const view = render(
+      <div data-testid='scroller' data-client={900} style={{ overflowY: 'auto' }}>
+        <Sections counts={[300]} />
+      </div>
+    );
+    placeSection(view, 0, -3600);
+    act(() => {
+      fireEvent.scroll(view.getByTestId('scroller'));
+    });
+    expect(view.getByTestId('section-0').textContent).toBe('72-152');
+  });
+
+  it('follows the window when nothing scrolls', () => {
+    const view = render(<Sections counts={[50]} />);
+    placeSection(view, 0, -1850);
     act(() => {
       dispatchEvent(new Event('resize'));
     });
-    expect(view.getAllByTestId('row')[0]?.textContent).toBe('32');
-    expect(list.lastElementChild?.textContent).toBe('49');
+    expect(view.getByTestId('section-0').textContent).toBe('24-50');
+  });
+
+  it('measures a section again the moment it is revealed, before it paints', () => {
+    const view = render(
+      <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
+        <Sections counts={[300, 300]} shown={[true, false]} />
+      </div>
+    );
+    view.rerender(
+      <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
+        <Sections counts={[300, 300]} shown={[true, true]} />
+      </div>
+    );
+    placeSection(view, 1, -3600);
+    act(() => remeasureSections());
+    expect(view.getByTestId('section-1').textContent).toBe('88-128');
+  });
+
+  it('starts a section it has not measured yet at its first rows', () => {
+    const view = render(
+      <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
+        <Sections counts={[30]} />
+      </div>
+    );
+    view.rerender(
+      <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
+        <Sections counts={[30, 30]} />
+      </div>
+    );
+    expect(view.getByTestId('section-1').textContent).toBe('0-24');
   });
 });

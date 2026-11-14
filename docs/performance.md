@@ -241,9 +241,12 @@ comes into view.
 - **Code is highlighted where it shows, when the page is idle.** `CodeLines` highlights only the lines it shows (14 of
   a 300-line read until you ask for more); `useLanguageTokens` asks Shiki on `requestIdleCallback` and reads a block
   it already highlighted synchronously, so a remounted fence paints coloured at once.
-- **Long lists render what is in view.** All tasks renders each group's rows in view of its scroller
-  (`components/queue/windowed-rows.tsx`, `hooks/use-row-window.ts`, rows 36px, in chunks of eight so scrolling
-  re-renders rarely; rows are memoized). Home's queue sections, the Overview's activity and an opened turn's detail
+- **Long lists render what is in view.** All tasks and an initiative's tasks are one window over every group
+  (`components/tasks/group.tsx`'s `TaskGroupList`, `hooks/use-row-window.ts`'s `useSectionWindows`): one scroll
+  listener measures each open group's rows and renders the ones in view, rows 36px, in chunks of eight so scrolling
+  re-renders rarely, with a viewport of rows to spare on each side (at least 12, `resolveOverscanRows`), so a
+  flick never outruns them; a group measures again before it paints when it opens, and the window when the page is
+  revealed; group headers stay sticky; rows are memoized. Home's queue sections, the Overview's activity and an opened turn's detail
   render their first rows at once and the rest a batch per task after the paint (`hooks/use-progressive-count.ts`);
   queue rows are not one height, so they are not windowed. The Overview's activity stops at its newest 100 entries,
   with a button for 100 older ones, and goes back to 100 once the Overview is hidden.

@@ -2,7 +2,7 @@ import type { InitiativeSheet, ShinsaState, TeamFeedInitiative } from '@shinsa/c
 import { cn } from '@shinsa/ui/lib/utils';
 import { LeadReport } from '@/components/initiatives/lead.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { TaskGroupSection } from '@/components/tasks/group.tsx';
+import { TaskGroupList } from '@/components/tasks/group.tsx';
 import { FILED_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
 import { useTeamTasks } from '@/components/teams/tasks.tsx';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
@@ -51,19 +51,18 @@ function InitiativeTasks({
       {sections.length === 0 ? (
         <p className='px-3 py-2.5 text-xs text-fg-2'>{EMPTY_TASKS}</p>
       ) : (
-        <div className='-mb-px flex flex-col'>
-          {sections.map((section) => (
-            <TaskGroupSection
-              key={section.key}
-              persistId={createDisclosureId('initiative', initiativeId, 'group', section.key)}
-              group={section.group}
-              entries={section.entries}
-              state={state}
-              defaultOpen={section.group.defaultOpen}
-              columns={columns}
-            />
-          ))}
-        </div>
+        <TaskGroupList
+          className='-mb-px flex flex-col'
+          sections={sections.map((section) => ({
+            key: section.key,
+            persistId: createDisclosureId('initiative', initiativeId, 'group', section.key),
+            group: section.group,
+            entries: section.entries,
+            defaultOpen: section.group.defaultOpen,
+          }))}
+          state={state}
+          columns={columns}
+        />
       )}
     </section>
   );

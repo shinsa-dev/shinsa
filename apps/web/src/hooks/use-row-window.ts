@@ -1,5 +1,7 @@
 import * as React from 'react';
-import { isSameRange, type RowWindow, resolveRowWindow } from '@/lib/format/rows.ts';
+import { isSameWindows, type RowWindow, resolveSectionWindows } from '@/lib/format/rows.ts';
+
+export const WINDOW_ROWS_ATTRIBUTE = 'data-window-rows';
 
 function findScroller(node: HTMLElement) {
   for (let parent = node.parentElement; parent; parent = parent.parentElement) {
@@ -8,32 +10,54 @@ function findScroller(node: HTMLElement) {
   return null;
 }
 
-export function useRowWindow(list: React.RefObject<HTMLElement | null>, count: number, rowHeight: number) {
-  const [range, setRange] = React.useState<RowWindow>(() =>
-    resolveRowWindow(0, typeof window === 'undefined' ? 0 : window.innerHeight, count, rowHeight)
+function resolveViewportHeight() {
+  return typeof window === 'undefined' ? 0 : window.innerHeight;
+}
+
+export function useSectionWindows(
+  list: React.RefObject<HTMLElement | null>,
+  counts: readonly number[],
+  rowHeight: number
+) {
+  const sizes = counts.join(',');
+  const [windows, replaceWindows] = React.useState<RowWindow[]>(() =>
+    resolveSectionWindows([], resolveViewportHeight(), counts, rowHeight)
   );
+  const measureRef = React.useRef(() => {});
   React.useLayoutEffect(() => {
     const node = list.current;
     if (!node) return;
     const scroller = findScroller(node);
+    const listed = sizes ? sizes.split(',').map(Number) : [];
     const measure = () => {
-      const top = node.getBoundingClientRect().top - (scroller?.getBoundingClientRect().top ?? 0);
+      const origin = scroller?.getBoundingClientRect().top ?? 0;
+      const tops: number[] = [];
+      for (const rows of node.querySelectorAll<HTMLElement>(`[${WINDOW_ROWS_ATTRIBUTE}]`)) {
+        tops[Number(rows.dataset.windowRows)] = rows.getBoundingClientRect().top - origin;
+      }
       const height = scroller?.clientHeight ?? window.innerHeight;
-      const next = resolveRowWindow(top, height, count, rowHeight);
-      setRange((current) => (isSameRange(current, next) ? current : next));
+      const next = resolveSectionWindows(tops, height, listed, rowHeight);
+      replaceWindows((current) => (isSameWindows(current, next) ? current : next));
     };
+    measureRef.current = measure;
     measure();
     const target = scroller ?? window;
     const resize = new ResizeObserver(measure);
-    for (const child of scroller?.children ?? []) resize.observe(child);
+    resize.observe(node);
     if (scroller) resize.observe(scroller);
     target.addEventListener('scroll', measure, { passive: true });
     window.addEventListener('resize', measure);
     return () => {
+      measureRef.current = () => {};
       resize.disconnect();
       target.removeEventListener('scroll', measure);
       window.removeEventListener('resize', measure);
     };
-  }, [list, count, rowHeight]);
-  return range;
+  }, [list, sizes, rowHeight]);
+  const remeasure = React.useCallback(() => measureRef.current(), []);
+  const current =
+    windows.length === counts.length
+      ? windows
+      : resolveSectionWindows([], resolveViewportHeight(), counts, rowHeight);
+  return { windows: current, remeasure };
 }
