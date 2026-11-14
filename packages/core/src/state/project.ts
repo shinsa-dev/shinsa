@@ -86,7 +86,7 @@ import { applyDelegationEvent, recordCourierTask, resolveLineage } from './deleg
 import { removeEntry, writeEntry } from './draft.ts';
 import { applyFeedbackEvent } from './feedback.ts';
 import { recordFork } from './forks.ts';
-import { applyGateEvent } from './gates.ts';
+import { applyGateEvent, applyMergeGateKept } from './gates.ts';
 import { applyHandoffEvent } from './handoffs.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyInitiativeEvent } from './initiatives.ts';
@@ -1193,6 +1193,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.edits_approved':
       updateTask(state, event.taskId, event.at, { approvedEdits: event.gate });
+      break;
+    case 'task.merge_gate_kept':
+      applyMergeGateKept(state, event);
       break;
     case 'task.suggested':
       applySuggested(state, event);

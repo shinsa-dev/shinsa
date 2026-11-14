@@ -289,3 +289,12 @@ describe('ticking a step around the merge', () => {
     expect(listAgentSpecs().some((spec) => spec.path.join(' ') === 'merges tick')).toBe(false);
   });
 });
+
+describe('keeping the merge gate', () => {
+  test('undoes Approve and merge for the task, and is the human’s alone', async () => {
+    const fake = createClient();
+    expect((await runSpec(fake, ['merges', 'keep-gate', 'fix'])).text).toBe('The merge waits for you again.');
+    expect(fake.sent).toEqual([{ type: 'task.keep_merge_gate', taskId: 'task-123' }]);
+    expect(listAgentSpecs().some((spec) => spec.path.join(' ') === 'merges keep-gate')).toBe(false);
+  });
+});

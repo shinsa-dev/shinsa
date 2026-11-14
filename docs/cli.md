@@ -1110,6 +1110,20 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa merges keep-gate
+
+Undo Approve and merge: the pull request no longer merges once ready and waits for you at the merge gate.
+
+```
+shinsa merges keep-gate <task> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `task.keep_merge_gate`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+
 #### shinsa merges tick
 
 Tick a pre-merge or post-merge step you did (a variable set, a migration run). The merge waits for every pre-merge step; a post-merge step ticks only once the pull request merged.

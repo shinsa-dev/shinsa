@@ -48,7 +48,7 @@ export interface TaskPageContext {
   comments: LineComment[];
   clearComments: () => void;
   verdicts: GateContext['verdicts'];
-  thenApprove?: boolean;
+  followUp?: GateContext['followUp'];
 }
 
 const NO_GATE_CONTEXT: GateContext = { comments: [], clearComments: () => {}, verdicts: {}, tab: null };
@@ -253,7 +253,7 @@ export function listTaskPageSections(
     comments: page.comments,
     clearComments: page.clearComments,
     verdicts: page.verdicts,
-    ...(page.thenApprove === undefined ? {} : { thenApprove: page.thenApprove }),
+    ...(page.followUp ? { followUp: page.followUp } : {}),
     tab: page.tab,
   };
   const decide = listOpenGateCommands(state, task, context);

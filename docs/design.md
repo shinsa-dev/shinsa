@@ -1496,7 +1496,14 @@ Only these, and they win over anything below:
       `icon-sm` chevron ("More ways to fix") joined with square inner corners, whose menu is a radio pair, Fix 2
       findings and Fix 2 findings and approve. The pick swaps the button's label and tooltip ("Sends the findings you
       kept, then approves once checks and the agent review pass") and is kept in the review draft, so ⌘K's fix command
-      follows it and offers the other one beside it. A reload starts on Fix 2 findings again. The activity lists the comments a decision
+      follows it and offers the other one beside it. A reload starts on Fix 2 findings again. On an engine with
+      `review.approve_and_merge`, and when the task merges on its own (it has a merge step and is not a bundle
+      follower), the menu gains a third choice, Fix 2 findings, approve and merge, and Approve changes becomes a split
+      button too, Approve changes or Approve and merge ("Opens the pull request and merges it once CI is green, nothing
+      conflicts and no comment is unread"). ⌘K's decision follows every pick the same way and lists each other
+      choice beside it (`listFollowUpCommands`, `lib/command/gates.ts`). While `mergeAhead` is on, the Now card says so in one `text-xs fg-3` line
+      ("You chose to merge once ready…", or "…as soon as you tick the step before the merge") with a quiet Keep the
+      merge gate link (`merge-ahead.ts`). The activity lists the comments a decision
       sent under it, each with its place (`activity-row.tsx`). An escalated
       review titles the card "The agents could not settle the review", or "The fix changed nothing and
       the same findings came back" when a round left the code as it was, and says why

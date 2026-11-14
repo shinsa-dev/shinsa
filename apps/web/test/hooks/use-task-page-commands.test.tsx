@@ -98,13 +98,23 @@ describe('useTaskPageCommands', () => {
     expect(find(result.current.sections, 'task.t1.gate.g1.approve').disabled).toBeUndefined();
   });
 
-  it('follows your choice to fix and approve when the engine can approve after a fix', () => {
+  it('follows the follow-up you picked on the button, to approve or to approve and merge', () => {
     spyOnEngine();
     const { result } = renderHook(() => usePage(FINDINGS_STATE), { wrapper: Draft });
     expect(find(result.current.sections, 'task.t1.gate.g1.approve').label).toBe('Fix 1 finding');
     act(() => result.current.draft.chooseThenApprove(true));
     expect(find(result.current.sections, 'task.t1.gate.g1.approve').label).toBe('Fix 1 finding and approve');
-    expect(find(result.current.sections, 'task.t1.gate.g1.fix_choice').label).toBe('Fix 1 finding');
+    expect(find(result.current.sections, 'task.t1.gate.g1.follow_up.none').label).toBe('Fix 1 finding');
+    expect(find(result.current.sections, 'task.t1.gate.g1.follow_up.merge').label).toBe(
+      'Fix 1 finding, approve and merge'
+    );
+    act(() => result.current.draft.chooseThenMerge(true));
+    expect(find(result.current.sections, 'task.t1.gate.g1.approve').label).toBe(
+      'Fix 1 finding, approve and merge'
+    );
+    expect(find(result.current.sections, 'task.t1.gate.g1.follow_up.approve').label).toBe(
+      'Fix 1 finding and approve'
+    );
   });
 
   it('drops the sections when the page unmounts', () => {

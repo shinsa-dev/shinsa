@@ -9,6 +9,7 @@ export const ENGINE_FEATURES = [
   'feedback',
   'teams',
   'review.approve_after_fix',
+  'review.approve_and_merge',
   'message.line_comments',
   'changelog',
   'remote.terminals',

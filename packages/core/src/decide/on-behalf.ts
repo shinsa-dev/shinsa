@@ -7,6 +7,7 @@ import type { Decider } from './decider.ts';
 type HumanOnlyType =
   | 'gate.answer'
   | 'merge_step.tick'
+  | 'task.keep_merge_gate'
   | 'memory.write'
   | 'memory.accept'
   | 'memory.remove'
@@ -30,6 +31,7 @@ type HumanOnlyType =
 const HUMAN_ONLY_TYPES: ReadonlySet<string> = new Set<HumanOnlyType>([
   'gate.answer',
   'merge_step.tick',
+  'task.keep_merge_gate',
   'memory.write',
   'memory.accept',
   'memory.remove',

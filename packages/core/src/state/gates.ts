@@ -19,6 +19,11 @@ function writeApproveAfterFix(state: ShinsaState, taskId: string, at: number, ap
   updateTask(state, taskId, at, { approveAfterFix });
 }
 
+function writeMergeAhead(state: ShinsaState, taskId: string, at: number, mergeAhead: boolean) {
+  if ((state.tasks[taskId]?.mergeAhead ?? false) === mergeAhead) return;
+  updateTask(state, taskId, at, { mergeAhead });
+}
+
 function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (gate.type === 'result') return 'Closed the task';
   if (event.autopilot && gate.type === 'failure') {
@@ -31,10 +36,14 @@ function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   }
   if (event.autopilot && gate.type === 'merge')
     return `Approved the merge for you by Autopilot: ${gate.title}`;
+  if (event.ahead && gate.type === 'merge') return `Merged once ready, as you asked: ${gate.title}`;
   if (event.autopilot && isAgentQuestion(gate)) return `Answered for you by Autopilot: ${gate.title}`;
   if (event.autopilot) return `Approved for you by Autopilot: ${gate.title}`;
   if (event.ahead) return `Approved after the fix, as you asked: ${gate.title}`;
+  if (event.thenApprove && event.thenMerge)
+    return `Asked for changes, then to approve and merge once ready: ${gate.title}`;
   if (event.thenApprove) return `Asked for changes and to approve after the fix: ${gate.title}`;
+  if (event.thenMerge) return `Approved, to merge once ready: ${gate.title}`;
   return describeDecision(event.decision, gate.title);
 }
 
@@ -92,6 +101,9 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
   clearMergeEscalation(state, gate.id, event.at);
   clearSuggestedActions(state, gate.taskId, event.at);
   if (gate.type === 'review') writeApproveAfterFix(state, gate.taskId, event.at, event.thenApprove === true);
+  if (gate.type === 'review' && !event.ahead)
+    writeMergeAhead(state, gate.taskId, event.at, event.thenMerge === true);
+  if (gate.type === 'merge') writeMergeAhead(state, gate.taskId, event.at, false);
   if (event.autopilot && event.decision === 'approve' && gate.type === 'review')
     updateTask(state, gate.taskId, event.at, { autopiloted: { at: event.at, reason: event.autopilot } });
   record(state, gate.taskId, event.at, {
@@ -121,6 +133,15 @@ function applyGateSuperseded(state: ShinsaState, event: EventOf<'gate.superseded
     actor: 'you',
     kind: 'question',
     text: `Replied in the chat instead of answering: ${gate.title}`,
+  });
+}
+
+export function applyMergeGateKept(state: ShinsaState, event: EventOf<'task.merge_gate_kept'>) {
+  writeMergeAhead(state, event.taskId, event.at, false);
+  record(state, event.taskId, event.at, {
+    actor: 'you',
+    kind: 'decision',
+    text: 'Kept the merge gate: the pull request waits for you to merge it',
   });
 }
 

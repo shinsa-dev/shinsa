@@ -24,6 +24,8 @@ export interface ReviewDraft {
   setVerdict: (index: number, verdict: FindingVerdictKind) => void;
   thenApprove: boolean;
   chooseThenApprove: (thenApprove: boolean) => void;
+  thenMerge: boolean;
+  chooseThenMerge: (thenMerge: boolean) => void;
 }
 
 function ignore() {}
@@ -41,6 +43,8 @@ export const ReviewDraftContext = React.createContext<ReviewDraft>({
   setVerdict: ignore,
   thenApprove: false,
   chooseThenApprove: ignore,
+  thenMerge: false,
+  chooseThenMerge: ignore,
 });
 
 const STORAGE_PREFIX = 'shinsa.review-draft.';

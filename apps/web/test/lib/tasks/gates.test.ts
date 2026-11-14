@@ -69,6 +69,29 @@ describe('replyToGate', () => {
     ]);
   });
 
+  it('asks to merge once ready when you approve and merge, after the fix or at once', async () => {
+    const review = createGate({ id: 'g', taskId: 't', type: 'review' });
+    await replyToGate(review, 'approveAndMerge');
+    await replyToGate(review, 'fixFindingsApproveAndMerge');
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null, thenMerge: true },
+        'Approved. Merging once ready.',
+      ],
+      [
+        {
+          type: 'gate.answer',
+          gateId: 'g',
+          decision: 'revise',
+          response: null,
+          thenApprove: true,
+          thenMerge: true,
+        },
+        'Sent. Merging once the fix passes.',
+      ],
+    ]);
+  });
+
   it('sends the repository you picked as the reply to the setup question', async () => {
     const setup = createGate({ id: 'g', taskId: 't', type: 'configuration', choices: ['paywall-next'] });
     await replyToGate(setup, 'pickRepository', 'paywall-next');

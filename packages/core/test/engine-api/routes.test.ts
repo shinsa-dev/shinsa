@@ -127,6 +127,7 @@ const FEATURE_ROUTES = {
     'GET /api/teams/tasks',
   ],
   'review.approve_after_fix': [],
+  'review.approve_and_merge': [],
   'message.line_comments': [],
   changelog: ['GET /api/changelog'],
   'remote.terminals': [],

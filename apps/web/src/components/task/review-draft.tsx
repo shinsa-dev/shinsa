@@ -13,9 +13,10 @@ import {
 interface ReviewChoice {
   verdicts: Record<number, FindingVerdictKind>;
   thenApprove: boolean;
+  thenMerge: boolean;
 }
 
-const NO_CHOICE: ReviewChoice = { verdicts: {}, thenApprove: false };
+const NO_CHOICE: ReviewChoice = { verdicts: {}, thenApprove: false, thenMerge: false };
 
 export function ReviewDraftProvider({
   enabled,
@@ -41,7 +42,7 @@ export function ReviewDraftProvider({
     ...NO_CHOICE,
   }));
   const comments = draft.key === draftKey ? draft.comments : readStoredComments(draftKey);
-  const { verdicts, thenApprove } = chosen.key === choiceKey ? chosen : NO_CHOICE;
+  const { verdicts, thenApprove, thenMerge } = chosen.key === choiceKey ? chosen : NO_CHOICE;
   const value = React.useMemo<ReviewDraft>(() => {
     const update = (change: (current: LineComment[]) => LineComment[]) =>
       setDraft((current) => {
@@ -72,7 +73,14 @@ export function ReviewDraftProvider({
           key: choiceKey,
           thenApprove: next,
         })),
+      thenMerge,
+      chooseThenMerge: (next) =>
+        setChosen((previous) => ({
+          ...(previous.key === choiceKey ? previous : NO_CHOICE),
+          key: choiceKey,
+          thenMerge: next,
+        })),
     };
-  }, [enabled, reviewing, withMessages, comments, verdicts, thenApprove, draftKey, choiceKey]);
+  }, [enabled, reviewing, withMessages, comments, verdicts, thenApprove, thenMerge, draftKey, choiceKey]);
   return <ReviewDraftContext.Provider value={value}>{children}</ReviewDraftContext.Provider>;
 }

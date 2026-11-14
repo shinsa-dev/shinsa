@@ -44,6 +44,7 @@ import { applyEditsApproval } from './edits.ts';
 import { isUnchangedFix } from './fingerprints.ts';
 import { failUnchangedFix, resetFixBudget, startFix } from './fixes.ts';
 import { settleTask } from './lifecycle.ts';
+import { mergeOnceReady } from './merge-ahead.ts';
 import { recordEarlierRoundMerged } from './rounds.ts';
 import { finishMerge } from './shapes.ts';
 import {
@@ -198,7 +199,7 @@ function openMergeGate(decider: Decider, task: Task, pullRequest: PullRequest, r
     .filter(Boolean)
     .join('\n\n');
   const gate = decider.openGate(task.id, 'merge', task.title, body, { details: { commit: headSha } });
-  applyAutopilotMerge(decider, gate);
+  if (!mergeOnceReady(decider, gate)) applyAutopilotMerge(decider, gate);
 }
 
 function recordWatch(
