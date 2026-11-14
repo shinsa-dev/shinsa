@@ -78,6 +78,7 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
         Layer.succeed(TerminalTimings, {
           notify: Duration.millis(1),
           screen: Duration.millis(1),
+          sweep: Duration.hours(1),
           answer: Duration.millis(1),
           answerLimit: Duration.millis(50),
         }),

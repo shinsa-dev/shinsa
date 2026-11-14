@@ -141,6 +141,7 @@ export interface TerminalSession {
   readonly running: boolean;
   readonly pid: number | null;
   readonly viewers: number;
+  readonly lastActiveAt: number;
   start(start: SessionStart): Effect.Effect<void, SpawnFailed>;
   fail(reason: string): Effect.Effect<void>;
   attach(viewer: TerminalViewer): void;
@@ -172,12 +173,14 @@ export interface TerminalsInput {
 export const TerminalTimings = Context.Reference<{
   readonly notify: Duration.Duration;
   readonly screen: Duration.Duration;
+  readonly sweep: Duration.Duration;
   readonly answer: Duration.Duration;
   readonly answerLimit: Duration.Duration;
 }>('shinsa/engine/terminals/TerminalTimings', {
   defaultValue: () => ({
     notify: Duration.millis(50),
     screen: Duration.seconds(2),
+    sweep: Duration.minutes(1),
     answer: Duration.millis(500),
     answerLimit: Duration.minutes(10),
   }),

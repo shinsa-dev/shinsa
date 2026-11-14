@@ -41,6 +41,7 @@ export async function startRealTerminals(config: ServerConfig, home: string) {
             Layer.succeed(TerminalTimings, {
               notify: Duration.millis(1),
               screen: Duration.seconds(2),
+              sweep: Duration.hours(1),
               answer: Duration.millis(1),
               answerLimit: Duration.millis(50),
             })
