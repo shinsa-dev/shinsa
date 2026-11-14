@@ -184,7 +184,7 @@ export class BrowserHost extends Context.Service<
         url: SignInUrl | null
       ) {
         const executable = yield* findExecutable;
-        const handOff = spawner
+        yield* spawner
           .spawn(
             ChildProcess.make(
               executable,
@@ -198,7 +198,6 @@ export class BrowserHost extends Context.Service<
             Effect.ignore,
             Effect.scoped
           );
-        yield* Effect.forkIn(handOff, layerScope);
       });
 
       const ensureHeadless = Effect.fn('BrowserHost.ensureHeadless')(function* (profile: BrowserProfile) {
