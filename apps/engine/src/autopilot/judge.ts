@@ -1,15 +1,18 @@
 import { Effect, Option, Schema } from 'effect';
 import type { QuickJson } from '../agents/quick/index.ts';
+import { listTaskReplies } from '../agents/reading/task.ts';
+import type { Transcripts } from '../agents/transcripts/service.ts';
 import {
   AUTOPILOT_JUDGE_SCHEMA,
   AUTOPILOT_WEIGH_SCHEMA,
   AutopilotJudgeAnswer,
   AutopilotWeighAnswer,
   type AutopilotJudge,
+  type AutopilotReplyReader,
   type AutopilotWeigher,
 } from './schema.ts';
 
-export type { AutopilotJudge, AutopilotWeigher } from './schema.ts';
+export type { AutopilotJudge, AutopilotReplyReader, AutopilotWeigher } from './schema.ts';
 
 const decodeAnswer = Schema.decodeUnknownOption(AutopilotJudgeAnswer);
 
@@ -41,5 +44,12 @@ export function createAutopilotWeigher(ask: QuickJson): AutopilotWeigher {
           }))
         )
       )
+    );
+}
+
+export function createAutopilotReplyReader(transcripts: Transcripts['Service']): AutopilotReplyReader {
+  return (state, taskId) =>
+    Effect.map(listTaskReplies(state, transcripts, taskId, ['agent']), (replies) =>
+      replies.map((reply) => ({ at: reply.at, text: reply.text }))
     );
 }

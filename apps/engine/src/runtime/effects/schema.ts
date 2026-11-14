@@ -1,6 +1,6 @@
 import type { ShinsaEffect } from '@shinsa/core';
 import { Duration, Schema } from 'effect';
-import type { AutopilotJudge, AutopilotWeigher } from '../../autopilot/judge.ts';
+import type { AutopilotJudge, AutopilotReplyReader, AutopilotWeigher } from '../../autopilot/judge.ts';
 import type { FeedbackDrafter } from '../../feedback/draft/service.ts';
 import type { ServerInstance } from '../../instance/install.ts';
 import type { HandoffEffects } from '../../remote/handoffs/schema.ts';
@@ -20,6 +20,7 @@ export interface EffectRunnerOptions {
   wordWatch?: WatchWriter;
   describeShare?: ShareDescriber['Service']['describe'];
   judgeAutopilot?: AutopilotJudge;
+  readAutopilotReplies?: AutopilotReplyReader;
   weighSuggestion?: AutopilotWeigher;
   draftFeedback?: FeedbackDrafter['Service'];
   instance?: Pick<ServerInstance, 'version' | 'commit'>;

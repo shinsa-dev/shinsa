@@ -2,7 +2,9 @@ import {
   AUTOPILOT_SUGGESTION_VERDICTS,
   AUTOPILOT_VERDICTS,
   type AutopilotJudgment,
+  type AutopilotReply,
   type AutopilotSuggestionVerdict,
+  type ShinsaState,
 } from '@shinsa/core';
 import { type Effect, Schema } from 'effect';
 import type { JsonSchema } from '../agents/providers/index.ts';
@@ -25,6 +27,11 @@ export const AutopilotJudgeAnswer = Schema.Struct({
 });
 
 export type AutopilotJudge = (system: string, prompt: string) => Effect.Effect<AutopilotJudgment | null>;
+
+export type AutopilotReplyReader = (
+  state: ShinsaState,
+  taskId: string
+) => Effect.Effect<readonly AutopilotReply[]>;
 
 export const AUTOPILOT_WEIGH_SCHEMA: JsonSchema = {
   type: 'object',
