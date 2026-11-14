@@ -2166,6 +2166,16 @@ Only these, and they win over anything below:
       Copy details). The page opens Shinsa by itself as soon as the engine answers, and the window switches to it if
       the engine stops answering for 15 s while you work (`apps/desktop/src/engine/screen.ts`, `src/connection/service.ts`,
       `static/waiting.html`).
+    - **The engine in this app.** The app shows This Mac's engine or one machine of yours on Shinsa Cloud
+      (`apps/desktop/CLAUDE.md` → Viewer mode). Shinsa → Engine and the menu bar item list This Mac, the pinned
+      machine and Choose a Machine…, the one in use checked; Settings → General → Engine in this app (only in the
+      app) names it with Use a machine, Choose another or Use this Mac's engine. Switching between This Mac and
+      Shinsa Cloud opens the window again. With no machine chosen the window shows "Choose a machine for this app",
+      a card per machine with its state and Show here; on Shinsa Cloud, Sign in opens GitHub in the browser, and
+      adding the app to a machine takes its pasted invite link. When Shinsa Cloud does not answer, the status page
+      says "Shinsa Cloud is not answering" with Try again and Use this Mac's engine, and the menu bar item's first
+      line says the same; otherwise it reads "Showing Studio on Shinsa Cloud" with the count and no task list, and
+      Quit sits over "The machine you view keeps running".
     - **The window**: closing it hides it and the Dock icon with it, so the app lives on in the menu bar (the page
       keeps its socket, so notifications go on); the menu bar item's Open Shinsa, a `shinsa://` link, a
       notification or opening Shinsa again brings both back, and ⌘Q quits the app and never stops the engine. Its

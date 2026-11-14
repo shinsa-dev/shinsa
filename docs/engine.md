@@ -4246,6 +4246,15 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `POST /__remote/sign-in/token` for a session token, then calls every signed-in route with `Authorization: Bearer`
   (`apps/cloud/CLAUDE.md` → Sign-in). Nothing changes on the machine: the app sends `Origin: https://app.shinsa.dev` on
   the channel's socket, and it is added like any device, by scanning the invite link's QR code.
+- **Shinsa for Mac as a viewer** shows one machine of yours through Shinsa Cloud instead of its own engine, which
+  then need not run (`apps/desktop/CLAUDE.md` → Viewer mode). Its window loads app.shinsa.dev (`SHINSA_CLOUD_URL`
+  overrides it) and is the dashboard with the Mac app's bridge: the bridge says which machine is pinned, and the
+  dashboard joins only that machine to its fleet (`resolveMachineScope`, `lib/remote/viewer-mode.ts`), so the Dock
+  badge, notifications and `shinsa://task` links follow it; with none pinned it shows a chooser of your machines, and
+  a pinned machine no longer on your account brings the chooser back with a line naming it. It signs in with the
+  same native PKCE flow as the iPhone app, in your browser and back on `shinsa://signed-in`, then keeps the session
+  as the window's cookie. The app is added to a machine like a browser, its add-device page taking the pasted invite
+  link in place of a QR code. Nothing changes on the machine or the Worker.
 - **One dashboard over every machine** (`FleetApp`, `lib/remote/fleet.ts`): there is no page to pick a machine. Every machine
   of your account that this browser was added to joins one `Fleet`, each over its own sealed channel (`RemoteLink`,
   `openRemoteChannel`) with its own `Connection`, and the fleet stands in for the page's connection

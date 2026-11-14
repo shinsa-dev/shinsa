@@ -62,7 +62,7 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
       const reachCloud = Effect.gen(function* () {
         const health = yield* requestHealth;
         if (Option.isSome(health)) return yield* showApp(health.value);
-        yield* showScreen({ kind: 'cloud', host: new URL(server.origin).host });
+        yield* showScreen({ kind: 'cloud' });
       });
       const attempt = Effect.gen(function* () {
         const outcome = yield* engine.ensure(showScreen({ kind: 'starting' }));

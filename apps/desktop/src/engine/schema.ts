@@ -67,7 +67,7 @@ export const EngineScreen = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('crashing'), detail: Schema.String }),
   Schema.Struct({ kind: Schema.Literal('port'), port: Schema.Number, detail: Schema.String }),
   Schema.Struct({ kind: Schema.Literal('stopped'), detail: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal('cloud'), host: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal('cloud') }),
 ]);
 
 export type EngineScreen = typeof EngineScreen.Type;

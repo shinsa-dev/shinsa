@@ -19,11 +19,17 @@ const AGENTS = {
     'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
   galaxy:
     'Mozilla/5.0 (Linux; Android 14; SM-S921B Build/UP1A.231005.007) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36',
+  shinsaApp:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Shinsa/1.4.0 Chrome/138.0 Electron/37.2.0 Safari/537.36',
   linux: 'Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0',
   chromebook: 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) OPR/100.0',
 };
 
 describe('the device name a request starts with', () => {
+  it('names Shinsa for Mac after the app, not the Chrome it is built on', () => {
+    expect(resolveDeviceName(AGENTS.shinsaApp, false, null)).toBe('Shinsa on Mac');
+  });
+
   it('names the device and, off a phone or tablet, the browser', () => {
     expect(resolveDeviceName(AGENTS.iphone, true, null)).toBe('iPhone');
     expect(resolveDeviceName(AGENTS.ipad, true, null)).toBe('iPad');

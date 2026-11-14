@@ -49,8 +49,14 @@ export function RemoteShell({
         fill ? cn('h-dvh overflow-hidden', SAFE_AREA_BOTTOM) : 'min-h-dvh'
       )}
     >
-      <header className='flex h-11 shrink-0 items-center gap-2 px-3.5 sm:px-5'>
-        <a href={REMOTE_PATHS.app} className='flex items-center gap-1.5 text-sm font-medium text-fg-4'>
+      <header
+        data-window-drag
+        className='flex h-11 shrink-0 items-center gap-2 px-3.5 select-none sm:px-5 desktop:ps-20'
+      >
+        <a
+          href={REMOTE_PATHS.app}
+          className='flex items-center gap-1.5 text-sm font-medium text-fg-4 desktop:hidden'
+        >
           <span className='grid size-5 shrink-0 place-items-center'>
             <Logo className='size-3.25' />
           </span>
