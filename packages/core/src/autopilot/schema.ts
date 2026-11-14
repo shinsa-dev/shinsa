@@ -1,15 +1,28 @@
 import type { AutopilotLevel } from '../domain/settings.ts';
 import type { TaskShape } from '../domain/shapes.ts';
+import type { GateCause } from '../domain/types.ts';
 import type { ReviewRating } from '../report/types.ts';
 import type { AutopilotModelGuess } from './model/schema.ts';
 import type { AutopilotModelHead } from './model/schema.ts';
 
-export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal';
+export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal' | 'failure';
+
+export const AUTOPILOT_DONE_ACTIONS = [
+  'approved',
+  'replied',
+  'merged',
+  'revised',
+  'retried',
+  'cancelled',
+] as const;
+
+export type AutopilotDoneAction = (typeof AUTOPILOT_DONE_ACTIONS)[number];
 
 export interface AutopilotDone {
   gateId: string;
   taskId: string;
   gate: AutopilotGateKind;
+  action: AutopilotDoneAction;
   title: string;
   reason: string;
   followUp: string | null;
@@ -39,6 +52,8 @@ export interface AutopilotFacts {
   heldPlan: boolean;
   escalatedReview: boolean;
   approvedByYou: boolean;
+  ready: boolean;
+  retried: number;
   waitedMinutes: number;
   presence: AutopilotPresence;
 }
@@ -61,16 +76,27 @@ export const AUTOPILOT_CEILINGS: Record<AutopilotLevel, AutopilotCeiling> = {
   ask_first: { risk: 'low', urgentRisk: 'low', scope: { phases: 2, files: 4 } },
   balanced: { risk: 'low', urgentRisk: 'medium', scope: { phases: 4, files: 10 } },
   most: { risk: 'medium', urgentRisk: 'high', scope: { phases: 6, files: 20 } },
+  everything: { risk: 'high', urgentRisk: 'high', scope: { phases: Infinity, files: Infinity } },
 };
 
 export const AUTOPILOT_LIMITS = {
   activeMinutes: 30,
   awayMinutes: 60,
+  retriesPerRound: 1,
 } as const;
 
-export const AUTOPILOT_VERDICTS = ['act', 'revise', 'forward'] as const;
+export const AUTOPILOT_VERDICTS = ['act', 'revise', 'forward', 'cancel'] as const;
 
 export type AutopilotVerdict = (typeof AUTOPILOT_VERDICTS)[number];
+
+export const AUTOPILOT_GATE_VERDICTS: Record<AutopilotGateKind, readonly AutopilotVerdict[]> = {
+  plan: ['act', 'revise', 'forward'],
+  question: ['act', 'forward'],
+  review: ['act', 'revise', 'forward'],
+  merge: ['act', 'revise', 'forward'],
+  proposal: ['act', 'forward'],
+  failure: ['act', 'cancel', 'forward'],
+};
 
 export const AUTOPILOT_SUGGESTION_VERDICTS = ['accept', 'dismiss', 'forward'] as const;
 
@@ -143,6 +169,7 @@ export const AUTOPILOT_DECISION_KINDS = [
   'review',
   'merge',
   'proposal',
+  'failure',
   'finding',
   'suggestion',
   'message',
@@ -249,6 +276,7 @@ export interface AutopilotTrackJudgment {
 
 export interface AutopilotJudgments {
   positive: boolean;
+  base: AutopilotTrackJudgment;
   judgments: AutopilotTrackJudgment[];
   rates: Record<AutopilotModelHead, AutopilotRate>;
 }
@@ -279,6 +307,11 @@ export interface AutopilotBenchmark {
 export interface AutopilotRate {
   positive: number;
   negative: number;
+}
+
+export interface AutopilotKindProfile {
+  tracks: Record<AutopilotTrack, AutopilotAgreement>;
+  rate: AutopilotRate;
 }
 
 export const AUTOPILOT_TOPICS = [
@@ -318,6 +351,7 @@ export interface AutopilotProfile {
   decisions: AutopilotDecision[];
   tracks: Record<AutopilotTrack, AutopilotAgreement>;
   rates: Record<AutopilotModelHead, AutopilotRate>;
+  kinds: Partial<Record<AutopilotDecisionKind, AutopilotKindProfile>>;
   tallies: AutopilotTally[];
   topics: AutopilotTopicTally[];
   followUps: AutopilotFollowUpMatch;
@@ -342,16 +376,24 @@ const EMPTY_AUTOPILOT_AGREEMENT: AutopilotAgreement = {
 
 const EMPTY_AUTOPILOT_RATE: AutopilotRate = { positive: 0, negative: 0 };
 
+const EMPTY_AUTOPILOT_TRACKS: Record<AutopilotTrack, AutopilotAgreement> = {
+  model: EMPTY_AUTOPILOT_AGREEMENT,
+  call: EMPTY_AUTOPILOT_AGREEMENT,
+  combined: EMPTY_AUTOPILOT_AGREEMENT,
+  base: EMPTY_AUTOPILOT_AGREEMENT,
+};
+
+export const EMPTY_AUTOPILOT_KIND_PROFILE: AutopilotKindProfile = {
+  tracks: EMPTY_AUTOPILOT_TRACKS,
+  rate: EMPTY_AUTOPILOT_RATE,
+};
+
 export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = {
   total: 0,
   decisions: [],
-  tracks: {
-    model: EMPTY_AUTOPILOT_AGREEMENT,
-    call: EMPTY_AUTOPILOT_AGREEMENT,
-    combined: EMPTY_AUTOPILOT_AGREEMENT,
-    base: EMPTY_AUTOPILOT_AGREEMENT,
-  },
+  tracks: EMPTY_AUTOPILOT_TRACKS,
   rates: { gate: EMPTY_AUTOPILOT_RATE, finding: EMPTY_AUTOPILOT_RATE, suggestion: EMPTY_AUTOPILOT_RATE },
+  kinds: {},
   tallies: [],
   topics: [],
   followUps: { scored: 0, matched: 0 },
@@ -361,6 +403,8 @@ export const AUTOPILOT_SCORED_KINDS = [
   'plan',
   'review',
   'merge',
+  'proposal',
+  'failure',
 ] as const satisfies readonly AutopilotDecisionKind[];
 
 export type AutopilotScoredKind = (typeof AUTOPILOT_SCORED_KINDS)[number];
@@ -404,3 +448,47 @@ export const AUTOPILOT_COMBINE_LIMITS = {
   veto: 0.5,
   confidence: 0.5,
 } as const;
+
+export const AUTOPILOT_FINDING_LIMITS = {
+  fix: 0.5,
+} as const;
+
+export const AUTOPILOT_JUDGED_FAILURE_CAUSES: readonly GateCause[] = ['monitor', 'push_hook'];
+
+export const AUTOPILOT_READINESS_KINDS = [
+  'plan',
+  'review',
+  'merge',
+  'proposal',
+  'failure',
+  'finding',
+] as const satisfies readonly AutopilotDecisionKind[];
+
+export type AutopilotReadinessKind = (typeof AUTOPILOT_READINESS_KINDS)[number];
+
+export const AUTOPILOT_READINESS_TRACK: Record<AutopilotReadinessKind, AutopilotTrack> = {
+  plan: 'combined',
+  review: 'combined',
+  merge: 'combined',
+  proposal: 'combined',
+  failure: 'combined',
+  finding: 'model',
+};
+
+export const AUTOPILOT_READINESS_LIMITS = {
+  minScored: 100,
+  agreement: 0.9,
+  margin: 0.05,
+} as const;
+
+export interface AutopilotKindReadiness {
+  kind: AutopilotReadinessKind;
+  track: AutopilotTrack;
+  score: AutopilotTrackScore;
+  ready: boolean;
+}
+
+export interface AutopilotReadiness {
+  kinds: AutopilotKindReadiness[];
+  offered: boolean;
+}

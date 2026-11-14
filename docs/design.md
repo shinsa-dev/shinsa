@@ -286,7 +286,7 @@ Only these, and they win over anything below:
    these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
    the greeting, the guide and the composer, then Needs you, In progress, Recently finished
-   (merged or done in the last 24 hours, five at most), Recent conversations (the latest agent message
+   (merged or done in the last 24 hours, ten at most), Recent conversations (the latest agent message
    of five tasks, opening their chat) and Waiting on another task. Recently
    finished is closure news, so it follows the work still moving; Recent conversations is how you
    jump back into a chat, a step after the news; Waiting, the section that starts collapsed in the
@@ -423,13 +423,11 @@ Only these, and they win over anything below:
    chat, since keeping sends it again as your message.
    Several messages sent while one is read reach the agent together, as one message (`docs/engine.md` → Rounds,
    Queued messages).
-10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
-    constant, `LAYOUT_NAMES` (`lib/preferences/layout.ts`: label, a one-line hint and the icon, read by Settings
-    → Appearance, where each layout's choice shows its hint as a tooltip, and by ⌘K's Switch layout): **Desk** for
-    Cards ("Pages sit centred with nothing at the sides, and a button at the top opens what needs you.") and
-    **Shelf** for Sidebar ("A rail at the side lists every task and stays open, so each one is a click away.").
-    Desk is the default. Renaming them is that one constant; the code, the `?layout=` param and this file keep
-    `cards` and `sidebar`. Both are one frame, `AppFrame` (`components/layout/frame.tsx`), around one `main`:
+10. **One layout on screen, Desk.** Cards is the only layout you can use: Settings and ⌘K offer no switch, and
+    every start opens Cards (`applyLayoutParam` in `lib/preferences/layout.ts` writes `cards` unless the address
+    asks otherwise). Sidebar (Shelf) stays in the code for a later return: `?layout=sidebar` opens it for that load
+    only, which the tests and screenshots use. The code, the `?layout=` param and this file keep `cards` and
+    `sidebar`. Both are one frame, `AppFrame` (`components/layout/frame.tsx`), around one `main`:
     switching adds or drops the top bar and the rail and never remounts the pages inside.
     Cards (the default) has no rail: a top
     bar with the navigation on the left (the Home button, 31; Tasks; Services, 37;
@@ -730,8 +728,7 @@ Only these, and they win over anything below:
       and the agent review pass"; its two halves keep their size when pressed and the chevron keeps its hover fill while
       its menu is open), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
       own and agents pick up where they were."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
-      notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
-      item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
+      notification" once notifications are allowed) and a **disabled** control whose reason is not on screen (Approve changes while line comments
       are drafted: "Send your line comments to the agent or remove them first").
     - **A delayed tooltip** wherever else hovering has more to tell:
       - **Icon-only buttons** whose meaning isn't plain from the glyph, through `Hint`
@@ -846,33 +843,51 @@ Only these, and they win over anything below:
       current step, Mark as done, Cancel task behind a confirm page), then Next and Previous
       task that needs you (`resolveQueueStep`). Request changes and Fix N findings carry the review's
       draft line comments and Approve the changes is disabled while there are any, as on the page.
+    - **Over a task on Home or All tasks**, ⌘K opens on that task's own page of actions, the one the task page
+      shows (its decision, Open with Overview, Code and Chat, then This task), with its title as the crumb;
+      Backspace goes back to the whole menu. The task is the row under the pointer when ⌘K is pressed
+      (`[data-task]`, read once by `lib/command/hover.ts`, and kept while the menu is open); keyboard focus never
+      scopes it, and anywhere else it opens on the root.
     - **On Home** it is about getting to tasks: Needs you lists the tasks waiting on a decision
       (the briefing's Now task first, then queue order, up to eight), each row opening its task;
       their decisions stay out of the root and match only while typing. **Settings** offers Jump to (each section,
       with the tab that holds it as its hint, from anywhere: it opens that tab and scrolls the section into view;
       `openSettingsSection` in `lib/command/settings.ts`), Change a setting (every setting's select as a choice; a project's own controls stay on the
-      page) and Setup (Run setup again). **All tasks** offers Filter by
+      page). **All tasks** offers Filter by
       status, Clear filters and "Search all tasks for …"; the filter and search live in the URL
       (`?status=&q=`), and an active status shows as a removable button beside the search.
     - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, as the rail's and the
       More sheet's New task do, and
-      Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings), Focus (Switch
+      Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings, each with its shortcut
+      at the right, hidden on the page you are on), Focus (Switch
       focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
-      typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens
-      Settings → Agent usage → Accounts, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
+      typing), Appearance (Change theme), Accounts (Add a Claude account, Agent usage, which opens
+      Settings → Usage → Accounts, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
       by name while typing; only while there is one; 27), and Integrations (Add an MCP, MCPs, Plugins
       and Skills, and while typing each MCP, plugin and skill by name; 29), and Versions (Update Claude Code and
       Update Codex; 26). With an empty query, Recent lists the
       last tasks visited (`shinsa.recent-tasks`) within the focus that no group above already shows.
-    - **Typing** matches by word (`lib/command/score.ts`: whole label, label prefix, word prefix, then
-      substring; hints and keywords count at 0.7). Groups are ordered by their best match, since
-      cmdk's own group sort does not work. Choices flatten into their options ("urgent", "dark",
-      "cards"), every task matches by title, repository, branch and status, and the queue's
-      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). Typing
-      searches every task, not only the newest 300 shown with an empty query, against an index of
-      each task's words built once per state (`resolveTaskIndex`, `lib/command/menu.ts`), and only
-      the best 20 task matches render (100 on Jump to a task, 20 per group of commands), so cmdk
-      never scores hundreds of rows a key. A closed menu works out nothing. At the
+    - **Typing** ranks each word once, in `lib/command/menu.ts`, and cmdk only draws what it is given
+      (`shouldFilter={false}`): no row appears and then moves. Each word scores against a row's fields
+      (`lib/command/search/score.ts`): the whole text 1, its prefix 0.9, a word's prefix 0.8, a substring
+      0.6, each 0.05 more when the match ends where a word ends (so "287" puts LOC-287 above LOC-2879),
+      then, on a label, a title, a handle or a branch only, a fuzzy match from the start of a word
+      (0.2 to 0.5, more for word starts and runs of letters, less for gaps, never into a word it did not
+      enter at its start: "fdv" finds Fix decide invariant violations). A handle also counts without its
+      dash ("loc287" is LOC-287 exactly). A field counts at its weight (a label, a title and a
+      handle 1, a branch 0.8, hints, keywords, the repository and the status 0.7, a task's summary 0.6,
+      the first 200 characters of its request 0.5), every word must match, and a row scores the mean of
+      its words. A row scoring under half the best row's score is left out (`RELEVANCE_SHARE`), so a
+      strong match is never buried under scattered ones, and weak matches show only when nothing matches
+      well. The letters a word matched show in the row's label in the full text colour. Groups are
+      ordered by their best match. Choices flatten into their options ("urgent", "dark", "cards") and a
+      choice page narrows to the options that match, the queue's decisions match across tasks ("merge"
+      finds Merge #4531 on whichever task it is), and New task and Jump to a task stay in Tasks only when
+      they match, above the tasks when they match better. Typing searches every task, not only the
+      newest 300 shown with an empty query, against an index built once per state (`resolveTaskIndex`)
+      from each task's fields, which are kept per task until it or its repository's name changes, and
+      only the best 20 task matches render (100 on Jump to a task, 20 per group of commands). A closed
+      menu works out nothing. At the
       bottom, always: "Create task: …" (starts it straight away) and "Edit it before starting"
       (Home's composer, filled in).
     - Rows: 24px. Icons are plain, never on a tile; a task's is its status icon in the status
@@ -887,6 +902,11 @@ Only these, and they win over anything below:
       value into view, so the list does it). Closing resets the menu to the root. Escape restores
       focus to where it was; a command that runs declines the restore so what it focuses keeps
       it.
+    - **App-wide moves have keys** (`APP_SHORTCUTS` in `lib/command/shortcuts.ts`, one listener in
+      `hooks/use-app-shortcuts.ts`): ⌘J (Ctrl J) opens the Terminal page and ⌘, (Ctrl ,) Settings, from anywhere,
+      inputs included; G then H, T or S goes to Home, All tasks or Settings, within 1.5 seconds and never while you
+      type in a field. Each closes ⌘K if it is open. The Mac app's menu keeps its own ⌘, for Settings, which does
+      the same. These are the only global keys besides ⌘K; anything else belongs in ⌘K.
 
 15. **Consistency comes from shared pieces, not from care at the call site.** Everything below
     has one owner; a hand-built copy is a bug. Measured in the browser at 900 and 1280, both
@@ -931,27 +951,34 @@ Only these, and they win over anything below:
       whole header becomes one button with the label, the count and a 14px chevron right after them (turned when
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
-    - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Updates, Setup), Statistics (Shipping, Token usage), Agents (Models, Engine, Memory, Versions), Agent Usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
-      folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
-      tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
-      floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
-      scroll-spy table of contents would have kept that page. The tab is in the URL (`?tab=agents`; General is
-      the bare `/settings`), and a link to a section (`/settings#limits`, the old `#agent-usage`, `#usage`, `#codex`
-      and `#agents` too) opens its tab and scrolls to it. A card never repeats its page's name: the Agents tab's
-      model card is Models and Agent Usage's account card is Accounts; Projects keeps its Projects card, the
-      list of projects themselves. The tabs are the segmented `Choice` under the heading, the task page's tab
-      control, at every width: there is no rail of tabs beside the column, however wide the window (Layout, No
-      sidebars). The column stays on Home's axis (`PAGE_COLUMN`) and the bar scrolls with the page; switching tabs
-      keeps the heading and the bar where they are and swaps only the pane under them. The page heading is the open tab's name ("General", "Agents"), never "Settings".
+    - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`), each named for what
+      you do there, so no tab holds most of the page: General (Appearance, Notifications, Updates, Versions), Agents
+      (Models, Engine, Context, Memory), Autopilot (Autopilot, Your hours), Cloud (Remote access, Teams, Sharing,
+      Slack; on the hosted page Machines, Teams and Sharing), Usage (Accounts, Auto pace, Forecast, Limits),
+      Statistics (Shipping, Token usage), Projects (Repository folders, then Worktrees and Projects: triage looks
+      for repositories in those folders, so they come first), Browser, Integrations (Context optimizer, MCPs,
+      Plugins, Skills; 29, its search pinned in the header under the tab bar, so the lists fade under it through
+      the page's own `scroll-fade` mask) and Automations (Watchdogs, Schedules). A project's repository row is its name and path: what always runs before review,
+      its test coverage and where agents work fold under its gear button, closed by default. Each is
+      its own pane, not a scroll position: the main use is a floating, tablet-sized window, where one long page
+      meant scrolling past everything to reach anything, and a scroll-spy table of contents would have kept that
+      page. The tab is in the URL (`?tab=agents`; General is the bare `/settings`), and a link to a section
+      (`/settings#updates`, `#limits`, the old `#agent-usage`, `#usage`, `#codex` and `#agents` too) opens the tab
+      that holds it and scrolls to it. A card never repeats its page's name: the Agents tab's model card is Models,
+      Usage's account card is Accounts and Autopilot's own card keeps its name only because the tab is named for
+      it; Projects keeps its Projects card, the list of projects themselves. The tabs are the segmented `Choice`
+      under the heading, the task page's tab control, at every width: there is no rail of tabs beside the column,
+      however wide the window (Layout, No sidebars). **The heading and the tab bar stay put**: they sit in a
+      `header` above the page's `PageScroll`, on Home's axis (`PAGE_COLUMN`), so scrolling a tab moves only its
+      sections, which fade under the bar, and switching tabs swaps only the pane. The page heading is the open
+      tab's name ("General", "Agents"), never "Settings".
     - **Settings is titles only**: the group label and each row's title with its control (a 40px
       row). There are no section or row descriptions (`SettingsGroup` and `SettingRow` take none), so a
-      title and its options must say what a setting does on their own ("Setup steps" with Run setup again).
+      title and its options must say what a setting does on their own.
       The one exception is Agents → Models, whose agent groups and roles each carry a one-sentence line, since
       "Task agents" or "Researcher" cannot say on its own which work it covers (26).
       A row may still show data under or beside its name (an account's reset time, a schedule's summary, a
-      path); the two layout names keep their hint lines as tooltips on Desk and Shelf (`Choice` items take a
-      `hint`, 13; ⌘K's Switch layout shows the same line). Model selects show
+      path). Model selects show
       the display name ("Opus 5.5") from the first paint (`KNOWN_AGENT_MODELS`, refined by the live
       catalog), never the raw alias.
       Section → section is 24px (`gap-6`) on every page.
@@ -1086,11 +1113,17 @@ Only these, and they win over anything below:
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
     approve, Needs your answer, Answered, Paused, In progress, Backlog, Done and Cancelled
-    (both collapsed). There is no section for waiting: a task waiting on another task is filed in the section of the
-    task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
+    (both collapsed). A task you approved to merge files under Done while GitHub merges it or holds it in the merge
+    queue (`isMergeInFlight`), its status Merging in green with the merged icon; a merge that fails opens its failure
+    gate and moves it to Paused. There is no section for waiting: a task waiting on another task is filed in the
+    section of the task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
     a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
+    The list scrolls inside its card, one window over every group that draws the rows in view before the frame
+    paints (`docs/performance.md` → All tasks); once it is scrolled past one screen, an `outline` `sm` Back to top
+    button (`IconArrowUp`) floats at the card's bottom centre, like the chat's Jump to latest, and scrolls the list
+    back to its first row.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
     first. Every open section is drawn as a tree that handles every shape
     (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from
@@ -1288,9 +1321,8 @@ Only these, and they win over anything below:
     rail, no queue, no usage glance, no Focus, and ⌘K is not mounted (the menu is closed on the way in). While
     `GET /api/onboarding` says setup is not complete, every route but `/onboarding` replaces itself with `/onboarding`
     (`resolveOnboardingRedirect`, in `root.tsx`), so a link, the address bar, the back button or the app's menu all
-    land on setup. A run you started again from Settings (Settings → Setup, ⌘K's Run setup again, `restartOnboarding`)
-    is not locked: setup is already complete, and each step's footer has Close setup beside its button, which goes to
-    Settings.
+    land on setup. Nothing in the app starts setup again once it is complete: Settings has no Setup section and ⌘K
+    no Run setup again.
     - **Setup reads as your first task** (`OnboardingHeader`): above the steps, the page's own `PageHeading`, "Set up
       Shinsa", with "Your first task. Pass each step below and Shinsa is ready for real work." under it ("Open any
       step to change it…" on a run again), then the steps as the task page's path of gates (`OnboardingPath`, items
@@ -1555,7 +1587,7 @@ Only these, and they win over anything below:
       tasks, Home or the rail, an activity entry, the Review tab, a preview card or ⌘K. The control is the unit's
       icon and the amount ("$18.55", or "1.8%" of the weekly limit on a subscription), and hovering it opens the
       popover with the heading, the tokens and the split by step and by phase. The
-      account's usage (the top bar's usage menu, Settings → Agent usage) is not a task's cost and stays where it is;
+      account's usage (the top bar's usage menu, Settings → Usage) is not a task's cost and stays where it is;
       the limits (Settings → Limits, the paused card and its Allow another) keep working and name the limit, never
       what the task spent.
     - **Cost** is in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
@@ -1585,7 +1617,7 @@ Only these, and they win over anything below:
     sign-in dialog's own sentences aside; the socket holds the `accounts` snapshot it pushes and every
     POST to `/api/accounts/*` answers, and `lib/connection/accounts.ts` reads it (`useAccounts`) and
     sends the changes; pieces in `components/accounts/`):
-    - **Settings → Agent usage → Accounts** (the tab is Agent usage, as in the top bar; its first card is Accounts,
+    - **Settings → Usage → Accounts** (the tab is Usage, the top bar's Agent usage; its first card is Accounts,
       so the card does not repeat the page's name, `ACCOUNT_LABEL.section`) is one section for every login agents
       run on, whatever the provider (`components/settings/accounts.tsx`; the old `#agent-usage`, `#usage` and
       `#codex` links land on it). Its header has a secondary icon button "Refresh usage" (it
@@ -1659,7 +1691,7 @@ Only these, and they win over anything below:
       `agentFastModes` per role). ⌘K has the group choices ("Model for task agents", every provider's models in
       one list, and "Speed for task agents") and, while typing, the per-role ones ("Agent model", "Agent
       speed", "Reviewer model"…). /ui shows the card folded on the defaults and opened with the roles set apart.
-    - **Settings → Agents → Versions** (`components/settings/versions.tsx`, `lib/versions.ts` for the rows and
+    - **Settings → General → Versions** (`components/settings/versions.tsx`, `lib/versions.ts` for the rows and
       labels, `lib/connection/versions.ts` reads `GET /api/versions` while the tab is open and runs the updates;
       `docs/engine.md` → Versions and updates) is the last group of the Agents tab. Its header has a secondary icon
       refresh button, "Check for updates", which looks up the latest versions again. One row per agent program and
@@ -1749,9 +1781,9 @@ Only these, and they win over anything below:
       glance window (the same pick) as a bar and its reset, or its status when it is out of usage or signed out. The account the
       next turn uses (`isNextAccount`, `isNextProvider` over the glance) carries a 6px blue dot (`TONE_FILL.blue`)
       right after its name, "Used for the next turn" in its tooltip and `aria-label`. A click goes to Settings →
-      Agent usage → Accounts. Hidden without accounts or a provider reading.
+      Usage → Accounts. Hidden without accounts or a provider reading.
     - **Usage re-checks itself while you look at it** (`lib/accounts/recheck.ts`, `useUsageRecheck`). Settings →
-      Agent usage and the usage menu's popover each read the accounts again when they open (unless a read finished
+      Usage and the usage menu's popover each read the accounts again when they open (unless a read finished
       in the last 5 seconds) and then every 60 seconds while they stay open, and stop when they close or the page is
       hidden; a hidden page that comes back reads again when the last read is a minute old. These automatic reads
       ask for usage only (`{ scope: 'usage' }`: readings over a minute old, no sign-in checks); Refresh usage reads
@@ -1760,7 +1792,7 @@ Only these, and they win over anything below:
       sent twice. A failed automatic read says nothing; Refresh usage shows its toast. A run that finds an account out
       of usage or signed out changes the account the moment it fails, without any read (`docs/engine.md` → A run's
       failure shows on its account at once).
-    - **Every account names its provider.** Wherever an account is listed with its usage (Settings → Agent usage, the
+    - **Every account names its provider.** Wherever an account is listed with its usage (Settings → Usage, the
       usage popover) it reads "Claude · a@b.com" or "Codex · a@b.com" ("Codex" alone without an email) after the
       provider's icon (`IconClaudeai`, `IconOpenaiCodex`; `IconRobot` for one Shinsa does not know): one helper,
       `resolveAccountProvider` in `lib/accounts/account.ts` (on core's `resolveProviderLabel` and the
@@ -1861,7 +1893,7 @@ Only these, and they win over anything below:
       that its URL stops working). A schedule whose task is gone reads "Its task is gone" in `fg-2`.
       Without schedules the card holds one sentence.
     - **Fast mode** is the speed select of each agent group and role in Settings → Agents (26). **Settings →
-      General** holds the **Context** group (`components/settings/context.tsx`):
+      Autopilot** holds the **Context** group (`components/settings/context.tsx`):
       **Management** ("Context management" in ⌘K; Default, `IconLayersTwo`; Compaction only, `IconMinimize`; Provider compaction,
       `IconBubbleText`; Off, `IconPause`; each with a one-line hint in the menu, never naming one provider's
       product), then **Compact idle sessions** (Never, the default, or 1, 2, 5 or 10 minutes before the cache
@@ -1915,7 +1947,7 @@ Only these, and they win over anything below:
       and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update
       Shinsa, or "Restart Shinsa’s engine to finish updating to 0.5.0." and the reason when the restart failed. An
       engine older than the app is restarted at once, without a banner (the page asks for `when: now`, working
-      agents pick up where they were); while it moves, Settings → Updates says so in its Engine row. No dismiss: it
+      agents pick up where they were); while it moves, Settings → General → Updates says so in its Engine row. No dismiss: it
       goes when the versions match. `/ui` shows `EngineCard` in its two states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
@@ -1923,7 +1955,7 @@ Only these, and they win over anything below:
       moment and agents keep working (13), and a click installs and relaunches the app. Nothing shows in a browser or
       while the update downloads.
     - **Settings → General → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
-      `apps/desktop`'s, `docs/release.md` → Channels and updates) is the last group of General. In the app: a
+      `apps/desktop`'s, `docs/release.md` → Channels and updates) is the first group of About. In the app: a
       secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
       dialog), then 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`)
       and, once the updater has something to say, its status ("Checking for updates…", "Up to date", "Downloading
@@ -1946,8 +1978,7 @@ Only these, and they win over anything below:
       (`SettingsGroup`, a `2xs` `fg-2` line), the one thing people fear about updating: "Updating or quitting the app
       never stops your agents. After an update the engine restarts into the new version on its own, and agents pick
       up where they were."
-      In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
-      are in its own Settings."
+      In a browser or Floaty there is no Updates card, only its What's new row when a changelog is there.
 
 28. **The task chat is the one place to talk.** An Answer task is how you just talk (`docs/engine.md` → Agents
     manage Shinsa); nothing in the top bar, the rail or ⌘K opens a conversation of its own.
@@ -2274,11 +2305,15 @@ Only these, and they win over anything below:
       measures the mode tabs and the search button at their natural width and that, with the row's padding, is the
       least the handle allows, so the search button never covers a tab, whatever the modes or the font; below `md` it is a sheet opened from the toolbar's
       Show the files, closed by picking a file, Escape or a click outside) and the editor on the right: the 36px
-      `Toolbar` (the file's icon, its path and diff counts, "Saving…" while an edit is on its way, and on a diff the
-      layout toggle), then the code. The toolbar has no Open in editor: Shinsa is where you read and edit the code
-      (the task's ⌘K and its menu still open the checkout in your editor). There are no editor
+      `Toolbar` (the file's icon, its path and diff counts, the edit state, on a Markdown file the Preview / Source
+      toggle, on a diff the layout toggle, then File options, the `OptionsTrigger` menu with Copy path and Show in
+      Files, which switches to Files and reveals the file in the tree, opening its folders and scrolling to it, and,
+      when the task has a checkout and the file exists there, Open in editor, which opens that file at the line in view
+      in your editor (`openWorktree`, the engine's `--goto`); ⌘K has all three), then the code. There are no editor
       tabs: one file is open at a time, and you switch from the file list, the review, a search result or ⌘P. The
       column's header is the mode `Choice` (Changes, Files; one mode shows as its plain label), the
+      Go to file button (`IconPageSearch`, ⌘P in its hint; in every mode, so any file of the project
+      opens without finding Files first, and in the narrow toolbar too; the empty editor only names ⌘P), the
       search button (`icon-sm`, pressed while Search is open) and the ref picker under them: a `SelectField`
       (`sm`, full width) with Head of the branch (or the default branch's name), Working copy (while the worktree
       exists; its hint says whether there are uncommitted edits), Base, and every earlier commit by its subject, each
@@ -2329,7 +2364,11 @@ Only these, and they win over anything below:
       opened for you; changed files carry their status letter at the right. **Search** (the button or ⇧⌘F) is a
       field with the three search toggles inside it, a Files to include pattern, a one-line summary ("12 results in
       4 files." and whether it stopped early) and the matches grouped under a collapsible row per file, the match
-      marked in `amber-a2`; a result opens its file at its line.
+      marked in `amber-a2`; a result opens its file at its line. Before you type it says what it does ("Search every
+      file"), and when nothing matches it says what to loosen: the Files to include pattern first, then whichever
+      toggle is on, otherwise the spelling (`describeSearchEmpty`, `lib/code/search.ts`). It searches 150ms after
+      you stop typing, streams matches in as they come, and a newer query cancels the one still running
+      (`useRepoSearch` interrupts its fiber, which aborts the request), so only the latest search is ever read.
     - **Tree rows are compact, like VS Code** (`components/code/tree-row.tsx`, `TREE_LIST`): 22px, `text-2xs`,
       indented 8px a level, then a 14px chevron slot (empty for a file, so a level's icons share one column), the
       14px file or folder icon and the name, 6px after it. Hover is `bg-bg-a2`, the open file `primary-a1` with
@@ -2361,7 +2400,18 @@ Only these, and they win over anything below:
       blue, tests green, docs azure, `scripts`/`bin` gold, assets purple, `.git`/`.github`/`.husky` coral.
     - ⌘P (Go to file) opens any file of the repository by name: Buzzkit's command dialog over every path at the
       ref, ranked by `rankPaths` (a name that contains what you typed first, then word starts and consecutive
-      letters), the matched letters in `primary-text`, the folder as the hint, the open file first with no query.
+      letters), the matched letters in `primary-text`, the folder as the hint. It stays quick on a large repository:
+      the paths are lowercased once per list, only the best 50 are kept as it scores (never a sort of every match),
+      and the ranking follows the query through `useDeferredValue`, so typing never waits for it. With no query it lists the files you
+      opened in this task, newest first (up to 10, `shinsa.code-recent.<task id>`, `lib/code/recent.ts`), under
+      Recently opened, then the rest; the open file is left out of it.
+    - **Markdown opens rendered** (`components/code/markdown-preview.tsx`, `lib/code/markdown.ts`). A `.md`, `.mdx` or
+      `.markdown` file shows its preview, like GitHub: the app's `Markdown` with raw HTML (`rehype-raw`), sanitized by
+      GitHub's schema (`rehype-sanitize`, so no script, style or event handler survives), headings given ids
+      (`rehype-slug`) for `#` links. A relative image loads from the project at the ref (`resolveRawUrl`), and a
+      relative link to another file opens it in the Code tab, at its line for `#L12`; an outside link opens in a new
+      tab. The toolbar's Preview / Source toggle (⌘K too) switches to the editor, remembered per user: a file opens
+      in preview by default (`shinsa.code-preview-file`), a diff in source (`shinsa.code-preview-diff`).
     - **Search toggles** (`components/code/search-field.tsx`, `SEARCH_OPTIONS`): Match case (`IconTitleCase`),
       Match whole word (`IconWholeWord`) and Use a regular expression (`IconRegex`), the last two our own marks,
       `icon-xs` buttons with 14px glyphs inside the right end of the field. Off they are the field's quiet ink, on
@@ -2407,8 +2457,9 @@ Only these, and they win over anything below:
       side, so they move with the text in the same frame, vertically and sideways, and never widen what the side
       scrolls over: a side scrolls as far as its code and no further. A file added or deleted whole has one side only, so side by side shows
       that side at the full width (the unified view, no empty half) and the layout toggle is hidden for it
-      (`hasOneSide`). Below `md` (a phone or a narrow window) every diff is unified and the toggle is hidden, since two
-      columns of code do not fit. A binary file shows nothing as text, and an image before and after on a checkerboard; a file
+      (`hasOneSide`). Below `lg` (1024px) a diff opens unified unless you chose side by side, since two columns of
+      about 280px cut most lines; below `md` (a phone or a narrow window) every diff is unified and the toggle is
+      hidden, since two columns of code do not fit. A binary file shows nothing as text, and an image before and after on a checkerboard; a file
       over 2 MB says its size and that it is too large to show as text. A file over 1 MB, or with a line over 10,000
       characters (a minified bundle), stops before the editor with "Opening this file may slow the page", the reason
       ("‹path› has a line of 900,000 characters, too long to show as text.") and Open anyway (`resolveTextGuard`).
@@ -2416,7 +2467,9 @@ Only these, and they win over anything below:
       edits, there is no mode to turn on and nothing to confirm, and ⌘Z undoes (every VS Code editing key, below). In a diff the new side is the editable
       one (the right side side by side, the whole editor unified) and the diff follows each keystroke. Each pause
       (600ms) saves the file to the task's working copy (`lib/code/edits.ts`, `FileSaver`; `hooks/use-file-saver.ts`;
-      `POST /api/tasks/<id>/file`, `docs/engine.md` → Your edits), "Saving…" shows in the toolbar meanwhile, and a file
+      `POST /api/tasks/<id>/file`, `docs/engine.md` → Your edits), "Edited" shows in the toolbar
+      while a change waits, "Saving…" while it is on its way and "Saved" once it landed, until you type again (a file
+      typed back to what is on disk sends nothing and shows nothing; a refused save never shows Saved), and a file
       you leave or close is saved at once, as is the file when you press ⌘S. A save never rebuilds the editor: when
       the first save makes the file one you edited and its read moves to the working copy, the pane keeps the text on
       screen until the new read lands (`holdPaneContent`), so the cursor, focus and undo history stay where they were. A save names the text it expects on disk; when the file changed there (an
@@ -2457,7 +2510,7 @@ Only these, and they win over anything below:
     - **Keys.** While the Code tab is open, and only then, it binds ⌘P (Go to file), ⇧⌘F (Search in files), ⌘F
       (find in the open file) and ⌘G (go to line), Ctrl elsewhere (`hooks/use-code-keys.ts`,
       `lib/code/keys.ts`). Each is also a ⌘K command with its key at the right, so the menu stays the one complete
-      place. This is an exception to ⌘K being the only shortcut, as are the Review tab's J and K (34) and the Terminal
+      place. This is an exception to ⌘K and the app-wide moves (14) being the only shortcuts, as are the Review tab's J and K (34) and the Terminal
       page's ⌘T and ⌘W (37), and `bun lint:conventions` rejects a global key listener anywhere else. Inside the editor, CodeMirror's own keymap gives VS Code's editing keys
       (`lib/code/editor/commands.ts`, `EDITOR_COMMANDS`, each one CodeMirror command; Ctrl for ⌘ off the Mac where
       VS Code does): ⌘S save now, ⌘Z undo, ⇧⌘Z and ⌘Y redo, ⌘F find, ⌥⌘F (Ctrl H) replace, ⌃G and ⌘G go to line,
@@ -2833,34 +2886,39 @@ Only these, and they win over anything below:
       row (measured: 4px right, 4px top), so every Start, Restart and Stop and the header's play button share one x and
       no row's button sits tighter to its edge than another's (a 2px inset, tried on 2026-10-28, matched the task runs
       and crowded the two-line service rows). The rows follow one
-      another with no gap, as the queue's do. The list's top is inset 6px more than a section's own padding
-      (`COMPACT_POPOVER_INSET`, the queue popover's too), so the first header's dot sits as far from the top as from
-      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). Its bottom is inset by as much
-      only while the last project is folded (`has-[>section:last-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
-      a folded section `data-folded`), so a project folded on its own sits as far from the footer's hairline as from the
-      popover's top (12px each); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
+      another with no gap, as the queue's do. Unlike the queue's, the list's top takes only a section's own padding,
+      without `COMPACT_POPOVER_INSET`, so the first header sits as far from the popover's top as the section's last row
+      from its hairline (measured: 6px and 6px; asked for on 2026-11-14, the extra 6px read as a gap). Its bottom is inset 6px more
+      only while the only project is folded (`has-[>section:only-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
+      a folded section `data-folded`); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
       sits from the popover's sides. A row
-      (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
+      (`ServiceRow`) is one short line (`h-7`, no command: the command is Manage's): the state's tile, `sm`, in the
+      icon slot so it sits under the project's dot (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
-      mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
-      1") and the command in mono. Pressing the row opens its terminal once it has one. The row's actions sit at its
-      end, `icon-sm`: Start (`IconPlay`) is always there on a service that does not run; Restart
-      (`IconArrowRotateClockwise`) and Stop (`IconStop`) show on a running one while the row is under the pointer (the
-      shared highlight's `data-hovered`), 1px apart (`gap-px`), as the same pair is on the Terminal page's toolbar and
-      as adjacent ghost buttons in an `InputGroup` addon are: each hover wash is its own edge, so the pair reads as one
-      set (measured: 1px between Restart and Stop, each 24px). A running row whose service has a preview URL ends
-      with Open (`ServicePreviewButton`, `icon-sm`, `IconArrowUpRight`, after Stop, 1px apart): always shown, not only
-      under the pointer, since the link is what you came for; its tooltip "Open ‹name›" ("Open ‹name› for ‹task›" on a
+      mark that never reads as a checkbox), the name and the state beside it in its tone ("Running for 12m", "Failed
+      with code 1"), then the chevron right after the state, as the project header has it after its counts, on a service
+      with runs in tasks. The line ends with its buttons, `icon-xs`, 1px apart (`gap-px`): Restart
+      (`IconArrowRotateClockwise`) and Stop (`IconStop`) on a running service and Share on a task's run with a preview,
+      those three shown under the pointer; Terminal (`IconConsole`, "Open the terminal of ‹name›",
+      `describeServiceTerminal`) once the service has a terminal, so it opens in one press; then Start (`IconPlay`) on
+      a service that does not run, or Open (`ServicePreviewButton`, `IconArrowUpRight`) on a running one with a
+      preview URL, an empty slot of its size when it has neither, so every row's last button stays in one column. Its
+      tooltip is "Open ‹name›" ("Open ‹name› for ‹task›" on a
       task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
       port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
-      Terminal page's toolbar have the same button. Evidence's Preview group links the task's running previews too,
+      Terminal page's toolbar have the same button. A service with runs in tasks folds
+      them under it, closed by default, its chevron shown under the pointer, and keeps its fold in
+      the disclosure store (`resolveServiceRowId`, `services:service:<id>`) across openings and reloads. Only the top
+      bar's popover passes runs, so a task's Services popover never folds; expanded, the runs hang under it on a tree line, each with its own
+      buttons. The project header keeps its chevron after its counts, as the queue's does (putting it after the play
+      button, tried on 2026-11-14, pushed the play out of the rows' column), and its play button is `icon-xs` as the rows' are, so
+      the header's play lines up with the rows' Start. Evidence's Preview group links the task's running previews too,
       after the ones the agent attached, as a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's
       name, its URL; `listTaskPreviews`), there only while the run is active and left out when the agent attached a
       link to the same server already (`listUnattachedPreviews`, by origin, since the agent's carries the screen's
       path). How to test stays the agent's: it names the preview it attached. A row has no `•••`: editing and removing are Manage's. Measured in the
-      browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
-      24px wide.
+      browser: the header's play button and every row's last button at the same x, 22px wide.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the
       trigger (`max-h-(--available-height)`, `COMPACT_POPOVER`, the queue popover's classes) and then scrolls,
       its footer staying put. Add services, the custom form and a service's form keep one height of their own,
@@ -2950,27 +3008,45 @@ Only these, and they win over anything below:
       washed while open like a fact's. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
       ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
       `ServiceRow` per service for this task, the list inset 6px on every side (`p-1.5`) so the first tile sits 12px
-      from the popover's side and 12px from the header's hairline: its state is the task's run's, Start starts it in
-      the worktree, and the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
+      from the popover's side and 12px from the header's hairline, folded the same way: its state is the task's run's,
+      Start starts it in the worktree, and its Terminal button opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
       the task's worktree (its repository when it has none), in its project, and go there.
-    - **Shape.** The page fills the space under the top bar edge to edge, with no column: a 36px `Toolbar` with the
-      project picker, the tabs, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
+    - **Shape.** In Cards (Desk), the page sits in the Code tab's frame (`TerminalFrame`: `CARDS_FRAME`, one `CARD`
+      with its toolbar and terminal inside, 16px below), so its edges line up with the top bar; in Sidebar (Shelf)
+      and on a phone it fills the space under the top bar edge to edge. A 36px `Toolbar` holds the
+      project picker, the tabs, the filter, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
       Restart and Stop (or Start) when a service's tab is in front, and Open after them while it runs with a preview
       URL (the rows' `ServicePreviewButton`: the toolbar acts on the tab in front, and a tab has no room for a second
       button beside its close), else, while any of the project's services is not
       running, one play button that starts them all ("Start all services in ‹project›"; a shell's tab or no tab is
-      in front, `resolveActiveService`), and Find in the scrollback (`IconMagnifyingGlass`), then the terminal on its own
-      background, 8px from the top and 12px from the left. The project picker is the Focus menu's own trigger and
+      in front, `resolveActiveService`), Find in the scrollback (`IconMagnifyingGlass`);
+      then the terminal on its own background, 8px from the top and 12px from the left. The project picker is the Focus menu's own trigger and
       rows (`ProjectMenuTrigger`, `ProjectRadioItems` in `components/focus/menu.tsx`): the project's dot, its name and
       the chevron, a radio list of every project with its dot, which closes on the one you pick (the Focus menu's
       stays open for how long to keep it). A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
+    - **Yours first** (since 2026-11-14; `filter-menu.tsx`, `listShownTerminals`). The page shows the terminals you
+      opened there yourself (no task, no service) by default, so a task's terminals and the services' runs do not
+      crowd your own. The filter after the tabs, just before New terminal (`secondary sm`, its label and a trailing chevron, apart
+      from the project picker so the two menus never sit side by side) is a radio menu: Your terminals, Task
+      terminals, Services and All terminals, each with its count in `fg-2` right after its name
+      (`countTerminalsByFilter`; a task's run of a service counts as a service, so the counts add up to All). The
+      choice is kept on this device (`shinsa.terminal-filter`). The terminal the URL names is always shown and in
+      front, whatever the filter, so Open a terminal on a task lands on it. A filter with nothing in it says so in
+      its own words, with Show all terminals when another filter has some; Open a terminal shows only under Your
+      terminals and All, and Start all services only under Services and All, since either would open a tab the
+      filter hides.
+    - **Terminals close on their own** (`docs/engine.md` → Terminals). A shell that exited closes 10 minutes after
+      its exit or the last time a page had it open; one that runs closes after 8 hours with no output, no typing, no
+      page on it and nothing but the shell in front. A service's terminal never does. The tab simply goes, as when
+      you close it.
     - **Tabs** (`tab-bar.tsx`). A tab is the kit's segmented tab, 22px inside the 26px list: its mark, the label (the
       name you gave it, else the shell's title, else the folder's name; a service's tab is its name, and a task's
-      run of one adds the task's handle, "api · LOC-10"; `resolveTerminalLabel` in core, `resolveTerminalTabLabel`),
+      run of one and a task's own terminal add the task's handle, "api · LOC-10"; `resolveTerminalLabel` in core,
+      `resolveTerminalTabLabel`),
       and a close button (`icon-2xs`, 18px) revealed on hover and always on the
       active tab. The button sits in an even 2px inset: 2px from the tab's top and bottom, and the tab's end padding
       is 2px too (`pe-0.5` over the kit's `px-2`; measured), so the × is centred in its corner. A shell's mark is
@@ -3252,8 +3328,9 @@ instead of `CARD`) and `formatAge(…)` or `formatDuration(…)` rendered in JSX
 highlight colour (`transition-colors`, `transition-shadow`, or a bare `transition` or a colour in
 `transition-[…]` on a line with a `hover:` or `active:`; Motion); the `/ui` catalog pages are checked for raw corners
 and those transitions only. Besides that it bans comments (outside `packages/ui`), enforces the verb catalog and rejects a
-global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-code-keys.ts` and
-`hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (32, 34, 37); a terminal's keys go through xterm.js's own
+global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-app-shortcuts.ts`,
+`hooks/use-code-keys.ts`, `hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (14, 32, 34, 37; `SHORTCUT_FILES`
+in `scripts/lint-shortcut.ts`); a terminal's keys go through xterm.js's own
 handler on its element (37). It also rejects an ad hoc selection (`select-text`, `select-all`,
 `select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39). It
 rejects a toast string in the app longer than 40 characters (42): the text passed to `toast.*`, `confirmDone`,
@@ -3464,7 +3541,7 @@ the string. Product copy is US English ("organization", "canceled", "color").
 ### Case
 
 - **Sentence case everywhere:** page titles, headings, card titles, buttons,
-  tabs (except the Settings tabs, which are title case: "Agent Usage"), menu and select items, field labels, placeholders, table headers,
+  tabs, menu and select items, field labels, placeholders, table headers,
   metric names, badges, tooltips, toasts, empty states and dialog titles.
   Capitalize the first word and proper nouns only — "All campaigns", "Main
   events", "Total proceeds", "Add product".
@@ -4858,7 +4935,7 @@ Settings tabs and Appearance's choices, a finding's Fix / Dismiss, the
 terminal tabs and the `/ui` specimens. The selected pill (or the underline's
 line) slides on the movement clock, 200ms `cubic-bezier(0.22, 1, 0.36, 1)`
 (`INDICATOR_TRANSITION`), and the tab colours change at once. Every one
-slides, Settings → Appearance's Layout included: Desk and Shelf are one frame
+slides. Desk and Shelf are one frame
 (`AppFrame`, `components/layout/frame.tsx`) that adds or drops the top bar and
 the rail around the same `main`, so switching keeps the page under it mounted,
 with its tab bar, its scroll and the focused tab. The indicator

@@ -14,32 +14,34 @@ import { Kbd } from '@shinsa/ui/components/kbd';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { MatchedLabel } from '@/components/command/highlight.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { SelectedMark } from '@/components/status/check-mark.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
+import { useAppShortcuts } from '@/hooks/use-app-shortcuts.ts';
 import { useCommandHotkey, useCommandKey } from '@/hooks/use-command-key.ts';
 import { useDelay } from '@/hooks/use-delay.ts';
 import { useChangelogAvailable } from '@/lib/changelog.ts';
+import { isMacPlatform } from '@/lib/code/keys.ts';
 import { listAccountSections } from '@/lib/command/accounts.ts';
 import { listExtensionSections } from '@/lib/command/extensions.ts';
 import { listGlobalSections } from '@/lib/command/global.ts';
+import { resolveOpeningStack, trackHoveredTasks } from '@/lib/command/hover.ts';
 import { listInitiativeSections } from '@/lib/command/initiatives.ts';
 import {
   arrangeByScore,
   type ChoiceCommand,
   COMPOSE_VALUE,
+  FALLBACK_PREFIX,
   type Frame,
-  JUMP_KEYWORDS,
   JUMP_VALUE,
-  listCommandKeywords,
+  listChoiceMatches,
   listDecisionCommands,
   listJumpEntries,
   listMenuTasks,
-  listOptionKeywords,
   listRootBlocks,
   listSectionBlocks,
-  listTaskKeywords,
   type MenuBlock,
   NEW_TASK_COMMAND,
   requestNewTaskOnHome,
@@ -47,6 +49,7 @@ import {
   resolveFirstValue,
   resolvePlaceholder,
   resolveRepoName,
+  type TaskAction,
   type TaskEntry,
   TASKS_FRAME,
   type Visit,
@@ -61,8 +64,8 @@ import {
   writeCommandMenuOpen,
 } from '@/lib/command/registry.ts';
 import { listScheduleSections } from '@/lib/command/schedules.ts';
-import { FALLBACK_PREFIX, scoreCommand } from '@/lib/command/score.ts';
 import { listServiceSections } from '@/lib/command/services.ts';
+import { type AppShortcutTarget, describeShortcut } from '@/lib/command/shortcuts.ts';
 import { resolveTaskPage } from '@/lib/command/task.ts';
 import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -74,7 +77,6 @@ import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
 import { listFocusTeams } from '@/lib/focus.ts';
 import { describeNewTask } from '@/lib/new-task.ts';
-import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { listRecentTaskIds, recordRecentTask } from '@/lib/preferences/recent-tasks.ts';
 import { useThemePreference } from '@/lib/preferences/theme.ts';
 import { scheduleAfter } from '@/lib/runtime/timers.ts';
@@ -104,13 +106,20 @@ function Trailing({ command }: { command: MenuCommand }) {
   return null;
 }
 
+function ShortcutKeys({ target }: { target: AppShortcutTarget }) {
+  const mac = React.useMemo(() => isMacPlatform(navigator.platform), []);
+  return <Status>{describeShortcut(target, mac)}</Status>;
+}
+
 function CommandRow({
   command,
   state,
+  query,
   onSelect,
 }: {
   command: MenuCommand;
   state: ShinsaState;
+  query: string;
   onSelect: (command: MenuCommand) => void;
 }) {
   const task = command.taskId ? state.tasks[command.taskId] : undefined;
@@ -118,15 +127,15 @@ function CommandRow({
   return (
     <CommandItem
       value={command.id}
-      keywords={listCommandKeywords(command)}
       icon={task ? resolveTaskMenuIcon(state, task) : command.icon}
       disabled={isDisabled(command)}
       onSelect={() => onSelect(command)}
       variant={command.destructive ? 'destructive' : 'default'}
     >
-      <Truncate className='min-w-0'>{command.label}</Truncate>
+      <MatchedLabel text={command.label} query={query} />
       {hint && <CommandHint className='min-w-12 shrink-[4]'>{hint}</CommandHint>}
       {command.trailing && <Status>{command.trailing}</Status>}
+      {command.shortcut && !command.current && <ShortcutKeys target={command.shortcut} />}
       <Trailing command={command} />
     </CommandItem>
   );
@@ -139,18 +148,21 @@ function OptionDot({ option }: { option: ChoiceOption }) {
 
 function ChoiceRows({
   command,
+  options,
   flat,
+  query,
   onPick,
 }: {
   command: ChoiceCommand;
+  options: ChoiceOption[];
   flat: boolean;
+  query: string;
   onPick: (command: ChoiceCommand, value: string) => void;
 }) {
-  return command.options.map((option) => (
+  return options.map((option) => (
     <CommandItem
       key={option.value}
       value={`${command.id}:${option.value}`}
-      keywords={listOptionKeywords(command, option)}
       icon={option.icon}
       disabled={isDisabled(option)}
       onSelect={() => onPick(command, option.value)}
@@ -162,7 +174,7 @@ function ChoiceRows({
         </span>
       )}
       {!flat && <DepthMark depth={option.depth ?? 0} />}
-      <Truncate className='min-w-0'>{option.label}</Truncate>
+      <MatchedLabel text={option.label} query={query} />
       {!option.disabled && option.hint && (
         <CommandHint className='shrink-0 tabular-nums'>{option.hint}</CommandHint>
       )}
@@ -180,23 +192,20 @@ function TaskRow({
   state,
   task,
   value,
+  query,
   onGo,
 }: {
   state: ShinsaState;
   task: Task;
   value: string;
+  query: string;
   onGo: () => void;
 }) {
   const status = resolveTaskStatus(state, task);
   const repo = resolveRepoName(state, task);
   return (
-    <CommandItem
-      value={value}
-      keywords={listTaskKeywords(state, task)}
-      icon={resolveTaskMenuIcon(state, task)}
-      onSelect={onGo}
-    >
-      <Truncate className='min-w-0'>{task.title}</Truncate>
+    <CommandItem value={value} icon={resolveTaskMenuIcon(state, task)} onSelect={onGo}>
+      <MatchedLabel text={task.title} query={query} />
       {repo && <CommandHint className='min-w-12 shrink-[4]'>{repo}</CommandHint>}
       {task.handle && <CommandHint className='shrink-0 tabular-nums'>{resolveHandleText(task)}</CommandHint>}
       <Status>{status.label}</Status>
@@ -216,48 +225,71 @@ interface BlockActions {
 function CommandRows({
   commands,
   state,
+  query,
   onSelect,
 }: {
   commands: MenuCommand[];
   state: ShinsaState;
+  query: string;
   onSelect: (command: MenuCommand) => void;
 }) {
   return commands.map((command) => (
-    <CommandRow key={command.id} command={command} state={state} onSelect={onSelect} />
+    <CommandRow key={command.id} command={command} state={state} query={query} onSelect={onSelect} />
   ));
+}
+
+function TaskActionRow({
+  action,
+  block,
+  state,
+  query,
+  actions,
+}: {
+  action: TaskAction;
+  block: Extract<MenuBlock, { kind: 'tasks' }>;
+  state: ShinsaState;
+  query: string;
+  actions: BlockActions;
+}) {
+  if (action === 'new')
+    return <CommandRow command={NEW_TASK_COMMAND} state={state} query={query} onSelect={actions.perform} />;
+  return (
+    <CommandItem value={JUMP_VALUE} icon='IconMagnifyingGlass' onSelect={actions.jump}>
+      <MatchedLabel text='Jump to a task' query={query} />
+      <CommandHint>{block.total}</CommandHint>
+      <Icon name='IconChevronRightMedium' className='ms-auto' />
+    </CommandItem>
+  );
 }
 
 function TasksGroup({
   block,
   state,
+  query,
   actions,
 }: {
   block: Extract<MenuBlock, { kind: 'tasks' }>;
   state: ShinsaState;
+  query: string;
   actions: BlockActions;
 }) {
+  const actionRows = block.actions.map((action) => (
+    <TaskActionRow key={action} action={action} block={block} state={state} query={query} actions={actions} />
+  ));
+  const taskRows = block.tasks.map((task) => (
+    <TaskRow
+      key={task.id}
+      state={state}
+      task={task}
+      value={`task:${task.id}`}
+      query={query}
+      onGo={() => actions.goTask(task)}
+    />
+  ));
+  if (actionRows.length === 0 && taskRows.length === 0) return null;
   return (
     <CommandGroup value='tasks' heading='Tasks'>
-      <CommandRow command={NEW_TASK_COMMAND} state={state} onSelect={actions.perform} />
-      <CommandItem
-        value={JUMP_VALUE}
-        keywords={JUMP_KEYWORDS}
-        icon='IconMagnifyingGlass'
-        onSelect={actions.jump}
-      >
-        Jump to a task
-        <CommandHint>{block.total}</CommandHint>
-        <Icon name='IconChevronRightMedium' className='ms-auto' />
-      </CommandItem>
-      {block.tasks.map((task) => (
-        <TaskRow
-          key={task.id}
-          state={state}
-          task={task}
-          value={`task:${task.id}`}
-          onGo={() => actions.goTask(task)}
-        />
-      ))}
+      {block.actionsFirst ? [...actionRows, ...taskRows] : [...taskRows, ...actionRows]}
     </CommandGroup>
   );
 }
@@ -317,7 +349,7 @@ function MenuBlockGroup({
     case 'section':
       return (
         <CommandGroup value={block.section.id} heading={block.section.heading}>
-          <CommandRows commands={block.commands} state={state} onSelect={actions.perform} />
+          <CommandRows commands={block.commands} state={state} query={query} onSelect={actions.perform} />
         </CommandGroup>
       );
     case 'recent':
@@ -329,6 +361,7 @@ function MenuBlockGroup({
               state={state}
               task={task}
               value={`recent:${task.id}`}
+              query={query}
               onGo={() => actions.goTask(task)}
             />
           ))}
@@ -337,15 +370,21 @@ function MenuBlockGroup({
     case 'decisions':
       return (
         <CommandGroup value='decisions' heading='Decisions'>
-          <CommandRows commands={block.commands} state={state} onSelect={actions.perform} />
+          <CommandRows commands={block.commands} state={state} query={query} onSelect={actions.perform} />
         </CommandGroup>
       );
     case 'tasks':
-      return <TasksGroup block={block} state={state} actions={actions} />;
+      return <TasksGroup block={block} state={state} query={query} actions={actions} />;
     case 'choice':
       return (
         <CommandGroup value={block.command.id} heading={block.command.heading}>
-          <ChoiceRows command={block.command} flat onPick={actions.pick} />
+          <ChoiceRows
+            command={block.command}
+            options={block.options}
+            flat
+            query={query}
+            onPick={actions.pick}
+          />
         </CommandGroup>
       );
     case 'search':
@@ -377,23 +416,24 @@ function ComposeGroup({
 function JumpGroup({
   state,
   entries,
+  query,
   onOpen,
 }: {
   state: ShinsaState;
   entries: TaskEntry[];
+  query: string;
   onOpen: (task: Task) => void;
 }) {
   return (
     <CommandGroup value='tasks' heading='Tasks'>
-      {entries.map(({ task, keywords }) => (
+      {entries.map(({ task }) => (
         <CommandItem
           key={task.id}
           value={`jump:${task.id}`}
-          keywords={keywords}
           icon={resolveTaskMenuIcon(state, task)}
           onSelect={() => onOpen(task)}
         >
-          <Truncate className='min-w-0'>{task.title}</Truncate>
+          <MatchedLabel text={task.title} query={query} />
           <CommandHint className='min-w-12 shrink-[4]'>{resolveRepoName(state, task)}</CommandHint>
           {task.handle && (
             <CommandHint className='shrink-0 tabular-nums'>{resolveHandleText(task)}</CommandHint>
@@ -433,7 +473,6 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
     .flatMap((section) => section.commands.map((command) => command.id))
     .join('\n');
   const theme = useThemePreference();
-  const layout = useLayoutPreference();
   const engineCommands = useEngineCommands();
   const accounts = useAccounts();
   const extensions = useExtensions(open);
@@ -441,7 +480,9 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
   const changelogAvailable = useChangelogAvailable();
   const terminals = useTerminals();
   const [query, setQuery] = React.useState('');
-  const [stack, setStack] = React.useState<Visit[]>([]);
+  const [stack, setStack] = React.useState<Visit[]>(() =>
+    state ? resolveOpeningStack(state, route, accounts) : []
+  );
   const [selected, setSelected] = React.useState('');
   const [recent] = React.useState(listRecentTaskIds);
   usePrefetchSelected(state, selected);
@@ -459,7 +500,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
     () =>
       state
         ? [
-            ...listGlobalSections(state, route, theme, layout, engineCommands, focusTeams),
+            ...listGlobalSections(state, route, theme, engineCommands, focusTeams),
             ...listInitiativeSections(state, route, { feed: teamFeed, teams: focusTeams }),
             ...listAccountSections(accounts),
             ...listScheduleSections(state),
@@ -472,7 +513,6 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
       state,
       route,
       theme,
-      layout,
       engineCommands,
       focusTeams,
       teamFeed,
@@ -595,7 +635,13 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
     if (frame.kind === 'choice') {
       return (
         <CommandGroup value='choice' heading={frame.command.heading}>
-          <ChoiceRows command={frame.command} flat={false} onPick={pick} />
+          <ChoiceRows
+            command={frame.command}
+            options={listChoiceMatches(frame.command, trimmed).options}
+            flat={false}
+            query={trimmed}
+            onPick={pick}
+          />
         </CommandGroup>
       );
     }
@@ -616,6 +662,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
         <JumpGroup
           state={state}
           entries={listJumpEntries(state, trimmed)}
+          query={trimmed}
           onOpen={(task) => enter(resolveTaskPage(state, task, accounts), `jump:${task.id}`)}
         />
       );
@@ -625,13 +672,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
   })();
 
   return (
-    <Command
-      loop={false}
-      value={selected}
-      onValueChange={setSelected}
-      filter={scoreCommand}
-      shouldFilter={frame?.kind !== 'compose'}
-    >
+    <Command loop={false} value={selected} onValueChange={setSelected} filter={() => 1} shouldFilter={false}>
       <CommandInput
         ref={inputRef}
         value={query}
@@ -661,6 +702,11 @@ export function CommandMenu() {
   const currentTaskId = useRouteTaskId(state);
 
   useCommandHotkey();
+  useAppShortcuts();
+
+  const openRef = React.useRef(open);
+  openRef.current = open;
+  React.useEffect(() => trackHoveredTasks(() => openRef.current), []);
 
   React.useEffect(() => {
     if (currentTaskId) recordRecentTask(currentTaskId);

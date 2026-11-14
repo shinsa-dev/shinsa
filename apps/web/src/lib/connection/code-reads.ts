@@ -62,7 +62,7 @@ export function requestCodeAnswer(taskRef: string, name: string, query: CodeQuer
 }
 
 export function requestCodeSearch(taskRef: string, query: CodeQuery, onLine: (line: SearchLine) => void) {
-  return runApp(search(taskRef, query, onLine));
+  return search(taskRef, query, onLine);
 }
 
 export function requestFileSave(taskRef: string, file: FileWrite) {

@@ -8,10 +8,12 @@ import {
   isDependencyOf,
   isHeldInBacklog,
   isPausingGate,
+  isRetryArmed,
   isTaskSettled,
   isWatchCheck,
   isWatchHome,
   listBundleBlockers,
+  listOpenGates,
   listWaitsOn,
   resolveShownStage,
   type ShinsaState,
@@ -120,6 +122,15 @@ export function isHeldByTasks(state: ShinsaState, task: Task) {
   return !task.snoozed && listWaitsOn(state, task).length > 0;
 }
 
+export function isMergeInFlight(state: ShinsaState, task: Task) {
+  return (
+    task.stage === 'awaiting_merge' &&
+    !task.bundleReady &&
+    !isRetryArmed(task) &&
+    listOpenGates(state, task.id).length === 0
+  );
+}
+
 function isAtRest(task: Task) {
   return isTaskSettled(task) || isWatchCheck(task);
 }
@@ -144,6 +155,7 @@ function resolveGroupWithin(state: ShinsaState, task: Task, seen: ReadonlySet<st
   const next = new Set(seen).add(task.id);
   const root = isWaitingForBundle(state, task) ? selectBundleRoot(state, task) : null;
   if (root && !next.has(root.id)) return resolveGroupWithin(state, root, next);
+  if (isMergeInFlight(state, task)) return 'done';
   const anchor = selectGroupAnchor(state, task, next);
   if (anchor) return resolveGroupWithin(state, anchor, next);
   return task.backlog ? 'backlog' : 'working';

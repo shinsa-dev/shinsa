@@ -25,7 +25,7 @@ export const resolveClaudeProgram = Effect.fn('ClaudeExecutable.resolve')(functi
     return {
       ok: false,
       reason: 'outdated',
-      message: `Claude Code ${version} is older than Shinsa needs (${minimum} or newer). Update it from Settings → Agents, or run \`claude update\`.`,
+      message: `Claude Code ${version} is older than Shinsa needs (${minimum} or newer). Update it from Settings → General, or run \`claude update\`.`,
     } satisfies ClaudeExecutable;
   }
   return { ok: true, path, version } satisfies ClaudeExecutable;

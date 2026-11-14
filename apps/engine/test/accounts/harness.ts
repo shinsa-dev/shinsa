@@ -175,6 +175,7 @@ function createFakePty(spawnLogin: FakeLoginSpawner) {
         };
       }),
     readForeground: () => Effect.succeed(null),
+    isAnswering: () => Effect.succeed(true),
     pickPort: () => Effect.die('not used'),
   });
 }

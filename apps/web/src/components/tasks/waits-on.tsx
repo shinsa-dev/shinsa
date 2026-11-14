@@ -1,4 +1,4 @@
-import { listStackParents, listWaitsOn, type ShinsaState, type Task } from '@shinsa/core';
+import type { Task } from '@shinsa/core';
 import { DropdownMenuContent } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { TooltipLabel } from '@shinsa/ui/components/tooltip';
@@ -9,6 +9,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { BUNDLE_ICON } from '@/lib/tasks/bundles.ts';
 import { navigate, resolveTaskPath, withRouteBase } from '@/router.ts';
+import { useTaskRowState } from './row-state.tsx';
 
 const WAITS_ON = 'Waits on';
 
@@ -21,7 +22,7 @@ function WaitsOnHint({
   label = WAITS_ON,
   detail,
 }: {
-  waitsOn: Task[];
+  waitsOn: readonly Task[];
   label?: string;
   detail?: string;
 }) {
@@ -64,7 +65,7 @@ function ParentLink({ parent }: { parent: Task }) {
   );
 }
 
-export function WaitsOnLinks({ waitsOn, stacked = false }: { waitsOn: Task[]; stacked?: boolean }) {
+export function WaitsOnLinks({ waitsOn, stacked = false }: { waitsOn: readonly Task[]; stacked?: boolean }) {
   const cancelled = waitsOn.find((parent) => parent.stage === 'cancelled');
   const [first, ...rest] = cancelled ? [cancelled] : waitsOn;
   if (!first) return null;
@@ -86,7 +87,7 @@ export function WaitsOnLinks({ waitsOn, stacked = false }: { waitsOn: Task[]; st
 const CHAIN_MARK =
   'grid size-5 shrink-0 cursor-pointer place-items-center rounded-control-sm text-fg-2 hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4';
 
-function StackMark({ parents }: { parents: Task[] }) {
+function StackMark({ parents }: { parents: readonly Task[] }) {
   const [first, ...rest] = parents;
   if (!first) return null;
   const name = first.handle ?? first.title;
@@ -106,7 +107,7 @@ function StackMark({ parents }: { parents: Task[] }) {
   );
 }
 
-function ChainHint({ parents, others }: { parents: Task[]; others: Task[] }) {
+function ChainHint({ parents, others }: { parents: readonly Task[]; others: readonly Task[] }) {
   if (parents.length === 0) return <WaitsOnHint waitsOn={others} />;
   return (
     <span className='flex flex-col gap-2'>
@@ -116,21 +117,29 @@ function ChainHint({ parents, others }: { parents: Task[]; others: Task[] }) {
   );
 }
 
-export function ChainArrow({ state, task }: { state: ShinsaState; task: Task }) {
-  const parents = listStackParents(state, task);
-  const stacked = new Set(parents.map((parent) => parent.id));
-  const others = listWaitsOn(state, task).filter((waited) => !stacked.has(waited.id));
+function ChainMenuItems({ task, waitsOn }: { task: Task; waitsOn: Task[] }) {
+  const state = useTaskRowState();
+  if (!state) return null;
+  return (
+    <DropdownMenuContent align='start' className='max-w-80 min-w-56'>
+      <WaitsOnItems state={state} task={task} waitsOn={waitsOn} />
+    </DropdownMenuContent>
+  );
+}
+
+export function ChainArrow({
+  task,
+  parents,
+  others,
+}: {
+  task: Task;
+  parents: readonly Task[];
+  others: readonly Task[];
+}) {
   const [first] = parents;
   if (first && others.length === 0) return <StackMark parents={parents} />;
   return (
-    <LazyMenu
-      kind='dropdown'
-      content={
-        <DropdownMenuContent align='start' className='max-w-80 min-w-56'>
-          <WaitsOnItems state={state} task={task} waitsOn={[...parents, ...others]} />
-        </DropdownMenuContent>
-      }
-    >
+    <LazyMenu kind='dropdown' content={<ChainMenuItems task={task} waitsOn={[...parents, ...others]} />}>
       <Hint label={<ChainHint parents={parents} others={others} />}>
         <LazyMenuTrigger
           render={

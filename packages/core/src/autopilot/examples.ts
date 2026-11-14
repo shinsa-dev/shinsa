@@ -38,6 +38,7 @@ const KIND_NAME: Record<AutopilotGateKind, string> = {
   review: 'A review',
   merge: 'A merge',
   proposal: 'A proposal',
+  failure: 'A failed step',
 };
 
 const ANSWER_TEXT: Partial<Record<AutopilotDecisionAnswer, string>> = {

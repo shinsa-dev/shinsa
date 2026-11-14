@@ -62,6 +62,37 @@ export const SEARCH_OPTIONS: SearchOption[] = [
   { key: 'regex', label: 'Use a regular expression', icon: 'IconRegex' },
 ];
 
+export interface SearchEmpty {
+  title: string;
+  description: string;
+}
+
+export function describeSearchEmpty(
+  search: SearchOptions & { query: string; glob: string },
+  result: SearchResult | null
+): SearchEmpty | null {
+  if (search.query.trim() === '')
+    return {
+      title: 'Search every file',
+      description: 'Find text across this task’s code and jump to its line.',
+    };
+  if (result === null || result.matches.length > 0 || result.timedOut) return null;
+  if (search.glob.trim() !== '')
+    return {
+      title: 'No results',
+      description: `Nothing matches in files like ${search.glob.trim()}. Clear Files to include to search them all.`,
+    };
+  const on = SEARCH_OPTIONS.filter((option) => search[option.key]).map((option) => option.label);
+  if (on.length > 0)
+    return { title: 'No results', description: `Try again with ${listAlternatives(on)} turned off.` };
+  return { title: 'No results', description: 'Check the spelling, or try fewer words.' };
+}
+
+function listAlternatives(labels: string[]) {
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(', ')} or ${labels.at(-1)}`;
+}
+
 function createPattern(query: string, options: SearchOptions) {
   const literal = options.regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const source = options.wholeWord ? `\\b(?:${literal})\\b` : literal;

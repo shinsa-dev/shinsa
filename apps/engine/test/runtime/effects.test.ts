@@ -632,6 +632,80 @@ describe('judging a gate for Autopilot', () => {
   });
 });
 
+describe('judging a failure for Autopilot', () => {
+  const FAILED = {
+    id: 'g-failure',
+    taskId: 'task-1',
+    type: 'failure',
+    status: 'open',
+    title: 'Could not push the branch',
+    body: 'The remote refused the push.',
+    runId: null,
+    openedAt: 0,
+    answeredAt: null,
+    decision: null,
+    response: null,
+    autopilotJudging: true,
+  } as const;
+  const JUDGE = { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-failure', shadow: false } as const;
+
+  function withFailureGate(gate: Partial<Gate> = {}) {
+    return (state: ShinsaState) => {
+      withTask({})(state);
+      state.gates[FAILED.id] = { ...FAILED, ...gate };
+    };
+  }
+
+  test('asks about the failed step and dispatches a cancel', async () => {
+    const asked: string[] = [];
+    const { runner, dispatched } = setup(withFailureGate(), {
+      judgeAutopilot: (_system, prompt) =>
+        Effect.sync(() => {
+          asked.push(prompt);
+          return { verdict: 'cancel', reason: 'The branch was deleted upstream.', reply: null };
+        }),
+    });
+    await runner.apply(JUDGE, createContext());
+    expect(asked[0]).toStartWith('Decision: Retry the failed step or cancel the task');
+    expect(dispatched).toEqual([
+      {
+        type: 'autopilot.judgment',
+        taskId: 'task-1',
+        gateId: 'g-failure',
+        verdict: 'cancel',
+        reason: 'The branch was deleted upstream.',
+        reply: null,
+        shadow: false,
+      },
+    ]);
+  });
+
+  test('dispatches a retry with the guidance the judge wrote', async () => {
+    const { runner, dispatched } = setup(withFailureGate(), {
+      judgeAutopilot: () =>
+        Effect.succeed({ verdict: 'act', reason: 'A flaky hook.', reply: 'Push again without rebasing.' }),
+    });
+    await runner.apply(JUDGE, createContext());
+    expect(dispatched).toEqual([
+      expect.objectContaining({ verdict: 'act', reply: 'Push again without rebasing.' }),
+    ]);
+  });
+
+  test('asks nothing about a failure that stays yours', async () => {
+    const judged: string[] = [];
+    const { runner, dispatched } = setup(withFailureGate({ cause: 'budget' }), {
+      judgeAutopilot: (_system, prompt) =>
+        Effect.sync(() => {
+          judged.push(prompt);
+          return { verdict: 'cancel', reason: 'x', reply: null };
+        }),
+    });
+    await runner.apply(JUDGE, createContext());
+    expect(judged).toEqual([]);
+    expect(dispatched).toEqual([]);
+  });
+});
+
 describe('weighing a suggested task', () => {
   const OPEN = {
     id: 's-1',

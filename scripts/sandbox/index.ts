@@ -115,7 +115,7 @@ export const startSandbox = Effect.fn('Sandbox.start')(function* () {
     {
       title: 'Autopilot in Slack',
       links: [
-        { label: 'Studio: Settings → Agents, Autopilot', url: `${studioOrigin}/settings?tab=agents` },
+        { label: 'Studio: Settings → Autopilot', url: `${studioOrigin}/settings?tab=autopilot` },
         { label: 'What Slack shows, stood in', url: `${ORIGIN}${SLACK_PAGE}` },
       ],
     },

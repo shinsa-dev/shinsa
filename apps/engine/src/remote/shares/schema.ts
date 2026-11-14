@@ -8,7 +8,7 @@ import type { ChannelPeer } from '../channel/schema.ts';
 import type { LiveShare, ShareChannelHandle } from '../share-channel/schema.ts';
 
 export const SHARE_NOT_PAIRED =
-  'Turn on remote access in Settings → General to share this task. Its link works once this machine is paired.';
+  'Turn on remote access in Settings → Cloud to share this task. Its link works once this machine is paired.';
 
 export const SHARE_LINK_LOST =
   'This machine was paired with remote access again, so the old link no longer reaches it. Share this task again for a new link.';

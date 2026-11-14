@@ -18,10 +18,12 @@ export {
 export {
   isAutopilotAgreement,
   resolveAutopilotBaseRate,
+  isAutopilotKindReady,
   isAutopilotModelVeto,
   resolveAutopilotCombinedVerdict,
   resolveAutopilotLoss,
   resolveAutopilotFollowUpScore,
+  resolveAutopilotReadiness,
   resolveAutopilotScore,
 } from './score.ts';
 export {
@@ -42,13 +44,21 @@ export {
   selectAutopilotModelGuess,
 } from './model/index.ts';
 export {
+  isAutopilotJudgedFailure,
   isUrgentTask,
   isWatchdogTask,
   resolveAutopilotFacts,
+  resolveAutopilotFindingLimit,
+  resolveAutopilotLevel,
   resolveAutopilotLimits,
   resolveAutopilotPresence,
   resolveAutopilotSuggestionLimit,
 } from './limits.ts';
+export {
+  describeAutopilotFindingCall,
+  selectAutopilotFindingCall,
+  type AutopilotFindingCall,
+} from './findings.ts';
 export {
   AUTOPILOT_CEILINGS,
   AUTOPILOT_DECISION_ANSWERS,
@@ -58,6 +68,9 @@ export {
   AUTOPILOT_SCORE_LIMITS,
   AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_SCORED_KINDS,
+  AUTOPILOT_READINESS_KINDS,
+  AUTOPILOT_READINESS_LIMITS,
+  AUTOPILOT_READINESS_TRACK,
   AUTOPILOT_TRACKS,
   AUTOPILOT_BENCHMARK_SCOPES,
   AUTOPILOT_TOPICS,
@@ -72,6 +85,10 @@ export {
   type AutopilotBenchmarkScope,
   type AutopilotAgreement,
   type AutopilotRate,
+  type AutopilotKindProfile,
+  type AutopilotKindReadiness,
+  type AutopilotReadiness,
+  type AutopilotReadinessKind,
   type AutopilotScore,
   type AutopilotTrack,
   type AutopilotTrackScore,
@@ -83,7 +100,10 @@ export {
   type AutopilotDecisionKind,
   type AutopilotProfile,
   type AutopilotTally,
+  AUTOPILOT_DONE_ACTIONS,
   AUTOPILOT_DONE_LIMIT,
+  AUTOPILOT_FINDING_LIMITS,
+  AUTOPILOT_GATE_VERDICTS,
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LESSON_ANSWERS,
   AUTOPILOT_LESSON_KINDS,
@@ -93,6 +113,7 @@ export {
   AUTOPILOT_VERDICTS,
   type AutopilotCeiling,
   type AutopilotDone,
+  type AutopilotDoneAction,
   type AutopilotFacts,
   type AutopilotGateKind,
   type AutopilotJudgment,

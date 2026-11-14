@@ -201,7 +201,7 @@ export const ECHO_TOOLTIP_MESSAGE =
   'A tooltip that repeats the text it sits on adds nothing. Make it say what the screen does not (where the control leads, what it covers) or drop it, keeping an aria-label only on an icon-only button (docs/design.md → Where Shinsa differs, 13)';
 
 export const SHORTCUT_MESSAGE =
-  'A global keyboard shortcut. ⌘K is the only shortcut, the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K and the Terminal page ⌘T and ⌘W while they are open; they live in hooks/use-command-key.ts, hooks/use-code-keys.ts, hooks/use-review-keys.ts and hooks/use-terminal-keys.ts, and a terminal keeps its own keys through xterm.js (lib/terminal/keys.ts) (docs/design.md → Where Shinsa differs, 14, 32, 34 and 37)';
+  'A global keyboard shortcut. ⌘K and the app-wide moves (⌘J, ⌘, and G then H, T or S, in lib/command/shortcuts.ts) are the only global shortcuts, the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K and the Terminal page ⌘T and ⌘W while they are open; they live in hooks/use-command-key.ts, hooks/use-app-shortcuts.ts, hooks/use-code-keys.ts, hooks/use-review-keys.ts and hooks/use-terminal-keys.ts, and a terminal keeps its own keys through xterm.js (lib/terminal/keys.ts) (docs/design.md → Where Shinsa differs, 14, 32, 34 and 37)';
 
 export const TIME_MESSAGE =
   'A time rendered without its tooltip. Render it through TimeAgo or Duration (components/text/time-ago.tsx), so hovering shows the exact time (docs/design.md → Where Shinsa differs, 13)';

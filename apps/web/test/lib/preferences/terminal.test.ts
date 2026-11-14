@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
   changeTerminalFontSize,
+  readTerminalFilter,
   readTerminalFontSize,
   resolveFontSize,
   subscribeTerminalFontSize,
   TERMINAL_FONT_SIZE,
+  writeTerminalFilter,
 } from '@/lib/preferences/terminal.ts';
 
 afterEach(() => localStorage.clear());
@@ -37,5 +39,17 @@ describe('the terminal’s font size', () => {
     expect(localStorage.getItem('shinsa.terminal-font-size')).toBeNull();
     expect(told).toBe(2);
     stop();
+  });
+});
+
+describe('the terminal filter', () => {
+  it('starts on your terminals, keeps another choice and ignores a value it does not know', () => {
+    expect(readTerminalFilter()).toBe('yours');
+    writeTerminalFilter('services');
+    expect(readTerminalFilter()).toBe('services');
+    writeTerminalFilter('yours');
+    expect(localStorage.getItem('shinsa.terminal-filter')).toBeNull();
+    localStorage.setItem('shinsa.terminal-filter', 'everything');
+    expect(readTerminalFilter()).toBe('yours');
   });
 });

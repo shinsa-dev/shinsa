@@ -1,6 +1,5 @@
 import type { OnboardingReply, OnboardingStatus, WorktreeUsage } from '@shinsa/core';
 import { OpenAnswer } from '@shinsa/core/engine-api/schema';
-import { toast } from '@shinsa/ui/components/sonner';
 import { Effect } from 'effect';
 import * as React from 'react';
 import { requestWithToast } from '@/lib/connection/commands.ts';
@@ -8,7 +7,6 @@ import { runApp } from '@/lib/runtime/app.ts';
 import { decodeAnswer } from '@/lib/runtime/engine/answers.ts';
 import { EngineClient } from '@/lib/runtime/engine/service.ts';
 import { createSignal } from '@/lib/signal.ts';
-import { navigate } from '@/router.ts';
 import { InstallAnswer, PRIVACY_NOT_OPENED_MESSAGE, PrivacyNotOpened } from './schema.ts';
 
 const signal = createSignal();
@@ -164,13 +162,4 @@ export function replyToOnboarding(answer: OnboardingReply) {
 
 export function requestOnboardingInstall(fix: { id: string } | { all: true } | { command: string }) {
   return runApp(install(fix));
-}
-
-const restart = reply({ type: 'restart' }).pipe(
-  Effect.andThen(Effect.sync(() => navigate('/onboarding'))),
-  Effect.catch((error) => Effect.sync(() => toast.error(error.message)))
-);
-
-export function restartOnboarding() {
-  return runApp(restart);
 }

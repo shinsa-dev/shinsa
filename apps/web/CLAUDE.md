@@ -11,8 +11,8 @@ themes, from sample data. Everything that reaches the engine or app.shinsa.dev i
 
 ```
 src/
-├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and a
-│                        `?layout=` override before the first paint
+├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and the layout
+│                        (Cards, or Sidebar for one load with `?layout=sidebar`) before the first paint
 ├── remote-sw.ts         The remote build's service worker (/sw.js, scope /): hands the page's /api/ requests to the page,
 │                        and a notification's click to the dashboard tab (or a new one) to open the task
 ├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
@@ -74,17 +74,17 @@ src/
 │                        the queued messages docked above the composer, file-card.tsx: FileCard, the one card a non-image attachment is in a message and in a composer, a grey bordered tile with the kind's icon from lib/chat/attachments.ts; it and every image attachment take the composer card's corner, ATTACHMENT_CORNER, and its tile ATTACHMENT_TILE_CORNER, 4px in on every side, so the tile is 46px in the 56px card), review (merge-steps.tsx: the steps around the
 │                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;
 │                        testing.tsx: the Review tab's How to test, what the tests cover and the steps to try with their targets;
-│                        note.tsx: ReviewNote, the one card every review comment is, and RemoveNoteButton, its Remove, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and FindingNote with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its current items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), an updated item's quiet mark, the replaced and removed items under a collapsed Earlier versions, the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue (row-summary.tsx: a row's summary line, the handle and status, the mini track and the agent's latest action or the current step's count), home (guide,
+│                        note.tsx: ReviewNote, the one card every review comment is, and RemoveNoteButton, its Remove, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and FindingNote with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its current items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), an updated item's quiet mark, the replaced and removed items under a collapsed Earlier versions, the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K: menu.tsx, and highlight.tsx: a row's text with the letters the search matched marked), queue (row-summary.tsx: a row's summary line, the handle and status, the mini track and the agent's latest action or the current step's count), home (guide,
 │                        new task, recently finished and recent conversations), tasks, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
-│                        accounts.tsx is the Agent usage tab's Accounts card, forecast.tsx its Forecast, with usage.tsx's windows and Limits, providers.tsx's
+│                        accounts.tsx is the Usage tab's Accounts card, forecast.tsx its Forecast, with usage.tsx's windows and Limits, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
-│                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
-│                        Remote access, and below Machines on app.shinsa.dev: the status, Connect Slack, each
+│                        integrations.tsx reads the extensions for the search, pinned while the lists scroll, slack.tsx (Cloud, after
+│                        Sharing, on the machine and on app.shinsa.dev: the status, Connect Slack, each
 │                        linked workspace, and Disconnect on the machine only), context-optimizer.tsx,
 │                        mcp-servers.tsx (with mcp-server-row.tsx, mcp-server-menu.tsx and server-dialog.tsx),
-│                        versions.tsx the Agents tab's Versions group;
+│                        versions.tsx the General tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
 │                        onboarding (shell, header: Set up Shinsa over the path, path: the steps as the task page's path of gates, section: the heading, body and footer every step shares, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts: Sign in with Claude and the accounts, checks: each check with Install and its terminal in the card, help: Ask an agent for help and its reply with Run in terminal),
@@ -129,7 +129,7 @@ src/
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
-│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys),
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the app-wide shortcuts of APP_SHORTCUTS (use-app-shortcuts), the Review tab's J and K (use-review-keys),
 │                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
@@ -139,7 +139,7 @@ src/
 │                        change; null turns it off), use-delayed (useDelayed: true once a wait has
 │                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
-│                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
+│                        (useUsageRecheck: re-reads account usage while Settings → Usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── share/           Sharing a task: dialog.ts (Share task's state, its five views, how long a task is shared, share,
     │                    Stop sharing and its confirmation, the banner's words),
@@ -239,7 +239,7 @@ src/
     │                    requestUpdate: the update's lines streamed into its toast through streamLines), evidence.ts,
     │                    placement.ts, schedules.ts and secrets.ts (the engine calls of evidence texts, routing,
     │                    schedules and secrets, for the plain modules in lib/ that use them)
-    ├── command/         ⌘K: registry.ts (useRegisterCommands, menu open state), score.ts, menu.ts (frames,
+    ├── command/         ⌘K: registry.ts (useRegisterCommands, menu open state), search/ (schema.ts: the match and its ranges; score.ts: the fuzzy scorer), hover.ts (the task row under the pointer when ⌘K opens), shortcuts.ts (APP_SHORTCUTS and the key or chord each resolves to), menu.ts (frames,
     │                    rows, the root's blocks and their scores, Recent, the New task action), global.ts, gates.ts (the commands of every open gate), task.ts and
     │                    task-actions.ts (a task's page), process.ts (check-ins, the quiet agent, suggested
     │                    tasks, delegations), accounts.ts (Accounts group, Run on account, usage waits),
@@ -363,15 +363,15 @@ src/
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts (each automation's type, its look, Slack's mark for a channel trigger, and its wording), automations.ts (a watch's page: its facts, a Slack channel trigger's updates fact,
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
-        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the router's answer from POST /api/placement, each machine's load),
-        slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
+        checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts (Enter, Escape, and isTyping: a key pressed in a text field), signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the router's answer from POST /api/placement, each machine's load),
+        slack.ts (Settings → Cloud → Slack: the status words, a link's line, the linked page's points, result and
         reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
         disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use and who added it, the copy of
         the invite link's dialog and its QR code as an image, an access request and the short toast accepting it shows; connection/remote-access.ts reads it from the
         socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the
-        server form and its checks), versions.ts (Settings → Agents → Versions: rows, statuses and the update labels)
+        server form and its checks), versions.ts (Settings → General → Versions: rows, statuses and the update labels)
 ```
 
 `test/` follows `src/`: nearly every `lib/` and `hooks/` module has its test at the same path (a few are covered
@@ -424,9 +424,8 @@ print the whole document.
   command from the help task's reply, to `POST /api/onboarding/install`; the engine decides what runs. Finishing
   opens the welcome task the flow names (`welcome`), or Home on a run started again. Until `GET /api/onboarding` says setup is complete,
   every route replaces itself with `/onboarding`, and `/onboarding` has no way out: its own shell, no Home button
-  and no ⌘K. `/onboarding` goes Home when the run it loads is finished. Run setup again (Settings → Setup, ⌘K) is
-  `restartOnboarding`: it starts a new run on the server first, so the page opens on its first step; there is no
-  URL flag. No folder path is written into the web.
+  and no ⌘K. `/onboarding` goes Home when the run it loads is finished. Nothing in the app starts setup again once it is
+  complete. No folder path is written into the web.
 - **URL state is the view state.** The task tab (`?tab=review|code|chat`), the Review tab's place (`?spot=`), the Code
   tab's whole workbench (`lib/code/location.ts`: `?mode=changes|files|search`, `file`, `diff`, `line`, `end`, `ref`,
   `spot`, `q`,
@@ -439,7 +438,9 @@ print the whole document.
   hooks private to them; anything that computes (a label, an order, a section list, a command list) is a `.ts`
   function in `lib/` with a test. A component used by one route still lives in `components/<domain>/` when the
   route file would otherwise grow past a screenful.
-- **⌘K is the only shortcut, but for the Code tab, the Review tab and the Terminal page.** Pages add commands with `useRegisterCommands(sections)` while
+- **⌘K is the only shortcut, but for the app-wide moves and the Code tab, the Review tab and the Terminal page.** The
+  moves are one table, `APP_SHORTCUTS` (`lib/command/shortcuts.ts`: ⌘J the terminal, ⌘, Settings, G then H, T or S),
+  read by the one listener `hooks/use-app-shortcuts.ts`; a `go` command names its move in `shortcut` to show the keys. Pages add commands with `useRegisterCommands(sections)` while
   mounted (`docs/design.md`, 14). A command or choice option is disabled only with its reason (`disabled: '…'`, a
   string shown in place of the hint); there is no boolean. While the Code tab is open it binds ⌘P, ⇧⌘F, ⌘F and ⌘G (`hooks/use-code-keys.ts`),
   while the Review tab is open J and K (`hooks/use-review-keys.ts`, not while you type), and while the Terminal page is open ⌘T and ⌘W (`hooks/use-terminal-keys.ts`), each also a ⌘K command or a button; `bun lint:conventions` rejects a global key listener anywhere else.

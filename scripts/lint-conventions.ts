@@ -59,6 +59,7 @@ import {
   VERB_CATALOG,
 } from './lint-rules.ts';
 import { RAW_SELECTION_MESSAGE, RAW_SELECTION_PATTERN } from './lint-selection.ts';
+import { isStrayKeyListener } from './lint-shortcut.ts';
 import { listToastViolations } from './lint-toast.ts';
 
 type Violation = { file: string; line: number; message: string };
@@ -142,13 +143,6 @@ const FITTED_WIDTH =
   /(?:^|\s)(?:w-fit|w-max|w-\d[\w.]*|size-[\w.]+|inline|inline-flex|inline-grid|inline-block)(?=\s|$)/;
 
 const TOOLTIP_PARTS = new Set(['Hint', 'Tooltip', 'TooltipProvider', 'TooltipTrigger', 'TooltipContent']);
-
-const SHORTCUT_FILES = [
-  'apps/web/src/hooks/use-command-key.ts',
-  'apps/web/src/hooks/use-code-keys.ts',
-  'apps/web/src/hooks/use-review-keys.ts',
-  'apps/web/src/hooks/use-terminal-keys.ts',
-];
 
 const TIME_CHECK_ROOTS = ['apps/web/src'];
 
@@ -477,15 +471,6 @@ function isEchoTooltip(node: BabelNode) {
   return readShownText(trigger.children as BabelNode[])?.toLowerCase() === tooltip.toLowerCase();
 }
 
-function isGlobalKeyListener(node: BabelNode) {
-  if (node.type !== 'CallExpression') return false;
-  const callee = node.callee as BabelNode & { name?: string; property?: BabelNode & { name?: string } };
-  const name = callee.type === 'MemberExpression' ? callee.property?.name : callee.name;
-  if (name !== 'addEventListener') return false;
-  const [event] = node.arguments as (BabelNode & { value?: unknown })[];
-  return event?.type === 'StringLiteral' && (event.value === 'keydown' || event.value === 'keyup');
-}
-
 function isHandRolledTabBar(node: BabelNode) {
   if (node.type === 'ImportDeclaration')
     return (node.source as BabelNode & { value?: string }).value === TAB_PRIMITIVE;
@@ -513,12 +498,11 @@ function collectSyntaxViolations(file: string, program: BabelNode, violations: V
   const timed = file.endsWith('.tsx') && file !== TIME_COMPONENT_FILE && isUnder(file, TIME_CHECK_ROOTS);
   const styled = isUnder(file, APP_AND_KIT) && !CATALOG.includes(file);
   const app = isUnder(file, APP);
-  const keyed = app && !SHORTCUT_FILES.includes(file);
   const tipped = isUnder(file, APP_AND_KIT);
   walk(program, (node, ancestors) => {
     const line = node.loc?.start.line ?? 0;
     if (tipped) for (const message of listTooltipMessages(node)) violations.push({ file, line, message });
-    if (keyed && isGlobalKeyListener(node)) violations.push({ file, line, message: SHORTCUT_MESSAGE });
+    if (app && isStrayKeyListener(file, node)) violations.push({ file, line, message: SHORTCUT_MESSAGE });
     if (app && isHandRolledTabBar(node)) violations.push({ file, line, message: TAB_BAR_MESSAGE });
     if (app && isLoneOption(node, ancestors)) violations.push({ file, line, message: LONE_OPTION_MESSAGE });
     if (timed && isUntimedFormatter(node, ancestors)) violations.push({ file, line, message: TIME_MESSAGE });

@@ -16,12 +16,6 @@ import {
 } from '@/lib/focus.ts';
 import { listOpenInitiatives } from '@/lib/initiatives/membership.ts';
 import { INITIATIVE_ICON } from '@/lib/initiatives/view.ts';
-import {
-  LAYOUT_NAMES,
-  LAYOUT_ORDER,
-  type LayoutPreference,
-  writeLayoutPreference,
-} from '@/lib/preferences/layout.ts';
 import { THEME_ITEMS, type ThemePreference, writeThemePreference } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { resolveTerminalEntry } from '@/lib/terminal/tabs.ts';
@@ -30,11 +24,6 @@ import type { Route } from '@/router.ts';
 const FOCUS_ICON = 'IconCircleDotted';
 
 const TEAM_FOCUS_ICON: MenuItemIcon = 'IconUserDuo';
-
-const LAYOUT_KEYWORDS: Record<LayoutPreference, string[]> = {
-  cards: ['cards', 'centred', 'top bar'],
-  sidebar: ['sidebar', 'rail', 'queue'],
-};
 
 const YOUR_WORK_VALUE = 'all';
 
@@ -163,6 +152,7 @@ function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] 
     {
       kind: 'go',
       id: 'go.home',
+      shortcut: 'home',
       label: 'Home',
       icon: 'IconHomeRoundDoor',
       current: route.name === 'home',
@@ -172,6 +162,7 @@ function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] 
     {
       kind: 'go',
       id: 'go.tasks',
+      shortcut: 'tasks',
       label: 'All tasks',
       icon: 'IconListBullets',
       current: route.name === 'tasks',
@@ -181,15 +172,17 @@ function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] 
     {
       kind: 'go',
       id: 'go.terminal',
+      shortcut: 'terminal',
       label: 'Terminal',
       icon: 'IconConsole',
       current: route.name === 'terminal',
-      keywords: ['shell', 'console', 'command line', 'dev server'],
+      keywords: ['shell', 'console', 'command line', 'dev server', 'open the terminal'],
       to: resolveTerminalEntry(),
     },
     {
       kind: 'go',
       id: 'go.settings',
+      shortcut: 'settings',
       label: 'Settings',
       icon: 'IconSettingsGear4',
       current: route.name === 'settings',
@@ -208,25 +201,8 @@ function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] 
   return commands.has('feedback.write') ? go : go.filter((command) => command.id !== 'feedback.open');
 }
 
-function listAppearanceCommands(theme: ThemePreference, layout: LayoutPreference): Command[] {
+function listAppearanceCommands(theme: ThemePreference): Command[] {
   return [
-    {
-      kind: 'choice',
-      id: 'appearance.layout',
-      label: 'Switch layout',
-      hint: LAYOUT_NAMES[layout].label,
-      icon: LAYOUT_NAMES[layout].icon,
-      keywords: ['layout', 'view', 'mode', 'rail', 'cards', 'sidebar'],
-      heading: 'Layout',
-      value: layout,
-      options: LAYOUT_ORDER.map((value) => ({
-        value,
-        label: LAYOUT_NAMES[value].label,
-        icon: LAYOUT_NAMES[value].icon,
-        keywords: LAYOUT_KEYWORDS[value],
-      })),
-      pick: (value) => writeLayoutPreference(value === 'cards' ? 'cards' : 'sidebar'),
-    },
     {
       kind: 'choice',
       id: 'appearance.theme',
@@ -246,7 +222,6 @@ export function listGlobalSections(
   state: ShinsaState,
   route: Route,
   theme: ThemePreference,
-  layout: LayoutPreference,
   commands: ReadonlySet<string>,
   teams: readonly FocusTeam[]
 ): CommandSection[] {
@@ -262,7 +237,7 @@ export function listGlobalSections(
       id: 'global.appearance',
       heading: 'Appearance',
       rank: RANK.global + 2,
-      commands: listAppearanceCommands(theme, layout),
+      commands: listAppearanceCommands(theme),
     },
   ];
 }

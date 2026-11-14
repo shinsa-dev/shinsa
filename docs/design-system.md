@@ -67,7 +67,8 @@ These are the rules every other section applies. When a case is not covered anyw
 13. **Acting never moves you.** An action changes the thing in place; nothing jumps to another page, and a view in
     place beats a dialog. In normal use there is no loading state: data is prefetched, and a wait that could not be
     foreseen stays blank for 300ms before it shows anything. A render error stays inside the part that failed.
-14. **One keyboard shortcut.** ⌘K opens the command menu everywhere. Only three workspaces bind keys of their own,
+14. **One keyboard shortcut, and a few moves.** ⌘K opens the command menu everywhere, and the app's moves have
+    keys: ⌘J the terminal, ⌘, Settings, and G then H, T or S Home, All tasks or Settings (never while typing). Only three workspaces bind keys of their own,
     and only while open: the Code tab (⌘P, ⇧⌘F, ⌘F, ⌘G), the Review tab (J, K) and the Terminal page (⌘T, ⌘W);
     the image viewer takes Esc, ←, →, `+`, `-` and `0` while it is open, and the Mac app's menu has its own
     (⌘, ⌘N ⌘W ⌘[ ⌘] ⇧⌘H). Invent no others.
@@ -5674,7 +5675,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Do** put a page's parts behind a segmented tab bar under its heading. **Don't** add a table of contents, a scroll-spy or a list of section links beside the column.
 
-**Example.** Settings is six panes (General, Agents, Agent usage, Projects, Integrations, Automations) behind a segmented `Choice` under the heading, the tab in the URL (`?tab=agents`, General is bare `/settings`). The heading reads the open tab's name ("Agents"), never "Settings", and switching tabs swaps only the pane under the bar.
+**Example.** Settings is ten panes (General, Agents, Autopilot, Cloud, Usage, Statistics, Projects, Browser, Integrations, Automations) behind a segmented `Choice` under the heading, which stays put while the pane scrolls, the tab in the URL (`?tab=agents`, General is bare `/settings`). The heading reads the open tab's name ("Agents"), never "Settings", and switching tabs swaps only the pane under the bar.
 
 #### Page heading
 
@@ -5709,7 +5710,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Do** put "Add account" on the Accounts section label. **Don't** put it in the page heading.
 
-**Example.** Settings → Agent usage puts Refresh and Add account as the Accounts `SectionLabel`'s action, 2px apart (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns).
+**Example.** Settings → Usage puts Refresh and Add account as the Accounts `SectionLabel`'s action, 2px apart (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns).
 
 #### A short flow is an overlay, not a page
 
@@ -5831,9 +5832,9 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Why.** The setting's name and its options are the whole message; descriptions under every row turned Settings into reading.
 
-**Do** name a setting so its options explain it ("Setup steps" with Run setup again). **Don't** add a grey sentence under a setting row.
+**Do** name a setting so its options explain it ("Merge with" with Squash, Merge commit and Rebase). **Don't** add a grey sentence under a setting row.
 
-**Example.** Settings → Projects: one block per project, 6px apart: the colour dot, the name, the key as a mono `Badge`, then a `secondary` `xs` Add and the `•••`; the shelf lists each repository and folder as a path row with ghost `sm` selects.
+**Example.** Settings → Projects: one block per project, 6px apart: the colour dot, the name, the key as a mono `Badge`, then a `secondary` `xs` Add and the `•••`; the shelf lists each repository and folder as a path row with only its name and path; a repository's checks, coverage and workspace fold under its gear button, closed by default.
 
 #### Tables and divided lists
 
@@ -6362,11 +6363,7 @@ Example: the Home section card, the Overview panel, the chat's hand-over card an
 
 #### Two layouts, one frame
 
-- The app has two layouts, chosen in Settings, both rendered by one frame around one `main`. Switching adds or removes the top bar and the side rail; it never remounts the pages inside, so scroll and state survive.
-- Each layout has a display name, a one-line hint and an icon, kept in one constant. Code, URL params and docs keep the internal ids (`cards`, `sidebar`); the screen shows the names. Renaming is a one-constant change.
-  - Desk (`cards`, the default): "Pages sit centred with nothing at the sides, and a button at the top opens what needs you."
-  - Shelf (`sidebar`): "A rail at the side lists every task and stays open, so each one is a click away."
-  - The hint shows as the tooltip of each layout's option in Settings and as the hint of the command menu's Switch layout.
+- The app has two layouts, both rendered by one frame around one `main`, but only Desk (`cards`) is offered: Settings and the command menu have no switch, and every start opens Desk. Shelf (`sidebar`) stays in the code and opens only from the `?layout=sidebar` address, for that load. Adding or removing the top bar and the side rail never remounts the pages inside, so scroll and state survive.
 - Desk: no rail. A top bar holds navigation at the left (logo, Home button in the Mac app, Tasks, Services, then the "3 need you" queue button) and Update, Settings, Agent usage and Focus at the right. Pages are centred on the same axis as Home. The queue button sits after Services so that nothing on the right moves when it appears or disappears; it shows on every task page at every width and is Desk's only queue outside Home.
 - Shelf: a permanent rail with the queue that never hides. From `md` (768px) up it sits beside the page; below 768px it opens as a sheet. Its nav names the same places in the same words as Desk's bar (New task, Tasks, Services, Settings), each showing its filled icon on its own page.
 - Nav buttons: `Button` `variant='secondary'`, `size='sm'` with icon and label, or `size='icon-sm'` with the icon alone (Settings: the cog only, tooltip "Settings"). Inactive `text-fg-3`; on its own page `text-fg-4`, the filled twin of the icon, and `aria-current="page"`.
@@ -6926,7 +6923,7 @@ Example: an agent reply with a heading at 14px, a list and an inline `code` span
 - Pages contribute what they know: a mounted component registers ranked sections and drops them on unmount; the menu re-renders only when the serialised sections change. Order: the current context first, then the queue (next and previous item that needs you), then global groups.
 - Context: on an item's page its decision leads, each named for what it does ("Approve the plan", "Merge #4531", "Answer the question"), then View (its tabs), then tab-specific groups while that tab is open (with their keys), then actions on this item, then next/previous. Global groups: Tasks, Go to, Focus, Appearance, Accounts, Schedules, Integrations, Versions. With an empty query, Recent lists the last items visited that no group already shows. Commands that only make sense while typing (`searchOnly`) appear only then.
 - Disabled always says why: `disabled` is the reason string (no boolean). The row greys, cannot be run by click or Enter, keyboard navigation skips it, and the reason replaces its hint. Typing never ranks a group by a disabled match; the first highlighted row is the first enabled one; a choice page opens on the current value only when it is enabled. Reasons are plain sentences: "Send or clear your comments first", "Updating…", "Unavailable: needs usage credits", "Kept until it merges or is cancelled".
-- Typing matches by word: whole label, label prefix, word prefix, then substring; hints and keywords count at 0.7. Groups are ordered by their best match (cmdk's own group sort does not work). Choices flatten into their options ("dark", "urgent"); items match by title, repository, branch and status; decisions match across items ("merge" finds Merge #4531 wherever it is). Always at the bottom: "Create task: …" (starts it) and "Edit it before starting" (opens the composer filled in). "Create task: …" and "Search all tasks for “…”" keep the query in `fg-4`.
+- Typing ranks once, before anything renders, so no row appears and then moves. Each word matches the whole text, its prefix, a word's prefix or a substring, then, on a label, a title, a handle or a branch, a fuzzy match from the start of a word ("fdv" finds Fix decide invariant violations); hints and keywords count at 0.7, and the matched letters show in the full text colour. Groups are ordered by their best match. Choices flatten into their options ("dark", "urgent"); items match by title, handle, branch, repository, summary and status; decisions match across items ("merge" finds Merge #4531 wherever it is). Always at the bottom: "Create task: …" (starts it) and "Edit it before starting" (opens the composer filled in). "Create task: …" and "Search all tasks for “…”" keep the query in `fg-4`.
 - Navigation: entering a page scrolls the list to the top; Backspace on an empty input goes back and re-selects the row that opened the page, restoring the scroll it had; the highlight slides from its on-screen position to the new row (the list scrolls the controlled value into view itself, since cmdk does not). A choice page opens on the current value. Closing resets to the root. Escape restores focus to where it was; a command that runs declines the restore so what it focuses keeps focus.
 - Filters and searches a command sets live in the URL; an active filter shows as a removable button beside the page's search.
 
@@ -6973,9 +6970,9 @@ Example: "Agent · 3 runs", under it "↳ Builder · Add the guard · Finished".
 - A row may still show data under or beside its name (a reset time, a summary, a path in `text-2xs fg-2`).
 - Selects show human display names from the first paint, never raw ids or aliases.
 - Settings is split into tabs, each its own pane, not one long scroll with a table of contents (the main use is a floating tablet-sized window). Links to a section open its tab and scroll to it.
-- Path rows: a 14px icon 8px from the name, the path after it in `text-2xs fg-2`, then ghost `sm` selects and a remove ×.
+- Path rows: a 14px icon 8px from the name, the path after it in `text-2xs fg-2`, then a gear button that opens the row's ghost `sm` selects below it, closed by default, and a remove ×.
 
-Example: Settings → General → Appearance: "Theme" with a select, "Layout" with Desk and Shelf, each option's hint in its tooltip.
+Example: Settings → Agents → Engine: "Merge with" with a select, each option's hint in its tooltip.
 
 #### Composers
 
@@ -7012,7 +7009,7 @@ Example: tabbing onto a list row shows no ring; its tooltip, if any, appears imm
 
 #### One keyboard shortcut
 
-- The app binds one global key: ⌘K (Ctrl K) for the command menu. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
+- The app binds ⌘K (Ctrl K) for the command menu, and a few moves: ⌘J (Ctrl J) opens the terminal, ⌘, (Ctrl ,) Settings, and G then H, T or S goes to Home, All tasks or Settings, within 1.5 seconds and never in a text field; each shows beside its command in ⌘K. With the pointer over a task in a list, ⌘K opens on that task's actions. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
 
 Example: pressing J on the Review tab moves to the next point; pressing J elsewhere does nothing.
 
@@ -7354,7 +7351,7 @@ readings on a shelf.
   ("Signed in with ChatGPT", "Not signed in", "Not installed", "Too old for Shinsa"), and, on its shelf when there
   is something to do, a row with the fix as inline markdown and a `CopyButton` for its command. Its menu offers only
   what makes sense (Copy the sign-in command, Check the sign-in again); no version is shown.
-- Example: Settings → Agent usage → Accounts.
+- Example: Settings → Usage → Accounts.
 
 #### Status words appear only when something is wrong
 
@@ -7513,8 +7510,7 @@ style of its own.
   queue, no usage glance, no Focus, and the command menu is not mounted (and is closed on the way in). The page is
   `flex h-dvh flex-col overflow-hidden bg-background text-fg-3`.
 - **Locked until done**: while setup is not complete every route replaces itself with setup, so a link, the address
-  bar, Back or the app's menu all land there. A run started again from Settings is not locked: every step's footer
-  then has "Close setup" (`secondary`), which goes to Settings. Opening setup once it is finished goes to the welcome task, or Home on a run again.
+  bar, Back or the app's menu all land there. Nothing in the app starts setup again once it is complete. Opening setup once it is finished goes to the welcome task, or Home on a run again.
 - **Column**: `mx-auto flex w-full max-w-xl flex-col gap-6 px-6` + `pt-6 pb-16 md:pt-12` (48px from the top from
   `md` up). Everything starts on the column's left edge. The header, the step and its footer are 24px apart.
 - **Setup reads as the first task**: above the step, the page's own heading ("Set up Shinsa", one line under it),
@@ -7799,7 +7795,7 @@ Structure that only matters once there is more than one of something stays invis
 - A search with no match shows "Nothing matches." alone (`px-1 text-fg-2 text-xs`), with every non-matching section
   hidden.
 - An empty state that is good news says so ("Agents used everything turned on here.").
-- Example: Settings → Agents → Versions before the first read.
+- Example: Settings → General → Versions before the first read.
 
 #### Settings search
 
@@ -9062,7 +9058,7 @@ Rules that sit behind the table:
 | `·` (U+00B7), spaced | Separator between facts on one line: "Building · Round 2", "Claude · a@b.com" | `•`, `|`, ` - ` |
 | `–` (U+2013), no spaces around it, in a number range | Ranges: "lines 4–9" | `-` |
 | `−` (U+2212) | The minus of a diff count: "+12 −3" | `-` |
-| `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Agent usage" | `->` |
+| `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Usage" | `->` |
 | `⌘ ⇧ ⌥` | Key names, joined with no space: "⌘K", "⇧⌘H", "⇧⌘F"; Ctrl spelled out with a space elsewhere: "Ctrl K" | "Cmd+K" |
 | `—` (em dash) | Never in a UI string. Use a colon, a comma or a second sentence | |
 | `!` | Never | |
@@ -10369,9 +10365,9 @@ document.body.dataset.dragging = '';
 
 - **Matches** (syntax rule, app, `.ts` and `.tsx`): any call to `addEventListener` (bare or as a method) whose first
   argument is the string `'keydown'` or `'keyup'`.
-- **Exempt files:** the four shortcut hooks, `use-command-key.ts`, `use-code-keys.ts`, `use-review-keys.ts`,
-  `use-terminal-keys.ts`.
-- **Why:** ⌘K (Ctrl K) is the only global shortcut. The Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K,
+- **Exempt files:** the five shortcut hooks, `use-command-key.ts`, `use-app-shortcuts.ts`, `use-code-keys.ts`,
+  `use-review-keys.ts`, `use-terminal-keys.ts`.
+- **Why:** ⌘K (Ctrl K) and the app-wide moves (⌘J, ⌘, and G then H, T or S) are the only global shortcuts. The Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K,
   the Terminal page ⌘T and ⌘W, while they are open; a terminal keeps its own keys through xterm.js's handler on its
   element, and the editor uses CodeMirror's keymap.
 

@@ -3,7 +3,9 @@ import { SHARE_PRESET_SCOPES } from '@shinsa/core';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { TaskRowState } from '@/components/tasks/row-state.tsx';
 import { describeChainDepth, resolveDepthIndent, TaskListRow } from '@/components/tasks/row.tsx';
+import { resolveTaskRowModel } from '@/lib/tasks/row-model.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
@@ -27,7 +29,9 @@ const STATE = createShinsaState({
 function renderRow(task: Task, depth = 0, state: ShinsaState = STATE) {
   return render(
     <TooltipProvider>
-      <TaskListRow state={state} task={task} depth={depth} />
+      <TaskRowState state={state}>
+        <TaskListRow model={resolveTaskRowModel(state, task, depth)} />
+      </TaskRowState>
     </TooltipProvider>
   );
 }
