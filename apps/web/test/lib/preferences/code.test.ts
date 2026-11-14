@@ -24,6 +24,14 @@ describe('code preferences', () => {
     expect(localStorage.getItem('shinsa.code-unified')).toBe('true');
   });
 
+  it('shows diffs unified first in a narrow window, until you pick side by side', () => {
+    const { result } = renderHook(() => useUnifiedDiff(true));
+    expect(result.current[0]).toBe(true);
+    act(() => result.current[1]());
+    expect(result.current[0]).toBe(false);
+    expect(localStorage.getItem('shinsa.code-unified')).toBe('false');
+  });
+
   it('remembers whether viewed files are hidden', () => {
     const { result } = renderHook(() => useHideViewed());
     expect(result.current[0]).toBe(false);

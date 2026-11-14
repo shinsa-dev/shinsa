@@ -73,7 +73,7 @@ describe('useFileSaver', () => {
     expect(result.current.start).toBe('x');
     act(() => result.current.edit());
     act(() => result.current.save());
-    expect(result.current.state).toEqual({ saving: false, notice: null, refusal: null });
+    expect(result.current.state).toEqual({ status: 'clean', notice: null, refusal: null });
   });
 
   it('saves at once when asked, without waiting for a pause in the typing', async () => {

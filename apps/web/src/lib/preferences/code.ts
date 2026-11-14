@@ -41,8 +41,8 @@ export function useExplorerWidth(floor = 0, side: ExplorerSide = 'left') {
   return usePaneWidth('shinsa.code-explorer-width', EXPLORER_WIDTH, floor, side === 'left' ? 1 : -1);
 }
 
-export function useUnifiedDiff() {
-  return useStoredToggle('shinsa.code-unified', false);
+export function useUnifiedDiff(compact = false) {
+  return useStoredToggle('shinsa.code-unified', compact);
 }
 
 export function useHideViewed() {

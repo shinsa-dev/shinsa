@@ -77,7 +77,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const [explorerFloor, setExplorerFloor] = React.useState(0);
   const side = useExplorerSide();
   const width = useExplorerWidth(explorerFloor, side);
-  const [unified, toggleSplit] = useUnifiedDiff();
+  const [unified, toggleSplit] = useUnifiedDiff(useMediaQuery('(max-width: 1023px)'));
   const split = !unified && !narrow;
   const [hideViewed, toggleHideViewed] = useHideViewed();
   const [quickOpen, setQuickOpen] = React.useState(false);

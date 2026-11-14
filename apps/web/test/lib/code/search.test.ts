@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { SearchResult } from '@shinsa/core';
 import {
+  describeSearchEmpty,
   describeSearchResult,
   groupMatches,
   listKeyedParts,
@@ -105,5 +106,33 @@ describe('listResultRows', () => {
   it('lists each file then its matches, leaving out the matches of a folded file, each with a stable key', () => {
     const rows = listResultRows(groupMatches(MATCHES), new Set(['b.ts']));
     expect(rows.map(resolveResultKey)).toEqual(['f:a.ts', 'm:a.ts:1:1', 'm:a.ts:9:3', 'f:b.ts']);
+  });
+});
+
+describe('describeSearchEmpty', () => {
+  const search = { query: 'hello', regex: false, caseSensitive: false, wholeWord: false, glob: '' };
+
+  it('invites a search before you type, and says nothing while results are shown or still coming', () => {
+    expect(describeSearchEmpty({ ...search, query: '  ' }, null)?.title).toBe('Search every file');
+    expect(describeSearchEmpty(search, null)).toBeNull();
+    expect(describeSearchEmpty(search, result({}))).toBeNull();
+    expect(describeSearchEmpty(search, result({ matches: [], timedOut: true }))).toBeNull();
+  });
+
+  it('says what to loosen when nothing matches', () => {
+    const none = result({ matches: [] });
+    expect(describeSearchEmpty(search, none)).toEqual({
+      title: 'No results',
+      description: 'Check the spelling, or try fewer words.',
+    });
+    expect(describeSearchEmpty({ ...search, glob: ' src/** ' }, none)?.description).toBe(
+      'Nothing matches in files like src/**. Clear Files to include to search them all.'
+    );
+    expect(describeSearchEmpty({ ...search, caseSensitive: true }, none)?.description).toBe(
+      'Try again with Match case turned off.'
+    );
+    expect(
+      describeSearchEmpty({ ...search, caseSensitive: true, wholeWord: true, regex: true }, none)?.description
+    ).toBe('Try again with Match case, Match whole word or Use a regular expression turned off.');
   });
 });

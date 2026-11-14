@@ -22,7 +22,7 @@ import { FilePath } from '@/components/text/file-path.tsx';
 import { useDelay } from '@/hooks/use-delay.ts';
 import { useFileSaver } from '@/hooks/use-file-saver.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
-import { isEditedPath, resolveEditState } from '@/lib/code/edits.ts';
+import { isEditedPath, resolveEditState, type SaveStatus } from '@/lib/code/edits.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import {
@@ -198,7 +198,7 @@ function PaneToolbar({
   source,
   split,
   showLayout,
-  saving,
+  status,
   preview,
   toolbar,
   onSplit,
@@ -208,7 +208,7 @@ function PaneToolbar({
   source: FileSource;
   split: boolean;
   showLayout: boolean;
-  saving: boolean;
+  status: SaveStatus;
   preview: boolean | null;
   toolbar: React.ReactNode;
   onSplit: (() => void) | null;
@@ -230,7 +230,7 @@ function PaneToolbar({
         <DiffStats added={source.change.additions} removed={source.change.deletions} />
       )}
       <span className='flex-1' />
-      {saving && <span className='shrink-0 text-2xs text-fg-2'>Saving…</span>}
+      <SaveStatusLabel status={status} />
       {showLayout && onSplit && <LayoutToggle split={split} onToggle={onSplit} />}
       {preview !== null && <PreviewToggle preview={preview} onToggle={onPreview} />}
       <CopyButton text={path} label='Copy path' size='icon-sm' />
@@ -238,6 +238,22 @@ function PaneToolbar({
         <HintButton label='Show in Files' size='icon-sm' icon='IconFolderOpen' onClick={onShowInFiles} />
       )}
     </Toolbar>
+  );
+}
+
+const SAVE_STATUS_LABEL: Record<SaveStatus, string | null> = {
+  clean: null,
+  edited: 'Edited',
+  saving: 'Saving…',
+  saved: 'Saved',
+};
+
+function SaveStatusLabel({ status }: { status: SaveStatus }) {
+  const label = SAVE_STATUS_LABEL[status];
+  return (
+    <span role='status' className='shrink-0 text-2xs text-fg-2 empty:hidden'>
+      {label}
+    </span>
   );
 }
 
@@ -398,7 +414,7 @@ export function EditorPane({
         source={source}
         split={split}
         showLayout={diffing && !oneSide && content.kind === 'text'}
-        saving={saver.state.saving}
+        status={saver.state.status}
         preview={markdown.shown}
         toolbar={toolbar}
         onSplit={onSplit}

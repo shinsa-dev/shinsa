@@ -1,4 +1,5 @@
 import type { Task } from '@shinsa/core';
+import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Input } from '@shinsa/ui/components/input';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
@@ -11,6 +12,7 @@ import { useDelay } from '@/hooks/use-delay.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import {
+  describeSearchEmpty,
   describeSearchResult,
   groupMatches,
   listKeyedParts,
@@ -67,6 +69,7 @@ export function SearchPanel({
     () => listResultRows(groupMatches(result?.matches ?? []), folded),
     [result, folded]
   );
+  const empty = searching ? null : describeSearchEmpty(delayed, result);
   const update = (patch: Partial<CodeSearch>) => setDraft((current) => ({ ...current, ...patch }));
   return (
     <div className='flex min-h-0 flex-col'>
@@ -88,10 +91,18 @@ export function SearchPanel({
       </div>
       {searching && <LoadingLine label='Searching' className='px-2.5 py-1.5 text-2xs' />}
       {loaded.status === 'error' && <p className='px-2.5 py-1.5 text-2xs text-red-text'>{loaded.message}</p>}
-      {loaded.status === 'ready' && !searching && (
+      {loaded.status === 'ready' && !searching && !empty && (
         <p aria-live='polite' className='px-2.5 pt-1.5 text-2xs text-fg-2'>
           {describeSearchResult(loaded.value)}
         </p>
+      )}
+      {empty && loaded.status !== 'error' && (
+        <EmptyState
+          size='sm'
+          icon='IconMagnifyingGlass'
+          title={empty.title}
+          description={empty.description}
+        />
       )}
       <div role='tree' aria-label='Search results' className={TREE_LIST}>
         <VirtualRows items={rows} rowHeight={TREE_ROW_HEIGHT} keyOf={resolveResultKey}>

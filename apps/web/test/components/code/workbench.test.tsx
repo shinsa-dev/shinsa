@@ -135,8 +135,12 @@ function respond(url: URL) {
   }
   if (name === 'file') return Response.json({ path: 'README.md', changed: true });
   if (name === 'search') {
+    const found =
+      url.searchParams.get('q') === 'nowhere'
+        ? []
+        : [{ path: 'docs/alpha.txt', line: 2, column: 1, text: 'two' }];
     const lines = [
-      { kind: 'matches', matches: [{ path: 'docs/alpha.txt', line: 2, column: 1, text: 'two' }] },
+      { kind: 'matches', matches: found },
       { kind: 'done', result: { ref, matches: [], truncated: false, timedOut: false } },
     ];
     return new Response(lines.map((line) => JSON.stringify(line)).join('\n'), {
@@ -423,6 +427,17 @@ describe('search and quick open', () => {
     expect(params().get('diff')).toBe('1');
   });
 
+  it('invites a search before you type, and says what to loosen when nothing matches', async () => {
+    renderCode(nextTask(), '&mode=search');
+    expect(await screen.findByText('Search every file')).toBeDefined();
+    const input = await screen.findByRole('textbox', { name: 'Search in files' });
+    fireEvent.click(screen.getByRole('button', { name: 'Match case' }));
+    fireEvent.change(input, { target: { value: 'nowhere' } });
+    expect(await screen.findByText('No results', {}, { timeout: 2000 })).toBeDefined();
+    expect(screen.getByText('Try again with Match case turned off.')).toBeDefined();
+    expect(screen.queryByText('Search every file')).toBeNull();
+  });
+
   it('opens any file by name from ⌘P', async () => {
     renderCode(nextTask(), '&mode=files');
     await screen.findByRole('tree', { name: 'Files' });
@@ -525,10 +540,12 @@ describe('editing in place', () => {
     const view = EditorView.findFromDOM(line as HTMLElement);
     if (!view) throw new Error('No editor');
     act(() => view.dispatch({ changes: { from: 0, insert: 'Hello ' }, userEvent: 'input.type' }));
+    expect(screen.getByRole('status').textContent).toBe('Edited');
     await waitFor(
       () => expect(writes).toEqual([{ path: 'README.md', content: 'Hello # Sample\n', base: '# Sample\n' }]),
       { timeout: 5_000 }
     );
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Saved'));
     expect(screen.queryByText(/read-only/)).toBeNull();
   });
 

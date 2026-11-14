@@ -9,7 +9,7 @@ interface Buffer {
   replaceText: (text: string) => void;
 }
 
-const IDLE: SaverState = { saving: false, notice: null, refusal: null };
+const IDLE: SaverState = { status: 'clean', notice: null, refusal: null };
 
 export function useFileSaver(input: {
   taskId: string;
