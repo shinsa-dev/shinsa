@@ -1640,7 +1640,8 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   initiative (`initiative.milestones_queued`, the last 40) and emits an `initiative.wake` effect. The engine's
   `LeadWakes` debounces it per initiative (30 s, `LeadWakeDebounce`, one waiting fiber per initiative), then sends
   `initiative.wake_lead`, which starts a turn only when the lead rests idle in `leading`; a lead that is busy gets
-  the queue on the wake its next report asks for, and on start the engine reschedules every initiative with milestones queued. The
+  the queue on the wake its next report asks for, a lead whose failed run waits on its automatic retry
+  (`isRetryArmed`) gets it on the turn that retry starts, so member milestones never spend its retries early, and on start the engine reschedules every initiative with milestones queued. The
   turn's prompt carries the digest of the sheet and the milestones since the last turn at the tail of the user turn,
   and `initiative.lead_woken` empties the queue, so the session's cached prefix never changes (Caching). A message to
   the lead, yours or a member's (`tasks_message`), starts a turn straight away (`answering your message`, or
@@ -3771,7 +3772,8 @@ beside your run (Runs for a task, below).
   servers you add (`extensions.json`) and the terminals themselves. They are written whenever they change and read
   once at start; a broken file is logged and read as empty.
 - **States.** `resolveServiceState` (core) reads the service's terminal: none or `stopped` is stopped; running is
-  starting for its first 3 s (`SERVICE_LIMITS.startingMs`) and running after; exited with 0 is exited; exited with
+  starting for its first 3 s (`SERVICE_LIMITS.startingMs`) and running after, and a service with a preview URL stays
+  starting while its terminal says `answering: false`; exited with 0 is exited; exited with
   130 or 143 (an interrupt or a terminate you sent) is stopped; any other code, or none, is failed. `resolveServiceView`
   adds how long it has been so, `resolveServicesSummary` the counts the header shows.
 - **Start, stop, restart.** `POST /api/services/<id>/start` opens the service's terminal the first time and starts its
@@ -3825,8 +3827,18 @@ beside your run (Runs for a task, below).
   restarts and under the service's own variables and its port.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
   engine starts it again (`Terminals.resumeServices`, from `serve/work.ts`), where its folder is still one of its project's; a
-  task's run starts again only while the task is open and still holds the folder. Plain
+  task's run starts again only while the task is open and still holds the folder. Each service starts on its own: one
+  that cannot (its folder is gone, no port is free, its command cannot be launched) is logged, writes the reason in its
+  tab and ends `exited` with no code, so it shows as failed, and the rest still start; the engine's start never waits on
+  or fails for it. A spawn that throws is a `SpawnFailed` and never leaves the terminal `running`. Plain
   shells come back as `stopped`, as before. Inspect mode starts nothing.
+- **Starting until the port answers.** A service run with a preview URL and a port starts with `answering: false` on
+  its `TerminalInfo`. A fiber per run (`Terminals.watchAnswer`) asks `TerminalPty.isAnswering`, a TCP connect to
+  127.0.0.1 and then ::1 with a 250 ms timeout (`ANSWER_TIMEOUT`), every 500 ms (`TerminalTimings.answer`) until the
+  port accepts, the process ends or 10 minutes pass (`TerminalTimings.answerLimit`); then `answering` turns true and
+  the service shows as running, so a build after an update reads as starting rather than a dead preview. A new start,
+  a closed tab and the engine's stop interrupt the fiber. A service without a preview has no `answering` and keeps the
+  3 s rule. The field is never read back from `terminals.json`.
 - **Found for you.** `GET /api/services/suggestions?projectId=` (`detect.ts`, `listServiceSuggestions`) reads each of
   the project's repositories and folders, fast enough to run when the Services popover turns to Add services (a few file reads,
   no process): the run script of every workspace the root `package.json` names (`workspaces` as a list or

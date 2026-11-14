@@ -1093,6 +1093,10 @@ Only these, and they win over anything below:
     a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
+    The list scrolls inside its card, one window over every group that draws the rows in view before the frame
+    paints (`docs/performance.md` → All tasks); once it is scrolled past one screen, an `outline` `sm` Back to top
+    button (`IconArrowUp`) floats at the card's bottom centre, like the chat's Jump to latest, and scrolls the list
+    back to its first row.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
     first. Every open section is drawn as a tree that handles every shape
     (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from
@@ -2817,34 +2821,39 @@ Only these, and they win over anything below:
       row (measured: 4px right, 4px top), so every Start, Restart and Stop and the header's play button share one x and
       no row's button sits tighter to its edge than another's (a 2px inset, tried on 2026-10-28, matched the task runs
       and crowded the two-line service rows). The rows follow one
-      another with no gap, as the queue's do. The list's top is inset 6px more than a section's own padding
-      (`COMPACT_POPOVER_INSET`, the queue popover's too), so the first header's dot sits as far from the top as from
-      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). Its bottom is inset by as much
-      only while the last project is folded (`has-[>section:last-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
-      a folded section `data-folded`), so a project folded on its own sits as far from the footer's hairline as from the
-      popover's top (12px each); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
+      another with no gap, as the queue's do. Unlike the queue's, the list's top takes only a section's own padding,
+      without `COMPACT_POPOVER_INSET`, so the first header sits as far from the popover's top as the section's last row
+      from its hairline (measured: 6px and 6px; asked for on 2026-11-14, the extra 6px read as a gap). Its bottom is inset 6px more
+      only while the only project is folded (`has-[>section:only-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
+      a folded section `data-folded`); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
       sits from the popover's sides. A row
-      (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
+      (`ServiceRow`) is one short line (`h-7`, no command: the command is Manage's): the state's tile, `sm`, in the
+      icon slot so it sits under the project's dot (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
-      mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
-      1") and the command in mono. Pressing the row opens its terminal once it has one. The row's actions sit at its
-      end, `icon-sm`: Start (`IconPlay`) is always there on a service that does not run; Restart
-      (`IconArrowRotateClockwise`) and Stop (`IconStop`) show on a running one while the row is under the pointer (the
-      shared highlight's `data-hovered`), 1px apart (`gap-px`), as the same pair is on the Terminal page's toolbar and
-      as adjacent ghost buttons in an `InputGroup` addon are: each hover wash is its own edge, so the pair reads as one
-      set (measured: 1px between Restart and Stop, each 24px). A running row whose service has a preview URL ends
-      with Open (`ServicePreviewButton`, `icon-sm`, `IconArrowUpRight`, after Stop, 1px apart): always shown, not only
-      under the pointer, since the link is what you came for; its tooltip "Open ‹name›" ("Open ‹name› for ‹task›" on a
+      mark that never reads as a checkbox), the name and the state beside it in its tone ("Running for 12m", "Failed
+      with code 1"), then the chevron right after the state, as the project header has it after its counts, on a service
+      with runs in tasks. The line ends with its buttons, `icon-xs`, 1px apart (`gap-px`): Restart
+      (`IconArrowRotateClockwise`) and Stop (`IconStop`) on a running service and Share on a task's run with a preview,
+      those three shown under the pointer; Terminal (`IconConsole`, "Open the terminal of ‹name›",
+      `describeServiceTerminal`) once the service has a terminal, so it opens in one press; then Start (`IconPlay`) on
+      a service that does not run, or Open (`ServicePreviewButton`, `IconArrowUpRight`) on a running one with a
+      preview URL, an empty slot of its size when it has neither, so every row's last button stays in one column. Its
+      tooltip is "Open ‹name›" ("Open ‹name› for ‹task›" on a
       task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
       port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
-      Terminal page's toolbar have the same button. Evidence's Preview group links the task's running previews too,
+      Terminal page's toolbar have the same button. A service with runs in tasks folds
+      them under it, closed by default, its chevron shown under the pointer, and keeps its fold in
+      the disclosure store (`resolveServiceRowId`, `services:service:<id>`) across openings and reloads. Only the top
+      bar's popover passes runs, so a task's Services popover never folds; expanded, the runs hang under it on a tree line, each with its own
+      buttons. The project header keeps its chevron after its counts, as the queue's does (putting it after the play
+      button, tried on 2026-11-14, pushed the play out of the rows' column), and its play button is `icon-xs` as the rows' are, so
+      the header's play lines up with the rows' Start. Evidence's Preview group links the task's running previews too,
       after the ones the agent attached, as a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's
       name, its URL; `listTaskPreviews`), there only while the run is active and left out when the agent attached a
       link to the same server already (`listUnattachedPreviews`, by origin, since the agent's carries the screen's
       path). How to test stays the agent's: it names the preview it attached. A row has no `•••`: editing and removing are Manage's. Measured in the
-      browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
-      24px wide.
+      browser: the header's play button and every row's last button at the same x, 22px wide.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the
       trigger (`max-h-(--available-height)`, `COMPACT_POPOVER`, the queue popover's classes) and then scrolls,
       its footer staying put. Add services, the custom form and a service's form keep one height of their own,
@@ -2934,8 +2943,8 @@ Only these, and they win over anything below:
       washed while open like a fact's. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
       ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
       `ServiceRow` per service for this task, the list inset 6px on every side (`p-1.5`) so the first tile sits 12px
-      from the popover's side and 12px from the header's hairline: its state is the task's run's, Start starts it in
-      the worktree, and the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
+      from the popover's side and 12px from the header's hairline, folded the same way: its state is the task's run's,
+      Start starts it in the worktree, and its Terminal button opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in

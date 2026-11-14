@@ -166,6 +166,13 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
     if (session.info.endedAt !== null) receive(ENCODER.encode('\r\n'));
     lastOutputAt = null;
     stopping = false;
+    const process = yield* spawn(command, {
+      cwd: session.info.cwd,
+      cols: mirror.cols,
+      rows: mirror.rows,
+      env,
+      onData: receive,
+    });
     session.info = {
       ...session.info,
       status: 'running',
@@ -175,15 +182,17 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
       title: null,
     };
     touch();
-    const process = yield* spawn(command, {
-      cwd: session.info.cwd,
-      cols: mirror.cols,
-      rows: mirror.rows,
-      env,
-      onData: receive,
-    });
     running = process;
     yield* Effect.forkDetach(awaitExit(process));
+  });
+
+  const fail = Effect.fn('TerminalSession.fail')(function* (reason: string) {
+    if (running || disposed) return;
+    receive(ENCODER.encode(`${reason}\r\n`));
+    flushBatch();
+    session.info = { ...session.info, status: 'exited', exitCode: null, endedAt: yield* options.now };
+    yield* options.onChange;
+    yield* options.onScreen(session);
   });
 
   const session: TerminalSession = {
@@ -201,6 +210,7 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
       return lastActiveAt;
     },
     start,
+    fail,
     attach(viewer) {
       flushBatch();
       viewers.set(viewer, { behind: false });
