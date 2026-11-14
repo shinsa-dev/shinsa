@@ -541,6 +541,44 @@ each value is the Event Timing duration of one `input` event, handling plus the 
   render (100 on Jump to a task), so cmdk never scores and re-sorts hundreds of rows in the DOM. Typing now searches
   every task, not only the newest 300.
 
+### All tasks (2026-11-14)
+
+Measured with `content-measure.ts` on the 300-task seed above (production build, `SHINSA_INSPECT=1`), three fresh
+browsers a scenario, the median. `SHINSA_PERF_CPU=4` runs the same with Chromium's CPU slowed four times
+(`Emulation.setCPUThrottlingRate`), standing in for a machine busy with other agents' builds. The scenarios:
+
+- **`lists`**: Home → All tasks, timed to the frame after the first row (`[data-depth]`) is in the DOM, then 120
+  frames of 120px scrolled by `scrollTop`.
+- **`wheelTasks`** and **`wheelTasksWhilePushed`**: 45 wheel events of 240px, 16 ms apart, sent through CDP
+  (`Input.dispatchMouseEvent`, so the browser scrolls as a flick does), the second with a one-task state patch every
+  250 ms. Each frame, the probe hit-tests the list every 4px down its task column; a point on an empty spacer of the
+  window (a childless `aria-hidden` box in the scroller) is blank. `blankFrames` counts frames with any blank,
+  `blankPxMax` the most blank pixels in one.
+- **`revealTasks`**: from Home back to the kept All tasks page, rows in view on each of the first 30 frames.
+- **`taskPushes`**: ten `state.patch` messages, each changing `updatedAt` of one task in view, on the page's own
+  socket. A stand-in for the React DevTools hook (`__REACT_DEVTOOLS_GLOBAL_HOOK__`, set before the bundle runs)
+  counts, for each commit, the components that rendered (`PerformedWork`, only in subtrees React cloned) and the
+  rows among them (a rendered component whose first element is a row).
+
+| Measure (300 tasks) | Before | After |
+| --- | --- | --- |
+| Home → All tasks: to paint / longest task | 25 ms / none | |
+| … at 4× CPU | 126 / 109 ms | |
+| Flick (6,568px): frames with blank rows / longest frame | 0 of 112 / 16.8 ms | |
+| … at 4× CPU | 0 of 106 / 66.7 ms (60 frames over 20 ms) | |
+| Flick with a push every 250 ms, at 4× CPU | 0 of 100 / 133 ms (80 over 20 ms, longest task 108 ms) | |
+| Back to All tasks: frames short of rows | 0 | |
+| One-task push: rows / components re-rendered | 27 of 27 / 4,471 | |
+| … to paint, at 1× / 4× CPU | 7 / 35 ms | |
+
+- **What the numbers say.** The window keeps up: no frame showed a spacer, even at 4× CPU and with pushes. What is
+  slow is the work behind it: a push for one task re-renders every row in view and 4,471 components (All tasks and
+  the kept pages behind it, `docs/design.md`, 35), 35 ms at 4× CPU, and a flick that meets pushes has 133 ms frames.
+  The probe reads the main thread's view of the list; the compositor scrolls on during such a frame, so that is where
+  a person sees rows arrive late. The first paint at 4× CPU is a 109 ms task.
+- **The user's data.** A copy of the real event log could not be read for this pass: it needs a migration this
+  branch's engine does not run in inspect mode.
+
 ### What is left
 
 - **Revealing Review still renders about 620 components** and Code about 650: what is left is the tabs' own effects
