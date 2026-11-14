@@ -95,7 +95,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   automations: {
     id: 'automations',
     label: 'Automations',
-    sections: ['Schedules', WATCHDOG_SETTINGS_TITLE],
+    sections: [WATCHDOG_SETTINGS_TITLE, 'Schedules'],
   },
 };
 

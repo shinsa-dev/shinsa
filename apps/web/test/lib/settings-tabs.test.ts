@@ -45,7 +45,7 @@ describe('settings tabs', () => {
     expect(findSettingsTab('statistics').sections).toEqual(['Shipping', 'Token usage']);
     expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Worktrees', 'Projects']);
     expect(findSettingsTab('browser').sections).toEqual(['Browser']);
-    expect(findSettingsTab('automations').sections).toEqual(['Schedules', 'Watchdogs']);
+    expect(findSettingsTab('automations').sections).toEqual(['Watchdogs', 'Schedules']);
   });
 
   it('opens Integrations for a link to the context optimizer', () => {
@@ -92,7 +92,7 @@ describe('settings tabs', () => {
     expect(resolveSectionTab('Notifications')).toBe('general');
     expect(resolveSectionTab('Somewhere else')).toBe('general');
     expect(resolveSectionRank('Appearance')).toBe(0);
-    expect(resolveSectionRank('Watchdogs')).toBeGreaterThan(resolveSectionRank('Schedules'));
+    expect(resolveSectionRank('Schedules')).toBeGreaterThan(resolveSectionRank('Watchdogs'));
     expect(resolveSectionRank('Somewhere else')).toBe(Number.POSITIVE_INFINITY);
   });
 

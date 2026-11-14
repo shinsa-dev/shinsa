@@ -450,7 +450,7 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
    (`planFirst`: `shinsa do --plan-first`) or kept in the backlog (Scheduling → The backlog, below)
    always waits at a plan gate; otherwise Settings → Agents →
-   Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
+   Engine, Approve plans (`approvePlans`: `when_asked`, `large`, the default, or `always`) decides: on Large plans a
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
    not. The size is the plan's, never triage's guess from the request. A decision

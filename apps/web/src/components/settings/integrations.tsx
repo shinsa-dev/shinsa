@@ -45,7 +45,10 @@ export function IntegrationSettings({ state }: { state: ShinsaState }) {
   const { searching } = matches;
   return (
     <>
-      <div data-slot='integrations-search' className='sticky top-0 z-10 -mt-3 -mb-3 bg-background py-3'>
+      <div
+        data-slot='integrations-search'
+        className='sticky top-0 z-40 -mx-2 -mt-3 -mb-3 bg-background px-2 py-3'
+      >
         <Input
           type='search'
           value={query}

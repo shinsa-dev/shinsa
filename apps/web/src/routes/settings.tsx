@@ -149,8 +149,8 @@ function TabSections({
     case 'automations':
       return (
         <>
-          <ScheduleSettings state={state} />
           <WatchdogSettings settings={state.settings} />
+          <ScheduleSettings state={state} />
         </>
       );
   }
@@ -206,7 +206,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
           onValueChange={openTab}
         />
       </header>
-      <PageScroll viewportRef={scroller}>
+      <PageScroll viewportRef={scroller} fade={tab === 'integrations' ? 'end' : true}>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-6 pt-3 pb-12')}>
           <TabSections state={state} tab={tab} automatic={automatic} />
         </div>

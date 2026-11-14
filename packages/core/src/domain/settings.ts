@@ -273,7 +273,7 @@ const DEFAULT_SETTINGS: Settings = {
   delegationLimit: null,
   mergeMethod: 'squash',
   attentionLimit: DEFAULT_ATTENTION_LIMIT,
-  approvePlans: 'when_asked',
+  approvePlans: 'large',
   agentModels: {},
   agentProviders: {},
   agentFastModes: {},

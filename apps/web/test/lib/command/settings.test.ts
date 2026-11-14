@@ -72,8 +72,8 @@ describe('Jump to', () => {
       ['MCPs', 'Integrations'],
       ['Plugins', 'Integrations'],
       ['Skills', 'Integrations'],
-      ['Schedules', 'Automations'],
       ['Watchdogs', 'Automations'],
+      ['Schedules', 'Automations'],
     ]);
   });
 
@@ -104,7 +104,7 @@ describe('Change a setting', () => {
       ['Play a sound', 'When Shinsa is in the background'],
       ['Sound', 'Chime'],
       ['Show a notification', 'Never'],
-      ['Approve plans', 'When you ask'],
+      ['Approve plans', 'Large plans'],
       ['Automatic fix rounds', 'Until clean'],
       ['Delegations at once', 'No limit'],
       ['Merge with', 'Squash'],

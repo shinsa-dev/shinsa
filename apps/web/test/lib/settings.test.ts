@@ -148,10 +148,10 @@ describe('setting choices', () => {
 });
 
 describe('setting values', () => {
-  it('reads which plans need approval, when you ask by default', () => {
-    expect(resolvePlanValue(settings({ approvePlans: 'large' }))).toBe('large');
+  it('reads which plans need approval, large plans by default', () => {
+    expect(resolvePlanValue(settings({ approvePlans: 'when_asked' }))).toBe('when_asked');
     expect(resolvePlanValue(settings({ approvePlans: 'always' }))).toBe('always');
-    expect(resolvePlanValue(settings({ approvePlans: undefined }))).toBe('when_asked');
+    expect(resolvePlanValue(settings({ approvePlans: undefined }))).toBe('large');
   });
 
   it('round-trips the fix round limit, with no limit as until clean', () => {

@@ -369,7 +369,7 @@ export function describeDailyLimitNote(settings: Settings, recent: number) {
 }
 
 export function resolvePlanValue(settings: Settings) {
-  return settings.approvePlans ?? 'when_asked';
+  return settings.approvePlans ?? 'large';
 }
 
 export function resolveFixRoundValue(settings: Settings) {

@@ -200,7 +200,7 @@ function listMergeChoices(context: StepReadContext, answered: boolean) {
 }
 
 function listPlanChoices(context: StepReadContext, answered: boolean) {
-  const picked = answered ? (context.settings.approvePlans ?? 'when_asked') : RECOMMENDED_PLANS;
+  const picked = answered ? (context.settings.approvePlans ?? 'large') : RECOMMENDED_PLANS;
   return PLAN_OPTIONS.map((option) =>
     createChoice(
       'plans',
@@ -214,7 +214,7 @@ function listPlanChoices(context: StepReadContext, answered: boolean) {
 }
 
 function resolvePlanLabel(approval: PlanApproval | undefined) {
-  return PLAN_OPTIONS.find((option) => option.value === (approval ?? 'when_asked'))?.summary as string;
+  return PLAN_OPTIONS.find((option) => option.value === (approval ?? 'large'))?.summary as string;
 }
 
 const listDefaultGroups = Effect.fn('OnboardingSteps.listDefaultGroups')(function* (

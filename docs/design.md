@@ -1949,8 +1949,7 @@ Only these, and they win over anything below:
       (`SettingsGroup`, a `2xs` `fg-2` line), the one thing people fear about updating: "Updating or quitting the app
       never stops your agents. After an update the engine restarts into the new version on its own, and agents pick
       up where they were."
-      In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
-      are in its own Settings."
+      In a browser or Floaty there is no Updates card, only its What's new row when a changelog is there.
 
 28. **The task chat is the one place to talk.** An Answer task is how you just talk (`docs/engine.md` → Agents
     manage Shinsa); nothing in the top bar, the rail or ⌘K opens a conversation of its own.
