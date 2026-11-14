@@ -7,6 +7,7 @@ import { Accounts } from '../../src/accounts/roster/service.ts';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Providers } from '../../src/agents/providers/registry/service.ts';
 import { Transcripts } from '../../src/agents/transcripts/service.ts';
+import { AppUpdates } from '../../src/app-updates/service.ts';
 import { BrowserCookies } from '../../src/browser/cookies/service.ts';
 import { BrowserHost } from '../../src/browser/host/service.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
@@ -95,6 +96,7 @@ export interface HttpContext {
   place?: PlacementAsker['Service'];
   workspaces?: Workspaces['Service'];
   restarter?: EngineRestarter['Service'];
+  appUpdates?: AppUpdates['Service'];
   terminals?: Terminals['Service'];
   refiner?: ServiceRefiner['Service'];
   resources?: Pick<ResourceMonitor['Service'], 'subscribe' | 'snapshot'>;
@@ -123,6 +125,7 @@ const OPTIONAL_SERVICES = [
   ['place', PlacementAsker],
   ['workspaces', Workspaces],
   ['restarter', EngineRestarter],
+  ['appUpdates', AppUpdates],
   ['terminals', Terminals],
   ['refiner', ServiceRefiner],
   ['resources', ResourceMonitor],

@@ -4,6 +4,10 @@ import * as shapes from '../../src/engine-api/schema.ts';
 import {
   AccountLoginRequest,
   AnyBody,
+  AppUpdateReport,
+  AppUpdateReportAnswer,
+  AppUpdateRequest,
+  AppUpdatesAnswer,
   BrowserCopyAnswer,
   BrowserProjectAnswer,
   BrowserSourceSitesAnswer,
@@ -41,6 +45,8 @@ const STRUCT_ANSWERS = new Set([
   'BrowserSourcesAnswer',
   'BrowserSourceSitesAnswer',
   'BrowserCopyAnswer',
+  'AppUpdateReportAnswer',
+  'AppUpdatesAnswer',
 ]);
 
 const ANSWERS = Object.entries(shapes).filter(
@@ -163,5 +169,43 @@ describe('EngineApi shapes', () => {
 
   test('an attachment upload may carry the base64 of a 25 MB file and its fields', () => {
     expect(ATTACHMENT_UPLOAD_LIMIT_BYTES).toBe(Math.ceil((ATTACHMENT_LIMIT_BYTES * 4) / 3) + 64 * 1024);
+  });
+  test('the app reports its version, channel and update, and gets back the requests waiting for it', () => {
+    const report = {
+      version: '1.4.0',
+      protocol: 1,
+      channel: 'beta',
+      update: { status: 'ready', version: '1.5.0' },
+    } as const;
+    expect(Schema.decodeUnknownSync(AppUpdateReport)(report)).toEqual(report);
+    expect(() => Schema.decodeUnknownSync(AppUpdateReport)({ ...report, channel: 'nightly' })).toThrow();
+    expect(() =>
+      Schema.decodeUnknownSync(AppUpdateReport)({ ...report, update: { status: 'ready' } })
+    ).toThrow();
+    const answer = { requests: [{ kind: 'install' }, { kind: 'channel', channel: 'canary' }] } as const;
+    expect(Schema.decodeUnknownSync(AppUpdateReportAnswer)(answer)).toEqual(answer);
+  });
+
+  test('a request checks, installs, switches channel or answers the go-back offer', () => {
+    expect(Schema.decodeUnknownSync(AppUpdateRequest)({ kind: 'downgrade', accept: false })).toEqual({
+      kind: 'downgrade',
+      accept: false,
+    });
+    expect(() =>
+      Schema.decodeUnknownSync(AppUpdateRequest)({ kind: 'channel', channel: 'nightly' })
+    ).toThrow();
+    expect(() => Schema.decodeUnknownSync(AppUpdateRequest)({ kind: 'quit' })).toThrow();
+  });
+
+  test('the view says where the engine came from, whether the app answers and what it installs', () => {
+    const view = {
+      source: 'app',
+      running: false,
+      app: null,
+      installing: '1.5.0',
+      engine: { version: '1.4.0', protocol: 1 },
+    } as const;
+    expect(Schema.decodeUnknownSync(AppUpdatesAnswer)(view)).toEqual(view);
+    expect(() => Schema.decodeUnknownSync(AppUpdatesAnswer)({ ...view, source: 'brew' })).toThrow();
   });
 });
