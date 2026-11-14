@@ -2122,7 +2122,10 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
   (`isReadOnlyRun`), in the repository itself, in the task's watch session (`Decider.taskSession` with purpose `watch`):
   the first check starts it with the round brief, so it knows what shipped, and later checks resume it. The Agent's
-  own session never resumes a check, and a check never resumes the Agent's. A check is a read of a data source like a watch's (Schedules and webhooks, below), scoped to the shipped
+  own session never resumes a check, and a check never resumes the Agent's. Everything that lists tasks reads a check
+  as the task at rest (`isWatchCheck`, `resolveShownStage`: `watching` shows as `merged`, or `done` when nothing
+  merged): the queue leaves it out of `working`, All tasks keeps it in Done, the counts count it done, and moving into
+  or out of `watching` keeps `stageChangedAt`, so the task keeps its place in Done and in Recently finished. A check is a read of a data source like a watch's (Schedules and webhooks, below), scoped to the shipped
   change: its prompt (`resolveWatchPrompt`, on the skeleton both share, `resolveReadPrompt` in `prompts/reads.ts`)
   names the watchdog, its check as what to look for, its source, what arrived since its last check (or since the
   window started), its last checks and the last 10 tasks filed from that server in the project.

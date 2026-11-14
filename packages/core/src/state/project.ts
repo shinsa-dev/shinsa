@@ -18,6 +18,7 @@ import {
   formatTaskHandle,
   type Gate,
   isTaskSettled,
+  isWatchCheck,
   type Initiative,
   type MemoryEntry,
   NO_FOCUS,
@@ -367,6 +368,11 @@ function resolveCancelledFrom(task: Task | undefined, stage: TaskStage) {
   return { cancelledFrom: task.stage };
 }
 
+function resolveStageChangedAt(task: Task | undefined, stage: TaskStage, at: number) {
+  if (!task || (!isWatchCheck(task) && !isWatchCheck({ stage }))) return at;
+  return task.stageChangedAt;
+}
+
 function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
   const task = state.tasks[event.taskId];
   const previous = task?.stage;
@@ -374,7 +380,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
   updateTask(state, event.taskId, event.at, {
     stage,
     stageReason: event.reason,
-    stageChangedAt: event.at,
+    stageChangedAt: resolveStageChangedAt(task, stage, event.at),
     ...resolveCancelledFrom(task, stage),
     ...(stage === 'checking' ? {} : { runningChecks: [] }),
     ...(task?.movingTo && isTaskSettled({ stage }) ? { movingTo: null } : {}),
