@@ -1575,8 +1575,13 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   already in another initiative stays there; a task already in one is refused (`initiative_exists`). This is how an
   effort like SW-101's chat split moves in after the fact.
 - **A plan can propose one.** A plan with a `split` may set `initiative: true` when the parts are one effort that will
-  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). The plan card
-  and its markdown say so under the other tasks (`PLAN_INITIATIVE_NOTE`), and approving the plan splits the parts off
+  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). An initiative
+  is never a bundle: its tasks each merge on their own, so its parts start `parallel` or `waits_on` the part whose merge
+  they need, each with the `phase` it belongs to, and a plan that sets `initiative` with a `stacks_on` part is refused,
+  as is a lead's own plan with one (`validatePlanRules`). The plan card says so: "The agent
+  wants to start this as an initiative of N tasks", Start initiative, and that each task merges on its own while a lead
+  keeps track of them (`describePlanCard`, `lib/tasks/backlog.ts`); its markdown says so under the other tasks
+  (`PLAN_INITIATIVE_NOTE`). Approving the plan splits the parts off
   and then adopts the task (`startPlanInitiative`), so the task, its parts and a lead forked from it become the
   initiative in one click. A task already in an initiative keeps it, and its parts join it.
 - **The sheet** (`resolveInitiativeSheet`, pure, no model call) is the lead task's Overview, `shinsa initiatives show`
@@ -1759,7 +1764,8 @@ stacked as a bundle, which is how most splits end; in parallel only for a part w
 alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
 Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
 every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
-`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle. A plan
+that starts an initiative says initiative instead, never bundle (Start initiative, Initiatives, above).
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
