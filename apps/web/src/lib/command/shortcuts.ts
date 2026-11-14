@@ -1,3 +1,4 @@
+import { isTyping } from '@/lib/keys.ts';
 import { resolveTerminalEntry } from '@/lib/terminal/tabs.ts';
 
 export type AppShortcutTarget = 'home' | 'tasks' | 'settings' | 'terminal';
@@ -44,12 +45,6 @@ export const APP_SHORTCUTS: readonly AppShortcut[] = [
 ];
 
 const NONE: AppShortcutResult = { kind: 'none' };
-
-function isTyping(target: EventTarget | null) {
-  const element = target as Partial<HTMLElement> | null;
-  if (!element || typeof element.tagName !== 'string') return false;
-  return element.isContentEditable === true || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName);
-}
 
 function resolveModifierKey(event: AppKeyPress, mac: boolean): AppShortcutResult {
   const modifier = mac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
