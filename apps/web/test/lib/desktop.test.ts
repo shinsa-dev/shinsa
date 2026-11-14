@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import {
   answerDesktopDowngrade,
   applyDesktop,
+  applyDesktopLocalEngine,
+  applyDesktopMachine,
   applyDesktopChannel,
   checkDesktopUpdates,
   installDesktopUpdate,
@@ -12,8 +14,10 @@ import {
   openDesktopNotificationSettings,
   readDesktopChannel,
   readDesktopUpdate,
+  requestDesktopSignIn,
   resolveSurface,
   selectDesktopBuild,
+  selectDesktopSource,
   subscribeDesktopAway,
   subscribeDesktopNotifyFailed,
   subscribeDesktopUpdate,
@@ -189,5 +193,34 @@ describe('the app’s own update', () => {
     expect(fake.channels).toEqual(['stable']);
     expect(heard).toBe(1);
     stop();
+  });
+});
+
+describe('which engine the app shows', () => {
+  const STUDIO = { id: 'k3x9', name: 'Studio' };
+
+  it('is no source in a browser, and asking to sign in or switch does nothing', () => {
+    expect(selectDesktopSource()).toBeNull();
+    expect(requestDesktopSignIn()).toBe(false);
+    applyDesktopLocalEngine();
+    applyDesktopMachine(STUDIO);
+  });
+
+  it('is no source in an older app that has no engine choice', () => {
+    fake = installDesktop();
+    expect(selectDesktopSource()).toBeNull();
+    expect(requestDesktopSignIn()).toBe(false);
+    applyDesktopLocalEngine();
+    applyDesktopMachine(null);
+  });
+
+  it('reads the app’s source and hands sign-in and every switch to the app', () => {
+    fake = installDesktop('window', { kind: 'cloud', machine: STUDIO });
+    expect(selectDesktopSource()).toEqual({ kind: 'cloud', machine: STUDIO });
+    expect(requestDesktopSignIn()).toBe(true);
+    applyDesktopMachine(null);
+    applyDesktopMachine(STUDIO);
+    applyDesktopLocalEngine();
+    expect(fake.sourceCalls).toEqual(['sign in', null, STUDIO, 'local']);
   });
 });

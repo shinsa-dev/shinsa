@@ -2,9 +2,10 @@ import type { RemoteSession } from '@shinsa/core';
 import { REMOTE_PATHS } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
+import { Input } from '@shinsa/ui/components/input';
 import { Logo } from '@shinsa/ui/components/logo';
 import { cn } from '@shinsa/ui/lib/utils';
-import type * as React from 'react';
+import * as React from 'react';
 import {
   SAFE_AREA_BOTTOM,
   SAFE_AREA_SIDES,
@@ -13,6 +14,7 @@ import {
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { SettingsCard } from '@/components/settings/group.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
+import { applyDesktopLocalEngine, requestDesktopSignIn, selectDesktopSource } from '@/lib/desktop.ts';
 import { TONE_SURFACE, type Tone } from '@/lib/format/tone.ts';
 import { type DashboardClient, describeSignInError, resolveSignInUrl } from '@/lib/remote/dashboard.ts';
 import {
@@ -23,6 +25,7 @@ import {
   MACHINE_ICON,
   type RemotePoint,
 } from '@/lib/remote/mode.ts';
+import { resolveInviteLinkPath, VIEWER_COPY } from '@/lib/remote/viewer-mode.ts';
 import { HANDOFF_ICON } from '@/lib/share/handoff.ts';
 
 export function RemoteShell({
@@ -151,6 +154,7 @@ export function SignInPrompt({
   error: string | null;
   handoff?: boolean;
 }) {
+  const inApp = selectDesktopSource() !== null;
   return (
     <section className='flex flex-col items-center gap-6 pt-4'>
       {handoff ? (
@@ -170,10 +174,18 @@ export function SignInPrompt({
         </p>
       )}
       <div className='flex w-full flex-col items-center gap-2'>
-        <Button className='w-full' nativeButton={false} render={<a href={resolveSignInUrl(returnPath)} />}>
-          <Icon name='IconGithub' />
-          Sign in with GitHub
-        </Button>
+        {inApp ? (
+          <Button className='w-full' onClick={() => requestDesktopSignIn()}>
+            <Icon name='IconGithub' />
+            Sign in with GitHub
+          </Button>
+        ) : (
+          <Button className='w-full' nativeButton={false} render={<a href={resolveSignInUrl(returnPath)} />}>
+            <Icon name='IconGithub' />
+            Sign in with GitHub
+          </Button>
+        )}
+        {inApp && <UseLocalEngineButton />}
         <p className='text-center text-2xs text-fg-2'>
           {handoff
             ? CLAIM_SIGN_IN_NOTE
@@ -210,5 +222,50 @@ export function RemoteHero({
         <p className='text-xs text-pretty text-fg-2'>{children}</p>
       </div>
     </div>
+  );
+}
+
+export function UseLocalEngineButton() {
+  return (
+    <Button variant='secondary' className='w-full' onClick={() => applyDesktopLocalEngine()}>
+      {VIEWER_COPY.useLocal}
+    </Button>
+  );
+}
+
+export function InviteLinkForm() {
+  const [link, setLink] = React.useState('');
+  const [invalid, setInvalid] = React.useState(false);
+  return (
+    <form
+      className='flex w-full flex-col gap-1.5'
+      onSubmit={(event) => {
+        event.preventDefault();
+        const path = resolveInviteLinkPath(link);
+        setInvalid(path === null);
+        if (path) location.assign(path);
+      }}
+    >
+      <div className='flex gap-1.5'>
+        <Input
+          size='sm'
+          value={link}
+          placeholder={VIEWER_COPY.invitePlaceholder}
+          aria-label={VIEWER_COPY.inviteLabel}
+          onChange={(event) => {
+            setLink(event.target.value);
+            setInvalid(false);
+          }}
+        />
+        <Button type='submit' size='sm' disabled={!link.trim()}>
+          {VIEWER_COPY.inviteSubmit}
+        </Button>
+      </div>
+      {invalid && (
+        <p role='alert' className='text-2xs text-pretty text-destructive'>
+          {VIEWER_COPY.inviteInvalid}
+        </p>
+      )}
+    </form>
   );
 }

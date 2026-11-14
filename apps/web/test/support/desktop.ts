@@ -3,7 +3,9 @@ import type {
   DesktopActions,
   DesktopBridge,
   DesktopNotice,
+  DesktopSource,
   DesktopUpdate,
+  PinnedMachine,
   UpdateChannel,
 } from '@/lib/desktop.ts';
 
@@ -15,7 +17,8 @@ export const IGNORED_ACTIONS: DesktopActions = {
   'whats-new': () => undefined,
 };
 
-export function installDesktop(windowState: WindowState = 'window') {
+export function installDesktop(windowState: WindowState = 'window', source: DesktopSource | null = null) {
+  const sourceCalls: (PinnedMachine | 'local' | 'sign in' | null)[] = [];
   const badges: number[] = [];
   const notices: DesktopNotice[] = [];
   const navigateListeners = new Set<(path: string) => void>();
@@ -46,6 +49,14 @@ export function installDesktop(windowState: WindowState = 'window') {
     checkForUpdates: () => updateCalls.push('check'),
     applyUpdateChannel: (channel) => channels.push(channel),
     answerDowngrade: (accept) => updateCalls.push(accept ? 'downgrade' : 'keep beta'),
+    ...(source
+      ? {
+          source,
+          signIn: () => sourceCalls.push('sign in'),
+          useLocalEngine: () => sourceCalls.push('local'),
+          useMachine: (machine: PinnedMachine | null) => sourceCalls.push(machine),
+        }
+      : {}),
     onUpdate: (listener) => {
       updateListeners.add(listener);
       return () => updateListeners.delete(listener);
@@ -73,6 +84,7 @@ export function installDesktop(windowState: WindowState = 'window') {
     badges,
     notices,
     updateCalls,
+    sourceCalls,
     channels,
     settingsOpened: () => settingsOpened,
     failNotice: () => {

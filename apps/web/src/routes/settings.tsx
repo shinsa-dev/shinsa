@@ -13,6 +13,7 @@ import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
 import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
+import { EngineSourceSettings } from '@/components/settings/engine-source.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
@@ -97,6 +98,7 @@ function TabSections({
           )}
           <SharingSettings settings={state.settings} />
           <SlackSettings />
+          <EngineSourceSettings />
           <UpdateSettings />
           <SetupSettings />
         </>

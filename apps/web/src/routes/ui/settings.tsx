@@ -13,6 +13,7 @@ import * as React from 'react';
 import { type AccountActions, AccountsGroup } from '@/components/settings/accounts.tsx';
 import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
+import { type EngineSourceActions, EngineSourceGroup } from '@/components/settings/engine-source.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
 import { HostedTeamsGroup, HostedTeamsSettings } from '@/components/settings/hosted-teams.tsx';
 import { MachineAccessRequests, MachinesSettings } from '@/components/settings/machines.tsx';
@@ -34,7 +35,7 @@ import { type EngineStatus, resolveEngineView } from '@/lib/connection/engine.ts
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
 import type { SlackActions } from '@/lib/connection/slack.ts';
 import { replaceConnection } from '@/lib/connection/socket.ts';
-import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
+import type { DesktopSource, DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import type { MemoryActions } from '@/lib/memory.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import type { Fleet } from '@/lib/remote/fleet.ts';
@@ -104,6 +105,23 @@ const SAMPLE_EXTENSION_ACTIONS: ExtensionActions = {
   choosePlugin: acknowledgeSample,
   chooseOptimizer: acknowledgeSample,
 };
+
+const SAMPLE_ENGINE_SOURCE_ACTIONS: EngineSourceActions = {
+  pickLocal: () => undefined,
+  pickMachine: () => undefined,
+};
+
+const ENGINE_SOURCE_SCENES: { label: string; source: DesktopSource }[] = [
+  { label: 'EngineSourceGroup · the Mac app on this Mac’s engine', source: { kind: 'local' } },
+  {
+    label: 'EngineSourceGroup · the Mac app showing Studio through Shinsa Cloud',
+    source: { kind: 'cloud', machine: { id: 'k3x9', name: 'Studio' } },
+  },
+  {
+    label: 'EngineSourceGroup · the Mac app on Shinsa Cloud, no machine chosen',
+    source: { kind: 'cloud', machine: null },
+  },
+];
 
 const SAMPLE_UPDATE_ACTIONS: UpdateActions = {
   check: () => void acknowledgeSample(),
@@ -659,6 +677,13 @@ export function SettingsSpecimens() {
               updating={[]}
               actions={SAMPLE_VERSION_ACTIONS}
             />
+          </div>
+        </Specimen>
+      ))}
+      {ENGINE_SOURCE_SCENES.map(({ label, source }) => (
+        <Specimen key={label} label={label}>
+          <div className='w-full max-w-xl'>
+            <EngineSourceGroup source={source} actions={SAMPLE_ENGINE_SOURCE_ACTIONS} />
           </div>
         </Specimen>
       ))}

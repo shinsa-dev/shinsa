@@ -24,6 +24,7 @@ import {
   useMachines,
   useUnreachableMachines,
 } from '@/lib/connection/socket.ts';
+import { selectDesktopSource } from '@/lib/desktop.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { REMOTE_ACCESS_SECTION } from '@/lib/remote-access.ts';
 import {
@@ -39,6 +40,7 @@ import {
 import { describeOutdatedMachine, MACHINES_SECTION } from '@/lib/remote/mode.ts';
 import { describeMachineResources, listResourceGauges, NO_RESOURCE_READING } from '@/lib/remote/resources.ts';
 import { RemoteServicesContext } from '@/lib/remote/services.ts';
+import { listScopedRows, resolveMachineScope } from '@/lib/remote/viewer-mode.ts';
 import { runApp } from '@/lib/runtime/app.ts';
 import { SETTING_ROW, SettingsEmpty, SettingsGroup, SettingsSection } from './group.tsx';
 import { PolicySettings } from './policies.tsx';
@@ -235,7 +237,7 @@ function useMachineRows() {
     let live = true;
     runApp(listMachineRows(services.dashboard, services.devices)).then(
       (next) => {
-        if (live) setRows(next);
+        if (live) setRows(listScopedRows(next, resolveMachineScope(selectDesktopSource())));
       },
       (error: unknown) => {
         if (live) setFailure((error as Error).message);

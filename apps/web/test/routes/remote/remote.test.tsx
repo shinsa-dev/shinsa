@@ -29,6 +29,7 @@ import { ClaimPage } from '@/routes/remote/claim.tsx';
 import { EnrollPage } from '@/routes/remote/enroll.tsx';
 import { RemoteRoot } from '@/routes/remote/index.tsx';
 import { PairPage } from '@/routes/remote/pair.tsx';
+import { installDesktop } from '../../support/desktop.ts';
 import { createRemoteSnapshot } from '../../support/remote-access.ts';
 import { createMachineResources, createTaskResources } from '../../support/resources.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
@@ -317,6 +318,117 @@ describe('the remote dashboard', () => {
     unmount();
     renderRoot('/claim', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
     expect(await screen.findByText('Work on a task handed to you')).toBeTruthy();
+  });
+});
+
+describe('Shinsa for Mac on Shinsa Cloud', () => {
+  const LAPTOP: RemoteInstance = { ...STUDIO, id: 'v9q1', name: 'Laptop' };
+  const PINNED_STUDIO = { id: 'k3x9', name: 'Studio' };
+  let app: ReturnType<typeof installDesktop> | null = null;
+
+  afterEach(() => {
+    app?.restore();
+    app = null;
+  });
+
+  it('shows only the machine the app is set to, so its badge and notifications are that machine’s', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: PINNED_STUDIO });
+    const view = renderRoot('/tasks', {
+      dashboard: createDashboard({ listInstances: () => Promise.resolve([STUDIO, LAPTOP]) }),
+      devices: createDevices(DEVICE),
+    });
+    expect(await screen.findByText('The app')).toBeTruthy();
+    expect((connection as Fleet).members).toEqual([{ id: 'k3x9', name: 'Studio', current: false }]);
+    view.unmount();
+  });
+
+  it('asks for a machine when none is chosen, and hands the one you pick to the app', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: null });
+    renderRoot('/', {
+      dashboard: createDashboard({ listInstances: () => Promise.resolve([STUDIO, LAPTOP]) }),
+      devices: createDevices(DEVICE),
+    });
+    expect(await screen.findByText('Choose a machine for this app')).toBeTruthy();
+    expect(screen.getByText('Laptop')).toBeTruthy();
+    expect(screen.queryByText('The app')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show here' })[1] as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Use this Mac’s engine' }));
+    expect(app.sourceCalls).toEqual([{ id: 'v9q1', name: 'Laptop' }, 'local']);
+  });
+
+  it('says the chosen machine is gone and offers the others', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: PINNED_STUDIO });
+    renderRoot('/', {
+      dashboard: createDashboard({ listInstances: () => Promise.resolve([LAPTOP]) }),
+      devices: createDevices(DEVICE),
+    });
+    expect(await screen.findByText(/Studio is no longer on your account/)).toBeTruthy();
+    expect(screen.getByText('Laptop')).toBeTruthy();
+  });
+
+  it('says so when the account has no machine to choose', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: null });
+    renderRoot('/', { dashboard: createDashboard({ listInstances: () => Promise.resolve([]) }) });
+    expect(await screen.findByText(/No machine on your account yet/)).toBeTruthy();
+  });
+
+  it('signs in through the app, and lets you go back to this Mac’s engine', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: null });
+    renderRoot('/', { dashboard: createDashboard({ readSession: () => Promise.resolve({ user: null }) }) });
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in with GitHub' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use this Mac’s engine' }));
+    expect(app.sourceCalls).toEqual(['sign in', 'local']);
+    expect(document.querySelector('a[href^="/__remote/sign-in"]')).toBeNull();
+  });
+
+  it('takes a pasted invite link to ask for access from the app, and refuses anything else', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: PINNED_STUDIO });
+    renderRoot('/', { devices: createDevices() });
+    expect(await screen.findByText('Copy the link, paste it below and ask for access.')).toBeTruthy();
+    const field = screen.getByRole('textbox', { name: 'Invite link' });
+    fireEvent.change(field, { target: { value: 'Studio' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask for access' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('not a machine’s invite link');
+    expect(assign).not.toHaveBeenCalled();
+    const fragment = `k3x9.${MACHINE_KEY}.secret_1.tok`;
+    fireEvent.change(field, { target: { value: `https://app.shinsa.dev/enroll#${fragment}` } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ask for access' }));
+    expect(assign).toHaveBeenCalledWith(`/enroll#${fragment}`);
+  });
+
+  it('lists only the machine the app shows in Settings → Machines', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: PINNED_STUDIO });
+    render(
+      <RemoteServicesContext.Provider
+        value={{
+          dashboard: createDashboard({ listInstances: () => Promise.resolve([STUDIO, LAPTOP]) }),
+          devices: createDevices(DEVICE),
+          teamKeys: createTeamKeys(),
+          worker: createWorker(),
+        }}
+      >
+        <MachinesSettings />
+      </RemoteServicesContext.Provider>
+    );
+    expect(await screen.findByText('Studio')).toBeTruthy();
+    expect(screen.queryByText('Laptop')).toBeNull();
+  });
+
+  it('offers this Mac’s engine when no machine is paired or Shinsa Cloud cannot be reached', async () => {
+    app = installDesktop('window', { kind: 'cloud', machine: PINNED_STUDIO });
+    const { unmount } = renderRoot('/', {
+      dashboard: createDashboard({ listInstances: () => Promise.resolve([STUDIO]) }),
+      devices: createDevices(),
+    });
+    expect(await screen.findByText('Add this device to your machine')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Use this Mac’s engine' })).toBeTruthy();
+    unmount();
+    renderRoot('/', {
+      dashboard: createDashboard({ listInstances: () => Promise.reject(new Error('Signed out.')) }),
+    });
+    expect(await screen.findByText('This device cannot reach your machines')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Use this Mac’s engine' })).toBeTruthy();
   });
 });
 
