@@ -2941,12 +2941,12 @@ Only these, and they win over anything below:
     - **Shape.** In Cards (Desk), the page sits in the Code tab's frame (`TerminalFrame`: `CARDS_FRAME`, one `CARD`
       with its toolbar and terminal inside, 16px below), so its edges line up with the top bar; in Sidebar (Shelf)
       and on a phone it fills the space under the top bar edge to edge. A 36px `Toolbar` holds the
-      project picker, the tabs, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
+      project picker, the tabs, the filter, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
       Restart and Stop (or Start) when a service's tab is in front, and Open after them while it runs with a preview
       URL (the rows' `ServicePreviewButton`: the toolbar acts on the tab in front, and a tab has no room for a second
       button beside its close), else, while any of the project's services is not
       running, one play button that starts them all ("Start all services in ‹project›"; a shell's tab or no tab is
-      in front, `resolveActiveService`), Find in the scrollback (`IconMagnifyingGlass`) and, last, the filter;
+      in front, `resolveActiveService`), Find in the scrollback (`IconMagnifyingGlass`);
       then the terminal on its own background, 8px from the top and 12px from the left. The project picker is the Focus menu's own trigger and
       rows (`ProjectMenuTrigger`, `ProjectRadioItems` in `components/focus/menu.tsx`): the project's dot, its name and
       the chevron, a radio list of every project with its dot, which closes on the one you pick (the Focus menu's

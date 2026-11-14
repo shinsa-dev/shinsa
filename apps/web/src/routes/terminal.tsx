@@ -305,6 +305,7 @@ function ProjectTerminals({
             onReorder={(ids) => void reorderTerminals(project.id, ids)}
           />
         )}
+        <TerminalFilterMenu filter={filter} counts={counts} />
         <NewTerminalButton groups={groups} fallback={fallback} onOpen={open} />
         {activeService && <ActiveServiceButtons view={activeService} />}
         {!activeService && showsServices(filter) && stopped.length > 0 && (
@@ -321,7 +322,6 @@ function ProjectTerminals({
             />
           </Hint>
         )}
-        <TerminalFilterMenu filter={filter} counts={counts} />
       </Toolbar>
       {active ? (
         <TerminalBody
