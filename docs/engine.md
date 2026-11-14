@@ -2425,7 +2425,10 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   for you."), and the same holds review findings. An area still under 30 decisions holds nothing, so each kind of
   decision decides on its own until the area has enough. Settings → Autopilot lists By kind of work once a decision
   has an area: each area, how often Autopilot guessed you right there and how far ahead of your usual answer, and
-  Handles it alone, Waits for you or Still learning.
+  Handles it alone, Waits for you or Still learning. Each row reads every track readiness uses (`combined`, and
+  `model` for findings), showing the one that holds the work when one does (`listAutopilotAreaReadiness`), so a row
+  never says Handles it alone while that area's findings wait for you. A profile from an older engine, with no
+  `areas`, lists none.
 - **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
   and asks for `autopilot.judge {taskId, gateId, shadow: false}`, a replay-safe effect on lane `task:<id>`: the engine builds the
   prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the

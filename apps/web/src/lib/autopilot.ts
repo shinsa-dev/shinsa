@@ -375,7 +375,7 @@ function describeArea({ score, known, ready }: AutopilotAreaReadiness) {
   if (!known) return `${right}. Until it has ${minScored}, each kind of decision decides on its own.`;
   const lead = score.margin === null ? right : `${right}, ${describeMarginPhrase(score.margin)}`;
   if (ready) return `${lead}. At Everything, it handles this work alone.`;
-  return `${lead}. Under ${Math.round(agreement * 100)}% or ${Math.round(margin * 100)} points ahead, this work waits for you.`;
+  return `${lead}. Below ${Math.round(agreement * 100)}%, or less than ${Math.round(margin * 100)} points ahead, this work waits for you.`;
 }
 
 export function listAutopilotAreaRows(state: Pick<ShinsaState, 'autopilotProfile'>): AutopilotAreaRow[] {

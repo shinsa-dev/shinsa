@@ -142,12 +142,18 @@ export function isAutopilotKindReady(
   return resolveKindReadiness(state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE, kind).ready;
 }
 
+function resolveAreas(areas: AutopilotProfile['areas'] | undefined): AutopilotProfile['areas'] {
+  return areas ?? {};
+}
+
 function resolveAreaReadiness(
   profile: AutopilotProfile,
   area: string,
   track: AutopilotTrack
 ): AutopilotAreaReadiness {
-  const score = resolveTrackScore((profile.areas[area] ?? EMPTY_AUTOPILOT_KIND_PROFILE).tracks[track]);
+  const score = resolveTrackScore(
+    (resolveAreas(profile.areas)[area] ?? EMPTY_AUTOPILOT_KIND_PROFILE).tracks[track]
+  );
   const { minScored, agreement, margin } = AUTOPILOT_AREA_LIMITS;
   const known = score.scored >= minScored;
   const ready =
@@ -159,12 +165,23 @@ function resolveAreaReadiness(
   return { area, score, known, ready };
 }
 
+const AREA_TRACKS: readonly AutopilotTrack[] = [
+  ...new Set<AutopilotTrack>(['combined', ...Object.values(AUTOPILOT_READINESS_TRACK)]),
+];
+
+function resolveShownAreaReadiness(profile: AutopilotProfile, area: string): AutopilotAreaReadiness {
+  const readiness = AREA_TRACKS.map((track) => resolveAreaReadiness(profile, area, track));
+  const shown =
+    readiness.find((track) => track.known && !track.ready) ?? readiness.find((track) => track.known);
+  return shown ?? resolveAreaReadiness(profile, area, 'combined');
+}
+
 export function listAutopilotAreaReadiness(
   state: Pick<ShinsaState, 'autopilotProfile'>
 ): AutopilotAreaReadiness[] {
   const profile = state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE;
-  return Object.keys(profile.areas)
-    .map((area) => resolveAreaReadiness(profile, area, 'combined'))
+  return Object.keys(resolveAreas(profile.areas))
+    .map((area) => resolveShownAreaReadiness(profile, area))
     .filter((area) => area.score.scored > 0)
     .sort((left, right) => right.score.scored - left.score.scored || left.area.localeCompare(right.area));
 }

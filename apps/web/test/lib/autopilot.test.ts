@@ -499,7 +499,7 @@ describe('the Autopilot settings', () => {
         'packages/core/autopilot',
         '80%',
         'waits',
-        'It guessed you right on 32 of 40 decisions in this area, 5 points ahead of your usual answer. Under 90% or 5 points ahead, this work waits for you.',
+        'It guessed you right on 32 of 40 decisions in this area, 5 points ahead of your usual answer. Below 90%, or less than 5 points ahead, this work waits for you.',
       ],
       [
         'apps/engine/git',

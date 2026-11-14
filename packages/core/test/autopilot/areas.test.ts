@@ -133,6 +133,27 @@ describe('readiness per area of the app', () => {
     expect(listAutopilotAreaReadiness({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE })).toEqual([]);
   });
 
+  test('an older engine’s profile without areas lists none', () => {
+    const { areas: _areas, ...older } = EMPTY_AUTOPILOT_PROFILE;
+    expect(listAutopilotAreaReadiness({ autopilotProfile: older as typeof EMPTY_AUTOPILOT_PROFILE })).toEqual(
+      []
+    );
+  });
+
+  test('an area whose findings wait for you shows the findings’ score, not the combined one', () => {
+    const track = agreement(40, 39, 20);
+    const findingsHeld: AutopilotKindProfile = {
+      tracks: { model: agreement(40, 20, 20), call: track, combined: track, base: agreement(40, 20, 20) },
+      rate: { positive: 1, negative: 1 },
+    };
+    const state = { autopilotProfile: profile({ [AREA]: findingsHeld }) };
+    expect(listAutopilotAreaReadiness(state)[0]).toMatchObject({
+      known: true,
+      ready: false,
+      score: { agreed: 20 },
+    });
+  });
+
   test('an area that agrees often but no better than your usual answer is not ready', () => {
     const state = { autopilotProfile: profile({ [AREA]: area(50, 48, 48) }) };
     expect(listAutopilotAreaReadiness(state)[0]).toMatchObject({ known: true, ready: false });
