@@ -37,12 +37,15 @@ const NO_MESSAGES: HumanMessage[] = [];
 const NO_EVIDENCE: never[] = [];
 
 const SPEAKER_BODY =
-  'flex min-w-0 flex-col ps-7 [--chat-inset:0px] [&>:first-child]:mt-0 [&>:first-child]:pt-0 [&>:last-child]:mb-0 [&>:last-child]:pb-0';
+  'flex min-w-0 flex-col [&>:first-child]:mt-0 [&>:first-child]:pt-0 [&>:last-child]:mb-0 [&>:last-child]:pb-0';
 
 function SpeakerHeader({ run, headline }: { run: Run; headline: string }) {
   const role = RUN_ROLE[run.role];
   return (
-    <div data-speaker-header className='flex min-w-0 items-center gap-2 text-xs max-sm:items-start'>
+    <div
+      data-speaker-header
+      className={cn('flex min-w-0 items-center gap-2 text-xs max-sm:items-start', CHAT_INSET)}
+    >
       <span aria-hidden className='grid size-5 shrink-0 place-items-center rounded-full bg-bg-a2 text-fg-4'>
         <Icon name={role.icon} size='sm' />
       </span>
@@ -66,7 +69,7 @@ function SpeakerBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div data-speaker={run.role} className={cn('mt-2 mb-3 flex min-w-0 flex-col gap-1.5', CHAT_INSET)}>
+    <div data-speaker={run.role} className='mt-2 mb-3 flex min-w-0 flex-col gap-1.5'>
       <SpeakerHeader run={run} headline={headline} />
       <div className={SPEAKER_BODY}>{children}</div>
     </div>

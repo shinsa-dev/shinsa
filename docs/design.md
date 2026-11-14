@@ -136,8 +136,8 @@ Only these, and they win over anything below:
      its name (from `RUN_ROLE`: Reviewer `IconShieldCheck`, Agent `IconAgent`, Planner `IconMap`, Builder
      `IconHammer`…) in `font-medium text-fg-4`, then what it did (`resolveRunHeadline`, "Reviewed the change, 3
      findings (2 blocking, 1 should fix)") in `text-fg-3`, with no model, no chevron and no fold. Its work,
-     reply, cards and errors hang 28px in, under the name and not under the avatar, with no card and no rail,
-     the way a second person's message reads in a chat, so a review never reads as the Agent's own turn (26). When your message started the run, your bubble sits above its header, so you speak, then the agent
+     reply, cards and errors follow on the chat's own inset, flush with every other line, with no indent, card or rail:
+     the sender line alone sets it apart, the way a second person's message reads in a chat, so a review never reads as the Agent's own turn (26). When your message started the run, your bubble sits above its header, so you speak, then the agent
      answers. A delegated agent never gets a header of its own: it is a card inside the turn of the agent that
      delegated it, with the same role mark (26). The chat renders the chat protocol (`docs/engine.md`), never a
      provider's tool names. A message you send after a run ended belongs to the run that answers it
