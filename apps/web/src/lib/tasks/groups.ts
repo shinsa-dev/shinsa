@@ -135,9 +135,10 @@ function selectGroupAnchor(state: ShinsaState, task: Task, seen: ReadonlySet<str
 function resolveGroupWithin(state: ShinsaState, task: Task, seen: ReadonlySet<string>): TaskGroupKey {
   if (task.duplicate) return 'duplicate';
   if (task.stage === 'cancelled') return 'cancelled';
-  if (isAtRest(task)) return 'done';
-  if (task.snoozed) return 'snoozed';
+  if (isTaskSettled(task)) return 'done';
   const gate = Option.getOrNull(selectLeadGate(state, task));
+  if (!gate && isWatchCheck(task)) return 'done';
+  if (task.snoozed) return 'snoozed';
   if (gate && isHeldInBacklog(state, gate)) return 'backlog';
   if (gate) return resolveGateGroup(gate);
   const next = new Set(seen).add(task.id);

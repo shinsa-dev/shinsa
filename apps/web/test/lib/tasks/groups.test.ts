@@ -524,6 +524,14 @@ describe('a task a watchdog is checking', () => {
     expect(listSections(state, '', 'working').flatMap((section) => section.entries)).toEqual([]);
   });
 
+  it('shows in Paused when the check opens a sign-in gate', () => {
+    const state = createShinsaState({
+      tasks: [checking],
+      gates: [createGate({ id: 'sign-in', taskId: 'checking', type: 'sign_in' })],
+    });
+    expect(resolveTaskGroup(state, checking)).toBe('paused');
+  });
+
   it('does not hold a task that waits on it, and is not offered as a task to wait on', () => {
     const child = waiting('child', ['checking']);
     const state = createShinsaState({ tasks: [checking, child] });
