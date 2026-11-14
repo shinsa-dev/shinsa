@@ -116,6 +116,61 @@ describe('a task with no repository', () => {
   });
 });
 
+describe('the repository fact', () => {
+  const task = createTask({
+    id: 'mv',
+    handle: 'LOC-3',
+    repoId: 'engine',
+    projectId: 'shinsa',
+    stage: 'planning',
+  });
+  const state = createShinsaState({
+    tasks: [task, { ...task, id: 'built', phaseReports: [{} as never] }],
+    projects: [createProject({ id: 'shinsa', name: 'Shinsa' })],
+    repos: [
+      createRepo({ id: 'engine', name: 'shinsa', projectId: 'shinsa' }),
+      createRepo({ id: 'ios', name: 'Shinsa-iOS', projectId: 'shinsa' }),
+    ],
+  });
+
+  async function openRepoCard(shown: Task, readOnly = false) {
+    pushState(state);
+    const facts = (
+      <TooltipProvider>
+        <TaskFacts state={state} task={shown} />
+      </TooltipProvider>
+    );
+    render(readOnly ? <ReadOnlyProvider>{facts}</ReadOnlyProvider> : facts);
+    const trigger = screen.getByRole('button', { name: 'shinsa' });
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    return waitFor(() => {
+      const card = document.querySelector('[data-slot="preview-card-content"]');
+      if (!card?.textContent) throw new Error('No card is open.');
+      return card as HTMLElement;
+    });
+  }
+
+  it('offers Move to another repository before real work starts', async () => {
+    const card = await openRepoCard(task);
+    expect(card.textContent).toContain('Move to another repository');
+  });
+
+  it('hides it once a phase reported', async () => {
+    const card = await openRepoCard(state.tasks.built as Task);
+    expect(card.textContent).not.toContain('Move to another repository');
+  });
+
+  it('hides it on a read-only page', async () => {
+    const card = await openRepoCard(task, true);
+    expect(card.textContent).not.toContain('Move to another repository');
+  });
+});
+
 describe('the handle fact', () => {
   it('copies the handle and says “Copied” in a toast', async () => {
     const write = spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);

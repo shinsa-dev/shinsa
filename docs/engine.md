@@ -815,7 +815,9 @@ them in the order they need:
   ```
 
   The task keeps its title, branch name and session; in another project it takes that project's next handle, the
-  way a pick at the setup gate does (`task.repo_bound`). The old branch stays in the old repository with no commits.
+  way a pick at the setup gate does (`task.repo_bound`). A task page open on the old handle follows the task to the
+  new one: the web remembers which task each address it opened resolved to (`selectRouteTask` in `router.ts`) and
+  replaces the address with the new handle. The old branch stays in the old repository with no commits.
   `readyWorktree` ignores a late `worktree.ready` while `movingTo` is set. The resumed run starts in the new
   worktree, so its turn ends with the note that its folder changed (`resolveMovedNote`).
 

@@ -216,6 +216,15 @@ describe('resolveRouteTaskId', () => {
     expect(resolveRouteTaskId(null, parseRoute('/tasks/t1'))).toBeNull();
   });
 
+  it('keeps a handle it resolved on its task once the task takes another handle, as a move to another project does', () => {
+    expect(resolveRouteTaskId(state, parseRoute('/tasks/SW-1'))).toBe('t1');
+    const moved = createShinsaState({ tasks: [createTask({ id: 't1', handle: 'PER-4' })] });
+    expect(resolveRouteTaskId(moved, parseRoute('/tasks/SW-1'))).toBe('t1');
+    expect(resolveRouteTaskId(moved, parseRoute('/tasks/PER-4'))).toBe('t1');
+    expect(resolveRouteTaskId(createShinsaState({}), parseRoute('/tasks/SW-1'))).toBeNull();
+    expect(resolveRouteTaskId(moved, parseRoute('/tasks/SW-9'))).toBeNull();
+  });
+
   it('follows the route as it changes', () => {
     const { result } = renderHook(() => useRouteTaskId(state));
     act(() => navigate('/tasks/SW-1'));

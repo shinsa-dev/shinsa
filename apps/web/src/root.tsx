@@ -15,6 +15,7 @@ import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { DuplicateDialog } from '@/components/task/duplicate-dialog.tsx';
 import { ForkDialog } from '@/components/task/fork-dialog.tsx';
+import { MoveDialog } from '@/components/task/move-dialog.tsx';
 import { HandoffRemoveConfirm, ShareDialog, UnshareConfirm } from '@/components/task/share-dialog.tsx';
 import { useTeamEscalations } from '@/components/teams/tasks.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
@@ -204,6 +205,7 @@ function AppContent({ route }: { route: PageRoute }) {
         <HandoffRemoveConfirm />
         <PreviewShareDialog />
         <DuplicateDialog />
+        <MoveDialog />
         <InitiativeDialog />
       </ErrorBoundary>
     </>

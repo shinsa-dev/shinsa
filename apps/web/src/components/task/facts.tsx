@@ -46,7 +46,7 @@ import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { resolveAutopilotFact, resolveEscalationFact } from '@/lib/autopilot.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
-import { useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
+import { useEngineCommand, useMachine, useMachines, useTeamFeed } from '@/lib/connection/socket.ts';
 import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -71,6 +71,7 @@ import {
   resolveSlackFact,
   selectDuplicateOriginal,
 } from '@/lib/tasks/facts.ts';
+import { isTaskMovable, MOVE_TITLE, openMoveDialog } from '@/lib/tasks/move.ts';
 import { OWNER_FACT_HINT, resolveOwnerFact } from '@/lib/tasks/owner.ts';
 import { resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
@@ -284,6 +285,8 @@ function StatusFact({ state, task }: { state: ShinsaState; task: Task }) {
 }
 
 function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const readOnly = useReadOnly();
+  const canMove = useEngineCommand('task.move_to_repository', task.id);
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
   if (!repo) return null;
   return (
@@ -296,6 +299,9 @@ function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
       }
     >
       <RepoDetails state={state} repo={repo} />
+      {!readOnly && canMove && isTaskMovable(state, task) && (
+        <InfoAction label={MOVE_TITLE} onClick={() => openMoveDialog(task.id)} />
+      )}
     </FactPopover>
   );
 }
