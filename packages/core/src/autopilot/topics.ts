@@ -42,7 +42,7 @@ export function listNoteTopics(note: string | null): AutopilotTopic[] {
   return AUTOPILOT_TOPICS.filter((topic) => TOPIC_PATTERN[topic].test(note));
 }
 
-export function isProbingDecision(decision: Pick<AutopilotDecision, 'kind' | 'answer'>) {
+function isProbingDecision(decision: Pick<AutopilotDecision, 'kind' | 'answer'>) {
   return PROBED_KINDS.includes(decision.kind) && PROBED_ANSWERS.includes(decision.answer);
 }
 
@@ -74,7 +74,7 @@ export function countDecisionTopics(
   });
 }
 
-export function isFollowUpScored(
+function isFollowUpScored(
   decision: Pick<AutopilotDecision, 'guess' | 'followUp' | 'answer' | 'note'>
 ) {
   return (

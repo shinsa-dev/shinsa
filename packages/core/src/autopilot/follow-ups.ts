@@ -16,7 +16,7 @@ function isSamePoint(gate: Gate, other: Gate) {
   );
 }
 
-export function listAutopilotFollowUps(state: Pick<ShinsaState, 'gates'>, gate: Gate) {
+function listAutopilotFollowUps(state: Pick<ShinsaState, 'gates'>, gate: Gate) {
   const earlier = Object.values(state.gates).filter((other) => isSamePoint(gate, other));
   const yours = earlier
     .filter((other) => other.autopilotAnswer === undefined)
