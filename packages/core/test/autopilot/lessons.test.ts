@@ -301,7 +301,7 @@ describe('what Autopilot learns from a follow-up it sent', () => {
     enable(harness);
     answer(harness, reachReviewAfterFollowUp(harness), 'approve');
     answer(harness, reachReviewAfterFollowUp(harness), 'revise', 'Also the rate limit.');
-    expect(lessons(harness)?.filter((lesson) => lesson.kind === 'revised')).toEqual([
+    expect(lessons(harness)?.filter((learned) => learned.kind === 'revised')).toEqual([
       expect.objectContaining({ gate: 'review', answer: 'approved', reason: 'They probe auth.' }),
       expect.objectContaining({ gate: 'review', answer: 'revised', note: 'Also the rate limit.' }),
     ]);
