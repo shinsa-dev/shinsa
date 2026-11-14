@@ -54,14 +54,19 @@ describe('Jump to', () => {
       ['Appearance', 'General'],
       ['Attention', 'General'],
       ['Notifications', 'General'],
-      ['Context', 'General'],
-      ['Setup', 'General'],
       ['Models', 'Agents'],
       ['Engine', 'Agents'],
+      ['Watchdogs', 'Agents'],
       ['Memory', 'Agents'],
-      ['Versions', 'Agents'],
-      ['Accounts', 'Agent Usage'],
-      ['Limits', 'Agent Usage'],
+      ['Autopilot', 'Autopilot'],
+      ['Your hours', 'Autopilot'],
+      ['Context', 'Autopilot'],
+      ['Teams', 'Connections'],
+      ['Sharing', 'Connections'],
+      ['Accounts', 'Usage'],
+      ['Auto pace', 'Usage'],
+      ['Forecast', 'Usage'],
+      ['Limits', 'Usage'],
       ['Repository folders', 'Projects'],
       ['Worktrees', 'Projects'],
       ['Projects', 'Projects'],
@@ -70,6 +75,8 @@ describe('Jump to', () => {
       ['Plugins', 'Integrations'],
       ['Skills', 'Integrations'],
       ['Schedules', 'Automations'],
+      ['Versions', 'About'],
+      ['Setup', 'About'],
     ]);
   });
 
@@ -444,7 +451,7 @@ describe('Change a setting', () => {
 
 describe('openSettingsSection', () => {
   it('scrolls to the section on its tab and opens its tab from anywhere else', () => {
-    history.replaceState(null, '', '/settings?tab=accounts');
+    history.replaceState(null, '', '/settings?tab=usage');
     const section = document.createElement('section');
     section.id = 'settings-accounts';
     const scroll = mock((_options?: ScrollIntoViewOptions) => {});
@@ -455,7 +462,7 @@ describe('openSettingsSection', () => {
     section.remove();
     history.replaceState(null, '', '/tasks');
     openSettingsSection('Accounts');
-    expect(`${location.pathname}${location.search}${location.hash}`).toBe('/settings?tab=accounts#accounts');
+    expect(`${location.pathname}${location.search}${location.hash}`).toBe('/settings?tab=usage#accounts');
     history.replaceState(null, '', '/tasks');
     openSettingsSection('Repository folders');
     expect(`${location.search}${location.hash}`).toBe('?tab=projects#repository-folders');

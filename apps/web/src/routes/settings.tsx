@@ -11,6 +11,7 @@ import { AgentSettings, useAutomaticModel } from '@/components/settings/agents.t
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
 import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
+import { AutopilotSettings } from '@/components/settings/autopilot.tsx';
 import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
@@ -86,7 +87,26 @@ function TabSections({
           <AppearanceSettings />
           <AttentionSettings settings={state.settings} />
           <NotificationSettings />
+        </>
+      );
+    case 'agents':
+      return (
+        <>
+          <AgentSettings settings={state.settings} automatic={automatic} />
+          <MemorySettings state={state} />
+        </>
+      );
+    case 'autopilot':
+      return (
+        <>
+          <AutopilotSettings settings={state.settings} />
+          <ActiveHoursSettings state={state} />
           <ContextSettings settings={state.settings} />
+        </>
+      );
+    case 'connections':
+      return (
+        <>
           {isRemoteBuild() ? (
             <MachinesSettings state={state} />
           ) : (
@@ -97,25 +117,9 @@ function TabSections({
           )}
           <SharingSettings settings={state.settings} />
           <SlackSettings />
-          <UpdateSettings />
-          <SetupSettings />
         </>
       );
-    case 'statistics':
-      return <StatisticsSettings state={state} />;
-    case 'agents':
-      return (
-        <>
-          <AgentSettings
-            settings={state.settings}
-            automatic={automatic}
-            afterAutopilot={<ActiveHoursSettings state={state} />}
-          />
-          <MemorySettings state={state} />
-          <VersionSettings />
-        </>
-      );
-    case 'accounts':
+    case 'usage':
       return (
         <>
           <AccountSettings settings={state.settings} />
@@ -128,6 +132,8 @@ function TabSections({
           />
         </>
       );
+    case 'statistics':
+      return <StatisticsSettings state={state} />;
     case 'projects':
       return (
         <>
@@ -141,6 +147,14 @@ function TabSections({
       return <IntegrationSettings state={state} />;
     case 'automations':
       return <ScheduleSettings state={state} />;
+    case 'about':
+      return (
+        <>
+          <UpdateSettings />
+          <VersionSettings />
+          <SetupSettings />
+        </>
+      );
   }
 }
 

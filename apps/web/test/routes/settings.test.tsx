@@ -57,17 +57,30 @@ describe('Settings tabs', () => {
       within(tabs)
         .getAllByRole('tab')
         .map((tab) => tab.textContent)
-    ).toEqual(['General', 'Statistics', 'Agents', 'Agent Usage', 'Projects', 'Integrations', 'Automations']);
+    ).toEqual([
+      'General',
+      'Agents',
+      'Autopilot',
+      'Connections',
+      'Usage',
+      'Statistics',
+      'Projects',
+      'Integrations',
+      'Automations',
+      'About',
+    ]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
-    for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', 'Updates'])
+    for (const section of ['Appearance', 'Attention', 'Notifications'])
       expect(screen.getByText(section)).toBeTruthy();
-    expect(screen.queryByText('Engine')).toBeNull();
+    for (const section of ['Engine', 'Context', 'Setup', 'Updates', 'Remote access'])
+      expect(screen.queryByText(section)).toBeNull();
     fireEvent.click(within(tabs).getByRole('tab', { name: 'Agents' }));
     await settle();
     expect(location.search).toBe('?tab=agents');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Agents');
     expect(screen.getByText('Engine')).toBeTruthy();
-    expect(screen.getByText('Versions')).toBeTruthy();
+    expect(screen.getByText('Watchdogs')).toBeTruthy();
+    expect(screen.queryByText('Versions')).toBeNull();
     expect(screen.queryByText('Appearance')).toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
     expect(within(tabs).getByRole('tab', { name: 'Agents' }).getAttribute('aria-selected')).toBe('true');

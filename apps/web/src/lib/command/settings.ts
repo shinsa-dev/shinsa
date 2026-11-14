@@ -13,6 +13,8 @@ import {
   type UsageRate,
 } from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import { AUTO_PACE_LABEL } from '@/lib/accounts/auto-pace.ts';
+import { FORECAST_TITLE } from '@/lib/accounts/forecast.ts';
 import {
   listSwitchItems,
   needsSnoozeSetting,
@@ -27,6 +29,8 @@ import {
   WATCHDOG_LIMITS_ITEMS,
   WATCHDOG_LIMITS_TITLE,
 } from '@/lib/accounts/limits.ts';
+import { ACTIVE_HOURS_LABEL } from '@/lib/active-hours.ts';
+import { AUTOPILOT_TITLE } from '@/lib/autopilot.ts';
 import { BROWSER_SECTION } from '@/lib/browser.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
@@ -105,7 +109,10 @@ import {
   updateSettings,
   WORKTREES_TITLE,
   DAILY_LIMIT_TITLE,
+  WATCHDOG_SETTINGS_TITLE,
 } from '@/lib/settings.ts';
+import { SHARING_SECTION } from '@/lib/share/dialog.ts';
+import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
 import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
@@ -142,6 +149,25 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     keywords: ['compaction', 'compact', 'eunoe', 'fold', 'idle sessions', 'context window'],
   },
   { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'delegations', 'merge'] },
+  {
+    title: WATCHDOG_SETTINGS_TITLE,
+    icon: 'IconEyeSparkle',
+    keywords: ['watch', 'after merge', 'monitor', 'production', 'errors'],
+  },
+  {
+    title: AUTOPILOT_TITLE,
+    icon: 'IconRocket',
+    keywords: ['auto', 'gates', 'auto merge', 'escalate', 'decide for me'],
+  },
+  {
+    title: ACTIVE_HOURS_LABEL.title,
+    icon: 'IconCalenderSparkle',
+    keywords: ['active hours', 'schedule', 'away', 'working hours'],
+  },
+  { title: TEAMS_SECTION, icon: 'IconUserDuo', keywords: ['team', 'members', 'invite', 'people'] },
+  { title: SHARING_SECTION, icon: 'IconShareOs', keywords: ['share', 'link', 'public', 'redact'] },
+  { title: AUTO_PACE_LABEL.title, icon: 'IconSpeedMiddle', keywords: ['pace', 'spread usage', 'throttle'] },
+  { title: FORECAST_TITLE, icon: 'IconChart3', keywords: ['forecast', 'projection', 'week', 'usage ahead'] },
   {
     title: 'Memory',
     icon: 'IconLightbulbGlow',

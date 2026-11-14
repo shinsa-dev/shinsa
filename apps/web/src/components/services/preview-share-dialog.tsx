@@ -202,7 +202,7 @@ function PreviewShareContent({ task, target }: { task: Task; target: PreviewTarg
     close: closePreviewShareDialog,
     openSettings: () => {
       closePreviewShareDialog();
-      navigate(resolveSettingsPath('general', 'Remote access'));
+      navigate(resolveSettingsPath('connections', 'Remote access'));
     },
   };
   return (
