@@ -113,10 +113,43 @@ describe('the judge’s context sections', () => {
         },
       },
     });
-    const lines = section(state, task, 'changes')?.lines ?? [];
-    expect(lines[0]).toBe('Files the plan changes:');
-    expect(lines).toHaveLength(1 + AUTOPILOT_CONTEXT_LIMITS.files + 1);
-    expect(lines.at(-1)).toBe('- and 2 more');
+    const changes = section(state, task, 'changes');
+    expect(changes?.lines[0]).toBe('Files the plan changes:');
+    expect(changes?.lines).toHaveLength(1 + AUTOPILOT_CONTEXT_LIMITS.files);
+    expect(changes?.omitted).toBe(2);
+    const lines = resolveAutopilotContextLines(changes ? [changes] : []);
+    expect(lines.at(-1)).toBe('- and 2 more not shown');
+  });
+
+  test('a file list longer than the section’s cap says how many files it leaves out', () => {
+    const reported = Array.from(
+      { length: 25 },
+      (_, index) => `apps/engine/src/runtime/effects/runner/handlers/autopilot-file-${index}.ts`
+    );
+    const { state, task } = setup({
+      phaseReports: [{ index: 0, summary: 's', spots: [], judgementCalls: [], files: reported, at: 1 }],
+    });
+    const changes = section(state, task, 'changes');
+    const lines = resolveAutopilotContextLines(changes ? [changes] : []);
+    const shown = lines.filter((line) => line.startsWith('- apps/'));
+    expect(shown.length).toBeLessThan(reported.length);
+    expect(lines.at(-1)).toBe(`- and ${reported.length - shown.length} more not shown`);
+    expect(lines.join('\n').length).toBeLessThanOrEqual(AUTOPILOT_CONTEXT_LIMITS.sections.changes + 2);
+  });
+
+  test('findings past the count or the cap are counted, not dropped silently', () => {
+    const findings = Array.from({ length: 12 }, (_, index) => ({
+      severity: 'should_fix' as const,
+      file: `apps/engine/src/runtime/effects/runner/service-${index}.ts`,
+      line: index,
+      message: `Finding ${index} ${'x'.repeat(200)}`,
+    }));
+    const { state, task } = setup({ reviewSummary: 'Mostly right.', findings });
+    const review = section(state, task, 'review');
+    expect(review?.omitted).toBe(findings.length - AUTOPILOT_CONTEXT_LIMITS.findings);
+    const lines = resolveAutopilotContextLines(review ? [review] : []);
+    const shown = lines.filter((line) => line.startsWith('- should fix'));
+    expect(lines.at(-1)).toBe(`- and ${findings.length - shown.length} more not shown`);
   });
 
   test('the walkthrough comes from the report, or else the last phase that wrote one', () => {

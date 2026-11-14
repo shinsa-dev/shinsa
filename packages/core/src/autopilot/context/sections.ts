@@ -24,9 +24,11 @@ export function listAutopilotTaskPaths(task: Task) {
 }
 
 function describeFiles(files: readonly string[]) {
-  const shown = files.slice(0, LIMITS.files).map((file) => `- ${file}`);
-  const more = files.length - shown.length;
-  return more > 0 ? [...shown, `- and ${more} more`] : shown;
+  return files.slice(0, LIMITS.files).map((file) => `- ${file}`);
+}
+
+function countOmittedFiles(files: readonly string[]) {
+  return Math.max(0, files.length - LIMITS.files);
 }
 
 function resolveChanges(task: Task): AutopilotContextSection {
@@ -42,11 +44,17 @@ function resolveChanges(task: Task): AutopilotContextSection {
       name: 'changes',
       title: 'What changed:',
       lines: [...stats, 'Files:', ...describeFiles(reported)],
+      omitted: countOmittedFiles(reported),
     };
   }
   const planned = listPlannedFiles(task);
   const files = planned.length > 0 ? ['Files the plan changes:', ...describeFiles(planned)] : [];
-  return { name: 'changes', title: 'What changed:', lines: [...stats, ...files] };
+  return {
+    name: 'changes',
+    title: 'What changed:',
+    lines: [...stats, ...files],
+    omitted: countOmittedFiles(planned),
+  };
 }
 
 function selectWalkthrough(task: Task) {
@@ -96,7 +104,7 @@ function resolveReview(task: Task): AutopilotContextSection {
     .slice(0, LIMITS.findings)
     .map(describeFinding);
   const lines = [...summary, ...ratings, ...(findings.length > 0 ? ['Findings:', ...findings] : [])];
-  return { name: 'review', title: 'The review:', lines };
+  return { name: 'review', title: 'The review:', lines, omitted: task.findings.length - findings.length };
 }
 
 function resolveMessages(task: Task): AutopilotContextSection {

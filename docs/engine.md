@@ -2554,7 +2554,9 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   last 4 answers there and your latest note. The part of the app is a path's top two folders
   (`resolveAutopilotAreas`), `.md` files left out, since nearly every task touches `docs/`. Each section has a cap
   (the review 1,500 characters, what changed, the walkthrough and the replies 1,200, your messages 1,000, the area
-  900; a line at most 300, a list at most 20 files), and the whole context a budget of 6,000: when the sections
+  900; a line at most 300, a list at most 20 files). A list cut by its count or its section's cap ends with how many
+  items it left out ("- and 7 more not shown", the section's `omitted` plus the items the cap dropped), so the judge
+  never takes a cut list of files or findings for the whole one. The whole context has a budget of 6,000: when the sections
   still run over, whole sections are cut from the last up and the prompt ends "Left out to fit: …". The system
   prompt gains one fixed sentence telling the judge to weigh that context, so it stays identical for every gate and
   task, and its prefix stays cached (Caching, above).

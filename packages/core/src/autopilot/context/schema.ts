@@ -13,6 +13,7 @@ export interface AutopilotContextSection {
   name: AutopilotContextSectionName;
   title: string;
   lines: string[];
+  omitted?: number;
 }
 
 export interface AutopilotReply {

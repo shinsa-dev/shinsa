@@ -10,23 +10,29 @@ export function clipAutopilotText(text: string, limit: number) {
   return trimmed.length > limit ? `${trimmed.slice(0, limit - 1)}…` : trimmed;
 }
 
-function fitLines(lines: readonly string[], cap: number) {
-  const fitted: string[] = [];
-  let used = 0;
-  for (const line of lines) {
-    if (used + line.length + 1 > cap) break;
-    fitted.push(line);
-    used += line.length + 1;
+function measure(lines: readonly string[]) {
+  return lines.reduce((total, line) => total + line.length + 1, 0);
+}
+
+function describeOmitted(count: number) {
+  return count > 0 ? [`- and ${count} more not shown`] : [];
+}
+
+function isItem(line: string) {
+  return line.startsWith('- ');
+}
+
+function fitLines(lines: readonly string[], omitted: number, cap: number) {
+  const fitted = [...lines];
+  let hidden = omitted;
+  while (fitted.length > 0 && measure([...fitted, ...describeOmitted(hidden)]) > cap) {
+    if (isItem(fitted.pop() ?? '')) hidden += 1;
   }
-  return fitted;
+  return fitted.length > 0 ? [...fitted, ...describeOmitted(hidden)] : [];
 }
 
 function renderSection(section: AutopilotContextSection) {
   return ['', section.title, ...section.lines];
-}
-
-function measure(lines: readonly string[]) {
-  return lines.reduce((total, line) => total + line.length + 1, 0);
 }
 
 function describeLeftOut(cut: readonly AutopilotContextSection[]) {
@@ -38,7 +44,7 @@ export function resolveAutopilotContextLines(sections: readonly AutopilotContext
   const capped = sections
     .map((section) => ({
       ...section,
-      lines: fitLines(section.lines, AUTOPILOT_CONTEXT_LIMITS.sections[section.name]),
+      lines: fitLines(section.lines, section.omitted ?? 0, AUTOPILOT_CONTEXT_LIMITS.sections[section.name]),
     }))
     .filter((section) => section.lines.length > 0)
     .sort((a, b) => AUTOPILOT_CONTEXT_SECTIONS.indexOf(a.name) - AUTOPILOT_CONTEXT_SECTIONS.indexOf(b.name));
