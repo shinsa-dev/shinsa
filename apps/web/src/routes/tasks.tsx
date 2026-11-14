@@ -1,4 +1,5 @@
 import { resolveFocusTeam, type ShinsaState } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -11,6 +12,7 @@ import { TaskFilterChips, TaskFilterMenu } from '@/components/tasks/filter-menu.
 import { TaskGroupList } from '@/components/tasks/group.tsx';
 import { TASK_LIST_COLUMNS, TEAM_TASK_LIST_COLUMNS } from '@/components/tasks/row.tsx';
 import { TeamFeedRefusals, useTeamTasks } from '@/components/teams/tasks.tsx';
+import { useScrolledDown } from '@/hooks/use-scrolled-down.ts';
 import { useTaskOwnership } from '@/hooks/use-task-ownership.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
@@ -27,6 +29,8 @@ import { useSearchString } from '@/router.ts';
 
 export function TasksPage({ state }: { state: ShinsaState }) {
   const ownership = useTaskOwnership();
+  const scroller = React.useRef<HTMLDivElement>(null);
+  const { scrolled, scrollToTop } = useScrolledDown(scroller);
   const filters = resolveTaskFilters(useSearchString(), ownership.shared);
   const team = useTeamTasks();
   const rows = React.useMemo(
@@ -74,7 +78,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
       </div>
       <div className='flex min-h-0 flex-col gap-2'>
         <TaskFilterChips fields={fields} filters={filters} />
-        <div className={cn(CARD, 'flex min-h-0 flex-col overflow-hidden')}>
+        <div className={cn(CARD, 'relative flex min-h-0 flex-col overflow-hidden')}>
           <div
             className={cn(
               'grid h-7 shrink-0 items-center gap-3 border-b border-border px-3 text-2xs font-medium text-fg-2',
@@ -88,7 +92,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
             <span className='max-md:hidden'>Pull request</span>
             <span className='text-right'>Updated</span>
           </div>
-          <div className='-mb-px min-h-0 overflow-y-auto'>
+          <div ref={scroller} className='-mb-px min-h-0 overflow-y-auto'>
             {empty ? (
               <EmptyState
                 icon={filtered ? 'IconMagnifyingGlass' : 'IconListBullets'}
@@ -118,6 +122,19 @@ export function TasksPage({ state }: { state: ShinsaState }) {
               />
             )}
           </div>
+          {scrolled && (
+            <div className='pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center'>
+              <Button
+                variant='outline'
+                size='sm'
+                icon='IconArrowUp'
+                className='pointer-events-auto'
+                onClick={scrollToTop}
+              >
+                Back to top
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

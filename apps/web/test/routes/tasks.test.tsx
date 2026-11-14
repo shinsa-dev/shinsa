@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, mock, spyOn } from 'bun:test';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
@@ -140,6 +140,26 @@ describe('the task groups', () => {
     expect(screen.getByText('Review the logout fix')).toBeTruthy();
     expect(drawn.mock.calls.slice(before).map(([task]) => task.id)).toEqual(['review']);
     drawn.mockRestore();
+  });
+
+  it('offers Back to top once the list is scrolled down, and scrolls back up', () => {
+    renderPage();
+    expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
+    const scroller = rowFor('Land the billing change').closest('.overflow-y-auto') as HTMLElement;
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 400 });
+    const scrolled = mock((_options?: ScrollToOptions) => {});
+    scroller.scrollTo = scrolled as typeof scroller.scrollTo;
+    act(() => {
+      scroller.scrollTop = 900;
+      fireEvent.scroll(scroller);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Back to top' }));
+    expect(scrolled.mock.calls).toEqual([[{ top: 0, behavior: 'smooth' }]]);
+    act(() => {
+      scroller.scrollTop = 0;
+      fireEvent.scroll(scroller);
+    });
+    expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
   });
 
   it('opens a task from its row', () => {

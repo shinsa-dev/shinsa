@@ -565,16 +565,23 @@ browsers a scenario, the median. `SHINSA_PERF_CPU=4` runs the same with Chromium
 
 | Measure (300 tasks) | Before | After |
 | --- | --- | --- |
-| Home → All tasks: to paint / longest task | 25 ms / none | |
-| … at 4× CPU | 126 / 109 ms | |
-| Flick (6,568px): frames with blank rows / longest frame | 0 of 112 / 16.8 ms | |
-| … at 4× CPU | 0 of 106 / 66.7 ms (60 frames over 20 ms) | |
-| Flick with a push every 250 ms, at 4× CPU | 0 of 100 / 133 ms (80 over 20 ms, longest task 108 ms) | |
-| Back to All tasks: frames short of rows | 0 | |
-| One-task push: rows / components re-rendered | 27 of 27 / 4,471 | |
-| … to paint, at 1× / 4× CPU | 7 / 35 ms | |
+| Home → All tasks: to paint / longest task | 25 ms / none | 27 ms / none |
+| … at 4× CPU | 126 / 109 ms | 135 ms / none |
+| Flick (6,568px): frames with blank rows / longest frame | 0 of 112 / 16.8 ms | 0 of 110 / 16.8 ms |
+| … at 4× CPU | 0 of 106 / 66.7 ms (60 frames over 20 ms) | 0 of 107 / 83 ms (39 over 20 ms) |
+| Flick with a push every 250 ms, at 4× CPU | 0 of 100 / 133 ms (80 over 20 ms, longest task 108 ms) | 0 of 105 / 83 ms (63 over 20 ms, longest task 88 ms) |
+| Back to All tasks: frames short of rows | 0 | 0 |
+| One-task push: rows / components re-rendered | 27 of 27 / 4,471 | 1 of 27 / 3,872 |
+| … to paint, at 1× / 4× CPU | 7 / 35 ms | 5.7 / 22.6 ms |
 
-- **What the numbers say.** The window keeps up: no frame showed a spacer, even at 4× CPU and with pushes. What is
+- **After.** One window over every group with a viewport of rows to spare each way, and rows that take only what
+  they show (`lib/tasks/row-model.ts`, compared field by field), so a push redraws the one row whose task changed.
+  The first paint at 4× CPU no longer has a long task: the work is split across frames, at 9 ms more to paint. A
+  flick that meets pushes tops out at 83 ms instead of 133 ms; the plain flick at 4× has fewer slow frames (39 instead
+  of 60) but a longer worst one, the larger overscan's first render. The 3,872 components a push still renders are
+  the kept pages behind All tasks (Home most of all), outside this page. Once the list is scrolled past one screen, a
+  Back to top button (`hooks/use-scrolled-down.ts`) returns to the first row.
+- **What the numbers said before.** The window keeps up: no frame showed a spacer, even at 4× CPU and with pushes. What is
   slow is the work behind it: a push for one task re-renders every row in view and 4,471 components (All tasks and
   the kept pages behind it, `docs/design.md`, 35), 35 ms at 4× CPU, and a flick that meets pushes has 133 ms frames.
   The probe reads the main thread's view of the list; the compositor scrolls on during such a frame, so that is where
