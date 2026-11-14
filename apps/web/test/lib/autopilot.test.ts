@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   AUTOPILOT_DEFAULTS,
   type AutopilotContact,
+  type AutopilotTopic,
   createSettings,
   EMPTY_AUTOPILOT_PROFILE,
   type MergeBlock,
@@ -264,7 +265,50 @@ describe('the Autopilot settings', () => {
           'Balanced while it learns. Most things once the score reaches 90% and is 5 points ahead of your usual answer.',
         apply: null,
       },
+      topics: null,
+      followUps: null,
     });
+  });
+
+  it('names the topics you raise most and how often its follow-ups raised the same', () => {
+    const tally = (topic: AutopilotTopic, total: number, recent: number) => ({
+      topic,
+      total,
+      recent,
+      at: NOW,
+    });
+    const profile = {
+      ...EMPTY_AUTOPILOT_PROFILE,
+      topics: [
+        tally('security', 6, 4),
+        tally('migrations', 3, 3.5),
+        tally('tests', 4, 1),
+        tally('docs', 1, 1),
+        tally('data_loss', 2, 0.5),
+      ],
+      followUps: { scored: 3, matched: 2 },
+    };
+    const view = resolveAutopilotScoreView({ autopilotProfile: profile }, 'balanced');
+    expect(view.topics).toEqual({
+      detail:
+        'What you raise most when you ask for changes or reply. Autopilot raises the same when it follows up for you.',
+      value: 'Security, migrations, tests',
+    });
+    expect(view.followUps).toEqual({
+      detail:
+        'When you asked for changes after it would have followed up, it raised the same topic as you on 2 of 3.',
+      percent: '67%',
+    });
+  });
+
+  it('shows no topics or follow-ups for a profile from an engine that keeps neither', () => {
+    const { topics: _topics, followUps: _followUps, ...older } = EMPTY_AUTOPILOT_PROFILE;
+    const view = resolveAutopilotScoreView(
+      { autopilotProfile: older as typeof EMPTY_AUTOPILOT_PROFILE },
+      'balanced'
+    );
+    expect(view.topics).toBeNull();
+    expect(view.followUps).toBeNull();
   });
 
   it('keeps suggesting Balanced while it agrees with you too rarely or over too few decisions', () => {
@@ -641,5 +685,40 @@ describe('the things Autopilot did for you on Home', () => {
       at: NOW,
       tone: 'green',
     });
+  });
+
+  it('quotes the follow-up it sent in your voice, and marks the row apart from an approval', () => {
+    const followed = createShinsaState({
+      tasks: [createTask({ id: 't-3', title: 'Add the endpoint', stage: 'planning' })],
+      gates: ['plan', 'review', 'merge'].map((type, index) =>
+        createGate({
+          id: `g-${type}`,
+          taskId: 't-3',
+          type: type as 'plan' | 'review' | 'merge',
+          ...answered,
+          answeredAt: NOW - index,
+          decision: 'revise',
+          response: '  How does this handle auth on the new endpoint? ',
+        })
+      ),
+    });
+    expect(listDoneForYouRows(followed).map((row) => [row.summary, row.icon, row.tone])).toEqual([
+      [
+        'Autopilot asked for changes to the plan for you: “How does this handle auth on the new endpoint?”',
+        'IconBubbleText',
+        'amber',
+      ],
+      [
+        'Autopilot asked for changes to the review for you: “How does this handle auth on the new endpoint?”',
+        'IconBubbleText',
+        'amber',
+      ],
+      [
+        'Autopilot asked for changes before the merge for you: “How does this handle auth on the new endpoint?”',
+        'IconBubbleText',
+        'amber',
+      ],
+    ]);
+    expect(listDoneForYouRows(followed)[0]?.reason).toBe('Small and clear.');
   });
 });

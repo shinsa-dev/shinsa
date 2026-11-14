@@ -113,7 +113,7 @@ export function resolveLeadPlanningPrompt(task: Task, feedback: string | null) {
     '',
     'Read what you need (the repositories, `find_tasks`, `read_task`), then call `propose_plan` with the plan of the whole initiative:',
     `- \`phases\`: its phases in order, ${PROTOCOL_LIMITS.minPlanPhases} to ${PROTOCOL_LIMITS.planPhases}, each a title of a few words and one sentence on what is true when it ends. Its tasks are grouped by them.`,
-    `- \`split\`: the first tasks to file, at most ${PROTOCOL_LIMITS.splitParts}. Each has a \`title\`, a \`request\` that stands on its own and names the repository it works in, the \`phase\` it belongs to (its number, from 1) and an \`order\`: \`waits_on\` for a task that needs another merged first. Each merges on its own pull request.`,
+    `- \`split\`: the first tasks to file, at most ${PROTOCOL_LIMITS.splitParts}. Each has a \`title\`, a \`request\` that stands on its own and names the repository it works in, the \`phase\` it belongs to (its number, from 1) and an \`order\`: \`parallel\` for a task that can start now, or \`waits_on\` for one that needs another merged first, never \`stacks_on\`. Each merges on its own pull request.`,
     '- `approach`: how the pieces fit together and the order they ship in. `out_of_scope`: what the initiative leaves out. `files` and `verification` stay empty: each task plans its own changes and checks.',
     'File the later pieces yourself with `create_task` once the first ones move; they join the initiative by themselves.',
     'If the human must decide something before you can plan, ask it with `ask` first, then plan with the answer.',

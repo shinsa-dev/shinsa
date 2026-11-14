@@ -1,4 +1,4 @@
-import { canChangeStack, isTaskSettled, type ShinsaState, type Task } from '@shinsa/core';
+import { canLeaveStack, isTaskSettled, type ShinsaState, type Task } from '@shinsa/core';
 import {
   DropdownMenuCheckboxItem,
   DropdownMenuGroup,
@@ -104,7 +104,7 @@ function StackItems({ state, task }: { state: ShinsaState; task: Task }) {
           onToggle={(choice) => void toggleStack(task, choice)}
         />
       )}
-      {(task.stacksOn?.length ?? 0) > 0 && canChangeStack(task) && (
+      {canLeaveStack(task) && (
         <DropdownMenuItem icon='IconCrossMedium' onClick={() => void unstackTask(task)}>
           Take out of the bundle
         </DropdownMenuItem>

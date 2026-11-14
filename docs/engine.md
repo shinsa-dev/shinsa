@@ -1420,9 +1420,9 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   it stacks on, ties broken oldest first (`sortParentsFirst`). `task.stack_on_tasks` refuses, for each task in the
   list, a task stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task
   (`stack_parent_settled`), on one that opens no pull request (`stack_no_pull_request`), on one in another repository
-  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). The bundle can change only
-  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
-  planning run and plans again once released (Taking a task out, below).
+  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). A task can stack on more
+  tasks only until it builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
+  planning run and plans again once released. Taking it out works at any time (Taking a task out, below).
 - **Ready instead of merged.** Every task of a bundle is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
   it is ready at) when the watch finds its pull request clean, where the merge gate would open, and keeps watching: a
   read that is not clean on the same head, or a new head, takes ready away and starts the usual fix (CI, comments,
@@ -1512,8 +1512,11 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   work until the task builds. A task still waiting starts at once from what it still stacks on, or the default branch.
   A task already planning on the branches below loses those bases, its planning run is cancelled, and
   `worktree.create` resets its worktree before it plans again; a task below with nothing stacked on it any more goes
-  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so the bundle no
-  longer changes; cancel the task or let the bundle merge.
+  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so it can no longer
+  stack on more tasks, but it can still leave (`leaveStartedStack`): each task it leaves becomes a wait (`waitsOn`, a
+  cancelled one is dropped), its bases go, and an open pull request is watched again and retargeted onto the default
+  branch, so it merges on its own once the tasks it left have merged. Until then its pull request shows their commits
+  too. This is how a stacked initiative becomes tasks that merge on their own.
 - **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
   description says so). Stack when the later task builds directly on these tasks' code in the same repository and
   ships with them: the next piece of one feature, a schema then its API and its screen in parallel then the screen
@@ -1575,8 +1578,13 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   already in another initiative stays there; a task already in one is refused (`initiative_exists`). This is how an
   effort like SW-101's chat split moves in after the fact.
 - **A plan can propose one.** A plan with a `split` may set `initiative: true` when the parts are one effort that will
-  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). The plan card
-  and its markdown say so under the other tasks (`PLAN_INITIATIVE_NOTE`), and approving the plan splits the parts off
+  run for days and keep growing (the planning prompt says when; `initiative` without `split` is refused). An initiative
+  is never a bundle: its tasks each merge on their own, so its parts start `parallel` or `waits_on` the part whose merge
+  they need, each with the `phase` it belongs to, and a plan that sets `initiative` with a `stacks_on` part is refused,
+  as is a lead's own plan with one (`validatePlanRules`). The plan card says so: "The agent
+  wants to start this as an initiative of N tasks", Start initiative, and that each task merges on its own while a lead
+  keeps track of them (`describePlanCard`, `lib/tasks/backlog.ts`); its markdown says so under the other tasks
+  (`PLAN_INITIATIVE_NOTE`). Approving the plan splits the parts off
   and then adopts the task (`startPlanInitiative`), so the task, its parts and a lead forked from it become the
   initiative in one click. A task already in an initiative keeps it, and its parts join it.
 - **The sheet** (`resolveInitiativeSheet`, pure, no model call) is the lead task's Overview, `shinsa initiatives show`
@@ -1597,7 +1605,7 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   tools. It is the task's one Agent session (the engine's first rule), and it keeps a task's notions: a plan, your
   answers, its chat.
   - **It plans first.** A new initiative's lead plans like any task (`purpose: plan`, `resolveLeadPlanningPrompt`,
-    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead): its `phases` are the
+    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead, and `resolveWorkspace` sends every lead run there even when the lead has a repository, as an adopted one does): its `phases` are the
     initiative's phases and its `split` the first tasks to file, each with the `phase` it belongs to (its number) and a
     request naming its repository. `validatePlanRules` lets a lead's plan split but refuses `files` and `initiative`.
     The split always opens the plan gate. Approving it files the parts (`startPlanSplit`, forked from the lead's chat,
@@ -1759,7 +1767,8 @@ stacked as a bundle, which is how most splits end; in parallel only for a part w
 alone; waiting only on code on an unmerged branch that should ship apart; and a small or cohesive request kept whole. Such a plan always waits for you. The plan card leads with
 Start N tasks (counting this task) over the list of parts, with Keep as one task beside it, and ⌘K offers both; when
 every part stacks back onto this task the split is one bundle, and the card says so (Start N-task bundle,
-`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle.
+`countBundledTasks`, `lib/tasks/split.ts`), and a mixed split names how many of its tasks form the bundle. A plan
+that starts an initiative says initiative instead, never bundle (Start initiative, Initiatives, above).
 Start N tasks approves the plan, and `startPlanSplit` (`decide/couriers.ts`) creates each part as a task under this
 one (`createdBy` `split`, the planning run), forked from it (`forkOf`), so its agent starts from this conversation and
 then plans for itself, with its wait or stack set; it shares the creation with `split_task` and is recorded as the
@@ -2375,7 +2384,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   task's request, plan goal or question, the facts, the last 8 lessons of that kind of gate and your decision profile
   for it, below, in the user prompt)
   and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
-  'forward', reason, reply}`. It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
+  'revise' | 'forward', reason, reply}` (`revise` on a plan, review or merge only, Follow-ups below). It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
   ("Autopilot could not reach a model, so this waits for you."). Core ignores a judgment for a gate no longer open
   or no longer judging, checks the limits again (the state may have moved), and then acts: a plan is approved
   (`answerGateForYou`), a question answered with the reply (with no reply it waits for you: "Autopilot was not sure
@@ -2386,6 +2395,34 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   waits for you as always. While a task is a review candidate, `reactToFindings` sends the review's `should_fix`
   findings to the Agent as well as its blocking ones (`isFindingFixedBeforeReview`), so it never approves past a
   finding you would have fixed.
+- **Follow-ups** (`revise`, `autopilot/follow-ups.ts`). At a plan, review or merge (`AUTOPILOT_FOLLOW_UP_GATES`) the
+  judge may answer `revise` with one follow-up question or change request in `reply`, written in your voice ("How
+  does this handle auth on the new endpoint?"). Autopilot answers the gate as your Request changes does
+  (`answerGateForYou` with `revise`, the same `reviseWork`), `gate.answered` with `autopilot: <reason>`, shown in the
+  activity as "Followed up for you by Autopilot" with the reason and the words it sent. A follow-up never sets
+  `Task.autopiloted`, so it never unlocks an auto merge. It has its own hard limit beside `act`
+  (`AutopilotLimits.revise`): it may go past the level's risk and size ceilings, since it approves nothing, but
+  never on a gate kind turned off in `gates`, a plan held for you, an escalated review, a paused kind (the lesson
+  limit), or a merge with `autoMerge` off or of a review you approved yourself. At most 2 follow-ups per gate in a
+  round (`AUTOPILOT_FOLLOW_UP_LIMITS.perGate`, `resolveFollowUpLimit`), counted since you last answered that kind of
+  gate on the task; then the gate comes to you ("Autopilot already followed up 2 times here, so this waits for
+  you."). A gate refused only for approving gets a live judgment that may only follow up (`autopilot.judging` with
+  `followUpOnly`, `Gate.autopilotFollowUpOnly`, the prompt told why it may not approve); an `act` there forwards with
+  the limit's reason, and its verdict is still kept as the guess. The prompt lists the follow-ups already sent at
+  this gate, oldest first, so it never asks the same twice; a `revise` with no words forwards. Handled by Autopilot
+  quotes the follow-up (`AutopilotDone.followUp`). Your later answer to that gate is a `revised` lesson: rejecting
+  it corrects Autopilot, approving or asking more keeps the call.
+- **The topics you probe** (`autopilot/topics.ts`, `AutopilotProfile.topics`). Each note you write when you ask for
+  changes or reply (`revised` or `replied` on a plan, question, review, merge or your OK) is read against a fixed
+  table of word patterns (`AUTOPILOT_TOPICS`: security, migrations, data loss, tests, error handling, performance,
+  compatibility, concurrency, privacy, docs; `listNoteTopics`), plain and replay-safe, no model call. Patterns match
+  whole words in any form (migrating, deleting, retried), and a word with another sense counts only in its topic's
+  context (drop or delete a table, rows or data; escape the input; row or table locks), so the Escape key, dropping
+  padding or a lock icon raise nothing. Each topic keeps
+  its count and a recency-weighted count with the profile's 30-day half-life (`AutopilotTopicTally`). Every judgment's
+  prompt lists the topics raised at least twice, at most 5, the ones raised lately first
+  (`listAutopilotTopicLines`, `AUTOPILOT_TOPIC_LIMITS`), so the judge raises them the way you would. Settings shows
+  the first three as What you ask about.
 - **It learns from you** (`autopilot/lessons.ts`). When you answer a gate after Autopilot acted on the task
   (approved its plan or review, answered its question) or brought it to you for a reason it could judge (not a
   setting), each answer becomes a lesson (`listAutopilotLessonsToLearn`, `autopilot.learned`,
@@ -2467,14 +2504,19 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
   merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
   (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
-  stored on the gate (`autopilot.guessed {verdict, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotEstimate`) and
+  stored on the gate (`autopilot.guessed {verdict, followUp, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotFollowUp`, `Gate.autopilotEstimate`) and
   acts on nothing. `estimate` is the model's estimate at that moment, the same one a live judgment reads for its
   veto, so the combined track scores exactly what Autopilot did or would have done. A gate it judged and then
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
-  (`AutopilotDecision.guess`). Approving agrees with `act`, changing or rejecting with `forward`; questions are not
-  scored, since a reply has no yes or no.
+  (`AutopilotDecision.guess`, and the follow-up it would have sent as `AutopilotDecision.followUp`). Approving agrees
+  with `act`, asking for changes with `revise` or `forward`, rejecting with `forward`; questions are not scored, since
+  a reply has no yes or no. **The follow-up match** (`AutopilotProfile.followUps`, `scoreFollowUp`,
+  `resolveAutopilotFollowUpScore`): when Autopilot guessed `revise` and you asked for changes in words that name a
+  topic, it counts whether its follow-up named one of the same topics; Settings shows the share as Its follow-ups,
+  and the benchmark prints it. Guesses and decisions from before follow-ups get `followUp: null` from the
+  `follow-ups` log migration.
 - **Four tracks** (`AutopilotProfile.tracks`, `AUTOPILOT_TRACKS`). Each decision is scored against four guessers,
   each a running agreement in which an older decision counts half as much after 50 newer ones
   (`AUTOPILOT_SCORE_LIMITS.halfLife`): `model`, the local model's guess (`p` of at least 0.5 is a yes), on every
@@ -2510,7 +2552,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   is always yours.
 - **Handled by Autopilot on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
   that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Handled by Autopilot, first on Home above
-  Needs you: what it did, the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
+  Needs you: what it did, the task and the reason; a follow-up quotes the words it sent. Opening a row marks it seen and it leaves the section (a finished task
   stays in Recently finished); with two or more rows, Mark all seen clears them (`autopilot.seen {gateIds}`, human-only, `Gate.autopilotSeen`; `shinsa autopilot seen`). Each notifies once when
   it happens and its notification closes when you mark it seen; none counts in the Needs you badge.
 - **Urgent merges while you are away.** With the policy on, an urgent task's open merge gate is checked every hour

@@ -54,6 +54,9 @@ describe('splitting the work in the plan', () => {
     expect(prompt).not.toContain('is the default');
     expect(prompt).not.toContain('only for pieces of one rewrite');
     expect(prompt).toContain('Keep a small or cohesive request whole');
+    expect(prompt).toContain('An initiative is not a bundle.');
+    expect(prompt).toContain('with `initiative` no part takes `stacks_on`');
+    expect(prompt).toContain('give each the `phase` it belongs to');
   });
 
   test('work that opens no pull request is never offered a split', () => {
