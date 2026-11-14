@@ -26,7 +26,6 @@ function writeMergeAhead(state: ShinsaState, taskId: string, at: number, mergeAh
 
 function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (gate.type === 'result') return 'Closed the task';
-  if (event.ahead && gate.type === 'merge') return `Merged once ready, as you asked: ${gate.title}`;
   if (event.autopilot && gate.type === 'failure') {
     const did = event.decision === 'reject' ? 'Cancelled' : 'Retried';
     return `${did} for you by Autopilot: ${gate.title}`;
@@ -37,6 +36,7 @@ function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   }
   if (event.autopilot && gate.type === 'merge')
     return `Approved the merge for you by Autopilot: ${gate.title}`;
+  if (event.ahead && gate.type === 'merge') return `Merged once ready, as you asked: ${gate.title}`;
   if (event.autopilot && isAgentQuestion(gate)) return `Answered for you by Autopilot: ${gate.title}`;
   if (event.autopilot) return `Approved for you by Autopilot: ${gate.title}`;
   if (event.ahead) return `Approved after the fix, as you asked: ${gate.title}`;
