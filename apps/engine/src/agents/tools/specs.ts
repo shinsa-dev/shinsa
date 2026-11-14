@@ -327,7 +327,7 @@ const SPLIT = {
         type: 'string',
         enum: [...PLAN_SPLIT_ORDERS],
         description:
-          'When it starts. stacks_on (the usual choice): on top of the branch of the task named in on, merging together with it as a bundle, for every part that serves the same goal as this task, such as the next piece of one feature or a follow-up on the same code. parallel: now, beside this task, only for a part with a different goal that is worth merging alone. waits_on: once the task named in on is merged, only when it needs code that exists only on that branch and should ship apart.',
+          'When it starts. stacks_on: on top of the branch of the task named in on, merging together with it as a bundle, for a part that serves the same goal as this task, such as the next piece of one feature or a follow-up on the same code; never with initiative. parallel: now, beside this task, for a part worth merging alone, and for an initiative part that needs nothing merged first. waits_on: once the task named in on is merged, when it needs code that exists only on that branch and should ship apart, and for an initiative part that needs another merged first.',
       },
       on: {
         type: 'integer',
@@ -425,7 +425,7 @@ export const TOOL_SPECS = {
         initiative: {
           type: 'boolean',
           description:
-            'Only with `split`, when the parts are one effort that will run for days and keep growing: true makes this task and its parts an initiative once the human approves the plan, with a lead agent that keeps track of them.',
+            'Only with `split`, when the parts are one effort that will run for days and keep growing: true makes this task and its parts an initiative once the human approves the plan, with a lead agent that keeps track of them. An initiative is not a bundle: its tasks each merge on their own, so no part takes stacks_on and each gives its phase.',
         },
         questions: {
           type: 'array',

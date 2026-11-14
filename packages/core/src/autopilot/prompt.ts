@@ -2,6 +2,7 @@ import { Option } from 'effect';
 import type { Gate, GateType, Task, TaskSuggestion } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { describeAutopilotEstimate, listAutopilotExampleLines, selectAutopilotEstimate } from './examples.ts';
+import { listAutopilotFollowUpLines } from './follow-ups.ts';
 import { listAutopilotLessonLines } from './lessons.ts';
 import { resolveAutopilotFacts } from './limits.ts';
 import { listAutopilotKindLines, listAutopilotSteeringLines } from './profile.ts';
@@ -12,6 +13,7 @@ import {
   type AutopilotFacts,
   type AutopilotGateKind,
 } from './schema.ts';
+import { listAutopilotTopicLines } from './topics.ts';
 
 export const AUTOPILOT_JUDGE_SYSTEM = [
   'You are Autopilot, the delegate of one developer who runs coding agents in Shinsa.',
@@ -21,7 +23,10 @@ export const AUTOPILOT_JUDGE_SYSTEM = [
   'Act only when the work is clear, small and low risk, and the developer would almost surely decide the same.',
   'Bring it to the developer when the scope is unclear, the change is large, the reviewer had doubts, the question needs their taste or knowledge, or you are unsure.',
   'An urgent fix a watchdog found while the developer is away may merge, when the reviewer rated it high confidence.',
-  'To answer an agent’s question, write the reply the developer would give, in plain words, in `reply`; otherwise leave `reply` empty.',
+  'To answer an agent’s question, write the reply the developer would give, in plain words, in `reply`.',
+  'On a plan, a review or a merge you may answer `revise` instead: one follow-up question or change request to the agent, in `reply`, written as the developer would write it, in their voice (“How does this handle auth on the new endpoint?”).',
+  'Follow up only when one specific question or change would settle what the developer would ask, such as a topic they often probe; never repeat a follow-up already sent.',
+  'For `act` and `forward` on anything but a question, leave `reply` empty.',
   `Write \`reason\` as one plain sentence the developer reads later, at most ${AUTOPILOT_JUDGMENT_LIMITS.reason} characters.`,
   'Weigh what the developer taught you at earlier decisions like this one: do what they approved, bring what they changed.',
   'Weigh their personal model’s estimate and the earlier decisions most like this one: what they did there, and their words, is what they would do here.',
@@ -83,16 +88,18 @@ export interface AutopilotHistoryLines {
   estimate: string | null;
   examples: readonly string[];
   steering: readonly string[];
+  topics?: readonly string[];
 }
 
 const NO_HISTORY: AutopilotHistoryLines = { estimate: null, examples: [], steering: [] };
 
-function describeHistory({ estimate, examples, steering }: AutopilotHistoryLines) {
+function describeHistory({ estimate, examples, steering, topics = [] }: AutopilotHistoryLines) {
   const lines: string[] = [];
   if (estimate) lines.push('', estimate);
   if (examples.length > 0)
     lines.push('', 'Earlier decisions most like this one, with or without you:', ...examples);
   if (steering.length > 0) lines.push('', ...steering);
+  if (topics.length > 0) lines.push('', ...topics);
   return lines;
 }
 
@@ -102,7 +109,15 @@ function describeShadow(shadow: boolean) {
 }
 
 export const AUTOPILOT_SHADOW_NOTE =
-  'Autopilot will not act here: this point is the developer’s. Guess what they will do: `act` if they approve it as it is, `forward` if they change or reject it.';
+  'Autopilot will not act here: this point is the developer’s. Guess what they will do: `act` if they approve it as it is, `revise` with the follow-up they would write in `reply` if they ask for a change or a follow-up, `forward` if they reject it or you cannot tell.';
+
+function describeFollowUpOnly(gate: Gate, shadow: boolean) {
+  if (shadow || !gate.autopilotFollowUpOnly) return [];
+  return [
+    '',
+    `You may not approve this one: ${gate.autopilotFollowUpOnly} Answer \`revise\` with one follow-up, or \`forward\` it to the developer.`,
+  ];
+}
 
 export function resolveAutopilotJudgePrompt(
   task: Task,
@@ -110,7 +125,8 @@ export function resolveAutopilotJudgePrompt(
   facts: AutopilotFacts,
   lessons: readonly string[] = [],
   history: AutopilotHistoryLines = NO_HISTORY,
-  shadow = false
+  shadow = false,
+  followUps: readonly string[] = []
 ) {
   const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
   return [
@@ -127,6 +143,8 @@ export function resolveAutopilotJudgePrompt(
     ...describeChoices(gate),
     ...describeLessons(lessons),
     ...describeHistory(history),
+    ...(followUps.length > 0 ? ['', ...followUps] : []),
+    ...describeFollowUpOnly(gate, shadow),
     ...describeShadow(shadow),
   ]
     .filter((line, index, lines) => line !== '' || lines[index - 1] !== '')
@@ -162,10 +180,19 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
       estimate: Option.getOrNull(Option.map(estimate, describeAutopilotEstimate)),
       examples: listAutopilotExampleLines(state, task, gate, kind, now),
       steering: listAutopilotSteeringLines(state, { projectId: task.projectId ?? null, risk: facts.risk }),
+      topics: listAutopilotTopicLines(state.autopilotProfile),
     };
     return {
       system: AUTOPILOT_JUDGE_SYSTEM,
-      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, history, shadow),
+      prompt: resolveAutopilotJudgePrompt(
+        task,
+        gate,
+        facts,
+        lessons,
+        history,
+        shadow,
+        listAutopilotFollowUpLines(state, gate)
+      ),
       verdicts: AUTOPILOT_VERDICTS,
     };
   });

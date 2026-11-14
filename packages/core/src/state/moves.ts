@@ -1,5 +1,5 @@
 import type { EventOf } from '../events/index.ts';
-import type { ShinsaState } from './project.ts';
+import { recordHandle, type ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
 
 type MoveEvent = EventOf<'task.moving'> | EventOf<'task.moved'>;
@@ -11,17 +11,20 @@ function describeRepoName(state: ShinsaState, repoId: string) {
 function applyMoving(state: ShinsaState, event: EventOf<'task.moving'>) {
   updateTask(state, event.taskId, event.at, { movingTo: event.repoId });
   record(state, event.taskId, event.at, {
-    actor: 'agent',
+    actor: event.runId ? 'agent' : 'you',
     kind: 'set_up',
     text: `Moving the task to ${describeRepoName(state, event.repoId)}`,
     detail: event.reason || null,
-    runId: event.runId,
+    runId: event.runId ?? null,
   });
 }
 
 function applyMoved(state: ShinsaState, event: EventOf<'task.moved'>) {
+  if (event.handle) recordHandle(state, event.handle);
   updateTask(state, event.taskId, event.at, {
     repoId: event.repoId,
+    ...(event.projectId ? { projectId: event.projectId } : {}),
+    ...(event.handle ? { handle: event.handle } : {}),
     movingTo: null,
     editedPaths: [],
     untoldEdits: [],

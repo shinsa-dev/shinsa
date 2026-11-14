@@ -12,6 +12,7 @@ export interface AutopilotDone {
   gate: AutopilotGateKind;
   title: string;
   reason: string;
+  followUp: string | null;
   at: number;
 }
 
@@ -46,6 +47,7 @@ export type AutopilotLimit = { allowed: true } | { allowed: false; reason: strin
 
 export interface AutopilotLimits {
   act: AutopilotLimit;
+  revise: AutopilotLimit;
   escalate: AutopilotLimit;
 }
 
@@ -66,7 +68,7 @@ export const AUTOPILOT_LIMITS = {
   awayMinutes: 60,
 } as const;
 
-export const AUTOPILOT_VERDICTS = ['act', 'forward'] as const;
+export const AUTOPILOT_VERDICTS = ['act', 'revise', 'forward'] as const;
 
 export type AutopilotVerdict = (typeof AUTOPILOT_VERDICTS)[number];
 
@@ -86,7 +88,19 @@ export const AUTOPILOT_JUDGMENT_LIMITS = {
   context: 1200,
 } as const;
 
-export const AUTOPILOT_LESSON_KINDS = ['acted', 'forwarded'] as const;
+export const AUTOPILOT_FOLLOW_UP_GATES = [
+  'plan',
+  'review',
+  'merge',
+] as const satisfies readonly AutopilotGateKind[];
+
+export type AutopilotFollowUpGate = (typeof AUTOPILOT_FOLLOW_UP_GATES)[number];
+
+export const AUTOPILOT_FOLLOW_UP_LIMITS = {
+  perGate: 2,
+} as const;
+
+export const AUTOPILOT_LESSON_KINDS = ['acted', 'revised', 'forwarded'] as const;
 
 export type AutopilotLessonKind = (typeof AUTOPILOT_LESSON_KINDS)[number];
 
@@ -191,6 +205,7 @@ export interface AutopilotDecision {
   watchdog: boolean;
   touched: boolean;
   guess: AutopilotVerdict | null;
+  followUp: string | null;
   note: string | null;
   facts: AutopilotDecisionFacts | null;
   estimate: AutopilotModelGuess | null;
@@ -258,6 +273,7 @@ export interface AutopilotBenchmark {
   decisions: number;
   judged: number;
   rows: AutopilotBenchmarkRow[];
+  followUps: AutopilotFollowUpMatch;
 }
 
 export interface AutopilotRate {
@@ -265,12 +281,46 @@ export interface AutopilotRate {
   negative: number;
 }
 
+export const AUTOPILOT_TOPICS = [
+  'security',
+  'migrations',
+  'data_loss',
+  'tests',
+  'errors',
+  'performance',
+  'compatibility',
+  'concurrency',
+  'privacy',
+  'docs',
+] as const;
+
+export type AutopilotTopic = (typeof AUTOPILOT_TOPICS)[number];
+
+export interface AutopilotTopicTally {
+  topic: AutopilotTopic;
+  total: number;
+  recent: number;
+  at: number;
+}
+
+export interface AutopilotFollowUpMatch {
+  scored: number;
+  matched: number;
+}
+
+export const AUTOPILOT_TOPIC_LIMITS = {
+  prompt: 5,
+  least: 2,
+} as const;
+
 export interface AutopilotProfile {
   total: number;
   decisions: AutopilotDecision[];
   tracks: Record<AutopilotTrack, AutopilotAgreement>;
   rates: Record<AutopilotModelHead, AutopilotRate>;
   tallies: AutopilotTally[];
+  topics: AutopilotTopicTally[];
+  followUps: AutopilotFollowUpMatch;
 }
 
 export const AUTOPILOT_PROFILE_LIMITS = {
@@ -303,6 +353,8 @@ export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = {
   },
   rates: { gate: EMPTY_AUTOPILOT_RATE, finding: EMPTY_AUTOPILOT_RATE, suggestion: EMPTY_AUTOPILOT_RATE },
   tallies: [],
+  topics: [],
+  followUps: { scored: 0, matched: 0 },
 };
 
 export const AUTOPILOT_SCORED_KINDS = [
@@ -333,6 +385,11 @@ export interface AutopilotScore {
   ready: boolean;
   suggested: AutopilotLevel;
   tracks: Record<AutopilotTrack, AutopilotTrackScore>;
+  followUps: AutopilotFollowUpScore;
+}
+
+export interface AutopilotFollowUpScore extends AutopilotFollowUpMatch {
+  share: number | null;
 }
 
 export const AUTOPILOT_SCORE_LIMITS = {

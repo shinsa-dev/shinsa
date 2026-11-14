@@ -22,6 +22,7 @@ import type { FieldSpec, Values } from './fields.ts';
 import { selectTeammateLead } from './initiatives.ts';
 import {
   findAccount,
+  findRepoId,
   findTaskId,
   findTaskIds,
   readTask,
@@ -818,6 +819,29 @@ export const TASK_SPECS: SurfaceSpec[] = [
       };
     }),
     done: () => 'It is no longer in a bundle.',
+  }),
+  defineCommand({
+    path: ['tasks', 'move'],
+    summary:
+      'Move a task to another repository, in any project, before it has done any work: its agent stops, its worktree is removed and the same step starts again there.',
+    command: 'task.move_to_repository',
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'repo',
+        kind: 'text',
+        required: true,
+        description: 'The repository to move it to (name or id).',
+      },
+    ],
+    build: Effect.fn('Surface.tasksMove')(function* (values, client) {
+      return {
+        type: 'task.move_to_repository' as const,
+        taskId: yield* findTaskId(client, readValue(values, 'task')),
+        repoId: yield* findRepoId(client, readValue(values, 'repo')),
+      };
+    }),
+    done: () => 'Moving it. The same step starts again in that repository.',
   }),
   defineCommand({
     path: ['tasks', 'move-to-backlog'],
