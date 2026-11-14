@@ -2954,7 +2954,7 @@ Only these, and they win over anything below:
       Open a terminal (`primary sm`, no tooltip).
     - **Yours first** (since 2026-11-14; `filter-menu.tsx`, `listShownTerminals`). The page shows the terminals you
       opened there yourself (no task, no service) by default, so a task's terminals and the services' runs do not
-      crowd your own. The filter at the end of the toolbar (`secondary sm`, its label and a trailing chevron, apart
+      crowd your own. The filter after the tabs, just before New terminal (`secondary sm`, its label and a trailing chevron, apart
       from the project picker so the two menus never sit side by side) is a radio menu: Your terminals, Task
       terminals, Services and All terminals, each with its count in `fg-2` right after its name
       (`countTerminalsByFilter`; a task's run of a service counts as a service, so the counts add up to All). The

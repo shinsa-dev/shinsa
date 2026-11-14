@@ -3645,7 +3645,8 @@ running when the window closes or the app quits, and a page that comes back find
   records when it was last active: output, your typing, a page attaching or leaving, a start. A shell that `exited`
   closes once it has been quiet and unseen for 10 minutes; a shell that has been quiet for 8 hours closes too, a
   running one only when nothing runs in front of it (the foreground check below), and so does one a restart left
-  `stopped` (`AUTO_CLOSE_LIMITS`). A terminal a page has open is never closed, and neither is a service run: it stops
+  `stopped` (`AUTO_CLOSE_LIMITS`). The clock starts when the engine makes the session, so after a start every
+  terminal it kept gets its full window, however long the machine was off. A terminal a page has open is never closed, and neither is a service run: it stops
   only when you stop the service. Inspect mode and a stopping engine close nothing.
 - **When the engine stops.** `stop()` hangs up every shell and its process group (`SIGHUP` and the PTY closed, as
   closing a terminal window does, then `SIGKILL` after 3 s) and waits until each group is empty, so nothing it started

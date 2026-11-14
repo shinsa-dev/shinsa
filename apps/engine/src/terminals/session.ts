@@ -51,8 +51,9 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
   let batchFiber: Fiber.Fiber<void> | null = null;
   let stopping = false;
   let lastOutputAt: number | null = null;
-  let lastActiveAt = options.info.endedAt ?? options.info.startedAt;
   let disposed = false;
+
+  let lastActiveAt = runSync(options.now);
 
   const touch = () => {
     lastActiveAt = runSync(options.now);

@@ -112,6 +112,26 @@ describe('Terminals sweep', () => {
     await close();
   });
 
+  it('gives every terminal a fresh window when the engine starts again, however long it was down', async () => {
+    let now = 0;
+    const first = await createTerminals({ now: () => now });
+    const shell = await runAsync(first.terminals.create(START));
+    await runAsync(first.terminals.stop);
+    await first.close();
+
+    now = 10 * idleMs;
+    const again = await createTerminals({ now: () => now, dataDir: first.dataDir });
+    await runAsync(again.terminals.sweep);
+    expect((await runAsync(again.terminals.find(shell.id))).info.status).toBe('stopped');
+    now += idleMs - 1;
+    await runAsync(again.terminals.sweep);
+    expect(await runAsync(again.terminals.select(shell.id))).not.toBeNull();
+    now += 1;
+    await runAsync(again.terminals.sweep);
+    expect(await runAsync(again.terminals.select(shell.id))).toBeNull();
+    await again.close();
+  });
+
   it('closes nothing in inspect mode or once stopped', async () => {
     let now = 0;
     const read = await createTerminals({ now: () => now, readOnly: true });
