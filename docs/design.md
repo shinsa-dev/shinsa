@@ -130,16 +130,14 @@ Only these, and they win over anything below:
      fix, the operation, an answer, an investigation or research: `isAgentVoice` in `lib/chat/run-role.ts`) read
      as one voice and are set apart by space alone: no role name, no model, no account. Only a run that failed
      or was stopped shows the role header, so "Failed", "Stopped" and the picker that runs it again on another
-     account have a place; a run going fine reaches that picker from ⌘K. **Every other voice has a header and a
-     rail**: the reviewer, a watch check,
-     an initiative's lead and a delegated helper. The header is a chat line with the role's icon and its name
-     (from `RUN_ROLE`: Reviewer `IconShieldCheck`, and for the others Agent `IconAgent`, Planner `IconMap`,
-     Builder `IconHammer`…), then as its meta what it did (`resolveRunHeadline`, "Reviewed the change, 3
-     findings (2 blocking, 1 should fix)") and the model. It is a button (`ToggleLine` in
-     `components/chat/chat-line.tsx`, the chevron on hover while closed): open by default, a click folds the
-     whole run to that one line, kept per run. Under it the run's work, reply, cards and errors sit 12px right
-     of a 1px `border-border` hairline that drops from the centre of the role's icon slot (`SpeakerRail` in
-     `components/chat/run-section.tsx`), so a review never reads as the Agent's own turn (26). When your message started the run, your bubble sits above its header, so you speak, then the agent
+     account have a place; a run going fine reaches that picker from ⌘K. **Every other voice speaks as another sender**: the
+     reviewer, a watch check, an initiative's lead and a delegated helper. Its run opens with a sender line
+     (`SpeakerHeader` in `components/chat/run-section.tsx`): the role's icon in a 20px round `bg-bg-a2` avatar,
+     its name (from `RUN_ROLE`: Reviewer `IconShieldCheck`, Agent `IconAgent`, Planner `IconMap`, Builder
+     `IconHammer`…) in `font-medium text-fg-6`, then what it did (`resolveRunHeadline`, "Reviewed the change, 3
+     findings (2 blocking, 1 should fix)") in `text-fg-3`, with no model, no chevron and no fold. Its work,
+     reply, cards and errors hang 28px in, under the name and not under the avatar, with no card and no rail,
+     the way a second person's message reads in a chat, so a review never reads as the Agent's own turn (26). When your message started the run, your bubble sits above its header, so you speak, then the agent
      answers. A delegated agent never gets a header of its own: it is a card inside the turn of the agent that
      delegated it, with the same role mark (26). The chat renders the chat protocol (`docs/engine.md`), never a
      provider's tool names. A message you send after a run ended belongs to the run that answers it

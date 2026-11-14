@@ -213,7 +213,7 @@ describe('RunSection', () => {
     expect(view.queryByRole('button', { name: /^Worked for/ })).toBeNull();
   });
 
-  it('puts a reviewer’s run on a rail under its mark, and leaves the Agent’s without one', async () => {
+  it('shows a reviewer’s run as another sender, with no toggle, and leaves the Agent’s without a header', async () => {
     const review = createRun({
       id: 'run-review',
       taskId: 'task-1',
@@ -234,15 +234,11 @@ describe('RunSection', () => {
       </TooltipProvider>
     );
     const verdict = await view.findByText('No findings.');
-    expect(verdict.closest('[data-speaker-rail]')?.getAttribute('data-speaker-rail')).toBe('reviewer');
-    expect(view.getByText('Reviewer').closest('[data-speaker-rail]')).toBeNull();
-    expect((await view.findByText(REPLY)).closest('[data-speaker-rail]')).toBeNull();
-    expect(view.container.querySelectorAll('[data-speaker-rail]')).toHaveLength(1);
+    expect(verdict.closest('[data-speaker]')?.getAttribute('data-speaker')).toBe('reviewer');
+    expect(view.getByText('Reviewer').closest('[data-speaker-header]')).not.toBeNull();
+    expect((await view.findByText(REPLY)).closest('[data-speaker]')).toBeNull();
+    expect(view.container.querySelectorAll('[data-speaker]')).toHaveLength(1);
     expect(view.queryByText('Agent')).toBeNull();
-    const header = view.getByRole('button', { name: /^Reviewer/ });
-    expect(header.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(header);
-    expect(view.queryByText('No findings.')).toBeNull();
-    expect(header.getAttribute('aria-expanded')).toBe('false');
+    expect(view.queryByRole('button', { name: /^Reviewer/ })).toBeNull();
   });
 });

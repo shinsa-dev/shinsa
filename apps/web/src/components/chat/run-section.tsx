@@ -1,9 +1,10 @@
 import type { Run, Task } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { RunAccount } from '@/components/accounts/account-items.tsx';
-import { ChatLine, DetailRail, FoldLine, SELECTED_WASH, ToggleLine } from '@/components/chat/chat-line.tsx';
+import { ChatLine, DetailRail, FoldLine, SELECTED_WASH } from '@/components/chat/chat-line.tsx';
 import { DelegationNotice } from '@/components/chat/delegation-card.tsx';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { LiveCard } from '@/components/chat/live-card.tsx';
@@ -35,15 +36,39 @@ const NO_MESSAGES: HumanMessage[] = [];
 
 const NO_EVIDENCE: never[] = [];
 
-const SPEAKER_RAIL =
-  'ms-2.25 flex min-w-0 flex-col border-s border-border ps-3 [--chat-inset:0px] [&>:last-child]:mb-0 [&>:last-child]:pb-0';
+const SPEAKER_BODY =
+  'flex min-w-0 flex-col ps-7 [--chat-inset:0px] [&>:first-child]:mt-0 [&>:first-child]:pt-0 [&>:last-child]:mb-0 [&>:last-child]:pb-0';
 
-function SpeakerRail({ role, children }: { role: Run['role']; children: React.ReactNode }) {
+function SpeakerHeader({ run, headline }: { run: Run; headline: string }) {
+  const role = RUN_ROLE[run.role];
   return (
-    <div className={cn('flex min-w-0 flex-col', CHAT_INSET)}>
-      <div data-speaker-rail={role} className={SPEAKER_RAIL}>
-        {children}
-      </div>
+    <div data-speaker-header className='flex min-w-0 items-center gap-2 text-xs max-sm:items-start'>
+      <span aria-hidden className='grid size-5 shrink-0 place-items-center rounded-full bg-bg-a2 text-fg-4'>
+        <Icon name={role.icon} size='sm' />
+      </span>
+      <span className='text-fg-6 shrink-0 font-medium'>{role.name}</span>
+      <Truncate className='min-w-0 text-fg-3 max-sm:line-clamp-2 max-sm:whitespace-normal'>
+        {headline}
+        {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
+        {run.outcome === 'cancelled' && ' · Stopped'}
+      </Truncate>
+    </div>
+  );
+}
+
+function SpeakerBlock({
+  run,
+  headline,
+  children,
+}: {
+  run: Run;
+  headline: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div data-speaker={run.role} className={cn('mt-2 mb-3 flex min-w-0 flex-col gap-1.5', CHAT_INSET)}>
+      <SpeakerHeader run={run} headline={headline} />
+      <div className={SPEAKER_BODY}>{children}</div>
     </div>
   );
 }
@@ -182,7 +207,6 @@ function RunBody({
   rerun: boolean;
   children: React.ReactNode;
 }) {
-  const { open, toggle } = useDisclosure(useDisclosureScope('run', run.id, 'speaker'), true);
   const role = RUN_ROLE[run.role];
   if (isAgentVoice(run)) {
     if (!hasStopped(run)) return children;
@@ -199,14 +223,10 @@ function RunBody({
       </>
     );
   }
-  const meta = <RunMeta run={run} task={task} headline={headline} rerun={false} />;
   return (
-    <>
-      <div className={RUN_LABEL}>
-        <ToggleLine open={open} onToggle={toggle} icon={role.icon} label={role.name} wraps meta={meta} />
-      </div>
-      {open && <SpeakerRail role={run.role}>{children}</SpeakerRail>}
-    </>
+    <SpeakerBlock run={run} headline={headline}>
+      {children}
+    </SpeakerBlock>
   );
 }
 
