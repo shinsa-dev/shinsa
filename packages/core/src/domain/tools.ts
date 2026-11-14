@@ -99,9 +99,19 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'list_services',
     'run_service',
   ],
-  answerer: ['answer', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember', 'report_feedback'],
+  answerer: [
+    'answer',
+    'move_to_repository',
+    'ask',
+    'find_tasks',
+    'note',
+    'suggest_tasks',
+    'remember',
+    'report_feedback',
+  ],
   investigator: [
     'report_diagnosis',
+    'move_to_repository',
     'ask',
     'attach_evidence',
     'remove_evidence',
@@ -117,7 +127,16 @@ const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
     'remove_service',
     'request_browser_sign_in',
   ],
-  researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks', 'remember', 'report_feedback'],
+  researcher: [
+    'submit_report',
+    'move_to_repository',
+    'ask',
+    'find_tasks',
+    'note',
+    'suggest_tasks',
+    'remember',
+    'report_feedback',
+  ],
 };
 
 export const PURPOSE_HAND_OVERS: Record<RunPurpose, readonly ShinsaToolName[]> = {

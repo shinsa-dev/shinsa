@@ -785,19 +785,68 @@ describe('move_to_repository', () => {
     expect(core.state.tasks[taskId]?.movingTo).toBe(studio?.id);
   });
 
-  test('passes on the core’s refusal for a repository of another project', async () => {
-    const { core, run } = await building('plan');
+  async function inTwoProjects() {
+    const planning = await building('plan');
+    const { core } = planning;
+    await core.dispatch({ type: 'project.write', project: { name: 'Shinsa', color: 'blue', key: 'LOC' } });
     await core.dispatch({ type: 'project.write', project: { name: 'Islands', color: 'green', key: 'ISL' } });
-    const islands = Object.values(core.state.projects)[0]?.id ?? '';
+    const project = (name: string) =>
+      Object.values(core.state.projects).find((candidate) => candidate.name === name)?.id ?? '';
+    const repoNamed = (name: string) => Object.values(core.state.repos).find((repo) => repo.name === name);
+    await core.dispatch({
+      type: 'repo.update',
+      repoId: repoNamed('app')?.id ?? '',
+      patch: { projectId: project('Shinsa') },
+    });
+    await core.dispatch({
+      type: 'repo.update',
+      repoId: repoNamed('admin')?.id ?? '',
+      patch: { projectId: project('Islands') },
+    });
+    return { ...planning, shinsa: project('Shinsa'), islands: project('Islands') };
+  }
+
+  test('moves to a registered repository of another project without registering anything', async () => {
+    const { core, run, taskId, islands } = await inTwoProjects();
+    const named: string[] = [];
+    const registerRepo: RegisterRepo = async (projectId, name) => {
+      named.push(`${projectId}:${name}`);
+      return null;
+    };
+    await handleOrchestrationTool(
+      'move_to_repository',
+      { repository: 'admin', reason: 'The badge lives in the Islands admin.' },
+      createCall(core, run.id, { registerRepo }).call
+    );
     const admin = Object.values(core.state.repos).find((repo) => repo.name === 'admin');
-    await core.dispatch({ type: 'repo.update', repoId: admin?.id ?? '', patch: { projectId: islands } });
-    await expect(
-      handleOrchestrationTool(
-        'move_to_repository',
-        { repository: 'admin', reason: 'It is there.' },
-        createCall(core, run.id).call
-      )
-    ).rejects.toThrow('admin belongs to another project');
+    expect(named).toEqual([]);
+    expect(core.state.tasks[taskId]?.movingTo).toBe(admin?.id);
+    await core.dispatch({ type: 'worktree.gone', taskId });
+    expect(core.state.tasks[taskId]?.repoId).toBe(admin?.id);
+    expect(core.state.tasks[taskId]?.projectId).toBe(islands);
+    expect(core.state.tasks[taskId]?.handle).toBe('ISL-1');
+  });
+
+  test('prefers the repository of the task’s own project when two share a name', async () => {
+    const { core, run, taskId, shinsa, islands } = await inTwoProjects();
+    for (const [projectId, path] of [
+      [islands, '/islands/web'],
+      [shinsa, '/shinsa/web'],
+    ] as const) {
+      await core.dispatch({
+        type: 'repo.register',
+        repo: { name: 'web', path, defaultBranch: 'main', remote: null, checkCommands: [] },
+        projectName: null,
+        projectId,
+      });
+    }
+    await handleOrchestrationTool(
+      'move_to_repository',
+      { repository: 'web', reason: 'The page is in web.' },
+      createCall(core, run.id).call
+    );
+    const own = Object.values(core.state.repos).find((repo) => repo.path === '/shinsa/web');
+    expect(core.state.tasks[taskId]?.movingTo).toBe(own?.id);
   });
 
   test('refuses a repository it cannot find, and input without a repository or a reason', async () => {
@@ -806,7 +855,7 @@ describe('move_to_repository', () => {
     await expect(
       handleOrchestrationTool('move_to_repository', { repository: 'web', reason: 'It is there.' }, call)
     ).rejects.toThrow(
-      'There is no repository "web" in this task\'s project or its folders. Known: app, admin.'
+      'There is no repository "web" registered or in this task\'s project folders. Known: app, admin.'
     );
     await expect(
       handleOrchestrationTool('move_to_repository', { reason: 'It is there.' }, call)

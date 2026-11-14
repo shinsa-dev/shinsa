@@ -1,7 +1,12 @@
 {
   "version": "0.2",
   "language": "en-GB,en-US",
-  "ignorePaths": ["**/node_modules/**", "**/dist/**", "packages/ui/src/components/icon/paths.ts"],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "packages/ui/src/components/icon/paths.ts",
+    "packages/core/src/autopilot/topic-patterns.ts"
+  ],
   "ignoreRegExpList": ["gh\\[[a-z]+\\]_", "\\\\bxox\\[[a-z]+\\]-", "AKIA\\["],
   "words": [
     "appcast",

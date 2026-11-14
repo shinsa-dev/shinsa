@@ -13,6 +13,7 @@ import {
   WATCHDOG_STATUS,
 } from '@/lib/tasks/watchdogs.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
@@ -156,6 +157,14 @@ describe('describing a watchdog', () => {
     expect(isWatchedTask(closed)).toBe(false);
     expect(resolveWatchingReason(closed, NOW)).toBeNull();
     expect(resolveWatchingReason(createTask({ id: 't', stage: 'merged' }), NOW)).toBeNull();
+  });
+
+  it('a merged task stays watched while one of its watchdogs checks it', () => {
+    const pullRequest = createPullRequest({ number: 7, state: 'merged' });
+    const checking = createTask({ id: 't', stage: 'watching', pullRequest, watchdogs: [createWatchdog()] });
+    expect(isWatchedTask(checking)).toBe(true);
+    const unmerged = createTask({ id: 'u', stage: 'watching', watchdogs: [createWatchdog()] });
+    expect(isWatchedTask(unmerged)).toBe(false);
   });
 
   it('describes a project’s data source with the repositories it covers', () => {

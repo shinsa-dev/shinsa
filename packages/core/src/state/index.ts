@@ -36,6 +36,7 @@ export {
 } from './project.ts';
 export {
   canChangeStack,
+  canLeaveStack,
   findTask,
   isBundleFollower,
   isBundleMember,
@@ -56,6 +57,10 @@ export {
   listProjectRepos,
   listRunningRuns,
   listStackChildren,
+  MOVE_REFUSAL_TEXT,
+  type MoveActor,
+  type MoveRefusal,
+  resolveMoveRefusal,
   listStackParents,
   resolveBundle,
   resolveBundleLead,

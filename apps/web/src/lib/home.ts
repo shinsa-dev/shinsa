@@ -7,6 +7,7 @@ import {
   isListedInFocus,
   isRetryArmed,
   isTaskComplete,
+  isWatchCheck,
   resolveAutoPace,
   resolveActiveHours,
   type ShinsaState,
@@ -60,7 +61,7 @@ export function listRecentlyFinished(state: ShinsaState, now: number, shown: Rea
     .filter(
       (task) =>
         !shown.has(task.id) &&
-        isTaskComplete(task) &&
+        (isTaskComplete(task) || isWatchCheck(task)) &&
         now - task.stageChangedAt <= FINISHED_WINDOW_MS &&
         isListedInFocus(state, task, now)
     )
