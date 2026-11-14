@@ -289,17 +289,14 @@ function usePanePreview(input: {
   content: PaneContent;
   headPath: string | null;
   guard: string | null;
-  start: string | null;
-  buffer: React.RefObject<EditorHandle | null>;
+  latest: string | null;
 }) {
-  const latest = React.useRef<string | null>(null);
-  if (input.preview !== null && input.buffer.current) latest.current = input.buffer.current.readText();
   const readable = input.content.kind === 'text' && input.headPath !== null && input.guard === null;
   if (!readable || input.content.kind !== 'text')
     return { shown: null, text: null, editing: input.guard === null };
   return {
     shown: input.preview,
-    text: input.preview ? (latest.current ?? input.start ?? input.content.content) : null,
+    text: input.preview ? (input.latest ?? input.content.content) : null,
     editing: !input.preview,
   };
 }
@@ -397,8 +394,7 @@ export function EditorPane({
     content,
     headPath: source.headPath,
     guard,
-    start: saver.start,
-    buffer,
+    latest: saver.latest,
   });
 
   function renderNote(note: CodeNote) {

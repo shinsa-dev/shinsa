@@ -19,6 +19,7 @@ export function useFileSaver(input: {
 }) {
   const { taskId, path, text, buffer } = input;
   const [state, setState] = React.useState<SaverState>(IDLE);
+  const [, setApplied] = React.useState(0);
   const read = React.useRef<{ text: string; start: string; latest: string; saver: FileSaver } | null>(null);
   if (read.current === null && text !== null && path !== null) {
     const start = selectSaved(taskId, path, text) ?? text;
@@ -33,6 +34,7 @@ export function useFileSaver(input: {
         apply: (next) => {
           if (read.current) read.current.latest = next;
           buffer.current?.replaceText(next);
+          setApplied((count) => count + 1);
         },
         onSaved: (saved) => rememberSaved(taskId, path, read.current?.text ?? from, saved),
         onState: setState,
@@ -63,6 +65,7 @@ export function useFileSaver(input: {
 
   return {
     start: current?.start ?? text,
+    latest: buffer.current?.readText() ?? current?.latest ?? text,
     state,
     edit: () => {
       if (!current) return;

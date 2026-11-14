@@ -684,6 +684,57 @@ describe('Markdown preview', () => {
     expect(await screen.findByRole('article', { name: 'Preview of README.md' })).toBeDefined();
   });
 
+  it('shows the new text when the file changes on disk while you read its preview', async () => {
+    const disk = { text: '# Sample\n' };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost');
+      const name = url.pathname.split('/').at(-1);
+      if (name === 'refs') return Response.json({ ...REFS, working: true, dirty: true });
+      if (name === 'blob' && url.searchParams.get('ref') === 'working')
+        return Response.json({
+          ref: 'working',
+          path: 'README.md',
+          content: disk.text,
+          size: disk.text.length,
+          binary: false,
+          tooLarge: false,
+          missing: false,
+          image: null,
+        });
+      return respond(url);
+    }) as typeof fetch;
+    const task = nextTask({
+      worktreePath: '/w',
+      stage: 'awaiting_review',
+      editedPaths: ['README.md'],
+      updatedAt: 1,
+    });
+    const page = (current: Task) => (
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey={`gate-${task.id}`}>
+          <CodeTab task={current} modes={['changes', 'files']} />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+    navigate(`/tasks/${task.id}?tab=code&mode=files&file=README.md`);
+    const view = render(page(task));
+    const preview = await screen.findByRole('article', { name: 'Preview of README.md' });
+    await waitFor(() =>
+      expect(within(preview).getByRole('heading', { level: 1 }).textContent).toBe('Sample')
+    );
+    disk.text = '# Rewritten\n';
+    view.rerender(page({ ...task, updatedAt: 2 }));
+    await waitFor(
+      () =>
+        expect(
+          within(screen.getByRole('article', { name: 'Preview of README.md' })).getByRole('heading', {
+            level: 1,
+          }).textContent
+        ).toBe('Rewritten'),
+      { timeout: 5_000 }
+    );
+  });
+
   it('offers no preview for a file that is not Markdown', async () => {
     renderCode(nextTask(), '&mode=files&file=docs/beta.txt');
     await findLine('guard');
