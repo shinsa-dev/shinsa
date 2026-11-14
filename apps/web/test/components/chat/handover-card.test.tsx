@@ -1,15 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { type ChatTool, resolveAnsweredReply, serializeAttachments, type Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, type RenderResult, render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
+import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createWatchSuggestion } from '../../support/schedules.ts';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function call(
   name: Extract<ChatTool, { kind: 'shinsa' }>['name'],
@@ -29,7 +30,14 @@ function call(
   };
 }
 
-function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
+function openCards(view: RenderResult) {
+  for (const header of view.container.querySelectorAll('h3 button[aria-expanded="false"]')) {
+    fireEvent.click(header);
+  }
+  return view;
+}
+
+function renderClosed(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
   return render(
     <TooltipProvider>
       <HandoverCard
@@ -41,6 +49,10 @@ function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | n
       />
     </TooltipProvider>
   );
+}
+
+function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
+  return openCards(renderClosed(toolCall, task, at));
 }
 
 describe('HandoverCard for the process tools', () => {
@@ -204,18 +216,20 @@ describe('HandoverCard for the process tools', () => {
   });
 
   it('names the owner instead of you on a teammate’s shared page', () => {
-    const view = render(
-      <TooltipProvider>
-        <ReadOnlyProvider owner={{ name: 'Kai', user: null }}>
-          <HandoverCard
-            call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
-            run={createRun({ id: 'r', taskId: 't' })}
-            live={false}
-            task={null}
-            at={null}
-          />
-        </ReadOnlyProvider>
-      </TooltipProvider>
+    const view = openCards(
+      render(
+        <TooltipProvider>
+          <ReadOnlyProvider owner={{ name: 'Kai', user: null }}>
+            <HandoverCard
+              call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
+              run={createRun({ id: 'r', taskId: 't' })}
+              live={false}
+              task={null}
+              at={null}
+            />
+          </ReadOnlyProvider>
+        </TooltipProvider>
+      )
     );
     expect(view.getByText('Asked Kai')).toBeTruthy();
     expect(view.getByText('Kai’s answer')).toBeTruthy();
@@ -224,18 +238,22 @@ describe('HandoverCard for the process tools', () => {
   });
 
   it('tags the owner with their user card when the share names their account', () => {
-    const view = render(
-      <TooltipProvider>
-        <ReadOnlyProvider owner={{ name: 'Kai', user: { login: 'kai', name: 'Kai Lane', avatarUrl: null } }}>
-          <HandoverCard
-            call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
-            run={createRun({ id: 'r', taskId: 't' })}
-            live={false}
-            task={null}
-            at={null}
-          />
-        </ReadOnlyProvider>
-      </TooltipProvider>
+    const view = openCards(
+      render(
+        <TooltipProvider>
+          <ReadOnlyProvider
+            owner={{ name: 'Kai', user: { login: 'kai', name: 'Kai Lane', avatarUrl: null } }}
+          >
+            <HandoverCard
+              call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
+              run={createRun({ id: 'r', taskId: 't' })}
+              live={false}
+              task={null}
+              at={null}
+            />
+          </ReadOnlyProvider>
+        </TooltipProvider>
+      )
     );
     const links = view.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
     expect(links).toEqual([
@@ -265,10 +283,12 @@ describe('HandoverCard for the process tools', () => {
         requestedAt: 0,
       },
     });
-    const view = render(
-      <TooltipProvider>
-        <HandoverCard call={call('ask', { question: 'Which file?' }, 'Use a.ts')} run={run} live={false} />
-      </TooltipProvider>
+    const view = openCards(
+      render(
+        <TooltipProvider>
+          <HandoverCard call={call('ask', { question: 'Which file?' }, 'Use a.ts')} run={run} live={false} />
+        </TooltipProvider>
+      )
     );
     expect(view.getByText('Asked the agent that delegated it')).toBeTruthy();
     expect(view.getByText('Its answer')).toBeTruthy();
@@ -288,7 +308,7 @@ describe('HandoverCard for the process tools', () => {
     expect(suggested.getByText('It is slow.')).toBeTruthy();
     suggested.unmount();
     const answered = renderCard(call('answer', { answer: 'It retries **three** times.' }));
-    expect(answered.getByText('Handed over the answer')).toBeTruthy();
+    expect(answered.container.querySelector('h3')).toBeNull();
     expect(answered.getByText('three')).toBeTruthy();
     answered.unmount();
     const waited = renderCard(call('wait_for', { notes: 'The deploy.' }, 'Shinsa will wake a fresh agent.'));
@@ -323,13 +343,13 @@ describe('HandoverCard for the process tools', () => {
     expect(phase.getByText('Other callers still use it.')).toBeTruthy();
     phase.unmount();
     const diagnosed = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs **dry**.' }));
-    expect(diagnosed.getByText('Reported the diagnosis')).toBeTruthy();
+    expect(diagnosed.container.querySelector('h3')).toBeNull();
     expect(diagnosed.getByText('dry')).toBeTruthy();
   });
 
-  it('shows a lead’s report as where the initiative stands', () => {
+  it('shows a lead’s report as a reply, with no card around it', () => {
     const view = renderCard(call('report_initiative', { narrative: 'The dock is in review.' }));
-    expect(view.getByText('Where it stands')).toBeTruthy();
+    expect(view.container.querySelector('h3')).toBeNull();
     expect(view.getByText('The dock is in review.')).toBeTruthy();
   });
 
@@ -360,6 +380,141 @@ describe('HandoverCard for the process tools', () => {
     }
     const plain = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs dry.' }));
     expect(plain.queryByText('What to do now')).toBeNull();
+  });
+});
+
+describe('HandoverCard folded to its header', () => {
+  const closed: [string, ToolCall, string, string][] = [
+    [
+      'a plan',
+      call('propose_plan', { goal: 'Ship it.', phases: [{ title: 'One' }, { title: 'Two' }] }),
+      '2 phases',
+      'Ship it.',
+    ],
+    [
+      'a phase',
+      call('complete_phase', {
+        summary: 'Moved the pool.',
+        judgement_calls: [{ title: 'Pool', call: 'Shared', reason: 'Fewer sockets.' }],
+      }),
+      '1 judgement call',
+      'Moved the pool.',
+    ],
+    [
+      'a fix',
+      call('complete_fix', { summary: 'Fixed the leak.', spots: [{ file: 'a.ts', start: 1 }] }),
+      '1 spot to review',
+      'Fixed the leak.',
+    ],
+    [
+      'a review',
+      call('report_review', {
+        findings: [{ file: 'a.ts', message: 'Leaks a socket.', severity: 'blocking' }],
+      }),
+      '1 blocking',
+      'Leaks a socket.',
+    ],
+    [
+      'an answered question',
+      call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false)),
+      'Answered',
+      'The last one',
+    ],
+    [
+      'composed steps',
+      call('reshape_task', { steps: ['answer', 'your_ok'], reason: 'Ask first.' }),
+      '2 steps',
+      'Ask first.',
+    ],
+    [
+      'suggested tasks',
+      call('suggest_tasks', { tasks: [{ title: 'Tidy logs', why: 'Noise.' }] }),
+      'In Overview',
+      'Tidy logs',
+    ],
+    [
+      'a rule',
+      call('remember', { text: 'Keep plans short.', why: 'You said so.' }),
+      'In Settings → Memory',
+      'Keep plans short.',
+    ],
+    [
+      'a move',
+      call('move_to_repository', { repository: 'web', reason: 'It lives there.' }),
+      '',
+      'It lives there.',
+    ],
+  ];
+
+  it.each(closed)(
+    'shows %s as one line with its summary, and opens it on click',
+    (_, toolCall, meta, body) => {
+      const view = renderClosed(toolCall);
+      const header = view.getByRole('button', { expanded: false });
+      if (meta) expect(header.closest('h3')?.textContent).toContain(meta);
+      expect(view.queryByText(body)).toBeNull();
+      fireEvent.click(header);
+      expect(view.getByRole('button', { expanded: true })).toBeTruthy();
+      expect(view.getByText(body)).toBeTruthy();
+      fireEvent.click(view.getByRole('button', { expanded: true }));
+      expect(view.queryByText(body)).toBeNull();
+    }
+  );
+
+  it('keeps the reply to your message and a delivered answer in view while the card is closed', () => {
+    const reply = { headline: 'Checked the retries.', points: [] };
+    for (const [name, args, text] of [
+      ['answer', { answer: 'It retries three times.' }, 'It retries three times.'],
+      ['report_diagnosis', { diagnosis: 'The pool runs dry.' }, 'The pool runs dry.'],
+      ['submit_report', { report: 'Use a workspace host.' }, 'Use a workspace host.'],
+      ['report_outcome', { outcome: 'Backfilled 12 rows.' }, 'Backfilled 12 rows.'],
+    ] as const) {
+      const view = renderClosed(call(name, { ...args, reply }));
+      expect(view.getByText('Checked the retries.')).toBeTruthy();
+      expect(view.getByText(text)).toBeTruthy();
+      view.unmount();
+    }
+    for (const [name, args, body] of [
+      ['propose_plan', { goal: 'Ship it.', phases: [{ title: 'One' }] }, 'Ship it.'],
+      ['complete_phase', { summary: 'Moved the pool.' }, 'Moved the pool.'],
+      ['complete_fix', { summary: 'Fixed the leak.' }, 'Fixed the leak.'],
+    ] as const) {
+      const view = renderClosed(call(name, { ...args, reply }));
+      expect(view.getByText('Checked the retries.')).toBeTruthy();
+      expect(view.queryByText(body)).toBeNull();
+      view.unmount();
+    }
+  });
+
+  it('shows an answer that proposes a change as a reply, with the change below it and nothing to open', () => {
+    const view = renderClosed(
+      call('answer', { answer: 'It retries.', propose_change: { request: 'Cap it.', why: 'It loops.' } })
+    );
+    expect(view.getByText('It retries.')).toBeTruthy();
+    expect(view.getByText('Proposed a change')).toBeTruthy();
+    expect(view.getByText('It loops.')).toBeTruthy();
+    expect(view.queryByRole('button')).toBeNull();
+  });
+
+  it('names a finished phase without a plan, and a fix without a focus, plainly', () => {
+    const phase = renderClosed(call('complete_phase', { summary: 'Done.' }));
+    expect(phase.getByText('Finished the phase')).toBeTruthy();
+    phase.unmount();
+    const fix = renderClosed(call('complete_fix', { summary: 'Fixed.' }));
+    expect(fix.getByText('Finished the fix')).toBeTruthy();
+  });
+
+  it('keeps a question that waits for you open', () => {
+    const view = renderClosed(call('ask', { question: 'Which run?', choices: ['First', 'Last'] }));
+    expect(view.getByRole('button', { expanded: true })).toBeTruthy();
+    expect(view.getByText('Waiting for your answer')).toBeTruthy();
+    expect(view.getByText('Last')).toBeTruthy();
+  });
+
+  it('draws a review with no findings as a plain line that opens nothing', () => {
+    const view = renderClosed(call('report_review', { findings: [] }));
+    expect(view.getByText('Reported no findings')).toBeTruthy();
+    expect(view.queryByRole('button')).toBeNull();
   });
 });
 
@@ -408,6 +563,18 @@ describe('HandoverCard for a watch an agent suggests', () => {
     ]);
   });
 
+  it('keeps a watch that waits for you open, and folds one you already added', () => {
+    pushSuggestion({ id: 's1' });
+    expect(
+      renderClosed(call('set_schedule', args), task).getByRole('button', { name: 'Add the watch' })
+    ).toBeTruthy();
+    cleanup();
+    pushSuggestion({ id: 's1', status: 'accepted', scheduleId: 'w1' });
+    const added = renderClosed(call('set_schedule', args), task);
+    expect(added.getByRole('button', { expanded: false })).toBeTruthy();
+    expect(added.queryByRole('link', { name: 'Open the watch' })).toBeNull();
+  });
+
   it('once added, links to the watch and offers no buttons', () => {
     pushSuggestion({ id: 's1', status: 'accepted', scheduleId: 'w1' });
     const view = renderCard(call('set_schedule', args), task);
@@ -421,5 +588,55 @@ describe('HandoverCard for a watch an agent suggests', () => {
     const view = renderCard(call('set_schedule', args), task);
     expect(view.getByText('No longer open')).toBeTruthy();
     expect(view.getByText('slack')).toBeTruthy();
+  });
+});
+
+describe('HandoverCard for the review that waits for your verdicts', () => {
+  const findings = [
+    { severity: 'blocking', file: 'a.ts', line: 1, message: 'Leaks a socket.' },
+    { severity: 'optional', file: 'b.ts', line: 2, message: 'Tidy the name.' },
+  ] as const;
+  const task = createTask({ id: 't', findings: [...findings] });
+
+  afterEach(() => {
+    stopFakeServer();
+  });
+
+  function renderReview(reported: readonly (typeof findings)[number][]) {
+    return render(
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey='chat-review'>
+          <HandoverCard
+            call={call('report_review', { findings: reported })}
+            run={createRun({ id: 'r', taskId: 't', role: 'reviewer' })}
+            live={false}
+            task={task}
+          />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+  }
+
+  it('opens the latest findings with Fix and Dismiss while your review is open', () => {
+    startFakeServer();
+    pushState(
+      createShinsaState({ tasks: [task], gates: [createGate({ id: 'g', taskId: 't', type: 'review' })] })
+    );
+    const view = renderReview(findings);
+    expect(view.getByText('Leaks a socket.')).toBeTruthy();
+    expect(view.getAllByRole('tab', { name: 'Fix' })).toHaveLength(2);
+    expect(view.getAllByRole('tab', { name: 'Dismiss' })).toHaveLength(2);
+  });
+
+  it('keeps an earlier review folded, with no verdicts to choose', () => {
+    startFakeServer();
+    pushState(
+      createShinsaState({ tasks: [task], gates: [createGate({ id: 'g', taskId: 't', type: 'review' })] })
+    );
+    const view = renderReview([findings[0]]);
+    expect(view.queryByText('Leaks a socket.')).toBeNull();
+    fireEvent.click(view.getByRole('button', { expanded: false }));
+    expect(view.getByText('Leaks a socket.')).toBeTruthy();
+    expect(view.queryByRole('tab', { name: 'Fix' })).toBeNull();
   });
 });
