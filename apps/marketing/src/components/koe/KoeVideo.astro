@@ -7,15 +7,21 @@ interface Props {
   height: number;
   label: string;
   captions: KoeCaption[];
+  light?: boolean;
+  compact?: boolean;
   class?: string;
   id?: string;
 }
 
-const { name, width, height, label, captions, class: className, id } = Astro.props;
-const lines = captions.map((caption) => ({ ...caption, words: resolveCaptionWords(caption) }));
+const { name, width, height, label, captions, light = false, compact = false, class: className, id } = Astro.props;
+const lines = compact ? [] : captions.map((caption) => ({ ...caption, words: resolveCaptionWords(caption) }));
+const lightName = light ? `${name}-light` : name;
 ---
 
-<div id={id} class:list={['relative overflow-hidden rounded-2xl bg-bg-1 ring-1 ring-bg-3', className]}>
+<div
+  id={id}
+  class:list={['relative overflow-hidden bg-bg-1 ring-1 ring-bg-3', compact ? 'rounded-xl' : 'rounded-2xl', className]}
+>
   <video
     class='block h-auto w-full'
     width={width}
@@ -23,14 +29,30 @@ const lines = captions.map((caption) => ({ ...caption, words: resolveCaptionWord
     poster={`/koe/${name}.webp`}
     aria-label={label}
     data-koe-video
+    data-poster-light={`/koe/${lightName}.webp`}
+    data-poster-dark={`/koe/${name}.webp`}
     muted
     loop
     playsinline
     preload='metadata'
   >
+    {
+      light && (
+        <>
+          <source src={`/koe/${lightName}.webm`} type='video/webm' media='(prefers-color-scheme: light)' />
+          <source src={`/koe/${lightName}.mp4`} type='video/mp4' media='(prefers-color-scheme: light)' />
+        </>
+      )
+    }
     <source src={`/koe/${name}.webm`} type='video/webm' />
     <source src={`/koe/${name}.mp4`} type='video/mp4' />
   </video>
+  <script is:inline>
+    (() => {
+      const video = document.currentScript.previousElementSibling;
+      if (matchMedia('(prefers-color-scheme: light)').matches) video.poster = video.dataset.posterLight;
+    })();
+  </script>
   <div class='pointer-events-none absolute inset-x-0 top-[6%] grid justify-items-center px-4' aria-hidden='true'>
     {
       lines.map((line) => (
@@ -105,6 +127,16 @@ const lines = captions.map((caption) => ({ ...caption, words: resolveCaptionWord
   }
 
   for (const video of videos) followCaptions(video);
+
+  const light = window.matchMedia('(prefers-color-scheme: light)');
+  light.addEventListener('change', () => {
+    for (const video of videos) {
+      const playing = !video.paused;
+      video.poster = (light.matches ? video.dataset.posterLight : video.dataset.posterDark) ?? video.poster;
+      video.load();
+      if (playing) void video.play().catch(() => video.setAttribute('controls', ''));
+    }
+  });
 
   if (reduced.matches) for (const video of videos) video.setAttribute('controls', '');
   else {

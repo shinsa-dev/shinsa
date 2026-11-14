@@ -170,10 +170,11 @@ export const koe = {
     { start: 4.85, end: 6.8, text: 'Make this button stand out.' },
     { start: 11.75, end: 13.9, text: 'Give these lines a little more room.' },
   ],
-  pillLabel: 'Koe’s pill while it listens',
   closingTitle: 'Say it once.',
   closingText: 'Koe brings the screenshots.',
   callout: 'Also from us',
+  launchTag: 'New',
+  launchText: 'Koe, dictation for your Mac',
   calloutTitle: 'Koe, talk and point instead of typing.',
   calloutText:
     'Hold Fn and talk. Comment on the screen, take screenshots and clips as you go, and Koe copies it all as one bundle, ready for any agent. Fast, and on your Mac.',
