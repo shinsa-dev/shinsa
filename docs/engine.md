@@ -3743,6 +3743,14 @@ running when the window closes or the app quits, and a page that comes back find
   would not free enough. When all of them run, `terminal_limit` names who holds them, each task by its handle with
   its services and shells, and how many are yours (`resolveLimitMessage`), so an agent's `run_service` or you can free
   one. On start, `resumeServices` drops the ended terminals of finished and unknown tasks before anything resumes.
+- **Unused terminals close on their own.** Every minute (`TerminalTimings.sweep`), `Terminals.sweep` asks
+  `resolveAutoClose` (`sweep.ts`, pure) about each terminal and closes what it picks, as Close would. Each session
+  records when it was last active: output, your typing, a page attaching or leaving, a start. A shell that `exited`
+  closes once it has been quiet and unseen for 10 minutes; a shell that has been quiet for 8 hours closes too, a
+  running one only when nothing runs in front of it (the foreground check below), and so does one a restart left
+  `stopped` (`AUTO_CLOSE_LIMITS`). The clock starts when the engine makes the session, so after a start every
+  terminal it kept gets its full window, however long the machine was off. A terminal a page has open is never closed, and neither is a service run: it stops
+  only when you stop the service. Inspect mode and a stopping engine close nothing.
 - **When the engine stops.** `stop()` hangs up every shell and its process group (`SIGHUP` and the PTY closed, as
   closing a terminal window does, then `SIGKILL` after 3 s) and waits until each group is empty, so nothing it started
   outlives the engine, and saves each screen. A restarted
