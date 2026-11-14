@@ -19,7 +19,7 @@ function listPlannedFiles(task: Task) {
   return [...new Set((task.plan?.document?.files ?? []).map((file) => file.path))];
 }
 
-export function listAutopilotTaskPaths(task: Task) {
+function listAutopilotTaskPaths(task: Task) {
   return [...new Set([...listReportedFiles(task), ...listPlannedFiles(task), ...(task.editedPaths ?? [])])];
 }
 
