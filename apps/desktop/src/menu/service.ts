@@ -78,13 +78,17 @@ export class AppMenu extends Context.Service<
           case 'UseEngine': {
             const step = yield* source.use(resolveSourceChoice(yield* source.current, command.choice));
             if (step !== 'reload') return;
-            yield* refresh(yield* updater.snapshot);
             yield* window.show;
             return yield* window.reload;
           }
         }
       });
       yield* Effect.forkIn(Stream.runForEach(updater.changes, refresh), scope, { startImmediately: true });
+      yield* Effect.forkIn(
+        Stream.runForEach(source.changes, () => Effect.flatMap(updater.snapshot, refresh)),
+        scope,
+        { startImmediately: true }
+      );
       yield* Effect.forkIn(Stream.runForEach(shell.menuCommands, answer), scope, { startImmediately: true });
       return AppMenu.of({
         showServer: (health) => Effect.andThen(Ref.set(credits, describeServer(origin, health)), applyAbout),

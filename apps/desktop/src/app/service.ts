@@ -1,4 +1,5 @@
 import { Effect, Layer, Stream } from 'effect';
+import { CloudSignIn } from '../cloud-sign-in/service.ts';
 import { findDeepLink, parseDeepLink } from '../deep-links/links.ts';
 import { DesktopHost } from '../host/service.ts';
 import type { ShellEvent } from '../shell/schema.ts';
@@ -10,7 +11,9 @@ export const AppLifecycle = Layer.effectDiscard(
     const host = yield* DesktopHost;
     const shell = yield* DesktopShell;
     const window = yield* AppWindow;
+    const signIn = yield* CloudSignIn;
     const openLink = Effect.fn('AppLifecycle.openLink')(function* (raw: string | null) {
+      if (raw && (yield* signIn.finish(raw))) return;
       const path = raw ? parseDeepLink(raw) : null;
       if (path) yield* window.open(path);
       yield* window.show;
@@ -25,7 +28,9 @@ export const AppLifecycle = Layer.effectDiscard(
           return yield* window.show;
       }
     });
-    const first = parseDeepLink(findDeepLink(host.argv) ?? '');
+    const firstLink = findDeepLink(host.argv) ?? '';
+    const signedIn = yield* signIn.finish(firstLink);
+    const first = signedIn ? null : parseDeepLink(firstLink);
     if (first) yield* window.open(first);
     yield* shell.guard({ beforeQuit: window.markQuitting });
     yield* Effect.forkScoped(Stream.runForEach(shell.events, answer), { startImmediately: true });

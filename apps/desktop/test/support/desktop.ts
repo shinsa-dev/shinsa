@@ -6,6 +6,7 @@ import { AppLifecycle } from '../../src/app/service.ts';
 import { AwayWatch } from '../../src/away/service.ts';
 import type { DesktopStart } from '../../src/bridge/schema.ts';
 import { PageBridge } from '../../src/bridge/service.ts';
+import { CloudSignIn } from '../../src/cloud-sign-in/service.ts';
 import { CommandLine } from '../../src/command-line/service.ts';
 import { Connection } from '../../src/connection/service.ts';
 import type { MessageDialog } from '../../src/dialogs/schema.ts';
@@ -32,6 +33,8 @@ import { PageChannel } from '../../src/page-channel/service.ts';
 import { PowerMonitor } from '../../src/power-monitor/service.ts';
 import { Prefs } from '../../src/prefs/service.ts';
 import { EngineServer } from '../../src/server/service.ts';
+import { CookieWriteFailed, type SessionCookie } from '../../src/session-cookies/schema.ts';
+import { SessionCookies } from '../../src/session-cookies/service.ts';
 import type { AboutPanel, ShellEvent, ShellGuards } from '../../src/shell/schema.ts';
 import { DesktopShell } from '../../src/shell/service.ts';
 import { EngineSource } from '../../src/source/service.ts';
@@ -63,6 +66,9 @@ export interface DesktopWorld {
   unwritable: Set<string>;
   answer: (path: string) => HttpAnswer;
   requests: string[];
+  posts: { url: string; body: unknown }[];
+  cookies: SessionCookie[];
+  cookiesFail: boolean;
   launchctl: string[][];
   print: () => { ok: boolean; output: string };
   registration: Registration;
@@ -126,6 +132,9 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     unwritable: new Set(),
     answer: () => 'refuse',
     requests: [],
+    posts: [],
+    cookies: [],
+    cookiesFail: false,
     launchctl: [],
     print: () => ({ ok: false, output: '' }),
     registration: 'not-registered',
@@ -180,6 +189,14 @@ function makeHttpLayer(world: DesktopWorld) {
     HttpClient.HttpClient,
     HttpClient.make((request, url) => {
       world.requests.push(url.pathname);
+      if (request.method === 'POST')
+        world.posts.push({
+          url: url.toString(),
+          body:
+            request.body._tag === 'Uint8Array'
+              ? JSON.parse(new TextDecoder().decode(request.body.body))
+              : null,
+        });
       const answer = world.answer(url.pathname);
       if (answer === 'hang') return Effect.never;
       if (answer === 'refuse') {
@@ -303,6 +320,17 @@ function makeWorldLayer(world: DesktopWorld) {
       })
     ),
     makeHttpLayer(world),
+    Layer.succeed(
+      SessionCookies,
+      SessionCookies.of({
+        write: (cookie) =>
+          world.cookiesFail
+            ? Effect.fail(new CookieWriteFailed({ cookie: cookie.name, message: 'refused' }))
+            : Effect.sync(() => {
+                world.cookies.push(cookie);
+              }),
+      })
+    ),
     makeUpdateLayer(world)
   );
 }
@@ -516,6 +544,7 @@ function makeDesktopLayer(world: DesktopWorld) {
     EngineSupervisor.layer,
     CommandLine.layer
   ).pipe(
+    Layer.provideMerge(CloudSignIn.layer),
     Layer.provideMerge(Updater.layer),
     Layer.provideMerge(Notifications.layer),
     Layer.provideMerge(AppWindow.layer),

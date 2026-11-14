@@ -15,6 +15,8 @@ import {
 
 const APP: SenderFrame = { contentsId: CONTENTS_ID, url: 'http://127.0.0.1:7446/tasks', top: true };
 
+const PREFS = `${USER_DATA}/prefs.json`;
+
 const FRAME: SenderFrame = { ...APP, top: false };
 
 function run<A>(world: DesktopWorld, body: (updater: Updater['Service']) => Effect.Effect<A>) {
@@ -52,6 +54,7 @@ describe('the page bridge', () => {
         update: { status: 'none' },
         channel: 'stable',
         windowState: 'fullscreen',
+        source: { kind: 'local' },
       },
       null,
     ]);
@@ -148,5 +151,27 @@ describe('the page bridge', () => {
       CHANNELS.update,
       { status: 'downloading', version: '1.3.0', percent: 0 },
     ]);
+  });
+
+  it('signs in and switches the engine for the page, reloading when only the machine changes', async () => {
+    const world = createWorld({
+      files: new Map([[PREFS, JSON.stringify({ engineSource: { kind: 'cloud', machine: null } })]]),
+    });
+    const answers = await run(world, () =>
+      Effect.gen(function* () {
+        const cloudPage: SenderFrame = { ...APP, url: 'https://app.shinsa.dev/' };
+        yield* send(world, CHANNELS.signIn, undefined, cloudPage);
+        yield* send(world, CHANNELS.useMachine, { id: 'm1', name: 'Studio' }, cloudPage);
+        const pinned = yield* start(world, cloudPage);
+        yield* send(world, CHANNELS.useMachine, { id: '', name: 'Nameless' }, cloudPage);
+        yield* send(world, CHANNELS.useLocalEngine, undefined, cloudPage);
+        return pinned?.source;
+      })
+    );
+    expect(answers).toEqual({ kind: 'cloud', machine: { id: 'm1', name: 'Studio' } });
+    expect(world.shell[0]).toStartWith('open https://app.shinsa.dev/__remote/sign-in?client=native');
+    expect(world.shell.slice(1)).toEqual(['relaunch']);
+    expect(world.actions).toEqual(['retry']);
+    expect(JSON.parse(world.files.get(PREFS) ?? '{}')).toMatchObject({ engineSource: { kind: 'local' } });
   });
 });

@@ -46,8 +46,6 @@ export class StatusTray extends Context.Service<
         if (click.kind === 'source') {
           const step = yield* source.use(resolveSourceChoice(yield* source.current, click.choice));
           if (step !== 'reload') return;
-          const shownState = yield* Ref.get(last);
-          yield* update(shownState.health, shownState.queue);
           yield* window.show;
           return yield* window.reload;
         }
@@ -55,6 +53,13 @@ export class StatusTray extends Context.Service<
         yield* shell.quit;
       });
       yield* update(null, null);
+      yield* Effect.forkIn(
+        Stream.runForEach(source.changes, () =>
+          Effect.flatMap(Ref.get(last), (shownState) => update(shownState.health, shownState.queue))
+        ),
+        scope,
+        { startImmediately: true }
+      );
       yield* Effect.forkIn(Stream.runForEach(native.clicks, answer), scope, { startImmediately: true });
       return StatusTray.of({ update });
     })

@@ -49,4 +49,23 @@ describe('the app', () => {
     await run(world, () => Effect.suspend(() => world.shellGuards?.beforeQuit ?? Effect.void));
     expect(closeWindow(world)).toBe(true);
   });
+
+  it('finishes a sign-in from its link instead of opening it as a page', async () => {
+    const world = createWorld({
+      argv: ['/Applications/Shinsa.app/Contents/MacOS/Shinsa', 'shinsa://signed-in?code=late'],
+    });
+    await run(world, (window) =>
+      Effect.gen(function* () {
+        yield* window.showServerPage;
+        yield* offer(world.shellEvents, { _tag: 'OpenUrl', url: 'shinsa://signed-in?error=sign_in_failed' });
+      })
+    );
+    expect(world.sent).toEqual([]);
+    expect(world.window).toEqual([
+      'show',
+      'load http://127.0.0.1:7446/?sign_in_error=sign_in_expired',
+      'load http://127.0.0.1:7446/?sign_in_error=sign_in_failed',
+      'show',
+    ]);
+  });
 });

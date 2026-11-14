@@ -59,6 +59,18 @@ describe('the window', () => {
     expect(world.sent).toEqual([[CHANNELS.navigate, '/settings']]);
   });
 
+  it('loads a page afresh when it shows Shinsa, and keeps it for later on the status page', async () => {
+    const world = createWorld();
+    await run(world, (window) =>
+      Effect.gen(function* () {
+        yield* window.load('/?sign_in_error=sign_in_failed');
+        yield* window.showServerPage;
+        yield* window.load('/');
+      })
+    );
+    expect(world.window).toEqual([`load ${ORIGIN}/?sign_in_error=sign_in_failed`, `load ${ORIGIN}/`]);
+  });
+
   it('shows the waiting page and takes its actions', async () => {
     const world = createWorld({ loads: false });
     const answers = await run(world, (window, guards) =>

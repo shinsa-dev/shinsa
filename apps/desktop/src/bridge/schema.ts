@@ -1,5 +1,6 @@
 import type { AwaySpan } from '@shinsa/core';
 import type { DesktopNotice } from '../notifications/schema.ts';
+import type { PinnedMachine, SourceSetting } from '../source/schema.ts';
 import type { UpdateChannel } from '../updates/schema.ts';
 
 export const PAGE_ACTIONS = ['new-task', 'command-menu', 'whats-new'] as const;
@@ -25,6 +26,7 @@ export interface DesktopStart {
   update: DesktopUpdate;
   channel: UpdateChannel;
   windowState: DesktopWindowState;
+  source: SourceSetting;
 }
 
 export interface DesktopBridge extends DesktopStart {
@@ -36,6 +38,9 @@ export interface DesktopBridge extends DesktopStart {
   checkForUpdates: () => void;
   applyUpdateChannel: (channel: UpdateChannel) => void;
   answerDowngrade: (accept: boolean) => void;
+  signIn: () => void;
+  useLocalEngine: () => void;
+  useMachine: (machine: PinnedMachine | null) => void;
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
@@ -58,4 +63,7 @@ export const CHANNELS = {
   downgrade: 'shinsa:downgrade',
   away: 'shinsa:away',
   action: 'shinsa:action',
+  signIn: 'shinsa:sign-in',
+  useLocalEngine: 'shinsa:use-local-engine',
+  useMachine: 'shinsa:use-machine',
 } as const;

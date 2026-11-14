@@ -25,6 +25,7 @@ export class AppWindow extends Context.Service<
     readonly showServerPage: Effect.Effect<boolean>;
     showWaiting(view: EngineScreenView): Effect.Effect<boolean>;
     open(path: string): Effect.Effect<void>;
+    load(path: string): Effect.Effect<void>;
     step(offset: -1 | 1): Effect.Effect<void>;
     sendToPage(channel: string, value?: unknown): Effect.Effect<void>;
   }
@@ -52,6 +53,11 @@ export class AppWindow extends Context.Service<
       const follow = Effect.fn('AppWindow.follow')(function* (navigation: Navigation) {
         if (navigation.kind === 'external') yield* shell.openExternal(navigation.url);
         if (navigation.kind === 'app' || navigation.kind === 'link') yield* open(navigation.path);
+      });
+      const showServerPage = Effect.gen(function* () {
+        const path = yield* Ref.getAndSet(pending, '/');
+        yield* Ref.set(page, 'app');
+        return yield* native.loadUrl(new URL(path, origin).toString());
       });
       const later = (effect: Effect.Effect<void>) => Effect.asVoid(Effect.forkIn(effect, scope));
       const hide = Effect.andThen(Ref.set(hideOnLeave, false), native.hide);
@@ -115,14 +121,14 @@ export class AppWindow extends Context.Service<
         show: native.show,
         markQuitting: Ref.set(quitting, true),
         reload,
-        showServerPage: Effect.gen(function* () {
-          const path = yield* Ref.getAndSet(pending, '/');
-          yield* Ref.set(page, 'app');
-          return yield* native.loadUrl(new URL(path, origin).toString());
-        }),
+        showServerPage,
         showWaiting: (view) =>
           Effect.andThen(Ref.set(page, 'waiting'), native.loadWaiting(resolveWaitingQuery(view))),
         open,
+        load: Effect.fn('AppWindow.load')(function* (path: string) {
+          yield* Ref.set(pending, path);
+          if ((yield* Ref.get(page)) === 'app') yield* showServerPage;
+        }),
         step: Effect.fn('AppWindow.step')(function* (offset: -1 | 1) {
           if ((yield* Ref.get(page)) !== 'app') return;
           const history = yield* native.history;

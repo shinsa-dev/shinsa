@@ -1,5 +1,6 @@
 import { ENGINE_PROTOCOL } from '@shinsa/core';
 import { Effect, Layer, Option, Schema, Stream } from 'effect';
+import { CloudSignIn } from '../cloud-sign-in/service.ts';
 import { APP_ID } from '../engine/schema.ts';
 import { DesktopHost } from '../host/service.ts';
 import { resolveBadgeText, resolveNotificationSettingsUrl } from '../notifications/notice.ts';
@@ -7,6 +8,8 @@ import { Notifications } from '../notifications/service.ts';
 import { PageRequest, type PageMessage } from '../page-channel/schema.ts';
 import { PageChannel } from '../page-channel/service.ts';
 import { DesktopShell } from '../shell/service.ts';
+import { LOCAL_SOURCE, type SourceSetting } from '../source/schema.ts';
+import { EngineSource } from '../source/service.ts';
 import { Updater } from '../updates/service.ts';
 import { resolveDesktopUpdate } from '../updates/state.ts';
 import { AppWindow } from '../window/service.ts';
@@ -20,8 +23,13 @@ export const PageBridge = Layer.effectDiscard(
     const updater = yield* Updater;
     const notifications = yield* Notifications;
     const shell = yield* DesktopShell;
+    const source = yield* EngineSource;
+    const signIn = yield* CloudSignIn;
     const scope = yield* Effect.scope;
     const inBackground = (effect: Effect.Effect<void>) => Effect.asVoid(Effect.forkIn(effect, scope));
+    const useSource = Effect.fn('PageBridge.useSource')(function* (next: SourceSetting) {
+      if ((yield* source.use(next)) === 'reload') yield* window.reload;
+    });
     const decodeRequest = Schema.decodeUnknownOption(PageRequest);
     const answer = Effect.fn('PageBridge.answer')(function* (message: PageMessage) {
       if (!window.isAppSender(message.frame)) return;
@@ -43,6 +51,12 @@ export const PageBridge = Layer.effectDiscard(
           return yield* notifications.show(request.payload);
         case CHANNELS.notificationSettings:
           return yield* shell.openExternal(resolveNotificationSettingsUrl(APP_ID));
+        case CHANNELS.signIn:
+          return yield* signIn.start;
+        case CHANNELS.useLocalEngine:
+          return yield* useSource(LOCAL_SOURCE);
+        case CHANNELS.useMachine:
+          return yield* useSource({ kind: 'cloud', machine: request.payload });
       }
     });
     const start = Effect.gen(function* () {
@@ -53,6 +67,7 @@ export const PageBridge = Layer.effectDiscard(
         update: resolveDesktopUpdate(snapshot.state),
         channel: snapshot.channel,
         windowState: yield* window.windowState,
+        source: yield* source.current,
       };
       return started;
     });

@@ -7,6 +7,7 @@ import { APP_NAME } from '../app/schema.ts';
 import { AppLifecycle } from '../app/service.ts';
 import { AwayWatch } from '../away/service.ts';
 import { PageBridge } from '../bridge/service.ts';
+import { CloudSignIn } from '../cloud-sign-in/service.ts';
 import { CommandLine } from '../command-line/service.ts';
 import { Connection } from '../connection/service.ts';
 import { URL_SCHEME } from '../deep-links/schema.ts';
@@ -36,6 +37,7 @@ import { NativeWindowLive } from './native-window.ts';
 import { PageChannelLive } from './page-channel.ts';
 import { PlatformLive } from './platform.ts';
 import { PowerMonitorLive } from './power-monitor.ts';
+import { SessionCookiesLive } from './session-cookies.ts';
 import { DesktopShellLive } from './shell.ts';
 import { UpdateClientLive } from './update-client.ts';
 
@@ -61,11 +63,13 @@ const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, Co
 );
 
 const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AwayWatch, AppMenu.layer, StatusTray.layer).pipe(
+  Layer.provideMerge(CloudSignIn.layer),
   Layer.provideMerge(Updater.layer),
   Layer.provideMerge(Notifications.layer),
   Layer.provideMerge(AppWindow.layer),
   Layer.provideMerge(
     Layer.mergeAll(
+      SessionCookiesLive,
       NativeWindowLive,
       NativeTrayLive,
       NativeNoticesLive,
