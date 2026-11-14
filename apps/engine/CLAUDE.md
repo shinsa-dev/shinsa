@@ -541,18 +541,16 @@ src/
 │                        process) and objects/ (ObjectCache: the 64 MB cache of what a commit addresses,
 │                        ObjectCacheBytes, one read in flight per key; CodeFiles reads a file at a commit through
 │                        it); both are in GitLayer, and http/routes/code yields them
-├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects per mode
+├── workspaces/          Where agents work (docs/engine.md → Where agents work): one Workspace of effects, worktrees
 │                        (schema.ts: prepare, commit, push, remove, writeEdit, syncBase: the merge of the base
-│                        before a push; TaskCheckoutMissing, CheckoutDirty, CheckoutOffBranch),
-│                        worktrees-mode/ (WorktreeWorkspaces: make(root) and the commit both modes share),
+│                        before a push; TaskCheckoutMissing),
+│                        worktrees-mode/ (WorktreeWorkspaces: make(root); remove never touches the repository's own path),
 │                        root/ (WorktreeRoot in service.ts, on EngineConfig and ConfigStore: the folder new
 │                        worktrees go in, read again on every call from SHINSA_WORKTREES_DIR, then config.json's
 │                        worktreesDir, then data/worktrees; assert refuses a chosen folder that is missing, not a
 │                        folder, not writable or without the mark that mark leaves, with WorktreeRootUnavailable,
 │                        and never creates it),
-│                        main-checkout-mode/ (MainCheckoutWorkspace: the workspace and the setup check's
-│                        describeProblem); service.ts (Workspaces: resolve(task), the Workspace of the task's mode in
-│                        the folder WorktreeRoot names, root, and describeProblem); layers.ts (WorkspacesLayer, and
+│                        service.ts (Workspaces: the Workspace in the folder WorktreeRoot names, and root); layers.ts (WorkspacesLayer, and
 │                        WorkspacesServiceLayer with Workspaces and WorktreeRoot on top, which needs ConfigStore)
 ├── github/              `gh`, the one way the engine reaches GitHub: process/ (GitHubProcess: gh with GITHUB_TIMEOUT,
 │                        and layerTest, which plays gh in a test), service.ts (GitHubCli: run fails with
@@ -778,7 +776,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   | `BriefingWriter` (`briefing/service.ts`) | `BriefingWriter.layer`, scoped, needs `EngineCore` and `QuickCalls` | the Home guide, debounced |
   | `EngineRestarter` (`instance/restart/service.ts`) | `EngineRestarter.layer(createServiceRestart(…))`, scoped, needs `EngineCore` | restarting now or after draining, and the engine's activity for /api/health |
   | `RepoFolders`, `RepoSetup`, `GitHubLogins` (`repos/`) | `ReposLayer` (`repos/layers.ts`), needs `GitLayer` and `GitHubLayer` | finding repositories and their origin, the setup check, the GitHub login |
-  | `WorktreeWorkspaces`, `MainCheckoutWorkspace` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the two places agents work (`TaskCheckoutMissing`, `CheckoutDirty`, `CheckoutOffBranch`) |
+  | `WorktreeWorkspaces` (`workspaces/`) | `WorkspacesLayer` (`workspaces/layers.ts`), needs `GitLayer` | the worktree every task works in (`TaskCheckoutMissing`) |
   | `CheckRunner`, `SharedCaches` (`checks/`), `TaskCoverage` (`test-coverage/`) | `ChecksLayer` (`checks/layers.ts`), needs `GitLayer` | checks and their re-runs, pruning the turbo cache, changed-line coverage (`CoverageReportUnreadable`) |
   | `BaseCheckouts` (`checks/base/service.ts`) | `BaseCheckouts.layer`, needs `GitLayer`, `CheckRunner` and `EngineConfig` | a failing check run again on the task's base commit, in a kept detached checkout |
   | `ExtensionDiscovery`, `ExtensionFiles`, `McpClients`, `ExtensionUsage` (`extensions/`) | `ExtensionsLayer` (`extensions/layers.ts`), needs `JsonFile` | what Claude Code, Codex, plugins and repositories set up, decoded; extensions.json and the usage cache; scoped MCP clients and timed calls (`McpServerFailed`); when each server and skill was last used |

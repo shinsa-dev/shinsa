@@ -28,7 +28,8 @@ src/
 ├── domain/          Entity types (types.ts), stage sets and priority order (stages.ts), settings, their defaults and
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
 │                    resolveDelegationLimit: delegations at once under one step, null for no limit;
-│                    HUMAN_ONLY_SETTINGS and HUMAN_ONLY_REPO_FIELDS, the fields only the human changes),
+│                    HUMAN_ONLY_SETTINGS, the fields only the human changes, and OWNER_ONLY_REPO_FIELDS, the
+│                    repository fields only the owner changes from another device),
 │                    DomainError (errors.ts: a Schema.TaggedError with a code and a message), the field schemas
 │                    every parser builds on (fields.ts: Text, Id, Choice, List, Strict, Tagged, ID_LIMIT and the
 │                    FIELD_MESSAGES they refuse with), the domain's shapes (schema.ts: the branded ids TaskId, RunId,
@@ -193,8 +194,7 @@ src/
 │   │                presets and composed steps, the operation gate and its notes after a merge, follow-ups (an
 │   │                inquiry's own agent, or an answerer on the last session of finished work: answerFollowUp)
 │   ├── tasks.ts     Creating, triaging, prioritising, cancelling and completing tasks; worktrees
-│   ├── workspaces.ts  Asking for a task's workspace in its repository's mode, and waiting for a main checkout
-│   │                another task holds (holdForCheckout)
+│   ├── workspaces.ts  Asking for a task's worktree (requestWorkspace)
 │   ├── suggestions.ts  Tasks an agent suggests, accepting and dismissing them, and split-offs (keeping one is
 │   │                messages.ts's keepSuggestion)
 │   ├── memory.ts    The rules agents remember: writing, keeping and removing one (human-only, refused on your behalf),
@@ -510,9 +510,6 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
   - checks (`check-invariants.ts`): no two checks of a task share an id, none is the repository's, a task without
     `build` has none, every check covers at least one phase and none past the plan's last, and no result is kept for
     a task check that was removed;
-  - workspaces (`workspace-invariants.ts`): no two tasks of one repository hold its main checkout (from asking for it
-    until it is given back), a task with a checkout knows its mode, and a task waiting on other tasks waits on an
-    unfinished dependency, a gate or the task holding its checkout;
   - every task sits in one place in the queue (deciding, working or waiting);
   - delegation (`delegation-invariants.ts`): a delegated run's parent is on the same task, depth is its parent's plus
     one and at most three, at most eight live under one step, a read-only parent has no child that writes, a step

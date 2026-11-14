@@ -357,8 +357,7 @@ src/
     │                    ahead at idle) and the last three task pages, by key, with the URL each was left at
     └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), idle.ts (scheduleIdle: the one
         requestIdleCallback with its timeout and the fallback timer), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
-        checks, repository choices, the actions), workspaces.ts (where agents work: worktrees or the main checkout,
-        changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
+        checks, repository choices, the actions), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts (each automation's type, its look, Slack's mark for a channel trigger, and its wording), automations.ts (a watch's page: its facts, a Slack channel trigger's updates fact,
         reads and filed tasks), secrets.ts,

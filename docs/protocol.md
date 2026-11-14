@@ -288,9 +288,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `report` | `WorkReport` \| null | the review built from every phase: headline, sections, the check results, judgement calls, `walkthrough?` |
 | `mergeStepsDone?` | string[] | the steps around the merge you ticked, by key (`resolveMergeStepKey`: `when:` and a hash of the step's kind, title, detail and command, so any change to a step clears its tick); the steps themselves are the latest walkthrough's `steps` (`listMergeSteps`); a new round starts it empty |
 | `carriedMergeSteps?` | `CarriedMergeStep[]` (`MergeStep` with `round`, `done`) | the open steps a new round carried over from the round before it: every step after the merge, and the steps before the merge of a round still shipping onto the next one's pull request; ticks of a carried step land here; done ones are dropped at the next round |
-| `worktreePath` | string \| null | the task's worktree; for a main-checkout task, the repository itself |
-| `workspace?` | `WorkspaceMode` | where the task works, taken from its repository when it set up (`worktree.requested`) and kept |
-| `returnBranch?` | string | main checkout: the branch the checkout was on when the task took it, where it goes back when the task settles |
+| `worktreePath` | string \| null | the task's worktree |
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
 | `approveAfterFix?` | boolean | you asked for changes with Fix N findings and approve (`gate.answered` with `thenApprove`): the next review gate that opens without an escalation is approved at once (`ahead`); written by every review answer, false in a new round |
@@ -508,9 +506,8 @@ the merge gate, so an open pull request is never left without one.
 | `defaultBranch` | string | |
 | `remote` | string \| null | `origin`'s URL |
 | `projectId` | string \| null | its project |
-| `checkCommands` | string[] | the repository's own commands, an optional baseline every task runs once before review (`r1`…); empty runs nothing extra; only you change it |
-| `workspace?` | `WorkspaceMode` | where agents work: `worktrees` (the default) or `main_checkout`; only you change it (`docs/engine.md` → Where agents work) |
-| `coverage?` | `CoverageSetting` | how test coverage is measured from the tests among a task's checks: `{ mode: 'auto' }` (the default, absent), `{ mode: 'off' }` or `{ mode: 'custom', command, report, format }` (`report` a path inside the repository, `format` `lcov` \| `cobertura` \| `go` or null to read it from the report's name, `resolveCoverageFormat`); only you change it (`docs/engine.md` → Test coverage of the change) |
+| `checkCommands` | string[] | the repository's own commands, an optional baseline every task runs once before review (`r1`…); empty runs nothing extra; you or a task's agent change it (`repos_update`) |
+| `coverage?` | `CoverageSetting` | how test coverage is measured from the tests among a task's checks: `{ mode: 'auto' }` (the default, absent), `{ mode: 'off' }` or `{ mode: 'custom', command, report, format }` (`report` a path inside the repository, `format` `lcov` \| `cobertura` \| `go` or null to read it from the report's name, `resolveCoverageFormat`); you or a task's agent change it (`docs/engine.md` → Test coverage of the change) |
 
 `Coverage` (`packages/core/src/test-coverage/types.ts`) is either `{ status: 'measured', command, covered, executable,
 files }`, where `files` lists each changed file with executable changed lines (`path`, `covered`, `executable`,
@@ -936,7 +933,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `project.remove_from_team` | stops showing them: every open view of its tasks for that team closes | `projects remove-from-team --team` | **human** |
 | `initiative.add_to_team` | shows an initiative and its lead task to a team (`teamId`): `initiative.written` with the team in `teamIds`; nothing when it is already there | `initiatives add-to-team --team` | **human** |
 | `initiative.remove_from_team` | stops showing it, and drops that team's recorded members | `initiatives remove-from-team --team` | **human** |
-| `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
+| `repo.update` | changes a repository's fields | `repos update` | agent; from another device only the owner for `checkCommands`, `coverage` (`OWNER_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus: `projectIds` with `except`, or `teamId`, or `initiativeId`, one kind at a time (`focus_refused`), and `until`; `projectId` alone, from a page older than `focus.projects`, focuses on that one project | `focus set`, `focus clear` | agent |
 | `autopilot.seen` | marks what Autopilot did at these gates as seen (`gateIds`), so it leaves Handled by Autopilot; gates it did not answer for you are skipped | `autopilot seen` | **human** |
@@ -1038,7 +1035,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, the open change it stacks on (`stacksOn`, applied only while start is Auto and the stack is allowed), and the Auto parts; a `duplicateOf` naming an open task, or a `duplicateOfTeammate` (`TeammateOriginal`), closes it as that task's duplicate before any work (a local one wins when both come); `unreached` lists the team machines the duplicate check could not read |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none, and how it started a repository with no commits (`started`: `branch`, `initialized`, `pushed`) |
-| `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
+| `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists, or is gone |
 | `task.record_edit` | the file route after a save from the Code tab (`http/routes/tasks`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
 | `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work/service.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
@@ -1179,8 +1176,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.moving`, `task.moved` | `move_to_repository` or `task.move_to_repository` started moving the task (`repoId`, `reason`, `runId?` for the agent's move; sets `movingTo`), and the old worktree is gone, so the task now works in `repoId`, with `projectId?` and `handle?` when the repository is in another project |
 | `config.verified` | setup verification ran |
 | `budget.acknowledged` | you allowed more past a usage or cost limit |
-| `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
-| `worktree.created`, `worktree.removed` | the worktree, branch or checkout was made (with its `workspace`, and `returnBranch` for a main checkout), given back |
+| `worktree.created`, `worktree.removed` | the worktree and its branch were made, given back |
 | `task.edited` | you saved `path` from the Code tab (`changed`), or put it back the way it was committed; keeps `editedPaths` and `untoldEdits` |
 | `task.edits_told` | a new run's prompt named the files in `untoldEdits`; clears it |
 | `task.overlapped` | the task and another open one (`otherTaskId`) both change `paths`, none of them recorded before; adds them to `overlaps` and its `untold` |
@@ -1700,7 +1696,8 @@ the relay in about a quarter of the time (`bun scripts/perf/remote.ts`, `docs/en
 **One task for a guest, one team for a teammate** (`scope.ts`): a scoped device is a `ScopedActor` (a `TaskGuest` with `scope`, `{ kind: 'task', taskId }` or `{ kind: 'team', teamId, scopes }`). A team scope reaches every task of the team's projects (`isTeamTask`) and the commands its action scopes allow (`resolveCommandScope`) (`TEAM_COMMANDS` on top of `SCOPED_COMMANDS`, `TEAM_SCOPE_MESSAGES`); a task scope, as follows. Its socket gets `resolveScopedState` and `resolveScopedPatch` (that task, its runs, gates, evidence, repository and project, accounts without their email, no share, previews or hand-off link) and `resolveScopedEngineInfo` (only `SCOPED_COMMANDS`); `resolveScopedRefusal` refuses any other command, another task's, a secret or sign-in gate's answer and a retry on a chosen account, with the code `handoff_scope` (`SCOPE_REFUSAL_CODE`, `SCOPE_MESSAGES`).
 
 **What only the owner sends from another device** (`local-only.ts`): `isOwnerOnlyCommand` names the user commands
-that need you at the keyboard or the machine's owner on a sealed channel (a human-only setting or repository field,
+that need you at the keyboard or the machine's owner on a sealed channel (a human-only setting, a repository's check
+commands or coverage (`OWNER_ONLY_REPO_FIELDS`, they run commands on this machine),
 `task.bind_account`, `task.retry` on a chosen account); `resolveOwnerOnlyRefusal` refuses them to any other remote
 request with the code `not_owner` (`OWNER_ONLY_CODE`, `OWNER_ONLY_MESSAGE`). A request's `RequestOrigin` (`local`,
 `owner` or `remote`) comes from how it arrived and whose connect token opened its channel, never from the page.
@@ -1781,7 +1778,7 @@ Behind the scenes).
 | Rounds, shipping, resting and closed | `packages/core/src/domain/rounds.ts`, `state/rounds.ts`, `decide/rounds.ts` |
 | Test coverage of the change: the setting, the report and diff parsers, the measurement, the summary | `packages/core/src/test-coverage/`; detection and the run in `apps/engine/src/test-coverage/` |
 | The message classifier and routing | `apps/engine/src/triage/message/service.ts`, `apps/engine/src/triage/router/service.ts` |
-| Human-only decisions | `packages/core/src/decide/gates.ts` (`assertHumanDecides`, `assertGatesStayOpen`), `domain/settings.ts` (`HUMAN_ONLY_SETTINGS`, `HUMAN_ONLY_REPO_FIELDS`), `decide/settings.ts` |
+| Human-only decisions | `packages/core/src/decide/gates.ts` (`assertHumanDecides`, `assertGatesStayOpen`), `domain/settings.ts` (`HUMAN_ONLY_SETTINGS`), `decide/settings.ts` |
 | Gate predicates | `packages/core/src/domain/gates.ts` (`isPausingGate`, `isDecisionGate`, `isAgentQuestion`) |
 | Steps, gates, `validatePipeline`, `PLAN_GATE_RULE` | `packages/core/src/domain/steps.ts`; `needsPlanApproval` in `decide/lifecycle.ts` |
 | Verification rules | `packages/core/src/domain/verification.ts` |
@@ -1867,7 +1864,7 @@ Tests are in `packages/core/test/`.
 14. **The delegated-question ceiling is intended.** A delegated agent's `ask` goes to its parent, which may ask you with
     its own `ask` (`decide/delegations.ts`). Test: `decide/delegations.test.ts`.
 15. **Settings and repository fields only you change.** A `settings.change` or `repo.update` on your behalf that
-    touches `HUMAN_ONLY_SETTINGS` or `HUMAN_ONLY_REPO_FIELDS` is refused with `human_only` (`decide/settings.ts`);
+    touches `HUMAN_ONLY_SETTINGS` is refused with `human_only` (`decide/settings.ts`);
     agents keep models, providers, fix rounds, attention and compaction. Test: `decide/settings.test.ts`.
 16. **The agent chooses the checks** (2026-10-27). The plan's `verification` is the task's checks, scoped commands
     (a whole-suite command is refused), changed with `check_changes`; Shinsa runs them per phase, after a fix and

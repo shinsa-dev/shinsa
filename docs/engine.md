@@ -182,12 +182,14 @@ suite is CI's job on the pull request, never a check's, so no task runs the whol
   phase gets a new check. Core records `checks.changed` (each change with the check as it is after it, source
   `agent`) and an activity entry ("Added the check “Label”", its detail "`command`: reason"). It refuses an id the
   task does not have (`check_unknown`), a command the task already has (`check_exists`), a phase the plan does not
-  have (`check_phases_invalid`) and the repository's own commands (`check_human_only`). A changed or removed check
+  have (`check_phases_invalid`) and the repository's own commands (`check_repo_owned`, which points the agent at
+  `repos_update`). A changed or removed check
   loses its last result.
 - **The repository's commands** (`repo.checkCommands`, Settings → Projects, `shinsa repos update --checks`) are an
   optional baseline every task of the repository runs once, before review. They are derived, never stored on the task
   (`listRepoChecks`: ids `r1`…, no phases, the source `repo`; `listTaskChecks` gives the task's checks and the
-  baseline), and only you change them (Who can change Shinsa, below). Nothing is guessed from `package.json`: a
+  baseline), and you or a task's agent change them (`repos_update`, logged as done on your behalf; from another
+  device only the machine's owner, Remote access → What only the owner does from another device). Nothing is guessed from `package.json`: a
   repository with none runs only its tasks' own checks, and setup verification has nothing to ask for.
 - **When they run.** Core decides; the task's stage is `checking` while they run:
   - after phase k: the checks that cover phase k and the ones its hand-over added or changed ("running the checks
@@ -275,10 +277,9 @@ again with coverage in the task's checkout and works out **changed-line coverage
 or modifies, the ones the report marks executable, and of those the ones a test ran
 (`apps/engine/src/test-coverage/`, the pure parts in `packages/core/src/test-coverage/`).
 
-- **The setting** is per repository (`Repo.coverage`, `CoverageSetting`), a human-only repository field
-  (`HUMAN_ONLY_REPO_FIELDS`) like the checks: whether coverage is measured, and by what command, decides what the
-  reviewer and you are told about the tests, so no agent changes it. Settings → Projects shows it on each repository's
-  row; `shinsa repos update --coverage auto|custom|off` (with `--coverage-command`, `--coverage-report` and
+- **The setting** is per repository (`Repo.coverage`, `CoverageSetting`), set like the checks by you or a task's
+  agent (`repos_update`); from another device only the machine's owner changes it (`OWNER_ONLY_REPO_FIELDS`), since
+  a custom command runs on this machine. Settings → Projects shows it under each repository's gear button; `shinsa repos update --coverage auto|custom|off` (with `--coverage-command`, `--coverage-report` and
   `--coverage-format` for custom) changes it. Three modes (`COVERAGE_MODES`):
   - **Auto**, the default: run the test checks among the task's checks again with their runner's coverage report,
     or measure nothing when none of them is a test runner Shinsa knows;
@@ -570,35 +571,20 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
 
 ## Where agents work
 
-A repository says where its agents work (`Repo.workspace`, Settings → Projects on each repository's row, ⌘K "Where
-agents work in ‹repository›", `shinsa repos update --workspace`). It is a human-only repository field
-(`HUMAN_ONLY_REPO_FIELDS`): no agent tool, no shell command and nothing on your behalf changes it. There are two
-modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behind one interface
-(`Workspace`: prepare, commit, syncBase, push, writeEdit, remove), picked per task by `Workspaces.resolve`:
+Every task works in a git worktree of its own (`apps/engine/src/workspaces/`, one `Workspace` of effects: prepare,
+commit, syncBase, push, writeEdit, remove). There is no other mode and no setting for it: a repository's own checkout
+is yours, and no task ever works in it.
 
-| Mode | A task gets | Commits | Pushes | When the task settles |
-|---|---|---|---|---|
-| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`, or the folder you chose, below), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
-| **Main checkout** (`main_checkout`) | the repository's own checkout, switched to a branch Shinsa makes from the freshly fetched default branch | `git commit` on that branch, only while the checkout is on it | `git push origin refs/heads/<branch>` | the checkout goes back to the branch it was on when the task took it (`returnBranch`), or to the default branch when that branch is gone or the checkout was detached; with uncommitted changes it stays where it is |
+| A task gets | Commits | Pushes | When the task settles |
+|---|---|---|---|
+| its own git worktree on a fresh branch (`data/worktrees/…`, or the folder you chose, below), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
 
-- **Core holds the mode and the invariants.** A task takes the repository's mode when it asks for its workspace
-  (`worktree.requested`, then `worktree.created` carries it) and keeps it for its whole life, rounds included, so
-  changing the setting only affects tasks that have not set up yet (`resolveTaskWorkspace`). The setup step says what
-  it sets up (`WORKSPACE_SETUP_REASON`: "setting up the worktree", "setting up the checkout").
-- **One task at a time in a main checkout.** A task holds the checkout from the moment it asks for it until its
-  checkout is given back (`worktree.gone`), which is after it settles (`selectCheckoutHolder`). Another task that
-  needs the checkout waits on the holder (`waiting_on_tasks`, "waiting for “Title” to finish with the checkout",
-  `holdForCheckout`, before its setup is even verified) and starts when the holder gives it back
-  (`releaseWaiting`); the queue shows the holder as what it waits on (`listWaitsOn`). Switching the repository to
-  another mode releases the waiting tasks at once. A `worktree.ready` for a task that would take a held checkout is
-  ignored. The property test checks that no two tasks of one repository ever hold its checkout
-  (`workspace-invariants.ts`).
-- **The setup check covers the mode** (`describeWorkspaceProblem`, a `workspace` configuration problem, "Agents
-  cannot work in this repository yet"): the main checkout needs a checkout with no uncommitted changes, only for a
-  task that does not hold it yet. Worktrees need nothing beyond the repository.
-- **Agents work where the strategy puts them.** For the main checkout a task's `worktreePath` is the repository
-  itself, so every role works in your checkout; a read-only agent's edits are never set aside there, as in any shared
-  checkout. Checks run in the same checkout.
+- **The setup step** says what it sets up (`WORKSPACE_SETUP_REASON`, "setting up the worktree"); worktrees need
+  nothing beyond the repository, so the setup check has no workspace problem.
+- **Your checkout is never removed.** A task whose `worktreePath` is the repository itself (one set up before the
+  main-checkout mode was removed, `worktrees-only` in `LOG_MIGRATIONS`) keeps working there, since git makes no second
+  worktree for a branch already checked out; when it settles, `remove` leaves that folder alone and cleanup stops no
+  process in it (`isRepositoryPath`, `Cleanup`).
 - **Where the worktrees go.** New worktrees and isolated delegation checkouts go into one folder, `data/worktrees`
   unless you choose another in Settings → Projects → Worktrees, for example a folder in an S3 or R2 bucket you mount
   with s3fs, rclone or Mountain Duck, to keep worktrees off the local disk. The choice is `config.json`'s
@@ -634,8 +620,8 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
   you opened yourself, a shell from Open in Terminal or an editor and the language servers it started, keeps running.
   The engine and your own Shinsa terminals, with every process they started, are spared too
   (`Terminals.listTerminalPids`). Then `removeWorktree` runs `git worktree remove --force`, deletes whatever
-  is left of the folder and prunes, so a folder git could not remove never stays behind. A main checkout is never
-  reaped: it is your repository.
+  is left of the folder and prunes, so a folder git could not remove never stays behind. A task's path that is the
+  repository itself is never reaped: it is your repository.
 - **Turbo's cache is shared per repository.** In a repository with a `turbo.json`, checks (and their run on the base
   commit) and a task's service runs get `TURBO_CACHE_DIR` set to `data/caches/<repo id>/turbo`
   (`resolveSharedCacheEnv` in `checks/caches.ts`), so a task reuses what another task's checkout already built
@@ -644,7 +630,7 @@ modes (`WORKSPACE_MODES`), each a service in `apps/engine/src/workspaces/` behin
   default. A worktree's own `.turbo` went with it; the shared one is pruned instead, each time a worktree is removed
   (`pruneSharedCaches`): an entry not written for 14 days goes (Turbo does not touch an entry it reads, so a build
   used for longer is made once more), and so does the cache of a repository Shinsa no longer knows.
-- **Conflicts go to the agent in every mode.** A pull request that conflicts with its base is merged with the fetched
+- **Conflicts go to the agent.** A pull request that conflicts with its base is merged with the fetched
   base by the Agent in its own session (The pull request watch → Conflicts), and an update onto the base that
   conflicts before a push is resolved the same way (Pushing the branch).
 
@@ -655,8 +641,7 @@ every commit.
 
 - **Where they go.** `POST /api/tasks/<id>/file` (`writeFile` in the `tasks` group, `apps/engine/src/http/routes/tasks/`) takes `{ path, content, base }`
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
-  task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for the main
-  checkout. The path passes `parseRepoPath` and must stay inside the checkout with its nearest existing
+  task's checkout, `worktreePath`, its worktree. The path passes `parseRepoPath` and must stay inside the checkout with its nearest existing
   folder's real path (`selectWritableInside`), so neither `..` nor a symlinked folder leads out. A text over 2 MB is
   refused (`file_too_large`), and so is a task core will not let you edit (`edit_refused`, `resolveEditRefusal`: merged,
   cancelled or done, or no checkout). Inspect mode refuses it with every other write.
@@ -664,9 +649,7 @@ every commit.
   `409 file_changed` with the disk's text (`FileChanged`); the editor merges your unsaved edit into it when the two
   touched different lines and shows the disk version otherwise. A running agent is not stopped: you can edit while it
   works, and whoever writes second sees the other's text first.
-- **Through the strategy** (`WorkspaceStrategy.writeEdit`). A worktree takes the write as it is. The main checkout
-  takes it only while it is on the task's branch (`assertOnBranch`), so an edit never lands on a branch you switched
-  to.
+- **Through the workspace** (`Workspace.writeEdit`). The worktree takes the write as it is.
 - **What core knows** (`task.record_edit`, sent by the route after each write with whether the file now differs from
   the checkout's `HEAD`; `task.edited`). `Task.editedPaths` lists the files you changed that no commit has taken yet,
   and `untoldEdits` the ones no agent has heard of. The first edit of a file shows as "Edited ‹path›" in the activity;
@@ -990,8 +973,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   never resets a later round's worktree to the default branch: it drops uncommitted scratch edits and merges the
   freshly fetched base, the default branch or the first branch it stacks on, into the branch, as the push does
   (`WorktreeWorkspaces.prepare`). A base that conflicts is aborted and left for the push's conflict fix, and a fetch
-  that fails is logged and the round starts from the branch as it is; the main checkout's later rounds reuse the
-  branch as it is). The agents
+  that fails is logged and the round starts from the branch as it is). The agents
   remember everything: every run of a later round, whatever its kind of work, resumes the task's session
   (`Decider.taskSession`, Agents above), so the round that plans next has the earlier rounds in its context; the
   reviewer resumes only its own session, so it never reviews from inside the Agent's head. A round after a merge runs
@@ -1446,7 +1428,7 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   until every task it stacks on is ready or has its merge gate open, or is merged or done
   (`listPendingStackParents`). It then records their branches as its bases (`Task.stackBases`, `task.stack_based`,
   in the order of `stacksOn`, leaving out a parent that merged or left). `resolveRoundBase` returns the first when no
-  round of its own is stacked, and `resolveRoundBases` all of them. Its branch, in a worktree or in your main checkout,
+  round of its own is stacked, and `resolveRoundBases` all of them. Its branch, in its worktree,
   starts from the first and merges the others in (`Checkout.mergeBranches`; a worktree left from before, of a task stacked while it planned, is reset onto
   the first, `refreshWorktree`, and merged the same way). A branch that conflicts there is left out, so the agent
   starts on a clean tree, and the push brings it in (Conflicts, below). Its pull request targets the first base, so
@@ -3171,8 +3153,8 @@ note (you, or report_feedback) ──► drafting ── quick call ──► dr
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
   `config.verify` (`RepoSetup`, `apps/engine/src/repos/setup/service.ts`) checks that the repository folder exists and is a git
-  repository, that the default branch exists (fetching it from origin before calling it missing) and that agents can
-  work in the repository's workspace mode (Where agents work, above). A task whose pipeline needs no worktree (an
+  repository, that the default branch exists (fetching it from origin before calling it missing) and that a worktree
+  can be made (Where agents work, above). A task whose pipeline needs no worktree (an
   answer, research) checks the repository only. A task with no repository whose steps need none never comes here; one
   whose steps need one finds it first (A task without a repository, above), and the problem when none is found is
   `no_repository`. Checks are not part of it: a task's checks come from its plan, and a repository without its own
@@ -3836,8 +3818,7 @@ beside your run (Runs for a task, below).
   (`selectServiceTerminal`; `ServiceView.taskId`). A task's run uses the same command and variables in the same
   folder of the task's worktree: `resolveTaskServiceCwd` (core) takes the folder relative to the task's repository
   and puts it under `task.worktreePath` (`/code/shop/apps/api` becomes `<worktree>/apps/api`). A service has no
-  run for a task that is settled, has no worktree of its own (one that works in the repository's own checkout uses
-  your run), belongs to another project, or whose repository does not hold the service's folder (a project folder
+  run for a task that is settled, has no worktree of its own, belongs to another project, or whose repository does not hold the service's folder (a project folder
   outside every repository). `listTaskServices` lists what a task can run, `listServiceTaskRuns` every task's run of
   one service. Start, stop and restart take an optional `{ taskId }` in their body (`selectServiceRunIn` in
   `terminals/runs.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
@@ -4264,7 +4245,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `/devices/remove` (`{ publicKey }`).
 - **What only the owner does from another device.** The machine's owner on a sealed channel counts as the keyboard;
   a member is refused with `not_owner` ("Only this machine’s owner can do this from another device.") every command
-  core's `isOwnerOnlyCommand` names (a human-only setting or repository field, binding an account, retrying on a
+  core's `isOwnerOnlyCommand` names (a human-only setting, a repository's check commands or coverage (`OWNER_ONLY_REPO_FIELDS`), binding an account, retrying on a
   chosen account), on the socket and on `POST /api/commands` alike, and these routes (their `OwnerOnlyRoute`
   annotation, 403): Claude accounts (signing in takes the code the sign-in page shows, so it works from any
   browser), MCP servers, plugins, skills and the optimizer, onboarding and folders, a secret (`/api/secrets/<gate>`)
@@ -5787,9 +5768,9 @@ plainly what protects what.
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,
     `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`, `shareLimit`, `sharePreset`,
     `watchdogsIgnoreUsageLimits`, `autopilot`, `autoPace`), a
-    project's usage limit (`Project.usageLimit`) and a repository's own check commands,
-    workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
-    (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
+    project's usage limit (`Project.usageLimit`); agents keep the rest (models, providers, fix rounds, attention,
+    compaction), a repository's check commands and coverage (`repos_update`; from another device only the owner,
+    `OWNER_ONLY_REPO_FIELDS`) and a task's own checks (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - what agents remember (`memory write`, `keep`, `remove`; core refuses `memory.write`, `memory.accept` and
@@ -6256,8 +6237,6 @@ add origin …` and first upload to run before you retry, instead of five fetche
      with the fix, runs the checks the resolved files touch (`startFixChecks`: the failing, named and touched ones),
      and, since a push is still pending, pushes again (`proceedAfterChecks` → `shipReviewedWork`) instead of going back
      to your review.
-   - **The main checkout** merges like a worktree, on the task's
-     branch (`MainCheckoutStrategy.syncBase` checks the checkout is still on it).
 3. **Push.** Shinsa reads whether the repository has a pre-push hook (`hasPrePushHook`: `git rev-parse --git-path
    hooks/pre-push`, which follows `core.hooksPath`, executable, and for a husky stub in `…/_/` the hook it runs) and
    says "pushing the branch (the repository’s pre-push hook is running)", or "pushing the changes (…)" to an open pull
@@ -6526,7 +6505,7 @@ carries the comments it read (`remarks`) and who is reading (`viewer`).
   stacked pull request whose base merged is merged with the default branch), and the prompt names it: merge
   it in with `git merge origin/<base>`, resolve every conflict, `git add` the files and leave the merge
   uncommitted. Shinsa never rebases: the shell policy refuses `git rebase` and a `git pull` without
-  `--no-rebase`, and nothing Shinsa runs force-pushes a worktree or main checkout. On `complete_fix` the
+  `--no-rebase`, and nothing Shinsa runs force-pushes a worktree. On `complete_fix` the
   commit concludes the merge even when the resolution changes no file (`commitWorktree` commits whenever
   `MERGE_HEAD` exists), refuses while a path is still unmerged (the agent is told which), and an undone
   hand-over puts the merge back in progress, its message with it; the push then makes the pull request
@@ -7962,9 +7941,9 @@ main.ts ──► BunRuntime.runMain(the CLI's program)       the one run in the
   `feedback/`) runs through `GitHubCli`.
 - **Repositories and workspaces.** `RepoFolders` scans the home folder, lists the repositories in the chosen folders
   and reads a repository's origin from its `.git/config`; `RepoSetup` is the setup check; `GitHubLogins` caches the
-  login once gh answers it and asks again after a failure. `WorktreeWorkspaces` and `MainCheckoutWorkspace` are the
-  two places agents work, each a `Workspace` of effects whose failures are typed (`TaskCheckoutMissing`,
-  `CheckoutDirty`, `CheckoutOffBranch`, and git's own), over `Git`, `Checkout` and `Remote`.
+  login once gh answers it and asks again after a failure. `WorktreeWorkspaces` is where agents
+  work, a `Workspace` of effects whose failures are typed (`TaskCheckoutMissing` and git's own), over `Git`,
+  `Checkout` and `Remote`.
 - **Checks, coverage and terminals.** `CheckRunner` runs a check through `Shell` at low priority, re-runs its failing
   test files alone and asks the base for a comparison, a command named twice in a round run once (`Effect.cached`);
   `BaseCheckouts` is the pool of detached base checkouts under `EngineConfig`'s `checkBasesDir` (how many it keeps is

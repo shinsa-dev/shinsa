@@ -790,7 +790,8 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Some decisions are only yours.** The decisions at your gates (`docs/engine.md` → Who can
   change Shinsa) happen there, by you: agents have no tool and no command for them, core refuses one sent on
   your behalf, and an agent asked in chat to merge points you to the gate. The settings that spend money, merge or
-  decide for you, and a repository's own check commands, are yours too. An agent's shell
+  decide for you are yours too; a repository's check commands and test coverage are set by you or its agents,
+  and from another device only by the machine's owner. An agent's shell
   can still do whatever your account can (`gh pr merge`, `git push`), so turn on GitHub branch
   protection for the default branch; it is what really guards a merge. Shinsa itself answers only
   on this machine and refuses requests from other websites.
@@ -943,11 +944,13 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ### Where agents work (2026-10-24)
 
-- **A repository chooses where its agents work**: Worktrees (the default: a worktree and a fresh branch per task)
-  or Main checkout (agents work in your checkout on a branch Shinsa makes, one task at a time; the next waits).
-  Settings → Projects on each repository, or ⌘K. The setup check stops a task whose repository is not ready for its
-  mode: the main checkout needs no uncommitted changes before a task takes it (`docs/engine.md` → Where agents
-  work).
+- **Every task works in its own worktree** on a fresh branch; your checkout is never touched. Since 2026-11-14
+  there is no Main checkout mode and no setting for it: opening an older event log drops the stored modes once, and
+  a task that was already in your checkout finishes there without that folder ever being removed
+  (`docs/engine.md` → Where agents work).
+- **Agents manage a repository's checks and coverage** (2026-11-14): "Always run before review" and Test coverage,
+  under each repository's gear button in Settings → Projects, can be changed by a task's agent (`repos_update`) as
+  well as by you.
 
 ### One agent per task (2026-10-24)
 
