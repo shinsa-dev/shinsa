@@ -267,6 +267,11 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.score} description={view.score.detail}>
         <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.score.percent}</span>
       </DescribedRow>
+      {view.margin ? (
+        <DescribedRow title={AUTOPILOT_SCORE_ROWS.margin} description={view.margin.detail}>
+          <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.margin.points}</span>
+        </DescribedRow>
+      ) : null}
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.suggested} description={view.suggested.detail}>
         {view.suggested.apply ? (
           <Button variant='secondary' size='sm' onClick={() => onUse(view.suggested.level)}>

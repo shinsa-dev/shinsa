@@ -5,6 +5,7 @@
       "entry": [
         "scripts/*.ts",
         "scripts/perf/*.ts",
+        "scripts/autopilot/benchmark.ts",
         "scripts/seed-media/*.ts",
         "scripts/screenshots/*.ts",
         "scripts/sandbox/dev-server.ts"

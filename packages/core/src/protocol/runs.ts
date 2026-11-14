@@ -1,6 +1,7 @@
 import { Option } from 'effect';
 import type { Run } from '../domain/index.ts';
 import { type FixFocus, resolveFixFocus } from '../prompts/index.ts';
+import { ENGINE_STATE_FIELDS } from '../state/draft.ts';
 import type { ShinsaState } from '../state/project.ts';
 import type { WireRun, WireState } from './schema.ts';
 
@@ -36,7 +37,19 @@ function serializeRuns(runs: Record<string, Run>) {
   return result;
 }
 
+const WIRE_STATES = new WeakMap<ShinsaState, WireState>();
+
+function isWireShaped(state: ShinsaState, runs: Record<string, WireRun>) {
+  return runs === state.runs && ENGINE_STATE_FIELDS.every((key) => !Object.hasOwn(state, key));
+}
+
 export function serializeState(state: ShinsaState): WireState {
   const runs = serializeRuns(state.runs);
-  return runs === state.runs ? state : { ...state, runs };
+  if (isWireShaped(state, runs)) return state;
+  const known = WIRE_STATES.get(state);
+  if (known) return known;
+  const { autopilotModel: _model, autopilotHistory: _history, ...rest } = state;
+  const wire: WireState = { ...rest, runs };
+  WIRE_STATES.set(state, wire);
+  return wire;
 }

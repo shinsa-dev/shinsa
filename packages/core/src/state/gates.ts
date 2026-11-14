@@ -1,3 +1,4 @@
+import { resolveAutopilotOpenedFacts } from '../autopilot/limits.ts';
 import { type Gate, isAgentQuestion, isPausingGate } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { describeDecision } from './activity.ts';
@@ -30,7 +31,7 @@ function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
 }
 
 function applyGateOpened(state: ShinsaState, event: EventOf<'gate.opened'>) {
-  const gate = { ...event.gate };
+  const gate = { ...event.gate, autopilotOpened: resolveAutopilotOpenedFacts(state, event.gate.openedAt) };
   writeEntry(state, 'gates', gate.id, gate);
   if (gate.type === 'review' || isPausingGate(gate))
     writeApproveAfterFix(state, gate.taskId, event.at, false);

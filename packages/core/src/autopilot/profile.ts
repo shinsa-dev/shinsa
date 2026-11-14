@@ -1,10 +1,12 @@
 import { Option } from 'effect';
-import { DAY_MS } from '../domain/index.ts';
+import { DAY_MS, MINUTE_MS, resolveTaskShape } from '../domain/index.ts';
 import type { FindingVerdict } from '../domain/schema.ts';
 import type { Gate, GateDecision, Task } from '../domain/types.ts';
-import type { ReviewRating } from '../report/types.ts';
+import type { ReviewFinding, ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { isUrgentTask } from './limits.ts';
+import { isHeldPlan, isUrgentTask, resolveAutopilotOpenedFacts } from './limits.ts';
+import { isAutopilotPositive } from './model/learn.ts';
+import { AUTOPILOT_HEAD_OF_KIND, type AutopilotModelGuess, type AutopilotModelHead } from './model/schema.ts';
 import {
   AUTOPILOT_DECISION_ANSWERS,
   AUTOPILOT_PROFILE_LIMITS,
@@ -13,14 +15,25 @@ import {
   type AutopilotAgreement,
   type AutopilotDecision,
   type AutopilotDecisionAnswer,
+  type AutopilotDecisionFacts,
+  type AutopilotFindingCounts,
   type AutopilotDecisionKind,
-  type AutopilotGateKind,
+  type AutopilotJudgments,
   type AutopilotProfile,
+  type AutopilotRate,
   type AutopilotScoredKind,
   type AutopilotTally,
+  type AutopilotTrack,
+  type AutopilotTrackJudgment,
+  type AutopilotVerdict,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
-import { isAutopilotAgreement } from './score.ts';
+import {
+  isAutopilotAgreement,
+  resolveAutopilotBaseRate,
+  resolveAutopilotCombinedVerdict,
+  resolveAutopilotLoss,
+} from './score.ts';
 
 const GATE_KIND: Partial<Record<Gate['type'], AutopilotDecisionKind>> = {
   plan: 'plan',
@@ -97,7 +110,38 @@ function resolveDecisionGuess(draft: DecisionDraft) {
   return isScoredKind(draft.kind) ? (draft.gate?.autopilotGuess ?? null) : null;
 }
 
-export function createAutopilotDecision(draft: DecisionDraft, at: number): AutopilotDecision {
+const FINDING_COUNT: Record<ReviewFinding['severity'], keyof AutopilotFindingCounts> = {
+  blocking: 'blocking',
+  should_fix: 'shouldFix',
+  optional: 'optional',
+};
+
+function countFindings(findings: readonly ReviewFinding[]): AutopilotFindingCounts {
+  const counts: AutopilotFindingCounts = { blocking: 0, shouldFix: 0, optional: 0 };
+  for (const finding of findings) counts[FINDING_COUNT[finding.severity]] += 1;
+  return counts;
+}
+
+function resolveDecisionFacts(state: ShinsaState, draft: DecisionDraft, at: number): AutopilotDecisionFacts {
+  const { task, gate } = draft;
+  const opened = gate?.autopilotOpened ?? resolveAutopilotOpenedFacts(state, gate?.openedAt ?? at);
+  return {
+    confidence: task.reviewRatings?.confidence ?? null,
+    shape: resolveTaskShape(task),
+    repoId: task.repoId,
+    revisions: Math.max(0, (task.plan?.version ?? 1) - 1),
+    findings: countFindings(task.findings),
+    heldPlan: isHeldPlan(task),
+    waitedMinutes: gate ? Math.max(0, Math.floor((at - gate.openedAt) / MINUTE_MS)) : null,
+    ...opened,
+  };
+}
+
+export function createAutopilotDecision(
+  state: ShinsaState,
+  draft: DecisionDraft,
+  at: number
+): AutopilotDecision {
   const { task, gate } = draft;
   return {
     at,
@@ -113,6 +157,8 @@ export function createAutopilotDecision(draft: DecisionDraft, at: number): Autop
     touched: gate?.autopilotHeld !== undefined,
     guess: resolveDecisionGuess(draft),
     note: clipNote(draft.note),
+    facts: resolveDecisionFacts(state, draft, at),
+    estimate: isScoredKind(draft.kind) ? (draft.gate?.autopilotEstimate ?? null) : null,
   };
 }
 
@@ -162,29 +208,106 @@ function countDecision(tallies: Map<string, AutopilotTally>, decision: Autopilot
   }
 }
 
-function scoreDecision(agreement: AutopilotAgreement, decision: AutopilotDecision): AutopilotAgreement {
-  if (decision.guess === null) return agreement;
+export type AutopilotScoredDecision = AutopilotDecision & { modelGuess?: AutopilotModelGuess | null };
+
+function scoreTrack(
+  agreement: AutopilotAgreement,
+  judgment: AutopilotTrackJudgment,
+  positive: boolean,
+  baseRight: boolean
+): AutopilotAgreement {
   const factor = resolveDecay(AUTOPILOT_SCORE_LIMITS.halfLife, 1);
-  const agreed = isAutopilotAgreement(decision.guess, decision.answer);
   return {
     scored: agreement.scored + 1,
-    agreed: agreement.agreed + (agreed ? 1 : 0),
+    agreed: agreement.agreed + (judgment.right ? 1 : 0),
     weight: agreement.weight * factor + 1,
-    agreedWeight: agreement.agreedWeight * factor + (agreed ? 1 : 0),
+    agreedWeight: agreement.agreedWeight * factor + (judgment.right ? 1 : 0),
+    baseWeight: agreement.baseWeight * factor + (baseRight ? 1 : 0),
+    loss: agreement.loss * factor + resolveAutopilotLoss(judgment.p, positive),
   };
+}
+
+function judgeVerdict(
+  track: AutopilotTrack,
+  verdict: AutopilotVerdict,
+  decision: AutopilotDecision
+): AutopilotTrackJudgment {
+  return { track, right: isAutopilotAgreement(verdict, decision.answer), p: verdict === 'act' ? 1 : 0 };
+}
+
+function judgeChance(track: AutopilotTrack, p: number, positive: boolean): AutopilotTrackJudgment {
+  return { track, right: p >= 0.5 === positive, p };
+}
+
+function listTrackJudgments(
+  decision: AutopilotScoredDecision,
+  base: AutopilotTrackJudgment,
+  positive: boolean
+) {
+  const judgments: AutopilotTrackJudgment[] = [base];
+  const modelGuess = decision.modelGuess ?? null;
+  if (modelGuess) judgments.push(judgeChance('model', modelGuess.p, positive));
+  if (decision.guess !== null) {
+    judgments.push(judgeVerdict('call', decision.guess, decision));
+    const combined = resolveAutopilotCombinedVerdict(decision.guess, decision.estimate);
+    judgments.push(judgeVerdict('combined', combined, decision));
+  }
+  return judgments;
+}
+
+function stepRate(rate: AutopilotRate, positive: boolean): AutopilotRate {
+  const factor = resolveDecay(AUTOPILOT_SCORE_LIMITS.halfLife, 1);
+  return {
+    positive: rate.positive * factor + (positive ? 1 : 0),
+    negative: rate.negative * factor + (positive ? 0 : 1),
+  };
+}
+
+export function selectAutopilotJudgments(
+  rates: Record<AutopilotModelHead, AutopilotRate>,
+  decision: AutopilotScoredDecision
+): Option.Option<AutopilotJudgments> {
+  const head = AUTOPILOT_HEAD_OF_KIND[decision.kind];
+  if (!head) return Option.none();
+  const positive = isAutopilotPositive(head, decision);
+  const base = judgeChance('base', resolveAutopilotBaseRate(rates[head]), positive);
+  return Option.some({
+    positive,
+    judgments: listTrackJudgments(decision, base, positive),
+    rates: { ...rates, [head]: stepRate(rates[head], positive) },
+  });
+}
+
+function scoreDecision(
+  profile: Pick<AutopilotProfile, 'tracks' | 'rates'>,
+  decision: AutopilotScoredDecision
+): Pick<AutopilotProfile, 'tracks' | 'rates'> {
+  const judged = selectAutopilotJudgments(profile.rates, decision);
+  if (Option.isNone(judged)) return profile;
+  const { positive, judgments, rates } = judged.value;
+  const baseRight = judgments[0]?.right ?? false;
+  const tracks = { ...profile.tracks };
+  for (const judgment of judgments)
+    tracks[judgment.track] = scoreTrack(tracks[judgment.track], judgment, positive, baseRight);
+  return { tracks, rates };
 }
 
 export function recordAutopilotDecisions(
   profile: AutopilotProfile | undefined,
-  decisions: readonly AutopilotDecision[]
+  decisions: readonly AutopilotScoredDecision[]
 ): AutopilotProfile {
   const current = profile ?? EMPTY_AUTOPILOT_PROFILE;
   const tallies = new Map(current.tallies.map((tally) => [tally.key, tally]));
   for (const decision of decisions) countDecision(tallies, decision);
+  const scored = decisions.reduce(scoreDecision, { tracks: current.tracks, rates: current.rates });
   return {
     total: current.total + decisions.length,
-    decisions: [...current.decisions, ...decisions].slice(-AUTOPILOT_PROFILE_LIMITS.words),
-    agreement: decisions.reduce(scoreDecision, current.agreement),
+    decisions: [
+      ...current.decisions,
+      ...decisions.map(({ modelGuess: _guess, ...decision }) => decision),
+    ].slice(-AUTOPILOT_PROFILE_LIMITS.words),
+    tracks: scored.tracks,
+    rates: scored.rates,
     tallies: [...tallies.values()],
   };
 }
@@ -195,14 +318,6 @@ export function listAutopilotTallies(
 ): AutopilotTally[] {
   return (state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE).tallies.filter((tally) => tally.kind === kind);
 }
-
-const GATE_DECISION_KINDS: Record<AutopilotGateKind, readonly AutopilotDecisionKind[]> = {
-  plan: ['plan'],
-  question: ['question'],
-  review: ['review', 'finding'],
-  merge: ['merge'],
-  proposal: ['proposal'],
-};
 
 const STEERING_KINDS: readonly AutopilotDecisionKind[] = ['message', 'edit', 'request', 'priority', 'cancel'];
 
@@ -290,15 +405,12 @@ export interface AutopilotProfileContext {
   risk: ReviewRating | null;
 }
 
-export function listAutopilotProfileLines(
+export function listAutopilotSteeringLines(
   state: Pick<ShinsaState, 'autopilotProfile'>,
-  gate: AutopilotGateKind,
   context: AutopilotProfileContext
 ): string[] {
-  const own = listAutopilotKindLines(state, GATE_DECISION_KINDS[gate], context);
   const steering = listAutopilotKindLines(state, STEERING_KINDS, context);
-  const steeringLines = steering.length > 0 ? ['How they steer their tasks:', ...steering] : [];
-  return fitToBudget([...own, ...steeringLines]);
+  return steering.length > 0 ? ['How they steer their tasks:', ...steering] : [];
 }
 
 export function listAutopilotKindLines(

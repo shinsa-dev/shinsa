@@ -2319,7 +2319,8 @@ gate opens ──► askAutopilot
                                          ├─ limits checked again; forward ──► waits for you
                                          └─ act ──► approve / reply / merge, with the reason
 you answer it later ──► lesson (autopilot.learned) ──► next judgment's prompt
-you answer any gate ──► autopilot.decided ──► profile ──► every prompt
+you answer any gate ──► autopilot.decided ──► model guesses, then learns
+                                         └─► estimate + examples ──► prompt
 gate left to you ──► shadow judge ──► autopilot.guessed ──► score
 ```
 
@@ -2405,7 +2406,15 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   `revised`, `rejected`, `replied`, `fixed`, `dismissed`, `accepted`, `kept`, `sent`, `raised`, `lowered`,
   `cancelled`, `filed` or `edited`), the project, the reviewer's risk, the plan's
   scope, whether the task was urgent or filed by a watchdog, whether Autopilot had brought it to you (`touched`),
-  its guess (below) and your words (280 characters). Nothing an agent or a schedule does on your behalf counts, nor
+  its guess (below), your words (280 characters) and `facts`, what the gate knew when you decided it
+  (`AutopilotDecisionFacts`: the reviewer's confidence, the task's shape and repository, how many times its plan was
+  revised, the latest review's findings by severity, whether the plan is one you always approve yourself, how long
+  the gate waited, whether you were active and inside your usual hours, and the hour where you are; null for a
+  decision recorded before facts were kept, and no wait for one with no gate). Presence and the hour are read when
+  the gate opened, as Autopilot sees them when it judges, not when you answered (answering makes you active):
+  the `gate.opened` fold stores them on the gate (`Gate.autopilotOpened`, `resolveAutopilotOpenedFacts`), and a gate
+  opened before that reads them at its `openedAt`, from your presence up to then. Its `estimate` is the model's
+  estimate Autopilot had when it guessed at the gate (`Gate.autopilotEstimate`, below), null where it made none. Nothing an agent or a schedule does on your behalf counts, nor
   a guest's answers on a handed-off task. Every decision counts, with no cap: the profile keeps a count per kind,
   per kind and project and per kind and risk (`AutopilotTally`), each with its all-time `answers` and a
   recency-weighted `recent` share, where a decision's weight halves every 30 days (`AUTOPILOT_PROFILE_LIMITS
@@ -2414,23 +2423,76 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   `listAutopilotProfileLines`: how you answered that kind of point overall, in the task's project and at its risk,
   with the recent lean ("lately approved 83%, revised 17%"), then how you steer your tasks (your messages, code edits,
   the tasks you file, priority changes and cancellations, `STEERING_KINDS`, read by every kind of point), then up to 3 of your recent notes,
-  within 1,200 characters, the point's own counts first. This is a summary the model reads, not a model trained on you.
+  within 1,200 characters, the point's own counts first. The tallies are what Settings and the suggestion prompt
+  read; the judge reads the model's estimate and your similar decisions instead (The model, below).
+- **The model** (`autopilot/model/`, `state.autopilotModel`). A small model trained on your own decisions, in core,
+  folded on every `autopilot.decided` (`state/autopilot.ts`, `learnAutopilotDecisions`): no hosted model, no
+  fine-tuning, nothing leaves your machine, and replaying the log rebuilds it exactly, since it is plain arithmetic
+  in a fixed order. It is an online logistic regression with three heads (`AUTOPILOT_HEAD_OF_KIND`): `gate` (plan,
+  review, merge and your OK; approved is yes), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
+  Messages, edits, filed tasks, priority changes and cancellations train no head. `listAutopilotFeatures` turns a
+  decision into features: the kind, risk, reviewer's confidence, shape and hour band one-hot, the plan's scope and
+  the findings log-scaled, the flags (urgent, watchdog, active, in your hours, the plan you always approve), the project and repository hashed into 16 buckets, and a few crosses (kind × risk, kind × confidence,
+  risk × scope, watchdog × away). The wait and `touched` are kept on the decision but are not features: at your
+  answer they say how long you took and whether Autopilot had brought it to you, which Autopilot cannot know when it
+  judges a gate that just opened, so learning them would teach the model a difference it never sees. Each decision is one gradient step with L2 (`AUTOPILOT_MODEL_LIMITS`: rate 0.05,
+  L2 0.001); the constant step makes recent decisions count most while every decision ever made stays in the
+  weights, with no cap and no refresh job. Its confidence is a decayed count per segment (the head, then its project
+  and risk, backing off to coarser segments until one has 5 decisions; a decision halves after 100 newer ones), so
+  `confidence` is `similar / (similar + 10)`, scaled down until the head has seen 20 decisions (`minSeen`).
+  **It guesses first, then learns**: for each decision the fold stores its prediction (`modelGuess {head, p,
+  confidence, similar}`) made with the weights from before, then takes the step, so every guess the score counts was
+  made before the model saw your answer. Every decision with its guess is kept, uncapped, in `state.autopilotHistory`
+  (`AutopilotLearnedDecision`); neither the model nor the history is sent to the page (`WireState` leaves both out).
+- **What the judge reads** (`selectAutopilotJudgeRequest`, `AutopilotHistoryLines`). In place of the tally lines, the
+  prompt carries the model's estimate for this gate (`describeAutopilotEstimate`: "Their personal model, learned
+  from every decision they made: 93% that they approve this, from 41 similar decisions.", with "It is still
+  learning, so weigh it lightly." while it is unsure), then up to 8 of your most similar past
+  decisions of the same kind as worked examples (`listAutopilotNeighbours`, `AUTOPILOT_RETRIEVAL_LIMITS`: nearness
+  is 0.6 feature similarity, 0.25 words shared with the task title and 0.15 recency, within 2,400 characters), each
+  with its facts, what you did and your words, then how you steer your tasks. All of it sits at the tail of the user
+  turn, so the system prompt never changes.
+- **Combining the two** (`resolveAutopilotCombinedVerdict`, `isAutopilotModelVeto`, `AUTOPILOT_COMBINE_LIMITS`). The
+  hard limits run first, as always. Then Autopilot acts only when the model call says act and the model does not
+  veto it: a veto is a confident model (confidence at least 0.5, about 10 similar decisions and 20 of its head)
+  that puts the chance you would approve below 50% (`veto`), so it thinks you would more likely not approve. A
+  confident model above that, even one that expects you to push back now and then, never vetoes: someone who
+  approves four plans in five still gets them approved. A model still learning, or a question, which it does not score,
+  leaves the model call to decide alone, so a new install or a new project still works. A veto brings the gate to
+  you with the estimate as the reason ("From 40 decisions like this one, Autopilot puts the chance you would
+  approve it at only 12%, so it waits for you."). With no model call, the gate comes to you, as before.
 - **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
   merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
   (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
-  stored on the gate (`autopilot.guessed`, `Gate.autopilotGuess`) and acts on nothing. A gate it judged and then
+  stored on the gate (`autopilot.guessed {verdict, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotEstimate`) and
+  acts on nothing. `estimate` is the model's estimate at that moment, the same one a live judgment reads for its
+  veto, so the combined track scores exactly what Autopilot did or would have done. A gate it judged and then
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
-  (`AutopilotDecision.guess`) and folded into a running agreement (`AutopilotProfile.agreement`: every guess ever
-  scored, how many agreed, and both weighted so each older guess counts half as much after 50 newer ones,
-  `AUTOPILOT_SCORE_LIMITS.halfLife`). Approving agrees with `act`, changing or rejecting with `forward`; questions
-  are not scored, since a reply has no yes or no. `resolveAutopilotScore` turns it into `progress`, from 0 to 1:
-  the lesser of how many guesses were scored against 50 and the weighted agreement against 90%, and into `value`,
-  the score out of 100 Settings shows: the weighted agreement once 50 guesses are scored, and before that at most
-  the share of 50 scored times 90, so it reaches 90 exactly when progress is full. It suggests `most`
-  once progress is full and `balanced` otherwise, so a run of recent misses lowers it again; it never changes your
-  level, which moves only when you choose one.
+  (`AutopilotDecision.guess`). Approving agrees with `act`, changing or rejecting with `forward`; questions are not
+  scored, since a reply has no yes or no.
+- **Four tracks** (`AutopilotProfile.tracks`, `AUTOPILOT_TRACKS`). Each decision is scored against four guessers,
+  each a running agreement in which an older decision counts half as much after 50 newer ones
+  (`AUTOPILOT_SCORE_LIMITS.halfLife`): `model`, the local model's guess (`p` of at least 0.5 is a yes), on every
+  plan, review, merge, your OK, finding and suggested task, Autopilot on or off; `call`, the model call's guess; `combined`, the verdict
+  the rule above makes from the call's guess and the estimate stored with it (`AutopilotDecision.estimate`), never
+  from the fold's later `modelGuess`, which has newer weights; and `base`, always your usual answer for that head lately (`AutopilotProfile
+  .rates`, the decayed share of yes, before this decision). Each track also counts how often `base` was right on the
+  same decisions (`baseWeight`), so its `margin` over your usual answer compares like with like, and a log loss
+  (a flat verdict counts as 99% sure, `clamp`), for the benchmark. `resolveAutopilotScore` reads `combined`, what
+  Autopilot does: `progress`, from 0 to 1, the lesser of how many were scored against 50 and the weighted agreement
+  against 90%; `value`, the score out of 100 Settings shows, the weighted agreement once 50 are scored and before that
+  at most the share of 50 scored times 90; and `margin`, its lead over your usual answer. It suggests `most` once
+  progress is full and the margin is at least 5 points (`AUTOPILOT_SCORE_LIMITS.margin`), since if you approve
+  nearly everything, always approving already scores high; `balanced` otherwise, so a run of recent misses lowers it
+  again. It never changes your level, which moves only when you choose one.
+- **The benchmark** (`bun scripts/autopilot/benchmark.ts [data folder]`, `scripts/autopilot/`). Copies
+  `shinsa.sqlite` to a temporary folder, migrates the copy and replays it (`replayAutopilotLog`), so your own log
+  is never written to; it makes no model call, reading the model call's guesses already stored. It prints, per kind
+  of decision and for each of the four tracks, how often it matched you and its log loss (`serializeBenchmark`),
+  with every decision counted equally, where Settings weights the recent ones most. Its scoring is the live score's
+  own code, so the two never disagree.
 - **Suggested tasks** (`suggestions` gate, off by default). Each new suggested task is weighed when an agent
   suggests it (`weighSuggestion`, `resolveAutopilotSuggestionLimit`: Autopilot on, the gate on, any level but Ask
   me first, never one you split off yourself or one that would stack on this task) through `autopilot.weigh
@@ -2520,8 +2582,10 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   approved). Who it asks: Your team (Only as a last resort, or Never), your team in Shinsa and the Slack contacts.
   Usage limits (Ignore them or Keep them). How well it knows you: Autopilot score, a percentage at the end of its row (`value`: the recency-weighted share of its guesses that matched you, held lower while it has
   few; a count has no maximum, so it shows a score, not how many decisions), with how many of how many it guessed
-  right under it and Most things suggested at 90, and the suggested level with a Use button while it differs from
-  yours. There is no separate agreement row: once it has enough guesses the score is that agreement.
+  right under it; Against your usual answer, once anything is scored, how many points it is ahead of or behind
+  giving your usual answer every time ("7 points ahead", "Even"), with that answer's own rate under it; and the
+  suggested level with a Use button while it differs from yours (Most things once the score reaches 90% and is 5
+  points ahead). There is no separate agreement row: once it has enough guesses the score is that agreement.
 - **Urgent work and usage limits.** With the policy on and `ignoreUsageLimits` set (`isUsageLimitExempt`), an urgent
   task's runs skip both holds before they start: `holdForBudget` (the task's usage and cost limits) and `holdForPace`
   (the daily and project usage limits). Marking a task urgent starts a step either hold stopped (`releasePaceHolds`
@@ -5888,7 +5952,7 @@ truth, and a snapshot only saves replaying it.
 - **The log migrates forward, once, on start.** Code never reads an old shape. The log's version is SQLite's
   `user_version`; the baseline is 15 (`LOG_BASELINE`, `store/migrations/schema.ts`) and every migration after it is
   one entry in `LOG_MIGRATIONS` (`store/migrations/list.ts`; the first, `stack-lists`, turns the single `stacksOn` of
-  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null; `slack-thread-updates` gives every stored Slack channel trigger from before the option `threadUpdates: true`; `reset-paces` gives every `usage.pace_recorded` from before resets a `resetPace` and `endingPace` equal to its pace and `resetEndsAt` null; the last, `review-ratings`, gives every `review.reported` from before the reviewer's ratings `ratings: null`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
+  `task.stack_changed` and `base` of `task.stack_based` into lists; the second, `slack-channel-names`, gives every `slack.thread_linked` link from before channel names a `channelName` of null; `slack-thread-updates` gives every stored Slack channel trigger from before the option `threadUpdates: true`; `reset-paces` gives every `usage.pace_recorded` from before resets a `resetPace` and `endingPace` equal to its pace and `resetEndsAt` null; `review-ratings` gives every `review.reported` from before the reviewer's ratings `ratings: null`; the last, `decision-facts`, gives every decision in an `autopilot.decided` from before facts were kept `facts: null`), an effect on the SQL client, in order, whose position is its version, so the current version is the baseline plus the
   list's length and no number is kept by hand. A new log is stamped with the current version when it opens empty.
   Before it replays anything, a writable engine runs `EventLog.migrate`: the migrations after the log's version run
   in one transaction, the snapshot is dropped and the version raised; a migration that fails leaves the log as it

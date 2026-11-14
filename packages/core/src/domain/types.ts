@@ -1,4 +1,5 @@
-import type { AutopilotVerdict } from '../autopilot/schema.ts';
+import type { AutopilotModelGuess } from '../autopilot/model/schema.ts';
+import type { AutopilotOpenedFacts, AutopilotVerdict } from '../autopilot/schema.ts';
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   AgentReply,
@@ -837,6 +838,8 @@ export interface Gate {
   autopilotHeld?: string;
   autopilotJudging?: boolean;
   autopilotGuess?: AutopilotVerdict;
+  autopilotEstimate?: AutopilotModelGuess | null;
+  autopilotOpened?: AutopilotOpenedFacts;
   autopilotAnswer?: string;
   autopilotTeaches?: boolean;
   autopilotLearned?: boolean;

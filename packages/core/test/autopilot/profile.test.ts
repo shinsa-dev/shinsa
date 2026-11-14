@@ -1,22 +1,28 @@
 import { describe, expect, test } from 'bun:test';
+import { createAutopilotDecision } from '../../src/autopilot/profile.ts';
 import {
   AUTOPILOT_PROFILE_LIMITS,
   type AutopilotDecision,
   DAY_MS,
   EMPTY_AUTOPILOT_PROFILE,
-  listAutopilotProfileLines,
+  HOUR_MS,
+  MINUTE_MS,
+  listAutopilotKindLines,
+  listAutopilotSteeringLines,
   listAutopilotTallies,
   type ReviewFinding,
   type ReviewRatings,
   recordAutopilotDecisions,
 } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, type Harness, PASSING } from '../harness.ts';
+import { buildAll, createHarness, createTask, type Harness, PASSING, proposePlan } from '../harness.ts';
 
 const NO_CONTEXT = { projectId: null, risk: null };
 
 const HIGH_LOW: ReviewRatings = { confidence: 'high', risk: 'low' };
 
 const OPTIONAL: ReviewFinding = { severity: 'optional', file: 'a.ts', line: 3, message: 'Rename it.' };
+
+const SHOULD_FIX: ReviewFinding = { severity: 'should_fix', file: 'b.ts', line: 7, message: 'Name it.' };
 
 function reachReview(harness: Harness, findings: ReviewFinding[] = []) {
   const taskId = createTask(harness);
@@ -51,6 +57,8 @@ function decision(overrides: Partial<AutopilotDecision>): AutopilotDecision {
     touched: false,
     guess: null,
     note: null,
+    facts: null,
+    estimate: null,
     ...overrides,
   };
 }
@@ -79,6 +87,83 @@ describe('the decisions Autopilot learns from', () => {
     ]);
     expect(decisions(harness)[0]?.scope).toEqual({ phases: expect.any(Number), files: expect.any(Number) });
     expect(harness.state.autopilotProfile.total).toBe(2);
+  });
+
+  test('a decided gate keeps what the gate knew: the ratings, findings, plan, wait, presence and your hour', () => {
+    const harness = createHarness();
+    harness.send({ type: 'clock.record', timeZone: 'Asia/Tokyo' });
+    const taskId = reachReview(harness, [OPTIONAL, SHOULD_FIX, OPTIONAL]);
+    const gate = harness.openGate(taskId);
+    harness.advance(90 * MINUTE_MS);
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    const tokyoHour = Math.floor(((gate.openedAt + 9 * HOUR_MS) % DAY_MS) / HOUR_MS);
+    expect(decisions(harness)[0]?.facts).toEqual({
+      confidence: 'high',
+      shape: 'change',
+      repoId: harness.task(taskId).repoId,
+      revisions: 0,
+      findings: { blocking: 0, shouldFix: 1, optional: 2 },
+      heldPlan: false,
+      waitedMinutes: Math.floor((harness.now - gate.openedAt) / MINUTE_MS),
+      active: gate.autopilotOpened?.active ?? false,
+      inHours: null,
+      hour: tokyoHour,
+    });
+    expect(decisions(harness)[0]?.facts?.waitedMinutes).toBeGreaterThanOrEqual(90);
+  });
+
+  test('presence and the hour are read when the gate opened, as Autopilot sees them, not when you answered', () => {
+    const harness = createHarness();
+    const taskId = reachReview(harness, []);
+    const gate = harness.openGate(taskId);
+    expect(gate.autopilotOpened?.hour).toBe(Math.floor((gate.openedAt % DAY_MS) / HOUR_MS));
+    const later = gate.openedAt + 5 * HOUR_MS;
+    const draft = {
+      task: harness.task(taskId),
+      kind: 'review' as const,
+      answer: 'approved' as const,
+      note: null,
+    };
+    const answered = { ...harness.state, presence: { [Math.floor(later / HOUR_MS)]: 1 } };
+    const fallback = createAutopilotDecision(
+      answered,
+      { ...draft, gate: { ...gate, autopilotOpened: undefined } },
+      later
+    );
+    expect(fallback.facts).toMatchObject({ active: false, hour: gate.autopilotOpened?.hour });
+    const opened = { active: true, inHours: false, hour: 3 };
+    const stored = createAutopilotDecision(
+      answered,
+      { ...draft, gate: { ...gate, autopilotOpened: opened } },
+      later
+    );
+    expect(stored.facts).toMatchObject(opened);
+  });
+
+  test('a plan you revised counts its revisions, and a decision with no gate has no wait', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'Smaller.',
+    });
+    proposePlan(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    harness.send({ type: 'task.message', taskId, text: 'Thanks.' });
+    const [first, second, message] = decisions(harness);
+    expect([first?.facts?.revisions, second?.facts?.revisions]).toEqual([0, 1]);
+    expect(second?.facts?.hour).toBe(Math.floor((harness.now % DAY_MS) / HOUR_MS));
+    expect(message?.kind).toBe('message');
+    expect(message?.facts?.waitedMinutes).toBeNull();
   });
 
   test('each finding you decide is learned beside the review answer', () => {
@@ -222,13 +307,14 @@ describe('the profile summary for a judgment', () => {
 
   test('is empty until you decided that kind of point', () => {
     expect(
-      listAutopilotProfileLines({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, 'plan', NO_CONTEXT)
+      listAutopilotKindLines({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }, ['plan'], NO_CONTEXT)
     ).toEqual([]);
     const state = profile([decision({ kind: 'merge' })]);
-    expect(listAutopilotProfileLines(state, 'plan', NO_CONTEXT)).toEqual([]);
+    expect(listAutopilotKindLines(state, ['plan'], NO_CONTEXT)).toEqual([]);
+    expect(listAutopilotSteeringLines(state, NO_CONTEXT)).toEqual([]);
   });
 
-  test('counts the review and its findings overall, in this project and at this risk, then your recent words', () => {
+  test('counts each kind overall, in this project and at this risk, then your recent words', () => {
     const state = profile([
       decision({ kind: 'review', answer: 'approved', projectId: 'p1', risk: 'low', note: 'first' }),
       decision({ kind: 'review', answer: 'revised', projectId: 'p2', risk: 'high', note: 'second' }),
@@ -236,7 +322,7 @@ describe('the profile summary for a judgment', () => {
       decision({ kind: 'finding', answer: 'fixed', projectId: 'p1', risk: 'low', note: 'fourth' }),
       decision({ kind: 'merge', answer: 'approved', note: 'not a review' }),
     ]);
-    expect(listAutopilotProfileLines(state, 'review', { projectId: 'p1', risk: 'low' })).toEqual([
+    expect(listAutopilotKindLines(state, ['review', 'finding'], { projectId: 'p1', risk: 'low' })).toEqual([
       '- All reviews: 2 decided: approved 1, revised 1; lately approved 50%, revised 50%',
       '- In this project: 1 decided: approved 1; lately approved 100%',
       '- At low risk: 1 decided: approved 1; lately approved 100%',
@@ -250,7 +336,7 @@ describe('the profile summary for a judgment', () => {
     ]);
   });
 
-  test('adds how you steer and file your tasks to every kind of point, after that point’s own counts', () => {
+  test('says how you steer and file your tasks', () => {
     const state = profile([
       decision({ kind: 'plan', answer: 'approved' }),
       decision({ kind: 'message', answer: 'sent', note: 'Keep it small.' }),
@@ -259,8 +345,7 @@ describe('the profile summary for a judgment', () => {
       decision({ kind: 'priority', answer: 'raised' }),
       decision({ kind: 'cancel', answer: 'cancelled' }),
     ]);
-    expect(listAutopilotProfileLines(state, 'plan', NO_CONTEXT)).toEqual([
-      '- All plans: 1 decided: approved 1; lately approved 100%',
+    expect(listAutopilotSteeringLines(state, NO_CONTEXT)).toEqual([
       'How they steer their tasks:',
       '- All messages to agents: 1 decided: sent 1; lately sent 100%',
       '- All their own code edits: 1 decided: edited 1; lately edited 100%',
@@ -270,17 +355,11 @@ describe('the profile summary for a judgment', () => {
       'Their recent words:',
       '- messages to agents, sent: “Keep it small.”',
     ]);
-    expect(
-      listAutopilotProfileLines(profile([decision({ kind: 'message', answer: 'sent' })]), 'merge', NO_CONTEXT)
-    ).toEqual([
-      'How they steer their tasks:',
-      '- All messages to agents: 1 decided: sent 1; lately sent 100%',
-    ]);
   });
 
   test('leaves out a project or risk you never decided at, and words when there are none', () => {
     const state = profile([decision({ kind: 'plan', answer: 'approved', projectId: 'p1', risk: 'low' })]);
-    expect(listAutopilotProfileLines(state, 'plan', { projectId: 'p9', risk: 'high' })).toEqual([
+    expect(listAutopilotKindLines(state, ['plan'], { projectId: 'p9', risk: 'high' })).toEqual([
       '- All plans: 1 decided: approved 1; lately approved 100%',
     ]);
   });
@@ -290,7 +369,7 @@ describe('the profile summary for a judgment', () => {
     const state = profile(
       Array.from({ length: 6 }, () => decision({ kind: 'question', answer: 'replied', note: long }))
     );
-    const lines = listAutopilotProfileLines(state, 'question', NO_CONTEXT);
+    const lines = listAutopilotKindLines(state, ['question'], NO_CONTEXT);
     expect(lines.join('\n').length).toBeLessThanOrEqual(AUTOPILOT_PROFILE_LIMITS.summary);
     expect(lines).toHaveLength(3);
     expect(lines[0]).toBe('- All agent questions: 6 decided: replied 6; lately replied 100%');

@@ -2,7 +2,7 @@ import { Option } from 'effect';
 import { type Gate, HOUR_MS, MINUTE_MS, hasStep } from '../domain/index.ts';
 import { type AutopilotGate, type AutopilotPolicy } from '../domain/settings.ts';
 import type { Task, TaskSuggestion } from '../domain/types.ts';
-import { isActiveAt, resolveActiveHours } from '../presence/hours.ts';
+import { isActiveAt, resolveActiveHours, resolveLocalSlot } from '../presence/hours.ts';
 import type { ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
@@ -12,6 +12,7 @@ import {
   type AutopilotGateKind,
   type AutopilotLimit,
   type AutopilotLimits,
+  type AutopilotOpenedFacts,
   type AutopilotPresence,
   type AutopilotScope,
 } from './schema.ts';
@@ -44,9 +45,20 @@ export function isUrgentTask(task: Task) {
 }
 
 function resolveLastSeenAt(state: ShinsaState, now: number) {
-  const hours = Object.keys(state.presence).map(Number);
+  const hours = Object.keys(state.presence)
+    .map(Number)
+    .filter((hour) => hour * HOUR_MS <= now);
   if (hours.length === 0) return null;
   return Math.min(now, (Math.max(...hours) + 1) * HOUR_MS);
+}
+
+export function resolveAutopilotOpenedFacts(state: ShinsaState, at: number): AutopilotOpenedFacts {
+  const presence = resolveAutopilotPresence(state, at);
+  return {
+    active: presence.active,
+    inHours: presence.inHours,
+    hour: resolveLocalSlot(state.timeZone ?? 'UTC', at).hour,
+  };
 }
 
 export function resolveAutopilotPresence(state: ShinsaState, now: number): AutopilotPresence {
@@ -66,7 +78,7 @@ function resolveScope(task: Task): AutopilotScope | null {
   return document ? { phases: document.phases.length, files: document.files.length } : null;
 }
 
-function isHeldPlan(task: Task) {
+export function isHeldPlan(task: Task) {
   const document = task.plan?.document;
   return (
     hasStep(task, 'operate') ||

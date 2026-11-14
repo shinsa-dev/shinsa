@@ -1,9 +1,10 @@
 import { Option } from 'effect';
 import type { Gate, GateType, Task, TaskSuggestion } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { describeAutopilotEstimate, listAutopilotExampleLines, selectAutopilotEstimate } from './examples.ts';
 import { listAutopilotLessonLines } from './lessons.ts';
 import { resolveAutopilotFacts } from './limits.ts';
-import { listAutopilotKindLines, listAutopilotProfileLines } from './profile.ts';
+import { listAutopilotKindLines, listAutopilotSteeringLines } from './profile.ts';
 import {
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_SUGGESTION_VERDICTS,
@@ -23,7 +24,8 @@ export const AUTOPILOT_JUDGE_SYSTEM = [
   'To answer an agent’s question, write the reply the developer would give, in plain words, in `reply`; otherwise leave `reply` empty.',
   `Write \`reason\` as one plain sentence the developer reads later, at most ${AUTOPILOT_JUDGMENT_LIMITS.reason} characters.`,
   'Weigh what the developer taught you at earlier decisions like this one: do what they approved, bring what they changed.',
-  'Weigh how they usually decide this kind of point, in this project and at this risk: the counts and their recent words are their habits.',
+  'Weigh their personal model’s estimate and the earlier decisions most like this one: what they did there, and their words, is what they would do here.',
+  'Weigh how they steer their tasks: the counts and their recent words are their habits.',
   'Answer with one JSON object and nothing else.',
 ].join('\n');
 
@@ -77,9 +79,21 @@ function describeLessons(lessons: readonly string[]) {
   return ['', 'What the developer taught you at earlier ones, most recent first:', ...lessons];
 }
 
-function describeProfile(profile: readonly string[]) {
-  if (profile.length === 0) return [];
-  return ['', 'How the developer decides points like this one, with or without you:', ...profile];
+export interface AutopilotHistoryLines {
+  estimate: string | null;
+  examples: readonly string[];
+  steering: readonly string[];
+}
+
+const NO_HISTORY: AutopilotHistoryLines = { estimate: null, examples: [], steering: [] };
+
+function describeHistory({ estimate, examples, steering }: AutopilotHistoryLines) {
+  const lines: string[] = [];
+  if (estimate) lines.push('', estimate);
+  if (examples.length > 0)
+    lines.push('', 'Earlier decisions most like this one, with or without you:', ...examples);
+  if (steering.length > 0) lines.push('', ...steering);
+  return lines;
 }
 
 function describeShadow(shadow: boolean) {
@@ -95,7 +109,7 @@ export function resolveAutopilotJudgePrompt(
   gate: Gate,
   facts: AutopilotFacts,
   lessons: readonly string[] = [],
-  profile: readonly string[] = [],
+  history: AutopilotHistoryLines = NO_HISTORY,
   shadow = false
 ) {
   const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
@@ -112,7 +126,7 @@ export function resolveAutopilotJudgePrompt(
     clip(gate.body, limit * 2),
     ...describeChoices(gate),
     ...describeLessons(lessons),
-    ...describeProfile(profile),
+    ...describeHistory(history),
     ...describeShadow(shadow),
   ]
     .filter((line, index, lines) => line !== '' || lines[index - 1] !== '')
@@ -143,13 +157,15 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
   return Option.map(selectJudgedGateKind(gate), (kind) => {
     const facts = resolveAutopilotFacts(state, task, kind, gate.openedAt, now);
     const lessons = listAutopilotLessonLines(state, kind);
-    const profile = listAutopilotProfileLines(state, kind, {
-      projectId: task.projectId ?? null,
-      risk: facts.risk,
-    });
+    const estimate = selectAutopilotEstimate(state, task, gate, kind, now);
+    const history: AutopilotHistoryLines = {
+      estimate: Option.getOrNull(Option.map(estimate, describeAutopilotEstimate)),
+      examples: listAutopilotExampleLines(state, task, gate, kind, now),
+      steering: listAutopilotSteeringLines(state, { projectId: task.projectId ?? null, risk: facts.risk }),
+    };
     return {
       system: AUTOPILOT_JUDGE_SYSTEM,
-      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, profile, shadow),
+      prompt: resolveAutopilotJudgePrompt(task, gate, facts, lessons, history, shadow),
       verdicts: AUTOPILOT_VERDICTS,
     };
   });

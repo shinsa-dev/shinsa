@@ -152,6 +152,7 @@ export const AUTOPILOT_BLOCKS = {
 
 export const AUTOPILOT_SCORE_ROWS = {
   score: 'Autopilot score',
+  margin: 'Against your usual answer',
   suggested: 'Suggested level',
 } as const;
 
@@ -163,6 +164,7 @@ const LEVEL_LABEL: Record<AutopilotLevel, string> = {
 
 export interface AutopilotScoreView {
   score: { detail: string; value: number; percent: string };
+  margin: { detail: string; points: string } | null;
   suggested: { level: AutopilotLevel; detail: string; apply: string | null };
 }
 
@@ -173,12 +175,31 @@ function describeScore(score: AutopilotScore) {
     return `It guessed you right on ${score.agreed} of ${score.scored}, the recent ones counting most.`;
   if (score.scored < AUTOPILOT_SCORE_LIMITS.minScored)
     return `It guessed you right on ${score.agreed} of ${score.scored} so far and needs more to be sure.`;
+  if (score.progress >= 1)
+    return `It guessed you right on ${score.agreed} of ${score.scored}, but your usual answer does nearly as well.`;
   return `It guessed you right on ${score.agreed} of ${score.scored}, but not often enough lately.`;
+}
+
+function describeMarginPoints(margin: number) {
+  const points = Math.round(margin * 100);
+  if (points === 0) return 'Even';
+  const unit = Math.abs(points) === 1 ? 'point' : 'points';
+  return points > 0 ? `${points} ${unit} ahead` : `${-points} ${unit} behind`;
+}
+
+function resolveMarginView(score: AutopilotScore) {
+  const base = score.tracks.combined.base;
+  if (score.margin === null || base === null) return null;
+  return {
+    detail: `Giving your usual answer every time would have been right ${Math.round(base * 100)}% of the time.`,
+    points: describeMarginPoints(score.margin),
+  };
 }
 
 function describeSuggested(score: AutopilotScore) {
   if (score.ready) return 'It agrees with you often enough to act alone on most work.';
-  return `Balanced while it learns. Most things once the score reaches ${AUTOPILOT_SCORE_LIMITS.agreement * 100}%.`;
+  const { agreement, margin } = AUTOPILOT_SCORE_LIMITS;
+  return `Balanced while it learns. Most things once the score reaches ${Math.round(agreement * 100)}% and is ${Math.round(margin * 100)} points ahead of your usual answer.`;
 }
 
 export function resolveAutopilotScoreView(
@@ -188,6 +209,7 @@ export function resolveAutopilotScoreView(
   const score = resolveAutopilotScore(state);
   return {
     score: { detail: describeScore(score), value: score.value, percent: `${score.value}%` },
+    margin: resolveMarginView(score),
     suggested: {
       level: score.suggested,
       detail: describeSuggested(score),

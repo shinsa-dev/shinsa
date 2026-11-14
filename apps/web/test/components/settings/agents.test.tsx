@@ -6,6 +6,7 @@ import { AgentSettings } from '@/components/settings/agents.tsx';
 import {
   AUTO_MERGE_DESCRIPTION,
   AUTOPILOT_BLOCKS,
+  AUTOPILOT_SCORE_ROWS,
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_OFF,
   AUTOPILOT_ROWS,
@@ -329,6 +330,8 @@ describe('Settings → Agents → Autopilot', () => {
     expect(screen.queryByText('Agrees with you')).toBeNull();
     expect(screen.queryByText('50')).toBeNull();
     expect(screen.queryByText('What it learned')).toBeNull();
+    expect(screen.getByText(AUTOPILOT_SCORE_ROWS.margin)).toBeTruthy();
+    expect(screen.getByText(/^\d+ points ahead$/)).toBeTruthy();
     expect(listSentCommands()).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
     expect(listSentCommands()).toEqual([

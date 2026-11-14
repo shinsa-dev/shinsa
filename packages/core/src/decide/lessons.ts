@@ -12,7 +12,7 @@ export function recordDecisions(decider: Decider, drafts: readonly DecisionDraft
   if (!isYours(decider) || drafts.length === 0) return;
   decider.emit({
     type: 'autopilot.decided',
-    decisions: drafts.map((draft) => createAutopilotDecision(draft, decider.context.now)),
+    decisions: drafts.map((draft) => createAutopilotDecision(decider.state, draft, decider.context.now)),
   });
 }
 

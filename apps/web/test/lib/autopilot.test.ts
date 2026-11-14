@@ -257,9 +257,11 @@ describe('the Autopilot settings', () => {
         value: 0,
         percent: '0%',
       },
+      margin: null,
       suggested: {
         level: 'balanced',
-        detail: 'Balanced while it learns. Most things once the score reaches 90%.',
+        detail:
+          'Balanced while it learns. Most things once the score reaches 90% and is 5 points ahead of your usual answer.',
         apply: null,
       },
     });
@@ -311,6 +313,41 @@ describe('the Autopilot settings', () => {
       apply: 'Use Most things',
     });
     expect(resolveAutopilotScoreView({ autopilotProfile: sure }, 'most').suggested.apply).toBeNull();
+  });
+
+  it('says how far the score is ahead of or behind giving your usual answer every time', () => {
+    const sure = resolveAutopilotScoreView(
+      { autopilotProfile: createAutopilotProfile({ agreed: 46, disagreed: 4 }) },
+      'balanced'
+    );
+    expect(sure.margin?.points).toMatch(/^\d+ points ahead$/);
+    expect(sure.margin?.detail).toMatch(
+      /^Giving your usual answer every time would have been right \d+% of the time\.$/
+    );
+    const always = createAutopilotProfile({ agreed: 0, disagreed: 0, unscored: 0 });
+    expect(resolveAutopilotScoreView({ autopilotProfile: always }, 'balanced').margin).toBeNull();
+    const behind = createAutopilotProfile({ agreed: 0, disagreed: 60 });
+    expect(resolveAutopilotScoreView({ autopilotProfile: behind }, 'balanced').margin?.points).toMatch(
+      /^\d+ points behind$/
+    );
+  });
+
+  it('calls a score as good as your usual answer even, and says when it is barely ahead', () => {
+    const combined = (agreedWeight: number, baseWeight: number) => ({
+      ...EMPTY_AUTOPILOT_PROFILE,
+      tracks: {
+        ...EMPTY_AUTOPILOT_PROFILE.tracks,
+        combined: { scored: 60, agreed: 57, weight: 100, agreedWeight, baseWeight, loss: 10 },
+      },
+    });
+    const even = resolveAutopilotScoreView({ autopilotProfile: combined(95, 95) }, 'balanced');
+    expect(even.margin?.points).toBe('Even');
+    expect(even.score.detail).toBe(
+      'It guessed you right on 57 of 60, but your usual answer does nearly as well.'
+    );
+    expect(even.suggested.level).toBe('balanced');
+    const ahead = resolveAutopilotScoreView({ autopilotProfile: combined(95, 94) }, 'balanced');
+    expect(ahead.margin?.points).toBe('1 point ahead');
   });
 
   it('adds or drops one gate and keeps the others', () => {
