@@ -7,7 +7,14 @@ import {
   type Task,
   type WireRun,
 } from '@shinsa/core';
-import { RUN_ROLE, resolveRunHeadline, resolveRunModelLabel } from '@/lib/chat/run-role.ts';
+import {
+  isAgentVoice,
+  RUN_ROLE,
+  resolveFixDoneTitle,
+  resolvePhaseDoneTitle,
+  resolveRunHeadline,
+  resolveRunModelLabel,
+} from '@/lib/chat/run-role.ts';
 import { createCallEntry, shinsaTool } from '../../support/chat.ts';
 import { createRun, createTask, NOW } from '../../support/state.ts';
 
@@ -225,5 +232,60 @@ describe('resolveRunModelLabel', () => {
     expect(resolveRunModelLabel({ model: 'opus' })).toBe('Opus 5.5');
     expect(resolveRunModelLabel({ model: 'claude-fable-5-2' })).toBe('Fable 5.2');
     expect(resolveRunModelLabel({ model: null })).toBeNull();
+  });
+});
+
+describe('isAgentVoice', () => {
+  it('counts the Agent’s planning, building, fixing and operating, and an inquiry, as its own voice', () => {
+    for (const purpose of ['plan', 'build', 'fix', 'operate'] as const) {
+      expect(isAgentVoice(createRun({ id: 'r', taskId: 't', purpose }))).toBe(true);
+    }
+    expect(isAgentVoice(createRun({ id: 'r', taskId: 't', role: 'answerer' }))).toBe(true);
+  });
+
+  it('gives the reviewer, a watch, a lead and a delegated helper a voice of their own', () => {
+    expect(isAgentVoice(createRun({ id: 'r', taskId: 't', role: 'reviewer' }))).toBe(false);
+    expect(isAgentVoice(createRun({ id: 'r', taskId: 't', purpose: 'watch' }))).toBe(false);
+    expect(isAgentVoice(createRun({ id: 'r', taskId: 't', purpose: 'lead' }))).toBe(false);
+    const delegated = createRun({
+      id: 'r',
+      taskId: 't',
+      delegation: {
+        parentRunId: 'step',
+        depth: 1,
+        requestKey: 'k',
+        title: 'Check it',
+        brief: 'Check it.',
+        mode: 'async',
+        wake: 'always',
+        isolation: 'shared',
+        baseCommit: null,
+        delivery: 'none',
+        question: null,
+        requestedAt: 0,
+      },
+    });
+    expect(isAgentVoice(delegated)).toBe(false);
+  });
+});
+
+describe('resolvePhaseDoneTitle and resolveFixDoneTitle', () => {
+  it('names a finished phase by its place and title in the plan', () => {
+    const planned = withPlan(['Read the code', 'Wire it in', 'Test it']);
+    expect(resolvePhaseDoneTitle(createRun({ id: 'r', taskId: 't', phaseIndex: 1 }), planned)).toBe(
+      'Finished phase 2 of 3: Wire it in'
+    );
+    expect(resolvePhaseDoneTitle(createRun({ id: 'r', taskId: 't', phaseIndex: 5 }), planned)).toBe(
+      'Finished phase 6'
+    );
+    expect(resolvePhaseDoneTitle(createRun({ id: 'r', taskId: 't' }), null)).toBe('Finished the phase');
+  });
+
+  it('names a fix by what it fixed', () => {
+    const focus: FixFocus = 'review';
+    expect(resolveFixDoneTitle({ ...createRun({ id: 'r', taskId: 't' }), fixFocus: focus })).toBe(
+      'Fixed the review findings'
+    );
+    expect(resolveFixDoneTitle(createRun({ id: 'r', taskId: 't' }))).toBe('Finished the fix');
   });
 });

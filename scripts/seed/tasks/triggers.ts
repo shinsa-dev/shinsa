@@ -271,10 +271,37 @@ const MOVED_NOTICES: ChatNotice[] = [
   { kind: 'compaction', trigger: 'auto', preTokens: 168_000, summary: null },
 ];
 
+const STARTED_NOTICES: ChatNotice[] = [
+  {
+    kind: 'extensions',
+    servers: [
+      { name: 'linear', tokens: 4_200 },
+      { name: 'posthog', tokens: 6_100 },
+    ],
+    skills: [{ name: 'review', tokens: 900 }],
+    plugins: [],
+  },
+  { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
+];
+
 export const ACCOUNT_MOVE_TRANSCRIPT = 'task-account-move-run-1.jsonl';
 
+export const ACCOUNT_START_TRANSCRIPT = 'task-account-move-run-0.jsonl';
+
 export function insertAccountNotices(transcript: string) {
-  return insertNotices(transcript, MOVED_NOTICES, NOW);
+  return insertNotices(transcript, MOVED_NOTICES, {
+    runId: 'task-account-move-run-1',
+    now: NOW,
+    context: true,
+  });
+}
+
+export function insertStartNotices(transcript: string) {
+  return insertNotices(transcript, STARTED_NOTICES, {
+    runId: 'task-account-move-run-0',
+    now: NOW,
+    context: false,
+  });
 }
 
 export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Repo }): SeedTask[] {
