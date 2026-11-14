@@ -51,7 +51,12 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
   let batchFiber: Fiber.Fiber<void> | null = null;
   let stopping = false;
   let lastOutputAt: number | null = null;
+  let lastActiveAt = options.info.endedAt ?? options.info.startedAt;
   let disposed = false;
+
+  const touch = () => {
+    lastActiveAt = runSync(options.now);
+  };
 
   const cancelBatch = () => {
     if (batchFiber) runFork(Fiber.interrupt(batchFiber));
@@ -73,6 +78,7 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
   const receive = (data: Uint8Array) => {
     if (disposed) return;
     lastOutputAt = performance.now();
+    touch();
     mirror.write(data);
     runSync(options.onScreen(session));
     if (viewers.size === 0) return;
@@ -167,6 +173,7 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
       endedAt: null,
       title: null,
     };
+    touch();
     const process = yield* spawn(command, {
       cwd: session.info.cwd,
       cols: mirror.cols,
@@ -189,14 +196,18 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
     get viewers() {
       return viewers.size;
     },
+    get lastActiveAt() {
+      return lastActiveAt;
+    },
     start,
     attach(viewer) {
       flushBatch();
       viewers.set(viewer, { behind: false });
+      touch();
       sendScreen(viewer);
     },
     detach(viewer) {
-      viewers.delete(viewer);
+      if (viewers.delete(viewer)) touch();
     },
     drain(viewer) {
       const state = viewers.get(viewer);
@@ -206,6 +217,7 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
       sendScreen(viewer);
     },
     input(data) {
+      touch();
       running?.write(data);
     },
     type(command) {

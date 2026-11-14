@@ -38,7 +38,11 @@ export async function startRealTerminals(config: ServerConfig, home: string) {
             ShellLayer,
             JsonFileLayer,
             Layer.succeed(EngineConfig, config),
-            Layer.succeed(TerminalTimings, { notify: Duration.millis(1), screen: Duration.seconds(2) })
+            Layer.succeed(TerminalTimings, {
+              notify: Duration.millis(1),
+              screen: Duration.seconds(2),
+              sweep: Duration.hours(1),
+            })
           )
         )
       ),

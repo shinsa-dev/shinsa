@@ -74,7 +74,11 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
           TerminalIds,
           Effect.sync(() => `${options.idPrefix ?? 'term'}-${++id}`)
         ),
-        Layer.succeed(TerminalTimings, { notify: Duration.millis(1), screen: Duration.millis(1) }),
+        Layer.succeed(TerminalTimings, {
+          notify: Duration.millis(1),
+          screen: Duration.millis(1),
+          sweep: Duration.hours(1),
+        }),
         Layer.succeed(Clock.Clock, createFixedClock(typeof now === 'function' ? now : () => now)),
         options.tasks
           ? Layer.succeed(

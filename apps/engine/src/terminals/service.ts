@@ -9,7 +9,7 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Clock, Context, Effect, Fiber, FileSystem, Layer, Option, Ref } from 'effect';
+import { Clock, Context, Effect, Fiber, FileSystem, Layer, Option, Ref, Schedule } from 'effect';
 import { EngineConfig } from '../config/service.ts';
 import { EngineCore } from '../runtime/engine/service.ts';
 import { listReclaimable, resolveLimitMessage, resolveServiceLimitMessage } from './limit.ts';
@@ -36,6 +36,7 @@ import {
 } from './schema.ts';
 import { createTerminalSession } from './session.ts';
 import { TerminalFiles } from './store/service.ts';
+import { resolveAutoClose } from './sweep.ts';
 
 export class Terminals extends Context.Service<
   Terminals,
@@ -67,6 +68,7 @@ export class Terminals extends Context.Service<
     readonly listTerminalPids: Effect.Effect<number[]>;
     resumeServices(state: ShinsaState): Effect.Effect<void>;
     attach(id: string, viewer: TerminalViewer): Effect.Effect<void, DomainError>;
+    readonly sweep: Effect.Effect<void>;
     readonly stop: Effect.Effect<void>;
   }
 >()('shinsa/engine/terminals/Terminals') {
@@ -601,6 +603,29 @@ export class Terminals extends Context.Service<
           (yield* find(id)).attach(viewer);
         });
 
+        const isQuiet = Effect.fn('Terminals.isQuiet')(function* (session: TerminalSession) {
+          const { pid } = session;
+          if (pid === null) return true;
+          return (yield* pty.readForeground(pid)) === null;
+        });
+
+        const sweep = Effect.gen(function* () {
+          if (readOnly || (yield* Ref.get(stopped))) return;
+          const now = yield* clock.currentTimeMillis;
+          const closing: TerminalSession[] = [];
+          for (const session of yield* listSessions) {
+            const decision = resolveAutoClose(session, now);
+            if (decision === 'close' || (decision === 'close_when_quiet' && (yield* isQuiet(session))))
+              closing.push(session);
+          }
+          if (closing.length === 0) return;
+          for (const session of closing) yield* closeSession(session);
+          yield* Effect.logInfo('[Terminals] Closed unused terminals').pipe(
+            Effect.annotateLogs({ terminals: closing.map((session) => session.info.id) })
+          );
+          yield* changed;
+        });
+
         const stop = Effect.gen(function* () {
           if (yield* Ref.getAndSet(stopped, true)) return;
           const notify = yield* Ref.getAndSet(notifyFiber, null);
@@ -628,6 +653,7 @@ export class Terminals extends Context.Service<
           yield* Ref.set(listeners, new Set());
         });
 
+        yield* Effect.forkScoped(Effect.repeat(sweep, Schedule.spaced(timings.sweep)));
         yield* Effect.addFinalizer(() => stop);
 
         return Terminals.of({
@@ -658,6 +684,7 @@ export class Terminals extends Context.Service<
           listTerminalPids,
           resumeServices,
           attach,
+          sweep,
           stop,
         });
       })
