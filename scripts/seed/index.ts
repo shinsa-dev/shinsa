@@ -24,7 +24,13 @@ import { DATA, REPOS, ROOT, WORKTREES } from './paths.ts';
 import { stampRunPrompts } from './prompts.ts';
 import { listDelegationTranscripts } from './tasks/delegation.ts';
 import { listTasks } from './tasks/index.ts';
-import { ACCOUNT_MOVE_TRANSCRIPT, insertAccountNotices, listAccountFiles } from './tasks/triggers.ts';
+import {
+  ACCOUNT_MOVE_TRANSCRIPT,
+  ACCOUNT_START_TRANSCRIPT,
+  insertAccountNotices,
+  insertStartNotices,
+  listAccountFiles,
+} from './tasks/triggers.ts';
 import { buildRunEvents, convertSessionTranscript, listRunTimes, SESSION_TRANSCRIPT } from './transcripts.ts';
 import { createProjects, createRepos, createWorktrees } from './workspace.ts';
 
@@ -94,6 +100,11 @@ export const seed = Effect.fn('Seed.run')(function* () {
   yield* writeSeedFile(
     accountMove,
     yield* Effect.fromOption(insertAccountNotices(yield* readSeedText(accountMove))).pipe(Effect.orDie)
+  );
+  const accountStart = join(transcripts, ACCOUNT_START_TRANSCRIPT);
+  yield* writeSeedFile(
+    accountStart,
+    yield* Effect.fromOption(insertStartNotices(yield* readSeedText(accountStart))).pipe(Effect.orDie)
   );
   const session = Bun.env.SHINSA_SEED_SESSION;
   if (session) {

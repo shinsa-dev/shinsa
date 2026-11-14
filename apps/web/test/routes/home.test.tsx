@@ -115,6 +115,14 @@ describe('HomePage', () => {
     expect(rowsTitled('Build the export')).toHaveLength(1);
   });
 
+  it('names its task on every task row, so the command menu can open on the one under the pointer', () => {
+    renderHome();
+    const rows = [...document.querySelectorAll('section [data-highlight-item]')];
+    expect(rows.length).toBeGreaterThan(0);
+    const unnamed = rows.filter((row) => !row.getAttribute('data-task') && !row.querySelector('[data-task]'));
+    expect(unnamed.map((row) => row.textContent)).toEqual([]);
+  });
+
   it('folds Recently finished and Recent conversations from their headers and remembers them on the next visit', () => {
     const view = renderHome();
     act(() => fireEvent.click(header(/^Recently finished/)));

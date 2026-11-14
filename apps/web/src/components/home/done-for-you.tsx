@@ -36,6 +36,7 @@ export function DoneForYou({ state }: { state: ShinsaState }) {
         <ListRow
           key={row.gateId}
           holdsLinks
+          taskId={row.taskId}
           leading={<StatusTile icon={row.icon} tone={row.tone} />}
           title={row.title}
           meta={`${row.summary} ${row.reason}`}

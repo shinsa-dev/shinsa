@@ -543,7 +543,7 @@ describe('resolveTurns', () => {
   const finished = createRun({ id: 'r', taskId: 't', startedAt: 0, endedAt: 100, outcome: 'completed' });
   const running = createRun({ id: 'r', taskId: 't', startedAt: 0 });
 
-  it('puts an account switch ahead of the work of its turn without breaking a tool group', () => {
+  it('folds an account switch into the work of an ended turn without breaking a tool group', () => {
     const items = resolveTimeline(
       [
         createCallEntry('1', readTool('a.ts'), 1),
@@ -563,21 +563,20 @@ describe('resolveTurns', () => {
       []
     );
     const [turn] = resolveTurns(items, finished, 500);
-    expect(turn?.notices).toEqual([
-      {
-        kind: 'account',
-        key: 'switch',
-        at: 2,
-        email: 'b@example.com',
-        previous: 'a@example.com',
-        reason: 'usage_limit',
-      },
-    ]);
-    expect(turn?.work.map((item) => item.kind)).toEqual(['tools']);
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work.map((item) => item.kind)).toEqual(['tools', 'account']);
+    expect(turn?.work[1]).toEqual({
+      kind: 'account',
+      key: 'switch',
+      at: 2,
+      email: 'b@example.com',
+      previous: 'a@example.com',
+      reason: 'usage_limit',
+    });
     expect(turn?.steps).toBe(2);
   });
 
-  it('keeps a compaction as a notice of its turn, as the transcript keeps it', () => {
+  it('folds a compaction into the work of an ended turn, where the transcript keeps it', () => {
     const items = resolveTimeline(
       [
         createCallEntry('1', readTool('a.ts'), 1),
@@ -591,13 +590,14 @@ describe('resolveTurns', () => {
       []
     );
     const [turn] = resolveTurns(items, finished, 500);
-    expect(turn?.notices).toEqual([
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work).toEqual([
+      expect.objectContaining({ kind: 'tools' }),
       { kind: 'compaction', key: 'compact', at: 2, trigger: 'manual', by: 'claude' },
     ]);
-    expect(turn?.work.map((item) => item.kind)).toEqual(['tools']);
   });
 
-  it('keeps eunoe’s folds, a missing eunoe and fast mode that could not run as quiet notices of their turn', () => {
+  it('folds eunoe’s folds, a missing eunoe and fast mode that could not run into the work of an ended turn', () => {
     const items = resolveTimeline(
       [
         createNoticeEntry(
@@ -618,15 +618,17 @@ describe('resolveTurns', () => {
       []
     );
     const [turn] = resolveTurns(items, finished, 500);
-    expect(turn?.notices).toEqual([
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work).toEqual([
       { kind: 'proxy', key: 'proxy', at: 1, detail: 'down' },
       { kind: 'fast_mode', key: 'fast', at: 2, status: 'unavailable', reason: 'free' },
+      expect.objectContaining({ kind: 'tools' }),
       { kind: 'background_wait', key: 'wait', at: 3, tasks: 1 },
       { kind: 'compaction', key: 'fold', at: 4, trigger: 'fold', by: 'eunoe' },
     ]);
   });
 
-  it('keeps what a run loaded at its start as a quiet notice of its turn', () => {
+  it('folds what a run loaded at its start into the work of an ended turn', () => {
     const loaded = {
       servers: [{ name: 'linear', tokens: 4_200 }],
       skills: [{ name: 'review', tokens: 900 }],
@@ -640,10 +642,27 @@ describe('resolveTurns', () => {
       []
     );
     const [turn] = resolveTurns(items, finished, 500);
-    expect(turn?.notices).toEqual([{ kind: 'extensions', key: 'loaded', at: 1, ...loaded }]);
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work).toEqual([{ kind: 'extensions', key: 'loaded', at: 1, ...loaded }]);
+    expect(turn?.reply?.text).toBe('Done');
   });
 
-  it('keeps a hand-over as a notice of its turn and leaves the other run notices in the transcript', () => {
+  it('folds quiet notices into the work while the turn is live too', () => {
+    const items = resolveTimeline(
+      [
+        createNoticeEntry({ kind: 'extensions', servers: [], skills: [], plugins: [] }, 1, 'loaded'),
+        createCallEntry('1', readTool('a.ts'), 2),
+        createNoticeEntry({ kind: 'background_wait', tasks: 2 }, 3, 'wait'),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, running, 500);
+    expect(turn?.live).toBe(true);
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work.map((item) => item.kind)).toEqual(['extensions', 'tools', 'background_wait']);
+  });
+
+  it('folds a hand-over into the work of an ended turn and leaves the other run notices in the transcript', () => {
     const items = resolveTimeline(
       [
         createNoticeEntry(
@@ -670,7 +689,8 @@ describe('resolveTurns', () => {
       []
     );
     const [turn] = resolveTurns(items, finished, 500);
-    expect(turn?.notices).toEqual([
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work).toEqual([
       {
         kind: 'handoff',
         key: 'handoff',
@@ -685,7 +705,7 @@ describe('resolveTurns', () => {
     expect(items.map((item) => item.kind)).toEqual(['handoff', 'agent']);
   });
 
-  it('keeps delegated work as notices of its turn, apart from the work and the reply', () => {
+  it('keeps delegated work as notices of an ended turn, apart from the work and the reply', () => {
     const items = resolveTimeline(
       [
         createCallEntry('1', shinsaTool('delegate_task', { task: 'Survey it' }), 1),
@@ -1028,7 +1048,8 @@ describe('resolveTurns', () => {
       ['Codex’s API had a server error.', 3],
       ['Something else.', 1],
     ]);
-    expect(turn?.notices).toEqual([
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work).toEqual([
       {
         kind: 'retrying',
         key: 'retry',

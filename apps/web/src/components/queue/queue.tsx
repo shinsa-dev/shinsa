@@ -150,6 +150,7 @@ function QueueItemRow({ context, item }: { context: RowContext; item: QueueItem 
   const { state, variant } = context;
   return (
     <ListRow
+      taskId={item.task.id}
       leading={<QueueItemGlyph state={state} item={item} />}
       active={item.task.id === context.activeTaskId}
       revealWhenActive={variant === 'compact'}
