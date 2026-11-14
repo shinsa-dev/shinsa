@@ -2398,8 +2398,11 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   it corrects Autopilot, approving or asking more keeps the call.
 - **The topics you probe** (`autopilot/topics.ts`, `AutopilotProfile.topics`). Each note you write when you ask for
   changes or reply (`revised` or `replied` on a plan, question, review, merge or your OK) is read against a fixed
-  keyword table (`AUTOPILOT_TOPICS`: security, migrations, data loss, tests, error handling, performance,
-  compatibility, concurrency, privacy, docs; `listNoteTopics`), plain and replay-safe, no model call. Each topic keeps
+  table of word patterns (`AUTOPILOT_TOPICS`: security, migrations, data loss, tests, error handling, performance,
+  compatibility, concurrency, privacy, docs; `listNoteTopics`), plain and replay-safe, no model call. Patterns match
+  whole words in any form (migrating, deleting, retried), and a word with another sense counts only in its topic's
+  context (drop or delete a table, rows or data; escape the input; row or table locks), so the Escape key, dropping
+  padding or a lock icon raise nothing. Each topic keeps
   its count and a recency-weighted count with the profile's 30-day half-life (`AutopilotTopicTally`). Every judgment's
   prompt lists the topics raised at least twice, at most 5, the ones raised lately first
   (`listAutopilotTopicLines`, `AUTOPILOT_TOPIC_LIMITS`), so the judge raises them the way you would. Settings shows

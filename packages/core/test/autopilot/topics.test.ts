@@ -51,6 +51,22 @@ describe('the topics in your words', () => {
     ]);
   });
 
+  test('finds every form of a word, not only its plural and past', () => {
+    expect(listNoteTopics('Are we migrating the table?')).toEqual(['migrations']);
+    expect(listNoteTopics('What about deleting old rows?')).toEqual(['data_loss']);
+    expect(listNoteTopics('Drop the users table first.')).toEqual(['data_loss']);
+    expect(listNoteTopics('It retried twice.')).toEqual(['errors']);
+    expect(listNoteTopics('Escape the user input.')).toEqual(['security']);
+    expect(listNoteTopics('Watch for row locks.')).toEqual(['concurrency']);
+  });
+
+  test('reads a word that has another sense only where it means the topic', () => {
+    expect(listNoteTopics('Make sure the Escape key closes it.')).toEqual([]);
+    expect(listNoteTopics('Drop the padding on the card.')).toEqual([]);
+    expect(listNoteTopics('Use the lock icon.')).toEqual([]);
+    expect(listNoteTopics('Delete this unused helper.')).toEqual([]);
+  });
+
   test('finds nothing in words that only contain a topic', () => {
     expect(listNoteTopics('The author named a specific latest attestation.')).toEqual([]);
     expect(listNoteTopics('')).toEqual([]);
