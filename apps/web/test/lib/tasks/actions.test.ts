@@ -159,6 +159,23 @@ describe('listTaskActions', () => {
     expect(TASK_ACTION.pause).toEqual({ label: 'Pause', icon: 'IconPause' });
   });
 
+  it('offers Move to another repository first among the lifecycle actions only while the task can move', () => {
+    expect(listTaskActions(FULL, ALL_COMMANDS, NOW, null, true, true).at(-1)).toEqual([
+      'move',
+      'pause',
+      'restart',
+      'complete',
+      'duplicate',
+      'cancel',
+    ]);
+    expect(listTaskActions(FULL, ALL_COMMANDS).flat()).not.toContain('move');
+    const older = new Set(USER_COMMAND_TYPES.filter((type) => type !== 'task.move_to_repository'));
+    expect(listTaskActions(FULL, older, NOW, null, false, true).flat()).not.toContain('move');
+    const owner = { id: 'u2', login: 'mona', name: null, avatarUrl: null };
+    const teammate = { owner, viewerId: 'u3', scopes: DEFAULT_TEAM_SCOPES };
+    expect(listTaskActions(FULL, ALL_COMMANDS, NOW, teammate, false, true).flat()).not.toContain('move');
+  });
+
   it('labels every action with its icon', () => {
     expect(TASK_ACTION.cancel).toEqual({ label: 'Cancel task', icon: 'IconCircleX' });
     expect(TASK_ACTION.branch.label).toBe('Copy branch name');

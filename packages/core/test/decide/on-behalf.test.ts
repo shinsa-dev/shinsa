@@ -441,6 +441,21 @@ describe('the summary of each action', () => {
     });
   });
 
+  test('names the repository a task moved to', () => {
+    const harness = createHarness();
+    const pwn = registerRepo(harness, 'pwn');
+    const studio = registerRepo(harness, 'studio');
+    const taskId = createTask(harness, { repoId: pwn });
+    linkSession(harness, taskId);
+    actOnBehalf(harness, { type: 'task.move_to_repository', taskId, repoId: studio });
+    const action = harness.events.find((event) => event.type === 'on_behalf.acted');
+    expect(action).toMatchObject({
+      command: 'task.move_to_repository',
+      taskId,
+      summary: `Moved “${harness.task(taskId).title}” to studio`,
+    });
+  });
+
   test('names repositories, projects, the focus and settings', () => {
     const harness = createHarness();
     createTask(harness);

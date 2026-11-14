@@ -8,6 +8,7 @@ import {
   isAgentQuestion,
   isDelegatedRun,
   isDependencyComplete,
+  isLaterRound,
   isSettingUpWorkspace,
   isTaskSettled,
   parseTaskHandle,
@@ -102,6 +103,56 @@ export function listStackChildren(state: Pick<ShinsaState, 'tasks'>, taskId: str
   return Object.values(state.tasks).filter(
     (task) => task.stacksOn?.includes(taskId) && !isTaskSettled(task) && hasStep(task, 'pull_request')
   );
+}
+
+export type MoveActor = 'agent' | 'you';
+
+export type MoveRefusal = 'work_started' | 'result_handed_over' | 'task_stacked' | 'task_moving';
+
+const FILE_INSTEAD = 'File the work there as a new task instead.';
+
+export const MOVE_REFUSAL_TEXT: Record<MoveRefusal, string> = {
+  work_started: `Work on this task has already started, so it stays where it is. ${FILE_INSTEAD}`,
+  result_handed_over: `This task has already handed over its result, so it stays where it is. ${FILE_INSTEAD}`,
+  task_stacked: `This task is part of a bundle in its repository, so it stays there. ${FILE_INSTEAD}`,
+  task_moving: 'This task is already moving to another repository.',
+};
+
+const WORK_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
+  'building',
+  'checking',
+  'reviewing',
+  'fixing',
+  'awaiting_review',
+  'shipping',
+  'awaiting_merge',
+  'operating',
+  'awaiting_operation',
+  'watching',
+]);
+
+function hasStartedWork(task: Task) {
+  return (
+    task.phaseReports.length > 0 ||
+    task.pullRequest !== null ||
+    isLaterRound(task) ||
+    (task.editedPaths ?? []).length > 0 ||
+    WORK_STAGES.has(task.stage)
+  );
+}
+
+export function resolveMoveRefusal(
+  state: Pick<ShinsaState, 'tasks'>,
+  task: Task,
+  actor: MoveActor
+): Option.Option<MoveRefusal> {
+  if (task.movingTo) return Option.some('task_moving');
+  if (hasStartedWork(task)) return Option.some('work_started');
+  if (actor === 'you' && task.result) return Option.some('result_handed_over');
+  if ((task.stacksOn?.length ?? 0) > 0 || listStackChildren(state, task.id).length > 0) {
+    return Option.some('task_stacked');
+  }
+  return Option.none();
 }
 
 const STACKABLE_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([

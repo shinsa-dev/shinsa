@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { TaskPage } from '@/routes/task/index.tsx';
@@ -65,5 +65,23 @@ describe('a settled task the page holds as a summary', () => {
     expect(answerTaskDetails()).toEqual([]);
     act(() => prefetchTask(STATE, 'merged-1'));
     expect(answerTaskDetails()).toEqual(['merged-1']);
+  });
+});
+
+describe('a task whose handle changes while its page is open', () => {
+  it('follows the task to its new handle, as a move to another project gives it', async () => {
+    pushViewState(STATE);
+    const view = renderPage('SW-2');
+    expect(view.getAllByText('Tidy the inbox').length).toBeGreaterThan(0);
+    const moved = { ...STATE.tasks['open-1']!, handle: 'PER-4' };
+    act(() => pushViewState({ ...STATE, tasks: { ...STATE.tasks, 'open-1': moved }, seq: 4 }));
+    await waitFor(() => expect(location.pathname).toBe('/tasks/PER-4'));
+    expect(view.queryByText('No such task')).toBeNull();
+  });
+
+  it('shows no task for a handle it never showed', () => {
+    pushViewState(STATE);
+    const view = renderPage('SW-404');
+    expect(view.getByText('No such task')).toBeTruthy();
   });
 });
