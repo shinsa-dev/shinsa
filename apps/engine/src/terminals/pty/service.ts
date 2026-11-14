@@ -1,7 +1,12 @@
-import { Context, Deferred, Effect, Exit, Layer, Schedule, Scope } from 'effect';
+import { BunSocket } from '@effect/platform-bun';
+import { Context, Deferred, Effect, Exit, FileSystem, Layer, Schedule, Scope } from 'effect';
 import { constNull } from 'effect/Function';
+import { isFolder } from '../../files/probe.ts';
 import { Shell } from '../../shell/service.ts';
 import {
+  ANSWER_HOSTS,
+  ANSWER_TIMEOUT,
+  FOLDER_GONE_MESSAGE,
   FOREGROUND_TIMEOUT,
   GROUP_POLL_SCHEDULE,
   HANG_UP_GRACE,
@@ -11,6 +16,8 @@ import {
   type PortListener,
   PortTaken,
   PortUnavailable,
+  SPAWN_FAILED_MESSAGE,
+  SpawnFailed,
   type TerminalProcess,
   type TerminalSpawnOptions,
 } from '../schema.ts';
@@ -19,19 +26,24 @@ import { spawnTerminal } from './spawn.ts';
 export class TerminalPty extends Context.Service<
   TerminalPty,
   {
-    spawn(command: readonly string[], options: TerminalSpawnOptions): Effect.Effect<TerminalProcess>;
+    spawn(
+      command: readonly string[],
+      options: TerminalSpawnOptions
+    ): Effect.Effect<TerminalProcess, SpawnFailed>;
     readForeground(pid: number): Effect.Effect<string | null>;
     pickPort(
       preferred: number | null,
       taken: ReadonlySet<number>,
       listen: PortListener
     ): Effect.Effect<number, PortUnavailable>;
+    isAnswering(port: number): Effect.Effect<boolean>;
   }
 >()('shinsa/engine/terminals/pty/TerminalPty') {
   static readonly layer = Layer.effect(
     TerminalPty,
     Effect.gen(function* () {
       const shell = yield* Shell;
+      const files = yield* FileSystem.FileSystem;
       const context = yield* Effect.context<never>();
       const runFork = Effect.runForkWith(context);
 
@@ -66,9 +78,25 @@ export class TerminalPty extends Context.Service<
         const scope = yield* Scope.make();
         const ended = yield* Deferred.make<void>();
         const child = yield* Effect.acquireRelease(
-          Effect.sync(() => spawnTerminal(command, options)),
+          Effect.try({
+            try: () => spawnTerminal(command, options),
+            catch: (cause) =>
+              new SpawnFailed({
+                message: `${SPAWN_FAILED_MESSAGE}: ${cause instanceof Error ? cause.message : String(cause)}`,
+              }),
+          }),
           (spawned) => hangUpGroup(spawned).pipe(Effect.ensuring(Deferred.done(ended, Exit.void)))
-        ).pipe(Scope.provide(scope));
+        ).pipe(
+          Scope.provide(scope),
+          Effect.catchTag('SpawnFailed', (failure) =>
+            isFolder(options.cwd).pipe(
+              Effect.provideService(FileSystem.FileSystem, files),
+              Effect.flatMap((present) =>
+                Effect.fail(present ? failure : new SpawnFailed({ message: FOLDER_GONE_MESSAGE }))
+              )
+            )
+          )
+        );
         const close = () => runFork(Scope.close(scope, Exit.void));
         const exited = runPromise(
           Effect.promise(() => child.exited).pipe(
@@ -131,7 +159,19 @@ export class TerminalPty extends Context.Service<
         );
       });
 
-      return TerminalPty.of({ spawn, readForeground, pickPort });
+      const connects = (host: string, port: number) =>
+        BunSocket.makeNet({ host, port, openTimeout: ANSWER_TIMEOUT }).pipe(
+          Effect.flatMap((socket) => Effect.scoped(socket.reader)),
+          Effect.as(true),
+          Effect.orElseSucceed(() => false)
+        );
+
+      const isAnswering = Effect.fn('TerminalPty.isAnswering')(function* (port: number) {
+        for (const host of ANSWER_HOSTS) if (yield* connects(host, port)) return true;
+        return false;
+      });
+
+      return TerminalPty.of({ spawn, readForeground, pickPort, isAnswering });
     })
   );
 }

@@ -1,5 +1,34 @@
 export const PROBE = `
 (() => {
+  const renders = { counting: false, components: 0, rows: new Set() };
+  const COMPONENT_TAGS = new Set([0, 1, 11, 14, 15]);
+  const firstHost = (fiber) => {
+    let node = fiber;
+    while (node && node.tag !== 5) node = node.child;
+    return node?.stateNode ?? null;
+  };
+  const countRendered = (fiber) => {
+    for (let node = fiber; node; node = node.sibling) {
+      if (COMPONENT_TAGS.has(node.tag) && (node.flags & 1) === 1) {
+        renders.components += 1;
+        const host = firstHost(node);
+        if (host?.hasAttribute?.('data-depth')) renders.rows.add(host);
+      }
+      if (node.child && (!node.alternate || node.child !== node.alternate.child)) countRendered(node.child);
+    }
+  };
+  let rendererId = 0;
+  window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+    renderers: new Map(),
+    supportsFiber: true,
+    inject(renderer) { rendererId += 1; this.renderers.set(rendererId, renderer); return rendererId; },
+    onScheduleFiberRoot() {},
+    onCommitFiberRoot(_id, root) { if (renders.counting) countRendered(root.current.child); },
+    onCommitFiberUnmount() {},
+    onPostCommitFiberRoot() {},
+    checkDCE() {},
+  };
+  let seq = 0;
   const sockets = [];
   const lengths = {};
   const transcript = (runId, entry) => JSON.stringify({ type: 'transcript', runId, entries: [entry], reset: false, start: lengths[runId] ?? 0 });
@@ -10,7 +39,11 @@ export const PROBE = `
       sockets.push(this);
       this.addEventListener('message', (event) => {
         const data = String(event.data);
-        if (data.startsWith('{"type":"state"')) window.__perf.lastState = data;
+        if (data.startsWith('{"type":"state"')) {
+          window.__perf.lastState = data;
+          seq = JSON.parse(data).state.seq;
+        }
+        if (data.startsWith('{"type":"state.patch"')) seq = JSON.parse(data).patch.to;
         if (data.startsWith('{"type":"transcript"')) {
           const message = JSON.parse(data);
           const from = typeof message.start === 'number' ? message.start : message.reset ? 0 : (lengths[message.runId] ?? 0);
@@ -176,6 +209,89 @@ export const PROBE = `
       }
       const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
       return { state: median(state), stateMax: Math.max(...state), transcript: median(transcripts), transcriptMax: Math.max(...transcripts) };
+    },
+    async revealRows(path, selector, frames) {
+      await painted();
+      history.pushState(null, '', path);
+      dispatchEvent(new PopStateEvent('popstate'));
+      const counts = [];
+      for (let index = 0; index < frames; index += 1) {
+        await frame();
+        const inView = [...document.querySelectorAll(selector)].filter((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight;
+        });
+        counts.push(inView.length);
+      }
+      return counts;
+    },
+    recordBlank(selector) {
+      const scroller = scrollerOf(selector);
+      if (!scroller) return null;
+      const box = scroller.getBoundingClientRect();
+      const recording = { blank: [], deltas: [], tops: [], stopped: false, start: performance.now() };
+      const isSpacer = (node) => node?.getAttribute('aria-hidden') !== null && node.childElementCount === 0 && scroller.contains(node);
+      let last = performance.now();
+      const tick = (at) => {
+        if (recording.stopped) return;
+        let blank = 0;
+        for (let y = box.top + 2; y < box.bottom; y += 4) {
+          if (isSpacer(document.elementFromPoint(box.left + 48, y))) blank += 4;
+        }
+        recording.blank.push(blank);
+        recording.deltas.push(at - last);
+        recording.tops.push(scroller.scrollTop);
+        last = at;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      window.__perf.recording = recording;
+      window.__perf.pushTimer = null;
+      return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2), viewport: Math.round(box.height) };
+    },
+    startPushes(everyMs) {
+      const socket = sockets.at(-1);
+      let index = 0;
+      window.__perf.pushTimer = setInterval(() => {
+        const handles = [...document.querySelectorAll('[data-depth] [data-task]')];
+        const handle = handles[index % Math.max(1, handles.length)];
+        index += 1;
+        if (!handle) return;
+        const patch = { from: seq, to: seq + 1, fields: {}, records: { tasks: { [handle.getAttribute('data-task')]: { fields: { updatedAt: { put: Date.now() } }, unset: [] } } } };
+        socket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'state.patch', patch }) }));
+      }, everyMs);
+      return true;
+    },
+    async stopBlank() {
+      clearInterval(window.__perf.pushTimer);
+      await painted();
+      const recording = window.__perf.recording;
+      recording.stopped = true;
+      return { blank: recording.blank, deltas: recording.deltas, distance: Math.round(Math.max(0, ...recording.tops)), long: since(recording.start) };
+    },
+    async rowPushes(times) {
+      const socket = sockets.at(-1);
+      const pushes = [];
+      for (let index = 0; index < times; index += 1) {
+        const handles = [...document.querySelectorAll('[data-depth] [data-task]')];
+        const handle = handles[index % Math.max(1, handles.length)];
+        if (!handle) break;
+        const taskId = handle.getAttribute('data-task');
+        await painted();
+        await sleep(50);
+        const patch = { from: seq, to: seq + 1, fields: {}, records: { tasks: { [taskId]: { fields: { updatedAt: { put: Date.now() } }, unset: [] } } } };
+        renders.components = 0;
+        renders.rows = new Set();
+        renders.counting = true;
+        const begin = performance.now();
+        socket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'state.patch', patch }) }));
+        await painted();
+        const ms = performance.now() - begin;
+        await sleep(250);
+        renders.counting = false;
+        pushes.push({ ms, components: renders.components, rows: renders.rows.size });
+      }
+      return { pushes, visibleRows: document.querySelectorAll('[data-depth]').length };
     },
     inputsSince(start) {
       return inputs.filter((entry) => entry.start >= start);

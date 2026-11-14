@@ -22,6 +22,8 @@ const FACTS: AutopilotFacts = {
   heldPlan: false,
   escalatedReview: false,
   approvedByYou: true,
+  ready: false,
+  retried: 0,
   waitedMinutes: 0,
   presence: { inHours: null, active: true, awayMinutes: 0 },
 };
@@ -56,6 +58,7 @@ describe('the judge prompt', () => {
     expect(resolveAutopilotJudgePrompt(task, gate, FACTS)).toBe(
       [
         'Decision: Answer the agent’s question',
+        'Verdicts: act, forward',
         '',
         `Task: ${task.title}`,
         'Request: Fix the scroll in tab groups',
@@ -199,7 +202,10 @@ describe('the judge request', () => {
     expect(Option.isNone(selectAutopilotJudgeRequest(harness.state, 'gone', harness.now))).toBe(true);
     const quiet = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotJudging: false } } };
     expect(Option.isNone(selectAutopilotJudgeRequest(quiet, gate.id, harness.now))).toBe(true);
-    const other = { ...harness.state, gates: { [gate.id]: { ...gate, type: 'failure' as const } } };
+    const other = {
+      ...harness.state,
+      gates: { [gate.id]: { ...gate, type: 'failure' as const, cause: 'budget' as const } },
+    };
     expect(Option.isNone(selectAutopilotJudgeRequest(other, gate.id, harness.now))).toBe(true);
     expect(Option.isNone(selectJudgedGateKind({ ...gate, type: 'secret' }))).toBe(true);
   });
@@ -213,6 +219,7 @@ describe('the judge request', () => {
     const gate = harness.openGate(taskId);
     const guess = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now, true));
     expect(guess?.prompt).toEndWith(AUTOPILOT_SHADOW_NOTE);
+    expect(AUTOPILOT_SHADOW_NOTE).toContain('`cancel` if they cancel the task after a failed step');
     expect(Option.isNone(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now))).toBe(true);
     const guessed = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotGuess: 'act' as const } } };
     expect(Option.isNone(selectAutopilotJudgeRequest(guessed, gate.id, harness.now, true))).toBe(true);

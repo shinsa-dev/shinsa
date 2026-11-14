@@ -1,21 +1,27 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  countTerminalsByFilter,
+  describeFilterEmpty,
   describeFindResults,
   describeTerminalClose,
   describeTerminalEnd,
   describeTerminalTab,
   groupTerminalPlaces,
   listProjectTerminals,
+  listShownTerminals,
   moveTerminal,
   rememberTerminalPath,
   resolveActiveTerminal,
   resolveDefaultPlace,
+  resolveFilterLabel,
   resolveNewTerminalPlace,
   resolveTerminalAfterClose,
   resolveTerminalEntry,
   resolveTerminalPath,
   resolveTerminalProject,
   resolveTerminalTabLabel,
+  resolveTerminalTaskHandle,
+  showsServices,
 } from '@/lib/terminal/tabs.ts';
 import { NOW } from '../../support/state.ts';
 import { createTerminal, createTerminalState, createTerminalsSnapshot } from '../../support/terminals.ts';
@@ -144,13 +150,15 @@ describe('the words', () => {
     expect(describeTerminalTab({ ...ONE, status: 'stopped' })).toStartWith('Ended when the engine restarted');
   });
 
-  it('names a service’s run for a task with the task’s handle', () => {
+  it('names a task’s terminal and a service’s run for a task with the task’s handle', () => {
+    expect(resolveTerminalTaskHandle({ ...ONE, taskId: 'fix' }, { fix: { handle: 'SH-4' } })).toBe('SH-4');
+    expect(resolveTerminalTaskHandle(ONE, { fix: { handle: 'SH-4' } })).toBeNull();
     const tasks = { fix: { handle: 'SH-4' }, raw: { handle: null } };
     const run = { ...ONE, name: 'api', serviceId: 'api', taskId: 'fix' };
     expect(resolveTerminalTabLabel(run, tasks)).toBe('api · SH-4');
     expect(resolveTerminalTabLabel({ ...run, taskId: 'raw' }, tasks)).toBe('api');
     expect(resolveTerminalTabLabel({ ...run, taskId: null }, tasks)).toBe('api');
-    expect(resolveTerminalTabLabel({ ...run, serviceId: null }, tasks)).toBe('api');
+    expect(resolveTerminalTabLabel({ ...run, serviceId: null }, tasks)).toBe('api · SH-4');
   });
 
   it('warns what closing a terminal with a program in front stops', () => {
@@ -190,5 +198,46 @@ describe('the words', () => {
     expect(describeFindResults({ index: -1, count: 0 }, 'x')).toBe('No results');
     expect(describeFindResults({ index: 1, count: 3 }, 'x')).toBe('2 of 3');
     expect(describeFindResults({ index: -1, count: 3 }, 'x')).toBe('3 found');
+  });
+});
+
+describe('the filter', () => {
+  const MINE = createTerminal({ id: 'mine' });
+  const TASK = createTerminal({ id: 'task', taskId: 'task-1' });
+  const SERVICE = createTerminal({ id: 'svc', serviceId: 'api' });
+  const TASK_SERVICE = createTerminal({ id: 'task-svc', serviceId: 'api', taskId: 'task-1' });
+  const ALL = [MINE, TASK, SERVICE, TASK_SERVICE];
+  const ids = (terminals: { id: string }[]) => terminals.map((terminal) => terminal.id);
+
+  it('shows your terminals, a task’s or the services, and every one under All', () => {
+    expect(ids(listShownTerminals(ALL, 'yours', null))).toEqual(['mine']);
+    expect(ids(listShownTerminals(ALL, 'tasks', null))).toEqual(['task']);
+    expect(ids(listShownTerminals(ALL, 'services', null))).toEqual(['svc', 'task-svc']);
+    expect(ids(listShownTerminals(ALL, 'all', null))).toEqual(['mine', 'task', 'svc', 'task-svc']);
+  });
+
+  it('keeps the terminal the URL names in its place, whatever the filter', () => {
+    expect(ids(listShownTerminals(ALL, 'yours', 'task'))).toEqual(['mine', 'task']);
+    expect(ids(listShownTerminals(ALL, 'services', 'mine'))).toEqual(['mine', 'svc', 'task-svc']);
+  });
+
+  it('counts the terminals under each filter', () => {
+    expect(countTerminalsByFilter(ALL)).toEqual({ yours: 1, tasks: 1, services: 2, all: 4 });
+    expect(countTerminalsByFilter([])).toEqual({ yours: 0, tasks: 0, services: 0, all: 0 });
+  });
+
+  it('names each filter, says what an empty one means, and shows services only where they are listed', () => {
+    expect(resolveFilterLabel('yours')).toBe('Your terminals');
+    expect(resolveFilterLabel('services')).toBe('Services');
+    expect(describeFilterEmpty('yours', 'Shop').title).toBe('No terminals of yours in Shop');
+    expect(describeFilterEmpty('tasks', 'Shop').title).toBe('No task terminals in Shop');
+    expect(describeFilterEmpty('services', 'Shop').title).toBe('No services running in Shop');
+    expect(describeFilterEmpty('all', 'Shop').title).toBe('No terminals in Shop');
+    expect([
+      showsServices('yours'),
+      showsServices('tasks'),
+      showsServices('services'),
+      showsServices('all'),
+    ]).toEqual([false, false, true, true]);
   });
 });

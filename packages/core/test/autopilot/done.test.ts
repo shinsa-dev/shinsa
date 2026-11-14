@@ -51,6 +51,7 @@ describe('what Autopilot did for you', () => {
         gateId: second.gateId,
         taskId: second.taskId,
         gate: 'review',
+        action: 'approved',
         title: harness.state.gates[second.gateId]?.title,
         reason: 'Small and clear.',
         followUp: null,

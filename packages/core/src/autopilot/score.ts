@@ -2,24 +2,33 @@ import type { ShinsaState } from '../state/project.ts';
 import type { AutopilotModelGuess } from './model/schema.ts';
 import {
   AUTOPILOT_COMBINE_LIMITS,
+  AUTOPILOT_READINESS_KINDS,
+  AUTOPILOT_READINESS_LIMITS,
+  AUTOPILOT_READINESS_TRACK,
   AUTOPILOT_SCORE_LIMITS,
   AUTOPILOT_TRACKS,
   type AutopilotAgreement,
   type AutopilotDecisionAnswer,
   type AutopilotFollowUpMatch,
   type AutopilotFollowUpScore,
+  type AutopilotKindReadiness,
+  type AutopilotProfile,
+  type AutopilotReadiness,
+  type AutopilotReadinessKind,
   type AutopilotRate,
   type AutopilotScore,
   type AutopilotTrack,
   type AutopilotTrackScore,
   type AutopilotVerdict,
+  EMPTY_AUTOPILOT_KIND_PROFILE,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
 
 const AGREEING_VERDICTS: Partial<Record<AutopilotDecisionAnswer, readonly AutopilotVerdict[]>> = {
   approved: ['act'],
+  replied: ['act'],
   revised: ['revise', 'forward'],
-  rejected: ['forward'],
+  rejected: ['forward', 'cancel'],
 };
 
 export function isAutopilotAgreement(guess: AutopilotVerdict, answer: AutopilotDecisionAnswer) {
@@ -30,8 +39,14 @@ export function resolveAutopilotCombinedVerdict(
   call: AutopilotVerdict,
   guess: AutopilotModelGuess | null
 ): AutopilotVerdict {
+  if (call === 'cancel') return isAutopilotCancelVeto(guess) ? 'forward' : 'cancel';
   if (call !== 'act') return call;
   return isAutopilotModelVeto(guess) ? 'forward' : 'act';
+}
+
+export function isAutopilotCancelVeto(guess: AutopilotModelGuess | null): guess is AutopilotModelGuess {
+  if (!guess || guess.confidence < AUTOPILOT_COMBINE_LIMITS.confidence) return false;
+  return guess.p >= AUTOPILOT_COMBINE_LIMITS.veto;
 }
 
 export function resolveAutopilotFollowUpScore(
@@ -94,4 +109,33 @@ export function resolveAutopilotScore(state: Pick<ShinsaState, 'autopilotProfile
     tracks,
     followUps: resolveAutopilotFollowUpScore(profile.followUps),
   };
+}
+
+function resolveKindReadiness(
+  profile: AutopilotProfile,
+  kind: AutopilotReadinessKind
+): AutopilotKindReadiness {
+  const track = AUTOPILOT_READINESS_TRACK[kind];
+  const score = resolveTrackScore((profile.kinds[kind] ?? EMPTY_AUTOPILOT_KIND_PROFILE).tracks[track]);
+  const { minScored, agreement, margin } = AUTOPILOT_READINESS_LIMITS;
+  const ready =
+    score.scored >= minScored &&
+    score.agreement !== null &&
+    score.agreement >= agreement &&
+    score.margin !== null &&
+    score.margin >= margin;
+  return { kind, track, score, ready };
+}
+
+export function resolveAutopilotReadiness(state: Pick<ShinsaState, 'autopilotProfile'>): AutopilotReadiness {
+  const profile = state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE;
+  const kinds = AUTOPILOT_READINESS_KINDS.map((kind) => resolveKindReadiness(profile, kind));
+  return { kinds, offered: kinds.some((kind) => kind.ready) };
+}
+
+export function isAutopilotKindReady(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  kind: AutopilotReadinessKind
+) {
+  return resolveKindReadiness(state.autopilotProfile ?? EMPTY_AUTOPILOT_PROFILE, kind).ready;
 }

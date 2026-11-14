@@ -1,4 +1,6 @@
+import { useSyncExternalStore } from 'react';
 import { createSignal } from '@/lib/signal.ts';
+import { TERMINAL_FILTERS, type TerminalFilter } from '@/lib/terminal/tabs.ts';
 
 const FONT_SIZE_KEY = 'shinsa.terminal-font-size';
 
@@ -6,7 +8,13 @@ export const TERMINAL_FONT_SIZE = { min: 9, max: 24, initial: 12 } as const;
 
 export type FontSizeChange = 'larger' | 'smaller' | 'reset';
 
+const FILTER_KEY = 'shinsa.terminal-filter';
+
+const DEFAULT_FILTER: TerminalFilter = 'yours';
+
 const fontSizes = createSignal();
+
+const filters = createSignal();
 
 export function readTerminalFontSize() {
   const stored = Number(localStorage.getItem(FONT_SIZE_KEY));
@@ -30,3 +38,18 @@ export function changeTerminalFontSize(change: FontSizeChange) {
 }
 
 export const subscribeTerminalFontSize = fontSizes.subscribe;
+
+export function readTerminalFilter(): TerminalFilter {
+  const stored = localStorage.getItem(FILTER_KEY);
+  return TERMINAL_FILTERS.find((entry) => entry.value === stored)?.value ?? DEFAULT_FILTER;
+}
+
+export function writeTerminalFilter(filter: TerminalFilter) {
+  if (filter === DEFAULT_FILTER) localStorage.removeItem(FILTER_KEY);
+  else localStorage.setItem(FILTER_KEY, filter);
+  filters.publish();
+}
+
+export function useTerminalFilter() {
+  return useSyncExternalStore(filters.subscribe, readTerminalFilter);
+}

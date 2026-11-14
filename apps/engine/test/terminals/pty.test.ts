@@ -11,7 +11,12 @@ import {
   resolveTerminalEnv,
 } from '../../src/terminals/pty.ts';
 import { TerminalPty } from '../../src/terminals/pty/service.ts';
-import type { PortListener, TerminalSpawnOptions } from '../../src/terminals/schema.ts';
+import {
+  FOLDER_GONE_MESSAGE,
+  type PortListener,
+  SPAWN_FAILED_MESSAGE,
+  type TerminalSpawnOptions,
+} from '../../src/terminals/schema.ts';
 
 const PTY = TerminalPty.layer.pipe(Layer.provide(ShellLayer));
 
@@ -43,6 +48,42 @@ function spawnShell(onText: (text: string) => void) {
 }
 
 describe('TerminalPty.spawn', () => {
+  it('fails with why when the command cannot be started', async () => {
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        TerminalPty.use((pty) =>
+          pty.spawn(['/nowhere/at/all/sh'], {
+            cwd: createTempDir(),
+            cols: 80,
+            rows: 24,
+            env: { PATH: '/usr/bin:/bin' },
+            onData: () => undefined,
+          })
+        )
+      ).pipe(Effect.provide(PTY))
+    );
+    expect(failure._tag).toBe('SpawnFailed');
+    expect(failure.message).toStartWith(`${SPAWN_FAILED_MESSAGE}: `);
+  });
+
+  it('says the folder is gone when the command cannot start in it', async () => {
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        TerminalPty.use((pty) =>
+          pty.spawn(['/bin/sh'], {
+            cwd: '/nowhere/at/all',
+            cols: 80,
+            rows: 24,
+            env: { PATH: '/usr/bin:/bin' },
+            onData: () => undefined,
+          })
+        )
+      ).pipe(Effect.provide(PTY))
+    );
+    expect(failure._tag).toBe('SpawnFailed');
+    expect(failure.message).toBe(FOLDER_GONE_MESSAGE);
+  });
+
   it('runs a real shell in a pseudo-terminal: it echoes, resizes and reports its exit code', async () => {
     let output = '';
     const shell = spawnShell((text) => {
@@ -217,6 +258,15 @@ describe('TerminalPty.pickPort', () => {
     const holder = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: { data() {} } });
     expect(listenOnce(holder.port)).toBeNull();
     holder.stop(true);
+  });
+
+  it('tells a port something listens on from one nothing answers on', async () => {
+    const holder = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: PORT_PROBE_SOCKET });
+    const isAnswering = (port: number) =>
+      Effect.runPromise(TerminalPty.use((pty) => pty.isAnswering(port)).pipe(Effect.provide(PTY)));
+    expect(await isAnswering(holder.port)).toBe(true);
+    holder.stop(true);
+    expect(await isAnswering(holder.port)).toBe(false);
   });
 
   it('hangs up on anything that connects to the port while it checks it', () => {

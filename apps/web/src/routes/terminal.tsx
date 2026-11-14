@@ -15,16 +15,20 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ProjectMenuTrigger, ProjectRadioItems } from '@/components/focus/menu.tsx';
+import { CARDS_FRAME } from '@/components/layout/page/column.ts';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
-import { SAFE_AREA_BOTTOM } from '@/components/layout/sidebar/compact-bar.tsx';
+import { PHONE_QUERY, SAFE_AREA_BOTTOM } from '@/components/layout/sidebar/compact-bar.tsx';
+import { CARD } from '@/components/layout/surface/card.ts';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ServiceActionButton, ServiceRunButtons } from '@/components/services/service-row.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
+import { TerminalFilterMenu } from '@/components/terminal/filter-menu.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
 import { TerminalFindBar, TerminalPane, useTerminalView } from '@/components/terminal/terminal-pane.tsx';
@@ -49,6 +53,8 @@ import {
   resolveTerminalTransport,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
+import { useLayoutPreference } from '@/lib/preferences/layout.ts';
+import { useTerminalFilter, writeTerminalFilter } from '@/lib/preferences/terminal.ts';
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { describeFindKey } from '@/lib/terminal/keys.ts';
@@ -61,8 +67,11 @@ import {
   resolveActiveService,
 } from '@/lib/terminal/services.ts';
 import {
+  countTerminalsByFilter,
+  describeFilterEmpty,
   describeTerminalClose,
   groupTerminalPlaces,
+  listShownTerminals,
   listProjectTerminals,
   rememberTerminalPath,
   resolveActiveTerminal,
@@ -71,6 +80,8 @@ import {
   resolveTerminalAfterClose,
   resolveTerminalPath,
   resolveTerminalProject,
+  showsServices,
+  type TerminalFilter,
 } from '@/lib/terminal/tabs.ts';
 import {
   resolveTerminalView,
@@ -180,10 +191,14 @@ function ProjectTerminals({
   snapshot: TerminalsSnapshot;
 }) {
   const mac = React.useMemo(() => isMacPlatform(navigator.platform), []);
-  const terminals = listProjectTerminals(snapshot, project.id);
+  const filter = useTerminalFilter();
+  const requested = useSearchParam('terminal');
+  const projectTerminals = listProjectTerminals(snapshot, project.id);
+  const terminals = listShownTerminals(projectTerminals, filter, requested);
+  const counts = countTerminalsByFilter(projectTerminals);
   const services = listProjectServices(snapshot, project.id, Date.now());
   const runs = listProjectServiceRuns(snapshot, project.id, Date.now());
-  const active = resolveActiveTerminal(terminals, useSearchParam('terminal'));
+  const active = resolveActiveTerminal(terminals, requested);
   const activeService = resolveActiveService(runs, active);
   const stopped = listStoppedServices(services);
   const views = useKeptViews(snapshot, active, mac);
@@ -290,9 +305,12 @@ function ProjectTerminals({
             onReorder={(ids) => void reorderTerminals(project.id, ids)}
           />
         )}
+        <TerminalFilterMenu filter={filter} counts={counts} />
         <NewTerminalButton groups={groups} fallback={fallback} onOpen={open} />
         {activeService && <ActiveServiceButtons view={activeService} />}
-        {!activeService && stopped.length > 0 && <StartAllButton project={project} />}
+        {!activeService && showsServices(filter) && stopped.length > 0 && (
+          <StartAllButton project={project} />
+        )}
         {activeView && (
           <Hint label='Find in the scrollback' shortcut={describeFindKey(mac)}>
             <Button
@@ -313,13 +331,20 @@ function ProjectTerminals({
           onClose={() => close(active)}
         />
       ) : (
-        <EmptyState
-          icon='IconConsole'
-          title={`No terminals in ${project.name}`}
-          description='A terminal keeps running when you close Shinsa.'
-        >
-          <NewTerminalButton groups={groups} fallback={fallback} label='Open a terminal' wide onOpen={open} />
-        </EmptyState>
+        <FilterEmpty
+          filter={filter}
+          project={project}
+          hidden={counts.all}
+          open={
+            <NewTerminalButton
+              groups={groups}
+              fallback={fallback}
+              label='Open a terminal'
+              wide
+              onOpen={open}
+            />
+          }
+        />
       )}
       {closing.value && (
         <ConfirmDialog
@@ -333,6 +358,32 @@ function ProjectTerminals({
         />
       )}
     </div>
+  );
+}
+
+function FilterEmpty({
+  filter,
+  project,
+  hidden,
+  open,
+}: {
+  filter: TerminalFilter;
+  project: Project;
+  hidden: number;
+  open: React.ReactNode;
+}) {
+  const words = describeFilterEmpty(filter, project.name);
+  return (
+    <EmptyState icon='IconConsole' title={words.title} description={words.description}>
+      <span className='flex items-center gap-2'>
+        {filter !== 'tasks' && filter !== 'services' && open}
+        {filter !== 'all' && hidden > 0 && (
+          <Button variant='secondary' size='sm' onClick={() => writeTerminalFilter('all')}>
+            Show all terminals
+          </Button>
+        )}
+      </span>
+    </EmptyState>
   );
 }
 
@@ -410,7 +461,27 @@ function ActiveServiceButtons({ view }: { view: ServiceView }) {
   );
 }
 
+function TerminalFrame({ children }: { children: React.ReactNode }) {
+  const layout = useLayoutPreference();
+  const phone = useMediaQuery(PHONE_QUERY);
+  const framed = layout === 'cards' && !phone;
+  if (!framed) return <div className='flex min-h-0 flex-1 flex-col'>{children}</div>;
+  return (
+    <div className={cn(CARDS_FRAME, 'flex min-h-0 flex-1 flex-col pt-2 pb-4')}>
+      <div className={cn(CARD, 'flex min-h-0 flex-1 flex-col overflow-hidden')}>{children}</div>
+    </div>
+  );
+}
+
 export function TerminalPage({ state }: { state: ShinsaState }) {
+  return (
+    <TerminalFrame>
+      <TerminalPageContent state={state} />
+    </TerminalFrame>
+  );
+}
+
+function TerminalPageContent({ state }: { state: ShinsaState }) {
   const snapshot = useTerminals();
   const search = useSearchString();
   React.useEffect(() => rememberTerminalPath(`/terminal${search}`), [search]);

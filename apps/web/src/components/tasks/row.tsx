@@ -1,4 +1,4 @@
-import { isTaskSettled, listWaitsOn, type Repo, type ShinsaState, type Task } from '@shinsa/core';
+import { isTaskSettled, type Project, type Repo, type Task } from '@shinsa/core';
 import {
   DropdownMenuContent,
   DropdownMenuItem,
@@ -11,27 +11,25 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { InitiativeItems } from '@/components/initiatives/task-items.tsx';
-import { RepoIcon } from '@/components/links/repo.tsx';
+import { RepoGlyph } from '@/components/links/repo.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { SharedMark } from '@/components/share/shared-mark.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
-import { StatusText } from '@/components/status/text.tsx';
 import { PriorityChoices, TaskActionItems } from '@/components/task/action-items.tsx';
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useEngineCommands, useMachine } from '@/lib/connection/socket.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
-import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { selectProject } from '@/lib/projects.ts';
+import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { resolveMachineLabel } from '@/lib/remote/mode.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
-import { isHeldByTasks } from '@/lib/tasks/groups.ts';
+import { isSameTaskRowModel, type TaskRowModel } from '@/lib/tasks/row-model.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
-import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 import { TaskOwnerMark } from './owner.tsx';
 import { PullRequestBadge } from './pull-request-badge.tsx';
+import { useTaskRowState } from './row-state.tsx';
 import { ChainArrow, WaitsOnLinks } from './waits-on.tsx';
 
 export const TASK_LIST_COLUMNS =
@@ -70,9 +68,11 @@ export function DepthMark({ depth }: { depth: number }) {
   );
 }
 
-function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
+function TaskMenuItems({ task }: { task: Task }) {
+  const state = useTaskRowState();
   const commands = useEngineCommands(task.id);
   const teammate = useMachine(task.id)?.teammate ?? null;
+  if (!state) return null;
   return (
     <DropdownMenuContent className='min-w-48'>
       <DropdownMenuItem icon={TASK_ACTION.open.icon} onClick={() => navigate(resolveTaskPath(task))}>
@@ -93,16 +93,13 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-export function KindMark({ state, task }: { state: ShinsaState; task: Task }) {
+export function KindMark({ task, tone }: { task: Task; tone: Tone }) {
   return (
     <Hint label={describeTaskSteps(task)}>
       <span
         role='img'
         aria-label={resolveShapeLabel(task)}
-        className={cn(
-          'grid size-4 shrink-0 place-items-center',
-          TONE_TEXT[resolveTaskStatus(state, task).tone]
-        )}
+        className={cn('grid size-4 shrink-0 place-items-center', TONE_TEXT[tone])}
       >
         <Icon size='sm' name={resolveShapeIcon(task)} />
       </span>
@@ -110,10 +107,9 @@ export function KindMark({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-export function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
-  const project = selectProject(state, repo.projectId);
+export function RepoMark({ repo, project }: { repo: Repo; project: Project | null }) {
   const machine = useMachine(repo.id);
-  const icon = <RepoIcon state={state} repo={repo} />;
+  const icon = <RepoGlyph repo={repo} project={project} />;
   if (!(project || machine)) return icon;
   return (
     <Hint
@@ -138,29 +134,32 @@ export function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
   );
 }
 
-export function RowStatus({ state, task }: { state: ShinsaState; task: Task }) {
-  if (isHeldByTasks(state, task)) {
-    const waitsOn = listWaitsOn(state, task);
-    const stacked = waitsOn.length > 0 && waitsOn.every((parent) => task.stacksOn?.includes(parent.id));
-    return <WaitsOnLinks waitsOn={waitsOn} stacked={stacked} />;
-  }
-  return <StatusText state={state} task={task} className='truncate text-xs' />;
+export function RowStatus({ model }: { model: TaskRowModel }) {
+  if (model.waitsOn.length > 0) return <WaitsOnLinks waitsOn={model.waitsOn} stacked={model.stacked} />;
+  return (
+    <span className={cn('truncate text-xs font-medium', TONE_TEXT[model.status.tone])}>
+      {model.status.label}
+    </span>
+  );
+}
+
+function isSameRow(
+  left: { model: TaskRowModel; columns?: string },
+  right: { model: TaskRowModel; columns?: string }
+) {
+  return left.columns === right.columns && isSameTaskRowModel(left.model, right.model);
 }
 
 export const TaskListRow = React.memo(function TaskListRowItem({
-  state,
-  task,
-  depth,
+  model,
   columns = TASK_LIST_COLUMNS,
 }: {
-  state: ShinsaState;
-  task: Task;
-  depth: number;
+  model: TaskRowModel;
   columns?: string;
 }) {
-  const repo = task.repoId ? state.repos[task.repoId] : undefined;
+  const { task, depth, repo } = model;
   return (
-    <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
+    <LazyMenu kind='context' content={<TaskMenuItems task={task} />}>
       <LazyMenuTrigger
         render={
           // oxlint-disable-next-line shinsa/use-semantic-elements -- the row holds a pull request link, so it cannot be a button
@@ -181,7 +180,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
         }
       >
         <span className={cn('flex min-w-0 items-center gap-1.5', resolveDepthIndent(depth))}>
-          {depth > 0 && <ChainArrow state={state} task={task} />}
+          {depth > 0 && <ChainArrow task={task} parents={model.stackParents} others={model.chainOthers} />}
           <DepthMark depth={depth} />
           <Hint label={`${PRIORITY_LABEL[task.priority]} priority`}>
             <span className='grid size-4 shrink-0 place-items-center'>
@@ -194,7 +193,7 @@ export const TaskListRow = React.memo(function TaskListRowItem({
         </span>
         {columns !== FILED_COLUMNS && (
           <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
-            {repo && <RepoMark state={state} repo={repo} />}
+            {repo && <RepoMark repo={repo} project={model.project} />}
             <Truncate>{repo?.name ?? 'No repository'}</Truncate>
           </span>
         )}
@@ -204,8 +203,8 @@ export const TaskListRow = React.memo(function TaskListRowItem({
           </span>
         )}
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
-          <KindMark state={state} task={task} />
-          <RowStatus state={state} task={task} />
+          <KindMark task={task} tone={model.status.tone} />
+          <RowStatus model={model} />
         </span>
         <span className='max-md:hidden'>
           <PullRequestBadge task={task} />
@@ -216,4 +215,4 @@ export const TaskListRow = React.memo(function TaskListRowItem({
       </LazyMenuTrigger>
     </LazyMenu>
   );
-});
+}, isSameRow);

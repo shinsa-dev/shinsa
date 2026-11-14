@@ -1,9 +1,11 @@
 import { BunRuntime } from '@effect/platform-bun';
 import { Config, Console, Duration, Effect, Option, Schema } from 'effect';
 import { type CdpPage, ChromiumLayer } from '../kit/chromium/index.ts';
-import { summarize } from './content-stats.ts';
+import { summarize, summarizeBlankScroll, summarizeReveal, summarizeRowPushes } from './content-stats.ts';
 import { openContentPage } from './content/page.ts';
 import {
+  BlankRecording,
+  BlankTarget,
   ChatScroll,
   HeldPlace,
   Inputs,
@@ -13,8 +15,13 @@ import {
   Navigation,
   NO_MEASUREMENTS,
   PushCost,
+  RevealCounts,
+  RowPushes,
   RUN_SECTION,
   type Scenario,
+  TASK_ROW,
+  HARD_FLICK,
+  WHEEL_FLICK,
 } from './content/schema.ts';
 import { writeReport } from './report/write.ts';
 
@@ -25,6 +32,7 @@ const program = Effect.gen(function* () {
   const only = yield* Config.option(Config.String('SHINSA_PERF_ONLY'));
   const chosenTask = yield* Config.option(Config.String('SHINSA_PERF_TASK'));
   const out = yield* Config.option(Config.String('SHINSA_PERF_OUT'));
+  const cpuSlowdown = yield* Config.Number('SHINSA_PERF_CPU').pipe(Config.withDefault(1));
 
   const navigate = (page: CdpPage, path: string, ready = 'body') =>
     page.evaluate(`window.__perf.navigate(${JSON.stringify(path)}, ${JSON.stringify(ready)})`, Navigation);
@@ -178,10 +186,10 @@ const program = Effect.gen(function* () {
   const lists = Effect.fn('ContentMeasure.lists')(function* (page: CdpPage) {
     yield* navigate(page, '/');
     yield* settle(page);
-    const tasks = yield* navigate(page, '/tasks', 'a[href^="/tasks/"]');
+    const tasks = yield* navigate(page, '/tasks', TASK_ROW);
     yield* settle(page);
     const scroll = yield* page.evaluate(
-      `window.__perf.scroll('a[href^="/tasks/"]', 'down', 120, 120)`,
+      `window.__perf.scroll(${JSON.stringify(TASK_ROW)}, 'down', 120, 120)`,
       ListScroll
     );
     const home = yield* navigate(page, '/', 'a[href^="/tasks/"]');
@@ -196,6 +204,63 @@ const program = Effect.gen(function* () {
     };
   });
 
+  const openTasks = Effect.fn('ContentMeasure.openTasks')(function* (page: CdpPage) {
+    yield* navigate(page, '/');
+    yield* settle(page);
+    const tasks = yield* navigate(page, '/tasks', TASK_ROW);
+    yield* settle(page);
+    return tasks;
+  });
+
+  const wheelFlick = Effect.fn('ContentMeasure.wheelFlick')(function* (
+    page: CdpPage,
+    withPushes: boolean,
+    flick: typeof WHEEL_FLICK = WHEEL_FLICK
+  ) {
+    yield* openTasks(page);
+    const target = yield* page.evaluate(
+      `window.__perf.recordBlank(${JSON.stringify(TASK_ROW)})`,
+      BlankTarget
+    );
+    if (!target) return NO_MEASUREMENTS;
+    if (withPushes) yield* page.evaluate(`window.__perf.startPushes(${flick.pushEveryMs})`, Schema.Unknown);
+    for (let index = 0; index < flick.events; index += 1) {
+      yield* page.send('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: target.x,
+        y: target.y,
+        deltaX: 0,
+        deltaY: flick.deltaY,
+      });
+      yield* Effect.sleep(Duration.millis(flick.everyMs));
+    }
+    yield* Effect.sleep(Duration.millis(300));
+    const recording = yield* page.evaluate('window.__perf.stopBlank()', BlankRecording);
+    return {
+      ...summarizeBlankScroll(recording.blank, recording.deltas, target.viewport),
+      distancePx: recording.distance,
+      longMax: recording.long.max,
+      longCount: recording.long.count,
+    };
+  });
+
+  const revealTasks = Effect.fn('ContentMeasure.revealTasks')(function* (page: CdpPage) {
+    yield* openTasks(page);
+    yield* navigate(page, '/');
+    yield* settle(page);
+    const counts = yield* page.evaluate(
+      `window.__perf.revealRows('/tasks', ${JSON.stringify(TASK_ROW)}, 30)`,
+      RevealCounts
+    );
+    return summarizeReveal(counts);
+  });
+
+  const taskPushes = Effect.fn('ContentMeasure.taskPushes')(function* (page: CdpPage) {
+    yield* openTasks(page);
+    const result = yield* page.evaluate('window.__perf.rowPushes(10)', RowPushes);
+    return summarizeRowPushes(result.pushes, result.visibleRows);
+  });
+
   const scenarios: ReadonlyArray<readonly [string, Scenario]> = [
     ['openChat', openChat],
     ['switchTabs', switchTabs],
@@ -204,10 +269,16 @@ const program = Effect.gen(function* () {
     ['typeWhileStreaming', typeWhileStreaming],
     ['pushes', pushes],
     ['lists', lists],
+    ['wheelTasks', (page) => wheelFlick(page, false)],
+    ['wheelTasksWhilePushed', (page) => wheelFlick(page, true)],
+    ['hardFlickTasks', (page) => wheelFlick(page, false, HARD_FLICK)],
+    ['revealTasks', revealTasks],
+    ['taskPushes', taskPushes],
   ];
 
   const runRound = Effect.fn('ContentMeasure.runRound')(function* (scenario: Scenario) {
     const page = yield* openContentPage(BASE);
+    if (cpuSlowdown > 1) yield* page.send('Emulation.setCPUThrottlingRate', { rate: cpuSlowdown });
     yield* settle(page);
     return yield* scenario(page, yield* pickTask(page));
   }, Effect.scoped);
