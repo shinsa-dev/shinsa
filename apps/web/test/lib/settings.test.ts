@@ -147,7 +147,6 @@ describe('setting choices', () => {
 });
 
 describe('setting values', () => {
-
   it('round-trips the fix round limit, with no limit as until clean', () => {
     expect(resolveFixRoundValue(settings({ maxFixRounds: null }))).toBe('endless');
     expect(resolveFixRoundValue(settings({ maxFixRounds: 5 }))).toBe('5');
