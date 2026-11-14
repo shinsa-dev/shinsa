@@ -423,7 +423,7 @@ describe('HandoverCard folded to its header', () => {
       'an answer that proposes a change',
       call('answer', { answer: 'It retries.', propose_change: { request: 'Cap it.', why: 'It loops.' } }),
       'Proposes a change',
-      'It retries.',
+      'It loops.',
     ],
     [
       'composed steps',
@@ -465,6 +465,31 @@ describe('HandoverCard folded to its header', () => {
       expect(view.queryByText(body)).toBeNull();
     }
   );
+
+  it('keeps the reply to your message and a delivered answer in view while the card is closed', () => {
+    const reply = { headline: 'Checked the retries.', points: [] };
+    for (const [name, args, text] of [
+      ['answer', { answer: 'It retries three times.' }, 'It retries three times.'],
+      ['report_diagnosis', { diagnosis: 'The pool runs dry.' }, 'The pool runs dry.'],
+      ['submit_report', { report: 'Use a workspace host.' }, 'Use a workspace host.'],
+      ['report_outcome', { outcome: 'Backfilled 12 rows.' }, 'Backfilled 12 rows.'],
+    ] as const) {
+      const view = renderClosed(call(name, { ...args, reply }));
+      expect(view.getByText('Checked the retries.')).toBeTruthy();
+      expect(view.getByText(text)).toBeTruthy();
+      view.unmount();
+    }
+    for (const [name, args, body] of [
+      ['propose_plan', { goal: 'Ship it.', phases: [{ title: 'One' }] }, 'Ship it.'],
+      ['complete_phase', { summary: 'Moved the pool.' }, 'Moved the pool.'],
+      ['complete_fix', { summary: 'Fixed the leak.' }, 'Fixed the leak.'],
+    ] as const) {
+      const view = renderClosed(call(name, { ...args, reply }));
+      expect(view.getByText('Checked the retries.')).toBeTruthy();
+      expect(view.queryByText(body)).toBeNull();
+      view.unmount();
+    }
+  });
 
   it('keeps a question that waits for you open', () => {
     const view = renderClosed(call('ask', { question: 'Which run?', choices: ['First', 'Last'] }));

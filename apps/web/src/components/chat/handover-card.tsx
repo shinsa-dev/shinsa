@@ -61,12 +61,14 @@ function Card({
   icon,
   title,
   meta,
+  lead,
   defaultOpen = false,
   children,
 }: {
   icon: IconName;
   title: React.ReactNode;
   meta?: React.ReactNode;
+  lead?: React.ReactNode;
   defaultOpen?: boolean;
   children?: React.ReactNode;
 }) {
@@ -81,6 +83,7 @@ function Card({
       ) : (
         <CardLine icon={icon} title={title} meta={meta} />
       )}
+      {lead && <div className='flex min-w-0 flex-col gap-3 border-t border-border p-3'>{lead}</div>}
       {children && open && (
         <div className='flex min-w-0 flex-col gap-3 border-t border-border p-3'>{children}</div>
       )}
@@ -88,15 +91,9 @@ function Card({
   );
 }
 
-function ReplyFirst({ args, children }: { args: ChatToolArgs; children: React.ReactNode }) {
+function ReplyLead({ args }: { args: ChatToolArgs }) {
   const reply = readHandOverReply(args);
-  if (!reply) return children;
-  return (
-    <>
-      <AgentReplyBlock reply={reply} />
-      <div className='flex min-w-0 flex-col gap-3 border-t border-border pt-3'>{children}</div>
-    </>
-  );
+  return reply ? <AgentReplyBlock reply={reply} /> : null;
 }
 
 function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; at: number | null }) {
@@ -109,35 +106,34 @@ function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; a
       icon='IconMap'
       title={revision && revision.version > 1 ? 'Revised the plan' : 'Proposed the plan'}
       meta={phases.length > 0 ? describeCount(phases.length, 'phase', 'phases') : null}
+      lead={readHandOverReply(args) && <ReplyLead args={args} />}
     >
-      <ReplyFirst args={args}>
-        {goal && <Markdown text={goal} />}
-        {phases.length > 0 && (
-          <ol className='flex flex-col gap-2'>
-            {phases.map((phase, index) => {
-              const title = readString(phase, 'title') ?? `Phase ${index + 1}`;
-              return (
-                // oxlint-disable-next-line shinsa/no-array-index-key -- plan phases are positional
-                <li key={index} className='flex gap-2.5'>
-                  <StepNumber index={index} />
-                  <div className='flex min-w-0 flex-col'>
-                    <PlanPhaseTitle
-                      title={title}
-                      change={Option.getOrNull(resolvePhaseChange(changes, title))}
-                    />
-                    {readString(phase, 'detail') && (
-                      <span className='selectable text-xs text-fg-3'>
-                        <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
-                      </span>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-        <PlanParameterList document={readPlanParameters(args)} headingClassName='text-2xs text-fg-2' />
-      </ReplyFirst>
+      {goal && <Markdown text={goal} />}
+      {phases.length > 0 && (
+        <ol className='flex flex-col gap-2'>
+          {phases.map((phase, index) => {
+            const title = readString(phase, 'title') ?? `Phase ${index + 1}`;
+            return (
+              // oxlint-disable-next-line shinsa/no-array-index-key -- plan phases are positional
+              <li key={index} className='flex gap-2.5'>
+                <StepNumber index={index} />
+                <div className='flex min-w-0 flex-col'>
+                  <PlanPhaseTitle
+                    title={title}
+                    change={Option.getOrNull(resolvePhaseChange(changes, title))}
+                  />
+                  {readString(phase, 'detail') && (
+                    <span className='selectable text-xs text-fg-3'>
+                      <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      <PlanParameterList document={readPlanParameters(args)} headingClassName='text-2xs text-fg-2' />
     </Card>
   );
 }
@@ -179,50 +175,48 @@ function SummaryCard({
   const summary = readString(args, 'summary');
   const calls = readList(args, 'judgement_calls');
   return (
-    <Card icon={icon} title={title} meta={meta}>
-      <ReplyFirst args={args}>
-        {summary && <Markdown text={summary} />}
-        {calls.length > 0 && (
-          <div className='flex flex-col gap-1.5'>
-            <span className='text-2xs text-fg-2'>Judgement calls</span>
-            <ul className='flex flex-col gap-1.5'>
-              {calls.map((call, index) => (
-                // oxlint-disable-next-line shinsa/no-array-index-key -- judgement calls are positional
-                <li key={index} className='flex gap-1.25 text-xs leading-5'>
-                  <IconSlot>
-                    <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
-                  </IconSlot>
-                  <span className='min-w-0 selectable'>
-                    {readString(call, 'title') && (
-                      <span className='font-medium text-fg-4'>
-                        <InlineMarkdown text={readString(call, 'title') ?? ''} />
-                        {': '}
-                      </span>
-                    )}
-                    <span className='text-fg-4'>
-                      <InlineMarkdown text={readString(call, 'call') ?? ''} />
-                    </span>{' '}
-                    {readString(call, 'reason') && (
-                      <span className='text-fg-3'>
-                        <InlineMarkdown text={readString(call, 'reason') ?? ''} />
-                      </span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <SpotList task={task} args={args} />
-        {task && hasHandOverWalkthrough(args) && (
-          <InAppLink
-            path={resolveReviewPath(task)}
-            className='w-fit text-xs font-medium text-primary-text hover:opacity-80 active:opacity-80'
-          >
-            Read the walkthrough
-          </InAppLink>
-        )}
-      </ReplyFirst>
+    <Card icon={icon} title={title} meta={meta} lead={readHandOverReply(args) && <ReplyLead args={args} />}>
+      {summary && <Markdown text={summary} />}
+      {calls.length > 0 && (
+        <div className='flex flex-col gap-1.5'>
+          <span className='text-2xs text-fg-2'>Judgement calls</span>
+          <ul className='flex flex-col gap-1.5'>
+            {calls.map((call, index) => (
+              // oxlint-disable-next-line shinsa/no-array-index-key -- judgement calls are positional
+              <li key={index} className='flex gap-1.25 text-xs leading-5'>
+                <IconSlot>
+                  <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
+                </IconSlot>
+                <span className='min-w-0 selectable'>
+                  {readString(call, 'title') && (
+                    <span className='font-medium text-fg-4'>
+                      <InlineMarkdown text={readString(call, 'title') ?? ''} />
+                      {': '}
+                    </span>
+                  )}
+                  <span className='text-fg-4'>
+                    <InlineMarkdown text={readString(call, 'call') ?? ''} />
+                  </span>{' '}
+                  {readString(call, 'reason') && (
+                    <span className='text-fg-3'>
+                      <InlineMarkdown text={readString(call, 'reason') ?? ''} />
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <SpotList task={task} args={args} />
+      {task && hasHandOverWalkthrough(args) && (
+        <InAppLink
+          path={resolveReviewPath(task)}
+          className='w-fit text-xs font-medium text-primary-text hover:opacity-80 active:opacity-80'
+        >
+          Read the walkthrough
+        </InAppLink>
+      )}
     </Card>
   );
 }
@@ -367,16 +361,23 @@ function SuggestedWatchCard({ args, task }: { args: ChatToolArgs; task: Task | n
 function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArgs; field: string }) {
   const proposal = readProposedChange(args);
   return (
-    <Card icon='IconSend' title={title} meta={resolveDeliveryMeta(args)}>
-      <ReplyFirst args={args}>
-        <Markdown text={readString(args, field) ?? ''} />
-        {proposal && (
-          <div className='flex flex-col border-t border-border pt-2.5 text-xs'>
-            <span className='text-2xs text-fg-2'>Proposed a change</span>
-            <InlineMarkdown text={proposal.why} className='selectable text-fg-4' />
-          </div>
-        )}
-      </ReplyFirst>
+    <Card
+      icon='IconSend'
+      title={title}
+      meta={resolveDeliveryMeta(args)}
+      lead={
+        <>
+          <ReplyLead args={args} />
+          <Markdown text={readString(args, field) ?? ''} />
+        </>
+      }
+    >
+      {proposal && (
+        <div className='flex flex-col text-xs'>
+          <span className='text-2xs text-fg-2'>Proposed a change</span>
+          <InlineMarkdown text={proposal.why} className='selectable text-fg-4' />
+        </div>
+      )}
     </Card>
   );
 }

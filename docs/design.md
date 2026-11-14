@@ -168,7 +168,10 @@ Only these, and they win over anything below:
      Each hand-over card starts folded to its header: the chevron, its title and a short summary as
      meta ("3 phases", "2 blocking, 1 should fix", "2 spots to review · 1 judgement call"), and a
      click opens it (`CardToggle`); the state is kept per card (`useDisclosure`), so repeated cards
-     stay one line each. A question still waiting for you and a suggested watch still open start open. The last thing the agent wrote stays in the chat, outside the
+     stay one line each. A question still waiting for you and a suggested watch still open start open. Two
+     things stay in view under a folded header: the reply to your message (`reply`: its headline, each
+     point and what to do now), and the delivered text of an answer, diagnosis, report or outcome, which
+     is the turn's final reply; only the rest of the card folds. The last thing the agent wrote stays in the chat, outside the
      fold: in a turn with a hand-over (a plan, phase, fix, review, answer, diagnosis, report,
      outcome or new set of steps: core's `isHandOverTool`) the reply is the text written after the
      last hand-over, shown directly under the fold and above the card. When no text follows the
