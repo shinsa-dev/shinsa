@@ -38,7 +38,6 @@ function createActions(overrides: Partial<ProjectActions> = {}) {
     removeRepo: mock(async (_repo: Repo) => true),
     addFolder: mock(async (_project: Project, _path: string): Promise<string | null> => null),
     removeFolder: mock(async () => true),
-    changeWorkspace: mock(async (_repo: Repo, _mode: string) => true),
     changeCoverage: mock(async (_repo: Repo, _setting: CoverageSetting) => true),
     changeBaseline: mock(async (_repo: Repo, _commands: string[]) => true),
   };
@@ -58,17 +57,6 @@ beforeEach(() => {
 afterEach(() => {
   mock.restore();
 });
-
-async function chooseWorkspace(repo: string, option: string) {
-  fireEvent.click(screen.getByRole('combobox', { name: `Where agents work in ${repo}` }));
-  await settle();
-  const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
-  const item = within(list).getByRole('option', { name: new RegExp(`^${option}`) });
-  fireEvent.pointerDown(item, { pointerType: 'mouse' });
-  fireEvent.click(item);
-  await settle();
-  return item;
-}
 
 function renderProjects(state: ShinsaState, actions = createActions()) {
   render(
@@ -327,36 +315,18 @@ describe('Settings → Projects', () => {
   it('keeps each repository’s settings folded away until you open them', async () => {
     renderProjects(superwallState());
     await settle();
-    expect(screen.queryByRole('combobox', { name: 'Where agents work in web' })).toBeNull();
+    expect(screen.queryByText('Always run before review')).toBeNull();
     const show = screen.getByRole('button', { name: 'Show the settings of web' });
     expect(show.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(show);
     await settle();
-    expect(screen.getByRole('combobox', { name: 'Where agents work in web' })).toBeTruthy();
+    expect(screen.queryByText('Where agents work')).toBeNull();
     expect(screen.getByText('Always run before review')).toBeTruthy();
     const hide = screen.getByRole('button', { name: 'Hide the settings of web' });
     expect(hide.getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(hide);
     await settle();
-    expect(screen.queryByRole('combobox', { name: 'Where agents work in web' })).toBeNull();
-  });
-
-  it('each repository says where agents work, and offers worktrees or the main checkout', async () => {
-    const actions = renderProjects(superwallState());
-    await settle();
-    await openRepoSettings();
-    const web = screen.getByRole('combobox', { name: 'Where agents work in web' });
-    expect(web.textContent).toContain('Worktrees');
-    fireEvent.click(web);
-    await settle();
-    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
-    expect(within(list).getAllByRole('option')).toHaveLength(2);
-    expect(within(list).getByRole('option', { name: /^Worktrees/ })).toBeTruthy();
-    expect(within(list).getByRole('option', { name: /^Main checkout/ })).toBeTruthy();
-    fireEvent.keyDown(list, { key: 'Escape' });
-    await settle();
-    await chooseWorkspace('notes', 'Main checkout');
-    expect(actions.changeWorkspace.mock.calls[0]?.[1]).toBe('main_checkout');
+    expect(screen.queryByText('Always run before review')).toBeNull();
   });
 
   it('sets each repository’s test coverage: Auto says what it found, Custom asks for the command and report', async () => {

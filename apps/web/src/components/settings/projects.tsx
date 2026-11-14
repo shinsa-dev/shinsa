@@ -3,8 +3,13 @@ import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { useCoverageDetection } from '@/lib/connection/coverage.ts';
-import { listLooseRepos, listProjects, PROJECT_ACTIONS, type ProjectActions } from '@/lib/projects.ts';
-import { resolveRepoKey } from '@/lib/workspaces.ts';
+import {
+  listLooseRepos,
+  listProjects,
+  PROJECT_ACTIONS,
+  type ProjectActions,
+  resolveRepoKey,
+} from '@/lib/projects.ts';
 import { SettingsBlock, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { LooseRepoRow, ProjectBlock } from './project-block.tsx';
 import { ProjectDialog } from './project-dialog.tsx';

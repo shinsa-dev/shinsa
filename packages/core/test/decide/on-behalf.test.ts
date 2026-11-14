@@ -3,9 +3,7 @@ import { Option } from 'effect';
 import type { EventOf } from '../../src/events/index.ts';
 import {
   AUTOPILOT_DEFAULTS,
-  HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
-  type Repo,
   type Settings,
   type ShinsaCommand,
   splitHouseRules,
@@ -356,7 +354,7 @@ describe('acting for the human', () => {
     expect(harness.activeRun(taskId).prompt).toContain(KEPT_NOTE);
   });
 
-  test('settings and repository fields only the human changes are refused on their behalf; the rest still change', () => {
+  test('settings only the human changes are refused on their behalf; the rest still change', () => {
     const harness = createHarness();
     const repoId = registerRepo(harness);
     const settings: Required<Pick<Settings, (typeof HUMAN_ONLY_SETTINGS)[number]>> = {
@@ -380,20 +378,10 @@ describe('acting for the human', () => {
       sharedTeams: ['team-1'],
       activeHours: [{ weekday: 1, from: 9, to: 17 }],
     };
-    const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
-      checkCommands: ['bun test'],
-      workspace: 'main_checkout',
-      coverage: { mode: 'off' },
-    };
     const refused: ShinsaCommand[] = [
       ...HUMAN_ONLY_SETTINGS.map((key): ShinsaCommand => ({
         type: 'settings.change',
         patch: { maxFixRounds: 4, [key]: settings[key] },
-      })),
-      ...HUMAN_ONLY_REPO_FIELDS.map((field): ShinsaCommand => ({
-        type: 'repo.update',
-        repoId,
-        patch: { name: 'renamed', [field]: fields[field] },
       })),
     ];
     for (const command of refused) {
@@ -404,13 +392,6 @@ describe('acting for the human', () => {
     expect(() =>
       actOnBehalf(harness, { type: 'settings.change', patch: { approvePlans: 'always' } })
     ).toThrow('Only the human changes the settings approvePlans. Tell them what you would change and why.');
-    expect(() =>
-      actOnBehalf(harness, {
-        type: 'repo.update',
-        repoId,
-        patch: { checkCommands: [], workspace: 'worktrees' },
-      })
-    ).toThrow('Only the human changes the repository’s checkCommands, workspace.');
     actOnBehalf(harness, {
       type: 'settings.change',
       patch: { maxFixRounds: 4, defaultModel: 'sonnet', attentionLimit: 2, idleCompaction: false },
@@ -426,6 +407,21 @@ describe('acting for the human', () => {
     harness.send({ type: 'repo.update', repoId, patch: { checkCommands: ['bun test'] } });
     expect(harness.state.settings).toMatchObject({ approvePlans: 'always', mergeMethod: 'rebase' });
     expect(harness.state.repos[repoId]?.checkCommands).toEqual(['bun test']);
+  });
+
+  test('an agent sets a repository’s checks and coverage on their behalf, and it is logged', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    actOnBehalf(harness, {
+      type: 'repo.update',
+      repoId,
+      patch: { checkCommands: ['bun lint'], coverage: { mode: 'off' } },
+    });
+    expect(harness.state.repos[repoId]).toMatchObject({
+      checkCommands: ['bun lint'],
+      coverage: { mode: 'off' },
+    });
+    expect(lastAction(harness)).toMatchObject({ command: 'repo.update' });
   });
 });
 

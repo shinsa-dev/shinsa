@@ -1360,12 +1360,8 @@ describe('worktrees', () => {
     expect(existsSync(worktree)).toBe(false);
     expect(closed).toEqual(['task-1']);
     expect(commandIds).toEqual([`${context.key}:worktree.gone`]);
-    const failing = {
-      mode: 'worktrees',
-      remove: () => Effect.fail(new GitFailed({ message: 'Device busy', retryable: false })),
-    };
     const workspaces = {
-      resolve: () => failing,
+      remove: () => Effect.fail(new GitFailed({ message: 'Device busy', retryable: false })),
       root: { path: Effect.succeed(createTempDir()) },
     } as unknown as Workspaces['Service'];
     const broken = setup(withTask({ worktreePath: createTempDir() }, repo), { workspaces });

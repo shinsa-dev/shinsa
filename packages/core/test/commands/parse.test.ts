@@ -584,11 +584,6 @@ describe('parseUserCommand for the process commands', () => {
       type: 'settings.change',
       patch: { taskBudgetUsd: null },
     });
-    expect(parseCommand({ type: 'repo.update', repoId: 'r', patch: { workspace: 'worktrees' } })).toEqual({
-      type: 'repo.update',
-      repoId: 'r',
-      patch: { workspace: 'worktrees' },
-    });
     expect(
       parseCommand({
         type: 'repo.update',

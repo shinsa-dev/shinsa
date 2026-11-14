@@ -5,7 +5,6 @@ import {
   type ActiveDay,
   type AutopilotContact,
   DomainError,
-  HUMAN_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   isProjectKey,
   isSameAutopilotContact,
@@ -238,7 +237,6 @@ function assertHumanOnlyFields(decider: Decider, patch: object, fields: readonly
 
 export function updateRepo(decider: Decider, command: CommandOf<'repo.update'>) {
   const repo = findRepo(decider.state, command.repoId);
-  assertHumanOnlyFields(decider, command.patch, HUMAN_ONLY_REPO_FIELDS, 'the repository’s');
   assertProject(decider, command.patch.projectId);
   const updated = { ...repo, ...command.patch };
   if (isSameValue(updated, repo)) return;

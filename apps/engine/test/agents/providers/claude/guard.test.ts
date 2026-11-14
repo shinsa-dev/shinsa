@@ -126,7 +126,7 @@ describe('the command guard', () => {
     });
   });
 
-  test('keeps the settings and repository fields only the human changes out of the agent’s shell, and leaves the rest open', () => {
+  test('keeps the settings only the human changes out of the agent’s shell, and leaves a repository’s checks and coverage open', () => {
     for (const command of [
       'shinsa settings set approvePlans true',
       'shinsa settings set --json mergeMethod squash',
@@ -134,13 +134,6 @@ describe('the command guard', () => {
       'shinsa settings set fastMode true && echo done',
       'shinsa settings set agentFastModes \'{"builder":true}\'',
       'shinsa settings set delegationLimit 4',
-      'shinsa repos update app --checks "bun test"',
-      'shinsa repos update app --name web --checks lint',
-      'shinsa repos update app --checks=lint',
-      'shinsa repos update app --workspace worktrees',
-      'shinsa repos update app --workspace=main_checkout',
-      'shinsa repos update app --coverage off',
-      'shinsa repos update app --coverage-command="make cover"',
     ]) {
       expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
     }
@@ -151,6 +144,10 @@ describe('the command guard', () => {
       'shinsa settings set compaction eunoe; echo approvePlans',
       'shinsa repos update app --name web --default-branch trunk',
       'shinsa repos list --checks',
+      'shinsa repos update app --checks "bun test"',
+      'shinsa repos update app --checks=lint',
+      'shinsa repos update app --coverage off',
+      'shinsa repos update app --coverage-command="make cover"',
     ]) {
       expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
     }
@@ -158,12 +155,6 @@ describe('the command guard', () => {
       hookSpecificOutput: {
         permissionDecisionReason:
           'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching, fast mode and delegations at once. Tell them what you would change and why.',
-      },
-    });
-    expect(resolveCommandVerdict('shinsa repos update app --checks lint', 'main')).toMatchObject({
-      hookSpecificOutput: {
-        permissionDecisionReason:
-          'Only the human changes a repository’s check commands, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
       },
     });
   });

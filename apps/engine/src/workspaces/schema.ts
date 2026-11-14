@@ -1,35 +1,19 @@
-import type { Repo, Task, WorkspaceMode } from '@shinsa/core';
+import type { Repo, Task } from '@shinsa/core';
 import { type Effect, Schema } from 'effect';
 import type { MergeUnresolved } from '../git/checkout/schema.ts';
 import type { BaseUpdate, PushError } from '../git/remote/schema.ts';
 import type { GitFailed, RefNameInvalid } from '../git/schema.ts';
 import type { WorktreeRootUnavailable } from './root/schema.ts';
 
-export const WorkspaceCheckout = Schema.Struct({
-  path: Schema.String,
-  branch: Schema.String,
-  returnBranch: Schema.optional(Schema.String),
-});
-export type WorkspaceCheckout = typeof WorkspaceCheckout.Type;
+interface WorkspaceCheckout {
+  readonly path: string;
+  readonly branch: string;
+}
 
 export class TaskCheckoutMissing extends Schema.TaggedError<
   TaskCheckoutMissing,
   { readonly brand: unique symbol }
 >()('TaskCheckoutMissing', { message: Schema.String }) {}
-
-export class CheckoutDirty extends Schema.TaggedError<CheckoutDirty, { readonly brand: unique symbol }>()(
-  'CheckoutDirty',
-  { path: Schema.String, message: Schema.String }
-) {}
-
-export class CheckoutOffBranch extends Schema.TaggedError<
-  CheckoutOffBranch,
-  { readonly brand: unique symbol }
->()('CheckoutOffBranch', {
-  branch: Schema.String,
-  current: Schema.NullOr(Schema.String),
-  message: Schema.String,
-}) {}
 
 export interface CheckoutCommit {
   readonly treeHash: string | null;
@@ -43,12 +27,9 @@ type WorkspaceFailure =
   | PushError
   | MergeUnresolved
   | TaskCheckoutMissing
-  | CheckoutDirty
-  | CheckoutOffBranch
   | WorktreeRootUnavailable;
 
 export interface Workspace {
-  readonly mode: WorkspaceMode;
   prepare(repo: Repo, task: Task, signal?: AbortSignal): Effect.Effect<WorkspaceCheckout, WorkspaceFailure>;
   commit(repo: Repo, task: Task, message: string): Effect.Effect<CheckoutCommit, WorkspaceFailure>;
   push(repo: Repo, task: Task, signal?: AbortSignal): Effect.Effect<string, WorkspaceFailure>;

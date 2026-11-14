@@ -10,9 +10,9 @@ setDefaultTimeout(30_000);
 
 async function startTask() {
   const made = await createGitRepo();
-  const strategy = openStrategy('worktrees', createTempDir());
+  const strategy = openStrategy(createTempDir());
   const checkout = await strategy.prepare(made.repo, createTask({ worktreePath: null }));
-  const task = createTask({ worktreePath: checkout.path, branch: checkout.branch, workspace: 'worktrees' });
+  const task = createTask({ worktreePath: checkout.path, branch: checkout.branch });
   return { ...made, strategy, checkout, task };
 }
 
@@ -154,7 +154,7 @@ describe('worktrees', () => {
 
   test('a task stacked on several starts from the first and merges the others in, skipping one that conflicts', async () => {
     const made = await createGitRepo();
-    const strategy = openStrategy('worktrees', createTempDir());
+    const strategy = openStrategy(createTempDir());
     const parents: string[] = [];
     for (const [id, files] of [
       ['b', { 'b.txt': 'b\n', 'shared.txt': 'b\n' }],
@@ -212,7 +212,7 @@ describe('worktrees', () => {
 describe('the folder new worktrees go in', () => {
   test('a new task gets its worktree in the folder chosen now, and one already made stays where it is', async () => {
     const made = await createGitRepo();
-    const strategy = openStrategy('worktrees', createTempDir());
+    const strategy = openStrategy(createTempDir());
     const first = await strategy.mark(createTempDir());
     await strategy.choose(first);
     const before = await strategy.prepare(made.repo, createTask({ id: 'task-before1', worktreePath: null }));
@@ -225,10 +225,18 @@ describe('the folder new worktrees go in', () => {
     expect((await strategy.prepare(made.repo, kept)).path).toBe(before.path);
   });
 
+  test('a task whose checkout is the repository itself never has the repository removed', async () => {
+    const { repo, path, strategy } = await startTask();
+    await strategy.remove(repo, createTask({ worktreePath: path, branch: 'main' }));
+    await strategy.remove(repo, createTask({ worktreePath: `${path}/`, branch: 'main' }));
+    expect(existsSync(join(path, '.git'))).toBe(true);
+    expect(await git(path, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('main');
+  });
+
   test('a chosen folder that is not mounted stops the task, and nothing is made on the local disk', async () => {
     const made = await createGitRepo();
     const missing = join(createTempDir(), 'bucket', 'worktrees');
-    const strategy = openStrategy('worktrees', createTempDir());
+    const strategy = openStrategy(createTempDir());
     await strategy.choose(missing);
     await expect(strategy.prepare(made.repo, createTask({ worktreePath: null }))).rejects.toThrow(
       `The worktree folder ${missing} does not exist.`
@@ -239,7 +247,7 @@ describe('the folder new worktrees go in', () => {
   test('a chosen drive that is unmounted leaves an empty folder, which is refused and left empty', async () => {
     const made = await createGitRepo();
     const mountPoint = createTempDir();
-    const strategy = openStrategy('worktrees', createTempDir());
+    const strategy = openStrategy(createTempDir());
     await strategy.choose(mountPoint);
     await expect(strategy.prepare(made.repo, createTask({ worktreePath: null }))).rejects.toThrow(
       `The worktree folder ${mountPoint} is not the one you chose: the drive it is on may not be mounted.`

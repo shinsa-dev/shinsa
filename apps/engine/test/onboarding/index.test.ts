@@ -356,17 +356,15 @@ describe('worktree usage', () => {
     return path;
   }
 
-  test('adds up the open worktrees and the delegation checkouts, and skips the main checkout', async () => {
+  test('adds up the open worktrees and the delegation checkouts', async () => {
     const folder = createTempDir();
     const first = writeWorktree(join(folder, 'app', 'feat-a'), 64 * 1024);
     const elsewhere = writeWorktree(join(createTempDir(), 'old-root', 'feat-b'), 32 * 1024);
     writeWorktree(join(folder, 'delegations', 'task-1', 'run-1'), 16 * 1024);
-    const main = writeWorktree(join(createTempDir(), 'main'), 512 * 1024);
     const tasks = {
       a: createTask({ id: 'a', worktreePath: first }),
       b: createTask({ id: 'b', worktreePath: elsewhere }),
       gone: createTask({ id: 'gone', worktreePath: join(folder, 'removed') }),
-      main: createTask({ id: 'main', worktreePath: main, workspace: 'main_checkout' }),
       none: createTask({ id: 'none', worktreePath: null }),
     };
     const usage = await Effect.runPromise(
@@ -374,7 +372,6 @@ describe('worktree usage', () => {
     );
     expect(usage).toMatchObject({ folder, worktrees: 2, measuredAt: 42 });
     expect(usage.bytes).toBeGreaterThanOrEqual(112 * 1024);
-    expect(usage.bytes).toBeLessThan(512 * 1024);
     expect(usage.freeBytes).toBeGreaterThan(0);
   });
 

@@ -9,7 +9,6 @@ import { spyOnCommands } from '../../support/commands.ts';
 import { installDesktop } from '../../support/desktop.ts';
 import { spyOnEngine } from '../../support/engine.ts';
 import { installNotifications } from '../../support/notifications.ts';
-import { createRepo } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
 
@@ -140,7 +139,6 @@ describe('Change a setting', () => {
       MODELS,
       DEFAULT_PREFERENCES,
       null,
-      undefined,
       'left',
       'stable'
     );
@@ -161,14 +159,7 @@ describe('Change a setting', () => {
   });
 
   it('moves the Code tab’s file list to either side', () => {
-    const sections = listSettingsSections(
-      createSettings(),
-      MODELS,
-      DEFAULT_PREFERENCES,
-      null,
-      undefined,
-      'right'
-    );
+    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, null, 'right');
     expect(sections[1]?.commands.at(-1)?.hint).toBe('Right');
     pick(sections, 'settings.explorer-side', 'left');
     expect(localStorage.getItem('shinsa.code-explorer-side')).toBe('left');
@@ -240,7 +231,6 @@ describe('Change a setting', () => {
         MODELS,
         DEFAULT_PREFERENCES,
         weekly,
-        undefined,
         'left',
         null,
         new Map([['account:weekly', { percentPerUsd: 0.2, tasks: 5, trusted }]])
@@ -457,43 +447,5 @@ describe('openSettingsSection', () => {
     history.replaceState(null, '', '/tasks');
     openSettingsSection('Notifications');
     expect(`${location.pathname}${location.search}${location.hash}`).toBe('/settings#notifications');
-  });
-});
-
-describe('Where agents work', () => {
-  it('each repository is a choice found by search, worktrees or the main checkout, and picking one saves it', () => {
-    const repos = [createRepo({ id: 'web' }), createRepo({ id: 'app', workspace: 'main_checkout' })];
-    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, null, repos);
-    const web = find(sections, 'settings.workspace.web');
-    expect(web).toMatchObject({
-      kind: 'choice',
-      label: 'Where agents work in web',
-      hint: 'Worktrees',
-      searchOnly: true,
-      value: 'worktrees',
-      keywords: expect.arrayContaining(['worktrees', 'main checkout']),
-    });
-    if (web.kind !== 'choice') throw new Error('not a choice');
-    expect(web.options.map((option) => [option.value, option.disabled])).toEqual([
-      ['worktrees', undefined],
-      ['main_checkout', undefined],
-    ]);
-    const app = find(sections, 'settings.workspace.app');
-    if (app.kind !== 'choice') throw new Error('not a choice');
-    expect(app).toMatchObject({ hint: 'Main checkout', value: 'main_checkout' });
-    expect(app.options.map((option) => option.value)).toEqual(['worktrees', 'main_checkout']);
-    expect(sections.flatMap((section) => section.commands).map((command) => command.id)).toContain(
-      'settings.workspace.app'
-    );
-    pick(sections, 'settings.workspace.web', 'main_checkout');
-    expect(spies.sent).toHaveBeenCalledWith(
-      { type: 'repo.update', repoId: 'web', patch: { workspace: 'main_checkout' } },
-      'One task at a time in web.'
-    );
-    expect(
-      listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES).flatMap((section) =>
-        section.commands.filter((command) => command.id.startsWith('settings.workspace.'))
-      )
-    ).toEqual([]);
   });
 });

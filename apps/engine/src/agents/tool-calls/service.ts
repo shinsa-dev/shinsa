@@ -132,7 +132,6 @@ export class ToolCalls extends Context.Service<
         if (!task.worktreePath || !repo) return yield* dispatch({ ...command, treeHash: null });
         const commit = yield* Effect.mapError(
           workspaces
-            .resolve(task)
             .commit(repo, task, resolveCommitMessage(task, run))
             .pipe(provideTaskGitHub(machine, engine.state, task.id)),
           fail

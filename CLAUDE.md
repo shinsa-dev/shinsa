@@ -87,8 +87,9 @@ web ──WebSocket──► shinsa engine
   Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/engine/src/agents/policy.ts` (no commit, push, rebase, `git pull` without `--no-rebase`, `reset --hard`, `gh pr create|merge`, checkout of the default branch, a human-only `shinsa` command, or a whole test suite), through a PreToolUse hook for Claude and command approvals for Codex.
 - **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge` Shinsa
   takes; GitHub branch protection is what stops a shell from taking another (`docs/engine.md` → Who can change Shinsa).
-- **Some decisions are human-only**: closing any gate, the settings in `HUMAN_ONLY_SETTINGS` and a repository's
-  own check commands, workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`); a task's own checks are its agent's. Their surface specs are `humanOnly`, so no agent has a tool or a shell command for
+- **Some decisions are human-only**: closing any gate and the settings in `HUMAN_ONLY_SETTINGS`; a repository's
+  check commands and coverage, and a task's own checks, are its agents' too (from another device only the machine's
+  owner sets the repository's, `OWNER_ONLY_REPO_FIELDS`). Their surface specs are `humanOnly`, so no agent has a tool or a shell command for
   them, and core refuses them on your behalf: nothing sent for you closes a gate, and a message an agent sends to a
   task at a gate is kept for its next agent (`docs/engine.md` → Who can change Shinsa has the list and the HTTP guard).
 - **No backwards compatibility in code.** Shinsa has never shipped: a rename or a removal is done everywhere at once,

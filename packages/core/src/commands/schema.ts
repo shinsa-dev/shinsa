@@ -44,7 +44,6 @@ import { SHARE_LIMITS, SHARE_PRESETS } from '../domain/settings.ts';
 import { TASK_SHAPES } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
 import { PULL_REQUEST_STATES, TASK_MODES } from '../domain/types.ts';
-import { WORKSPACE_MODES } from '../domain/workspaces.ts';
 import { ViewScopes } from '../scopes/schema.ts';
 import { CoverageSetting } from '../test-coverage/schema.ts';
 
@@ -68,7 +67,6 @@ const RepoPatch = Strict(
     remote: Schema.optionalKey(OrNull(Text(ID_LIMIT), FIELD_MESSAGES.text)),
     projectId: Schema.optionalKey(OrNull(ProjectId, FIELD_MESSAGES.text)),
     checkCommands: Schema.optionalKey(List(Text())),
-    workspace: Schema.optionalKey(Choice(WORKSPACE_MODES)),
     coverage: Schema.optionalKey(CoverageSetting),
   },
   'A repository update',

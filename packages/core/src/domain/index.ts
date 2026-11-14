@@ -222,7 +222,7 @@ export {
   COMPACTION_MODES,
   type CompactionMode,
   createSettings,
-  HUMAN_ONLY_REPO_FIELDS,
+  OWNER_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   isEunoeCompaction,
   isFoldingCompaction,
@@ -426,14 +426,9 @@ export {
 } from './watchdogs.ts';
 export {
   type ApprovalPath,
-  DEFAULT_WORKSPACE_MODE,
   describeHumanEdits,
   isSettingUpWorkspace,
-  isSharedWorkspace,
   resolveApprovalPath,
   resolveEditRefusal,
-  resolveRepoWorkspace,
-  WORKSPACE_MODES,
   WORKSPACE_SETUP_REASON,
-  type WorkspaceMode,
 } from './workspaces.ts';

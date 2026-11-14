@@ -9,15 +9,12 @@ import {
   isDelegatedRun,
   isDependencyComplete,
   isLaterRound,
-  isSettingUpWorkspace,
   isTaskSettled,
   parseTaskHandle,
   type Run,
   resolveCurrentRound,
-  resolveRepoWorkspace,
   type Task,
   type TaskStage,
-  type WorkspaceMode,
 } from '../domain/index.ts';
 import { listLiveChildRuns } from './delegations.ts';
 import type { ShinsaState } from './project.ts';
@@ -329,31 +326,6 @@ export function listPendingDependencies(state: ShinsaState, task: Task) {
   const pending = listDependencies(state, task).filter((dependency) => !isWaitOver(task, dependency));
   const parents = listPendingStackParents(state, task).filter((parent) => !pending.includes(parent));
   return [...pending, ...parents];
-}
-
-export function resolveTaskWorkspace(state: ShinsaState, task: Task): WorkspaceMode {
-  if (task.worktreePath !== null || isSettingUpWorkspace(task)) {
-    return task.workspace ?? resolveRepoWorkspace(null);
-  }
-  return resolveRepoWorkspace(task.repoId === null ? null : state.repos[task.repoId]);
-}
-
-function holdsCheckout(task: Task) {
-  return task.workspace === 'main_checkout' && (task.worktreePath !== null || isSettingUpWorkspace(task));
-}
-
-export function selectCheckoutHolder(state: ShinsaState, task: Task): Option.Option<Task> {
-  if (task.repoId === null) return Option.none();
-  return Option.fromNullishOr(
-    Object.values(state.tasks).find(
-      (other) => other.id !== task.id && other.repoId === task.repoId && holdsCheckout(other)
-    )
-  );
-}
-
-export function isWaitingForCheckout(state: ShinsaState, task: Task) {
-  if (holdsCheckout(task) || resolveTaskWorkspace(state, task) !== 'main_checkout') return false;
-  return Option.isSome(selectCheckoutHolder(state, task));
 }
 
 export function listDependents(state: ShinsaState, taskId: string) {

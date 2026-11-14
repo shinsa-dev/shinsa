@@ -1,6 +1,6 @@
 import { Option } from 'effect';
 import type { UserCommand } from '../commands/index.ts';
-import { HUMAN_ONLY_REPO_FIELDS, HUMAN_ONLY_SETTINGS } from '../domain/index.ts';
+import { HUMAN_ONLY_SETTINGS, OWNER_ONLY_REPO_FIELDS } from '../domain/index.ts';
 
 export type RequestOrigin = 'local' | 'owner' | 'remote';
 
@@ -19,7 +19,7 @@ export function isOwnerOnlyCommand(command: UserCommand) {
     case 'settings.change':
       return touchesAny(command.patch, HUMAN_ONLY_SETTINGS);
     case 'repo.update':
-      return touchesAny(command.patch, HUMAN_ONLY_REPO_FIELDS);
+      return touchesAny(command.patch, OWNER_ONLY_REPO_FIELDS);
     case 'task.bind_account':
       return true;
     case 'task.retry':

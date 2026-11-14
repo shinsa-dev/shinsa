@@ -5,6 +5,7 @@ import { resolveScratchPath } from '../../../config/index.ts';
 import { Checkout } from '../../../git/checkout/service.ts';
 import { LeftoverProcesses } from '../../../git/leftovers/service.ts';
 import { describeError } from '../../../log/redact.ts';
+import { isRepositoryPath } from '../../../workspaces/checkout.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
@@ -55,12 +56,11 @@ export class Cleanup extends Context.Service<
         yield* closeTerminals(taskId);
         const services = world.services;
         yield* Effect.gen(function* () {
-          const workspace = world.workspaces.resolve(task);
-          if (workspace.mode === 'worktrees') {
+          if (!isRepositoryPath(repo, worktreePath)) {
             const spare = services ? yield* services.listTerminalPids : [];
             yield* leftovers.stop(worktreePath, { spare });
           }
-          yield* Effect.mapError(workspace.remove(repo, task), resolveEffectFailure);
+          yield* Effect.mapError(world.workspaces.remove(repo, task), resolveEffectFailure);
         }).pipe(
           Effect.catch((failure) =>
             Effect.logWarning('[Effects] Could not remove a worktree').pipe(

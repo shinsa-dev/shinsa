@@ -47,7 +47,6 @@ import {
   type ShinsaState,
   type StateChanges,
   type StatePatch,
-  selectCheckoutHolder,
   serializeState,
   serializeViewState,
   type Task,
@@ -88,11 +87,6 @@ import {
   selectScheduleWrite,
 } from './schedule-invariants.ts';
 import { assertShapeInvariants, listShapeCommands, listShapeMarks } from './shape-invariants.ts';
-import {
-  assertWorkspaceInvariants,
-  listWorkspaceMarks,
-  selectWorkspaceCommand,
-} from './workspace-invariants.ts';
 
 type Random = () => number;
 
@@ -1021,7 +1015,6 @@ function assertInvariants(state: ShinsaState, now: number) {
 
   assertScheduleInvariants(state);
   assertHandleInvariants(state);
-  assertWorkspaceInvariants(state);
   assertMoveInvariants(state);
   for (const task of Object.values(state.tasks)) {
     const runs = listActiveRuns(state, task.id);
@@ -1082,8 +1075,7 @@ function assertInvariants(state: ShinsaState, now: number) {
       expect(listOpenBlockers(state, task), context).toHaveLength(0);
     }
     if (task.stage === 'waiting_on_tasks') {
-      const waiting = listPendingDependencies(state, task).length > 0 || gates.length > 0;
-      expect(waiting || Option.getOrNull(selectCheckoutHolder(state, task)) !== null, context).toBe(true);
+      expect(listPendingDependencies(state, task).length > 0 || gates.length > 0, context).toBe(true);
     }
     assertProcessInvariants(state, task, gates, context);
   }
@@ -1103,7 +1095,6 @@ type SideStream =
   | 'rounds'
   | 'composed_rounds'
   | 'on_behalf'
-  | 'workspaces'
   | 'pushes'
   | 'backlog'
   | 'duplicates'
@@ -1458,8 +1449,6 @@ function selectSideCommand(
       return selectRoundCommand(state, randoms.rounds, true);
     case 'on_behalf':
       return selectOnBehalfCommand(state, randoms.rounds);
-    case 'workspaces':
-      return selectWorkspaceCommand(state, randoms.planner);
     case 'pushes':
       return selectPushCommand(state, randoms.pushes);
     case 'backlog':
@@ -1875,19 +1864,6 @@ describe('decide under random command sequences', () => {
         actions += simulate(seed, STEPS, 'on_behalf').onBehalfActions?.length ?? 0;
       }
       expect(actions).toBeGreaterThan(0);
-    },
-    SEEDS * 2_000
-  );
-
-  test(
-    'keeps one task at a time in a main checkout while the repository changes where agents work',
-    () => {
-      const reached = new Set<string>();
-      const collect = (state: ShinsaState) => {
-        for (const mark of listWorkspaceMarks(state)) if (mark) reached.add(mark);
-      };
-      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'workspaces', collect);
-      expect([...reached].sort()).toEqual(['waited for the checkout', 'worked in the checkout']);
     },
     SEEDS * 2_000
   );

@@ -6,7 +6,7 @@ import { Checkout } from '../../git/checkout/service.ts';
 import { Remote } from '../../git/remote/service.ts';
 import type { GitFailed } from '../../git/schema.ts';
 import { Git } from '../../git/service.ts';
-import { requireCheckout } from '../checkout.ts';
+import { isRepositoryPath, requireCheckout } from '../checkout.ts';
 import type { WorktreeRoot } from '../root/service.ts';
 import { type CheckoutCommit, NO_BRANCH_YET, TaskCheckoutMissing, type Workspace } from '../schema.ts';
 
@@ -64,7 +64,6 @@ export class WorktreeWorkspaces extends Context.Service<
       });
 
       const make = (root: WorktreeRoot['Service']): Workspace => ({
-        mode: 'worktrees',
         prepare: Effect.fn('WorktreeWorkspace.prepare')(function* (
           repo: Repo,
           task: Task,
@@ -98,7 +97,10 @@ export class WorktreeWorkspaces extends Context.Service<
           Effect.flatMap(requireCheckout(task), ({ path, branch }) =>
             remote.pushBranch(path, branch, signal).pipe(Effect.andThen(checkout.head(path)))
           ),
-        remove: (repo, task) => (task.worktreePath ? checkout.remove(repo, task.worktreePath) : Effect.void),
+        remove: (repo, task) =>
+          task.worktreePath && !isRepositoryPath(repo, task.worktreePath)
+            ? checkout.remove(repo, task.worktreePath)
+            : Effect.void,
         writeEdit: (_repo, _task, _path, write) => Effect.asVoid(write),
         syncBase: (_repo, task, base, onBehind, signal) =>
           Effect.flatMap(requireCheckout(task), ({ path, branch }) =>

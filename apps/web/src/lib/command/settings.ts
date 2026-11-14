@@ -5,10 +5,8 @@ import {
   hasEngineFeature,
   listAgentProviders,
   type PlanApproval,
-  type Repo,
   resolveCompaction,
   resolveIdleCompaction,
-  resolveRepoWorkspace,
   type Settings,
   type UsageRate,
   resolvePlanApproval,
@@ -112,7 +110,6 @@ import { SHARING_SECTION } from '@/lib/share/dialog.ts';
 import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
 import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
-import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate, stripRouteBase } from '@/router.ts';
 
 const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] = [
@@ -504,22 +501,6 @@ function listUsageChoices(
   return choices;
 }
 
-function listWorkspaceChoices(repos: Repo[]): Command[] {
-  return [...repos]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((repo) => {
-      const choice = settingChoice(
-        `workspace.${repo.id}`,
-        `${WORKSPACE_TITLE} in ${repo.name}`,
-        listWorkspaceItems(),
-        resolveRepoWorkspace(repo),
-        (value) => void changeWorkspace(repo, value as Parameters<typeof changeWorkspace>[1]),
-        true
-      );
-      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'main checkout'] };
-    });
-}
-
 function listChannelChoices(channel: UpdateChannel | null): Command[] {
   if (!channel) return [];
   return [
@@ -534,7 +515,6 @@ export function listSettingsSections(
   providers: AgentProviderInfo[],
   notifications: NotificationPreferences,
   snapshot: AccountsSnapshot | null = null,
-  repos: Repo[] = [],
   explorerSide: ExplorerSide = 'left',
   updateChannel: UpdateChannel | null = null,
   rates: Map<string, UsageRate | null> | null = null,
@@ -552,7 +532,6 @@ export function listSettingsSections(
         ...listGroupChoices(settings, providers, snapshot, automatic),
         ...listRoleChoices(settings, providers, snapshot, automatic),
         ...listUsageChoices(settings, snapshot, rates),
-        ...listWorkspaceChoices(repos),
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),

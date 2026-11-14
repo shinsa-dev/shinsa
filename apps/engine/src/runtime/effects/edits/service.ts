@@ -22,7 +22,7 @@ export class EditCommits extends Context.Service<
       ) {
         if ((task.editedPaths ?? []).length === 0) return;
         const committed = yield* Effect.mapError(
-          world.workspaces.resolve(task).commit(repo, task, EDITS_COMMIT_MESSAGE),
+          world.workspaces.commit(repo, task, EDITS_COMMIT_MESSAGE),
           resolveEffectFailure
         );
         yield* world.dispatch(

@@ -4,7 +4,6 @@ import {
   needsWorktree,
   type Repo,
   resolveTaskPipeline,
-  resolveTaskWorkspace,
   type Task,
 } from '@shinsa/core';
 import { Context, Effect, FileSystem, Layer } from 'effect';
@@ -132,13 +131,6 @@ export class TaskSetup extends Context.Service<
         const pipeline = resolveTaskPipeline(task);
         const started = needsWorktree(pipeline) ? yield* setup.prepare(repo) : null;
         const problems = yield* setup.verify(repo, { defaultBranch: needsWorktree(pipeline) });
-        if (needsWorktree(pipeline) && problems.every((problem) => problem.kind !== 'repository')) {
-          const mode = resolveTaskWorkspace(yield* world.state, task);
-          const workspace = yield* world.workspaces
-            .describeProblem(repo, mode, task.worktreePath !== null)
-            .pipe(Effect.mapError(resolveEffectFailure));
-          if (workspace) problems.push(workspace);
-        }
         yield* world.dispatch(
           {
             type: 'config.record',
@@ -191,7 +183,6 @@ export class TaskSetup extends Context.Service<
         const { task, repo } = yield* world.findTask(taskId);
         if (task.stage !== 'triage' || !task.branch) return;
         const worktree = yield* world.workspaces
-          .resolve(task)
           .prepare(repo, task)
           .pipe(Effect.mapError(resolveEffectFailure));
         yield* world.dispatch(
@@ -200,7 +191,6 @@ export class TaskSetup extends Context.Service<
             taskId,
             path: worktree.path,
             branch: worktree.branch,
-            ...(worktree.returnBranch === undefined ? {} : { returnBranch: worktree.returnBranch }),
           },
           { id: `${attempt.key}:worktree.ready` }
         );

@@ -26,7 +26,6 @@ import {
 import { type Decider, describeWaiting, quoteTitles } from './decider.ts';
 import { startWork } from './lifecycle.ts';
 import { reviewMergeHold } from './pull-requests.ts';
-import { holdForCheckout } from './workspaces.ts';
 
 export function resolveDependencies(decider: Decider, task: Task | null, ids: string[]) {
   const kept: string[] = [];
@@ -232,7 +231,6 @@ export function releaseWaiting(decider: Decider) {
       decider.stage(task.id, 'waiting_on_tasks', describeWaiting(task, pending));
       continue;
     }
-    if (holdForCheckout(decider, task.id)) continue;
     startWork(decider, task.id);
   }
 }

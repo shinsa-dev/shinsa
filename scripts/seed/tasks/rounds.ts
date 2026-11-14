@@ -283,7 +283,6 @@ function scriptRounds(push: Push, clock: SeedClock, worktree: string) {
     taskId: TASK,
     path: worktree,
     branch: BRANCH,
-    workspace: 'worktrees',
   });
   planRound(push, clock, first, counter, 1);
   finishRound(push, clock, first, counter);

@@ -1838,10 +1838,10 @@ Every task agent's tool: `repos_list` (reads).
 
 #### shinsa repos update
 
-Change a repository's name, default branch, project, check commands, where agents work or how test coverage is measured.
+Change a repository's name, default branch, project, check commands or how test coverage is measured.
 
 ```
-shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--workspace <worktrees|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
+shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
 ```
 
 Every task agent's tool: `repos_update`. Sends `repo.update`.
@@ -1852,9 +1852,8 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--name` | text, optional | Its name. |
 | `--default-branch` | text, optional | The branch pull requests target. |
 | `--project` | text, optional | Its project (key, name or id), or none. |
-| `--checks` | list, optional | The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. Only the human changes them. |
-| `--workspace` | choice, optional | Where agents work: worktrees (a worktree each) or main_checkout (one task at a time in the checkout). Only the human changes it. |
-| `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
+| `--checks` | list, optional | The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. |
+| `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. |
 | `--coverage-command` | text, optional | With --coverage custom: the command that runs the tests with coverage. |
 | `--coverage-report` | text, optional | With --coverage custom: the report it writes, relative to the repository. |
 | `--coverage-format` | choice, optional | With --coverage custom: the report format, when its name does not tell (lcov, cobertura or go). |
