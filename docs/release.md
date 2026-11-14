@@ -257,6 +257,12 @@ and never run out.
   the choice is the app's own (Settings → General → Updates, ⌘K's Update channel), switching checks again at once,
   and every channel is offered. An old Shinsa Canary app (`studio.overclock.shinsa.canary`, from before canaries were
   a channel) is not updated any more: delete it and its `~/.config/shinsa-canary`, and pick Canary in Shinsa.
+- **From another device.** In a browser (app.shinsa.dev, the remote dashboard or the engine's own page),
+  Settings → General → Updates shows each of your machines' app and engine versions and its channel, and checks,
+  installs, switches channel or restarts the engine there, through the engine and the app's `UpdateLink`
+  (`docs/engine.md` → Updating Shinsa for Mac from another device). Shinsa for Mac has to run on that machine;
+  Open Shinsa for Mac starts it in the background. An engine installed with npm or the install script only shows its
+  version: it updates on its own machine (below).
 
 ## Downloads
 

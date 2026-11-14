@@ -20,6 +20,7 @@ import { Notifications } from '../notifications/service.ts';
 import { Prefs } from '../prefs/service.ts';
 import { EngineServer } from '../server/service.ts';
 import { StatusTray } from '../tray/service.ts';
+import { UpdateLink } from '../update-link/service.ts';
 import { UpdateLog } from '../update-log/service.ts';
 import { Updater } from '../updates/service.ts';
 import { AppWindow } from '../window/service.ts';
@@ -57,7 +58,14 @@ const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, Co
   Layer.provideMerge(ElectronLayer)
 );
 
-const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AwayWatch, AppMenu.layer, StatusTray.layer).pipe(
+const WindowLayer = Layer.mergeAll(
+  AppLifecycle,
+  PageBridge,
+  UpdateLink,
+  AwayWatch,
+  AppMenu.layer,
+  StatusTray.layer
+).pipe(
   Layer.provideMerge(Updater.layer),
   Layer.provideMerge(Notifications.layer),
   Layer.provideMerge(AppWindow.layer),

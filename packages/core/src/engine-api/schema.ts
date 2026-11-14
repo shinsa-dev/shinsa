@@ -872,6 +872,54 @@ export const BrowserCopyAnswer = Schema.Struct({
 });
 export type BrowserCopyAnswer = typeof BrowserCopyAnswer.Type;
 
+export const APP_UPDATE_CHANNELS = ['stable', 'beta', 'canary'] as const;
+
+export const AppUpdateChannel = Schema.Literals(APP_UPDATE_CHANNELS);
+export type AppUpdateChannel = typeof AppUpdateChannel.Type;
+
+export const AppUpdate = Schema.Union([
+  Schema.Struct({ status: Schema.Literal('none') }),
+  Schema.Struct({ status: Schema.Literal('checking') }),
+  Schema.Struct({ status: Schema.Literal('current') }),
+  Schema.Struct({ status: Schema.Literal('failed'), message: Schema.String }),
+  Schema.Struct({ status: Schema.Literal('downloading'), version: Schema.String, percent: Schema.Number }),
+  Schema.Struct({ status: Schema.Literal('preparing'), version: Schema.String }),
+  Schema.Struct({ status: Schema.Literal('ready'), version: Schema.String }),
+  Schema.Struct({ status: Schema.Literal('installing'), version: Schema.String }),
+  Schema.Struct({ status: Schema.Literal('downgrade'), version: Schema.String }),
+]);
+export type AppUpdate = typeof AppUpdate.Type;
+
+export const AppUpdateReport = Schema.Struct({
+  version: Schema.String,
+  protocol: Schema.Number,
+  channel: AppUpdateChannel,
+  update: AppUpdate,
+});
+export type AppUpdateReport = typeof AppUpdateReport.Type;
+
+export const AppUpdateRequest = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('check') }),
+  Schema.Struct({ kind: Schema.Literal('install') }),
+  Schema.Struct({ kind: Schema.Literal('channel'), channel: AppUpdateChannel }),
+  Schema.Struct({ kind: Schema.Literal('downgrade'), accept: Schema.Boolean }),
+]);
+export type AppUpdateRequest = typeof AppUpdateRequest.Type;
+
+export const AppUpdateReportAnswer = Schema.Struct({ requests: Schema.Array(AppUpdateRequest) });
+export type AppUpdateReportAnswer = typeof AppUpdateReportAnswer.Type;
+
+export const APP_UPDATE_SOURCES = ['app', 'standalone'] as const;
+
+export const AppUpdatesAnswer = Schema.Struct({
+  source: Schema.Literals(APP_UPDATE_SOURCES),
+  running: Schema.Boolean,
+  app: Schema.NullOr(AppUpdateReport),
+  installing: Schema.NullOr(Schema.String),
+  engine: Schema.Struct({ version: Schema.String, protocol: Schema.Number }),
+});
+export type AppUpdatesAnswer = typeof AppUpdatesAnswer.Type;
+
 export interface EngineRoute {
   readonly group: string;
   readonly name: string;
