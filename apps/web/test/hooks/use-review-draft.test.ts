@@ -39,6 +39,8 @@ describe('useReviewDraft', () => {
       setVerdict: () => undefined,
       thenApprove: false,
       chooseThenApprove: () => undefined,
+      thenMerge: false,
+      chooseThenMerge: () => undefined,
     };
     const { result } = renderHook(() => useReviewDraft(), {
       wrapper: ({ children }) => React.createElement(ReviewDraftContext.Provider, { value: draft }, children),

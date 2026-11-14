@@ -41,8 +41,8 @@ function renderActions(findings: Task['findings'], engine?: EngineInfo) {
   );
 }
 
-async function pickFixChoice(name: string) {
-  fireEvent.click(screen.getByRole('button', { name: 'More ways to fix' }));
+async function pickFixChoice(name: string, menu = 'More ways to fix') {
+  fireEvent.click(screen.getByRole('button', { name: menu }));
   fireEvent.click(await screen.findByRole('menuitemradio', { name }));
   await waitForGone(() => screen.queryByRole('menu'));
 }
@@ -65,6 +65,7 @@ describe('ReviewActions on a review with findings', () => {
     expect(items.map((item) => [item.textContent, item.getAttribute('aria-checked')])).toEqual([
       ['Fix 1 finding', 'true'],
       ['Fix 1 finding and approve', 'false'],
+      ['Fix 1 finding, approve and merge', 'false'],
     ]);
   });
 
@@ -89,10 +90,17 @@ describe('ReviewActions on a review with findings', () => {
     await waitFor(() => expect(listSentCommands()).toEqual([FIX_ANSWER]));
   });
 
-  it('shows no chevron when nothing is kept to fix', () => {
-    const view = renderActions([{ severity: 'optional', file: null, line: null, message: 'Rename it.' }]);
-    expect(view.getByRole('button', { name: 'Approve changes' })).toBeTruthy();
-    expect(view.queryByRole('button', { name: 'More ways to fix' })).toBeNull();
+  it('fixes, approves and merges in one decision from the chevron', async () => {
+    const view = renderActions(BLOCKING);
+    await pickFixChoice('Fix 1 finding, approve and merge');
+    const button = view.getByRole('button', { name: 'Fix 1 finding, approve and merge' });
+    expect(await findTooltipText(button.parentElement as HTMLElement)).toBe(
+      'Sends the findings you kept, approves once the fix passes, then merges once the pull request is ready'
+    );
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([{ ...FIX_ANSWER, thenApprove: true, thenMerge: true }])
+    );
   });
 
   it('shows only Fix N findings on an engine that cannot approve after a fix', () => {
@@ -103,5 +111,50 @@ describe('ReviewActions on a review with findings', () => {
     });
     expect(view.getByRole('button', { name: 'Fix 1 finding' })).toBeTruthy();
     expect(view.queryByRole('button', { name: 'More ways to fix' })).toBeNull();
+  });
+});
+
+const OPTIONAL = [{ severity: 'optional' as const, file: null, line: null, message: 'Rename it.' }];
+
+const APPROVE_ANSWER: UserCommand = {
+  type: 'gate.answer',
+  gateId: 'gate-1',
+  decision: 'approve',
+  response: null,
+  verdicts: [{ index: 0, verdict: 'dismiss', note: null }],
+};
+
+describe('ReviewActions on a review with nothing to fix', () => {
+  it('approves by default and offers Approve and merge from the chevron', async () => {
+    const view = renderActions(OPTIONAL);
+    expect(view.getByRole('button', { name: 'Approve changes' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'More ways to fix' })).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'More ways to approve' }));
+    const items = await screen.findAllByRole('menuitemradio');
+    expect(items.map((item) => [item.textContent, item.getAttribute('aria-checked')])).toEqual([
+      ['Approve changes', 'true'],
+      ['Approve and merge', 'false'],
+    ]);
+  });
+
+  it('approves and asks to merge once ready when you pick Approve and merge', async () => {
+    const view = renderActions(OPTIONAL);
+    await pickFixChoice('Approve and merge', 'More ways to approve');
+    const button = view.getByRole('button', { name: 'Approve and merge' });
+    expect(await findTooltipText(button.parentElement as HTMLElement)).toBe(
+      'Opens the pull request and merges it once CI is green, nothing conflicts and no comment is unread'
+    );
+    fireEvent.click(button);
+    await waitFor(() => expect(listSentCommands()).toEqual([{ ...APPROVE_ANSWER, thenMerge: true }]));
+  });
+
+  it('shows no chevron on an engine that cannot merge once ready', () => {
+    const engine = resolveEngineInfo('1.0.0');
+    const view = renderActions(OPTIONAL, {
+      ...engine,
+      features: engine.features.filter((feature) => feature !== 'review.approve_and_merge'),
+    });
+    expect(view.getByRole('button', { name: 'Approve changes' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'More ways to approve' })).toBeNull();
   });
 });

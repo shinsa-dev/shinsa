@@ -13,33 +13,37 @@ import { useBusy } from '@/hooks/use-busy.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { useEngineFeature } from '@/lib/connection/socket.ts';
 import {
+  canMergeAhead,
   describeApproveHint,
+  type FollowUp,
+  type FollowUpChoice,
   isFixingAction,
+  listFollowUpChoices,
   isVerdictActionBlocked,
+  resolveChosenFollowUp,
+  resolveFollowUp,
+  resolveFollowUpFlags,
   resolveVerdictAction,
   resolveVerdictAnswer,
   resolveVerdictDraft,
-  type VerdictDraft,
 } from '@/lib/overview/verdicts.ts';
 import { describeMergeBlock, resolveMergeLabel } from '@/lib/review/merge-steps.ts';
 import { replyToGate, resolveApprovalReply } from '@/lib/tasks/gates.ts';
 
-const FIX_CHOICE = { fix: 'fix', approve: 'approve' } as const;
-
 const SPLIT_PART = 'not-disabled:active:before:inset-0 not-disabled:data-[pressed]:before:inset-0';
 
-function FixChoiceMenu({
-  task,
-  verdicts,
-  thenApprove,
+function FollowUpMenu({
+  choices,
+  followUp,
+  fixing,
   disabled,
   choose,
 }: {
-  task: Task;
-  verdicts: VerdictDraft;
-  thenApprove: boolean;
+  choices: FollowUpChoice[];
+  followUp: FollowUp;
+  fixing: boolean;
   disabled: boolean;
-  choose: (thenApprove: boolean) => void;
+  choose: (followUp: FollowUp) => void;
 }) {
   return (
     <DropdownMenu>
@@ -49,22 +53,21 @@ function FixChoiceMenu({
           <Button
             size='icon-sm'
             icon='IconChevronDownMedium'
-            aria-label='More ways to fix'
+            aria-label={fixing ? 'More ways to fix' : 'More ways to approve'}
             className={cn(SPLIT_PART, 'rounded-l-none data-popup-open:before:bg-primary/80')}
           />
         }
       />
       <DropdownMenuContent align='end' className='min-w-56'>
         <DropdownMenuRadioGroup
-          value={thenApprove ? FIX_CHOICE.approve : FIX_CHOICE.fix}
-          onValueChange={(value) => choose(value === FIX_CHOICE.approve)}
+          value={followUp}
+          onValueChange={(value) => choose(resolveChosenFollowUp(choices, value))}
         >
-          <DropdownMenuRadioItem value={FIX_CHOICE.fix} closeOnClick>
-            {resolveVerdictAction(task.findings, verdicts).label}
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value={FIX_CHOICE.approve} closeOnClick>
-            {resolveVerdictAction(task.findings, verdicts, true).label}
-          </DropdownMenuRadioItem>
+          {choices.map((choice) => (
+            <DropdownMenuRadioItem key={choice.value} value={choice.value} closeOnClick>
+              {choice.label}
+            </DropdownMenuRadioItem>
+          ))}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -75,6 +78,7 @@ export function ReviewActions({ state, task, gate }: { state: ShinsaState; task:
   const { busy, run } = useBusy<'merge' | 'decide'>();
   const draft = useReviewDraft();
   const supportsApproveAfterFix = useEngineFeature('review.approve_after_fix', task.id);
+  const supportsApproveAndMerge = useEngineFeature('review.approve_and_merge', task.id);
   if (gate.type === 'merge') {
     const blocked = describeMergeBlock(task);
     const button = (
@@ -97,9 +101,15 @@ export function ReviewActions({ state, task, gate }: { state: ShinsaState; task:
   }
   const commented = draft.comments.length > 0;
   const verdicts = resolveVerdictDraft(task.findings, draft.verdicts);
-  const thenApprove = supportsApproveAfterFix && draft.thenApprove;
-  const action = resolveVerdictAction(task.findings, verdicts, thenApprove);
-  const split = supportsApproveAfterFix && isFixingAction(action);
+  const choices = listFollowUpChoices(task.findings, verdicts, {
+    approveAfterFix: supportsApproveAfterFix,
+    approveAndMerge: supportsApproveAndMerge && canMergeAhead(state, task),
+  });
+  const chosen = resolveFollowUp(draft.thenApprove, draft.thenMerge);
+  const followUp = choices.some((choice) => choice.value === chosen) ? chosen : 'none';
+  const { thenApprove, thenMerge } = resolveFollowUpFlags(followUp);
+  const action = resolveVerdictAction(task.findings, verdicts, thenApprove, thenMerge);
+  const split = choices.length > 0;
   const button = (
     <Hint label={describeApproveHint(commented, action)}>
       <span className='flex w-fit'>
@@ -132,12 +142,16 @@ export function ReviewActions({ state, task, gate }: { state: ShinsaState; task:
     <div className='flex w-fit items-stretch'>
       {button}
       <span aria-hidden className='w-px bg-primary-foreground/25' />
-      <FixChoiceMenu
-        task={task}
-        verdicts={verdicts}
-        thenApprove={thenApprove}
+      <FollowUpMenu
+        choices={choices}
+        followUp={followUp}
+        fixing={isFixingAction(action)}
         disabled={busy === 'decide'}
-        choose={draft.chooseThenApprove}
+        choose={(next) => {
+          const flags = resolveFollowUpFlags(next);
+          draft.chooseThenApprove(flags.thenApprove);
+          draft.chooseThenMerge(flags.thenMerge);
+        }}
       />
     </div>
   );

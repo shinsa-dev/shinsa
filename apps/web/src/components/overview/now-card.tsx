@@ -46,9 +46,15 @@ import { InsetNote } from '@/components/text/inset-note.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
+import { useEngineCommand } from '@/lib/connection/socket.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { type AnsweredIteration, selectShownReply, selectWorkingRequest } from '@/lib/overview/exchanges.ts';
+import {
+  describeMergeAhead,
+  KEEP_MERGE_GATE_LABEL,
+  requestKeepMergeGate,
+} from '@/lib/overview/merge-ahead.ts';
 import {
   describeAgentReviewFact,
   describeFollowUpNote,
@@ -392,6 +398,23 @@ function FactDot() {
   return <span className='text-fg-2'>·</span>;
 }
 
+function MergeAheadNote({ task }: { task: Task }) {
+  const { busy, run } = useBusy<'keep'>();
+  const supported = useEngineCommand('task.keep_merge_gate', task.id);
+  const note = describeMergeAhead(task);
+  if (!note) return null;
+  return (
+    <p className='flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-3'>
+      <span>{note}</span>
+      {supported && (
+        <QuietLink busy={busy === 'keep'} onClick={() => void run('keep', () => requestKeepMergeGate(task))}>
+          {KEEP_MERGE_GATE_LABEL}
+        </QuietLink>
+      )}
+    </p>
+  );
+}
+
 function ReviewCard({
   state,
   task,
@@ -431,6 +454,7 @@ function ReviewCard({
       )}
       {checks && <FoldedChecks taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
+      {merge && <MergeAheadNote task={task} />}
       {merge && <MergeStepsBlock task={task} when='pre_merge' waits={listMergeWaits(state, task)} />}
     </NowFrame>
   );
@@ -494,6 +518,7 @@ function WorkCard({
         </p>
       )}
       {request && <WorkingRequest iteration={request} />}
+      <MergeAheadNote task={task} />
       {current?.planned && current.detail && !checks && !request && (
         <Markdown text={current.detail} className='text-xs text-fg-3' />
       )}

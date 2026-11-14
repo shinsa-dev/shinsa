@@ -3,8 +3,12 @@ import {
   type FindingVerdict,
   type FindingVerdictKind,
   type Gate,
+  hasStep,
+  isBundleFollower,
   type ReviewEscalation,
   type ReviewFinding,
+  type ShinsaState,
+  type Task,
 } from '@shinsa/core';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
 import { SEVERITY_VERDICT } from '@/lib/review/findings.ts';
@@ -18,7 +22,14 @@ export const VERDICT_ITEMS: { value: FindingVerdictKind; label: string }[] = [
 ];
 
 export interface VerdictAction {
-  reply: Extract<GateReply, 'approveChanges' | 'fixFindings' | 'fixFindingsAndApprove'>;
+  reply: Extract<
+    GateReply,
+    | 'approveChanges'
+    | 'approveAndMerge'
+    | 'fixFindings'
+    | 'fixFindingsAndApprove'
+    | 'fixFindingsApproveAndMerge'
+  >;
   label: string;
 }
 
@@ -48,20 +59,71 @@ function countFixes(findings: ReviewFinding[], draft: VerdictDraft) {
 export function resolveVerdictAction(
   findings: ReviewFinding[],
   draft: VerdictDraft,
-  thenApprove = false
+  thenApprove = false,
+  thenMerge = false
 ): VerdictAction {
   const fixes = countFixes(findings, draft);
   if (fixes === 0) {
-    return { reply: 'approveChanges', label: 'Approve changes' };
+    return thenMerge
+      ? { reply: 'approveAndMerge', label: 'Approve and merge' }
+      : { reply: 'approveChanges', label: 'Approve changes' };
   }
   const label = `Fix ${describeCount(fixes, 'finding', 'findings')}`;
+  if (thenMerge) return { reply: 'fixFindingsApproveAndMerge', label: `${label}, approve and merge` };
   return thenApprove
     ? { reply: 'fixFindingsAndApprove', label: `${label} and approve` }
     : { reply: 'fixFindings', label };
 }
 
 export function isFixingAction(action: VerdictAction) {
-  return action.reply !== 'approveChanges';
+  return action.reply !== 'approveChanges' && action.reply !== 'approveAndMerge';
+}
+
+export type FollowUp = 'none' | 'approve' | 'merge';
+
+export interface FollowUpChoice {
+  value: FollowUp;
+  label: string;
+}
+
+export interface FollowUpSupport {
+  approveAfterFix: boolean;
+  approveAndMerge: boolean;
+}
+
+export function canMergeAhead(state: Pick<ShinsaState, 'tasks'>, task: Task) {
+  return hasStep(task, 'merge') && !isBundleFollower(state, task);
+}
+
+export function resolveFollowUp(thenApprove: boolean, thenMerge: boolean): FollowUp {
+  if (thenMerge) return 'merge';
+  return thenApprove ? 'approve' : 'none';
+}
+
+export function resolveFollowUpFlags(followUp: FollowUp) {
+  return { thenApprove: followUp !== 'none', thenMerge: followUp === 'merge' };
+}
+
+export function resolveChosenFollowUp(choices: FollowUpChoice[], value: unknown): FollowUp {
+  return choices.find((choice) => choice.value === value)?.value ?? 'none';
+}
+
+export function listFollowUpChoices(
+  findings: ReviewFinding[],
+  draft: VerdictDraft,
+  support: FollowUpSupport
+): FollowUpChoice[] {
+  const fixing = countFixes(findings, draft) > 0;
+  const values: FollowUp[] = [
+    'none',
+    ...(fixing && support.approveAfterFix ? (['approve'] as const) : []),
+    ...(support.approveAndMerge && (!fixing || support.approveAfterFix) ? (['merge'] as const) : []),
+  ];
+  if (values.length < 2) return [];
+  return values.map((value) => {
+    const { thenApprove, thenMerge } = resolveFollowUpFlags(value);
+    return { value, label: resolveVerdictAction(findings, draft, thenApprove, thenMerge).label };
+  });
 }
 
 export function isVerdictActionBlocked(commented: boolean, action: VerdictAction) {
@@ -100,6 +162,16 @@ export function describeReviewTitle(gate: Gate) {
 }
 
 export function describeApproveHint(commented: boolean, action: VerdictAction) {
+  if (action.reply === 'fixFindingsApproveAndMerge') {
+    return commented
+      ? 'Sends the findings you kept and your line comments, approves once the fix passes, then merges once the pull request is ready'
+      : 'Sends the findings you kept, approves once the fix passes, then merges once the pull request is ready';
+  }
+  if (action.reply === 'approveAndMerge') {
+    return commented
+      ? 'Send your line comments to the agent or remove them first'
+      : 'Opens the pull request and merges it once CI is green, nothing conflicts and no comment is unread';
+  }
   if (action.reply === 'fixFindingsAndApprove') {
     return commented
       ? 'Sends the findings you kept and your line comments, then approves once checks and the agent review pass'

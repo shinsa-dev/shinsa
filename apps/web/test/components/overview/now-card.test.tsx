@@ -1244,3 +1244,39 @@ describe('NowCard about an account', () => {
     });
   });
 });
+
+describe('NowCard after Approve and merge', () => {
+  beforeEach(() => {
+    startFakeServer();
+    toast.dismiss();
+  });
+
+  afterEach(() => {
+    stopFakeServer();
+  });
+
+  it('says a shipping task merges once ready, and keeps the merge gate when you ask', async () => {
+    const task = createTask({ id: 'task-1', stage: 'shipping', mergeAhead: true });
+    const { view } = renderOverview(createShinsaState({ tasks: [task] }), task, undefined);
+    expect(
+      view.getByText(
+        'You chose to merge once ready: it merges by itself once CI is green, nothing conflicts and no comment is unread.'
+      )
+    ).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Keep the merge gate' }));
+    await waitFor(() =>
+      expect(listSentCommands()).toEqual([{ type: 'task.keep_merge_gate', taskId: 'task-1' }])
+    );
+  });
+
+  it('shows the note on the merge gate it waits at, and nothing for a task that kept its gate', () => {
+    const waiting = createTask({ id: 'task-1', stage: 'awaiting_merge', mergeAhead: true });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'merge' });
+    const first = renderOverview(createShinsaState({ tasks: [waiting], gates: [gate] }), waiting, gate);
+    expect(first.view.getByRole('button', { name: 'Keep the merge gate' })).toBeTruthy();
+    first.view.unmount();
+    const kept = createTask({ id: 'task-2', stage: 'shipping' });
+    const second = renderOverview(createShinsaState({ tasks: [kept] }), kept, undefined);
+    expect(second.view.queryByRole('button', { name: 'Keep the merge gate' })).toBeNull();
+  });
+});

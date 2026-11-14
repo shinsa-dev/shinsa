@@ -43,6 +43,11 @@ const GATE_REPLY = {
   requestChanges: { decision: 'revise', done: 'Sent back to the agent.' },
   fixFindings: { decision: 'revise', done: 'Sent. The agent works on what you kept.' },
   fixFindingsAndApprove: { decision: 'revise', done: 'Sent. Approving once the fix passes.' },
+  fixFindingsApproveAndMerge: {
+    decision: 'revise',
+    done: 'Sent. Merging once the fix passes.',
+  },
+  approveAndMerge: { decision: 'approve', done: 'Approved. Merging once ready.' },
   merge: { decision: 'approve', done: 'Approved. Merging the pull request.' },
   mergeEdits: {
     decision: 'approve',
@@ -63,6 +68,16 @@ const GATE_REPLY = {
 
 export type GateReply = keyof typeof GATE_REPLY;
 
+const THEN_APPROVE_REPLIES: ReadonlySet<GateReply> = new Set<GateReply>([
+  'fixFindingsAndApprove',
+  'fixFindingsApproveAndMerge',
+]);
+
+const THEN_MERGE_REPLIES: ReadonlySet<GateReply> = new Set<GateReply>([
+  'approveAndMerge',
+  'fixFindingsApproveAndMerge',
+]);
+
 export type GateReplier = (
   reply: GateReply,
   response?: string | null,
@@ -76,9 +91,10 @@ export function replyToGate(
   extras: AnswerExtras = {}
 ) {
   const { decision, done } = GATE_REPLY[reply];
-  const thenApprove = reply === 'fixFindingsAndApprove' ? { thenApprove: true } : {};
+  const thenApprove = THEN_APPROVE_REPLIES.has(reply) ? { thenApprove: true } : {};
+  const thenMerge = THEN_MERGE_REPLIES.has(reply) ? { thenMerge: true } : {};
   return sendCommandWithToast(
-    { type: 'gate.answer', gateId: gate.id, decision, response, ...extras, ...thenApprove },
+    { type: 'gate.answer', gateId: gate.id, decision, response, ...extras, ...thenApprove, ...thenMerge },
     done
   );
 }

@@ -1,20 +1,25 @@
 import { describe, expect, it } from 'bun:test';
 import type { ReviewFinding } from '@shinsa/core';
 import {
+  canMergeAhead,
   createVerdictDraft,
   describeApproveHint,
   describeEscalationBody,
   describeReviewTitle,
   isFixingAction,
   isVerdictActionBlocked,
+  listFollowUpChoices,
   listVerdicts,
+  resolveChosenFollowUp,
+  resolveFollowUp,
+  resolveFollowUpFlags,
   resolveVerdict,
   resolveVerdictAction,
   resolveVerdictAnswer,
   resolveVerdictDraft,
   VERDICT_ITEMS,
 } from '@/lib/overview/verdicts.ts';
-import { createGate } from '../../support/state.ts';
+import { createGate, createShinsaState, createTask } from '../../support/state.ts';
 
 const FINDINGS: ReviewFinding[] = [
   { severity: 'blocking', file: 'a.ts', line: 1, message: 'Off by one.' },
@@ -145,5 +150,81 @@ describe('finding verdicts', () => {
     expect(describeEscalationBody(rounds)).toBe(
       'The reviewer still had findings after 2 fix rounds. Decide on each one: keep the ones to fix, dismiss the rest.'
     );
+  });
+});
+
+describe('approving and merging once ready', () => {
+  const BOTH = { approveAfterFix: true, approveAndMerge: true };
+
+  it('names the merge once ready choices, after a fix or at once', () => {
+    const merge = resolveVerdictAction(FINDINGS, {}, false, true);
+    const fixMerge = resolveVerdictAction(FINDINGS, { 0: 'fix' }, true, true);
+    expect(merge).toEqual({ reply: 'approveAndMerge', label: 'Approve and merge' });
+    expect(fixMerge).toEqual({
+      reply: 'fixFindingsApproveAndMerge',
+      label: 'Fix 1 finding, approve and merge',
+    });
+    expect([isFixingAction(merge), isFixingAction(fixMerge)]).toEqual([false, true]);
+    expect(isVerdictActionBlocked(true, merge)).toBe(true);
+    expect(describeApproveHint(false, merge)).toBe(
+      'Opens the pull request and merges it once CI is green, nothing conflicts and no comment is unread'
+    );
+    expect(describeApproveHint(true, merge)).toBe(
+      'Send your line comments to the agent or remove them first'
+    );
+    expect(describeApproveHint(false, fixMerge)).toBe(
+      'Sends the findings you kept, approves once the fix passes, then merges once the pull request is ready'
+    );
+    expect(describeApproveHint(true, fixMerge)).toBe(
+      'Sends the findings you kept and your line comments, approves once the fix passes, then merges once the pull request is ready'
+    );
+  });
+
+  it('lists the choices the engine supports, and none when only one is left', () => {
+    const labels = (draft: Record<number, 'fix' | 'dismiss'>, support: typeof BOTH) =>
+      listFollowUpChoices(FINDINGS, draft, support).map((choice) => choice.label);
+    expect(labels({ 0: 'fix' }, BOTH)).toEqual([
+      'Fix 1 finding',
+      'Fix 1 finding and approve',
+      'Fix 1 finding, approve and merge',
+    ]);
+    expect(labels({}, BOTH)).toEqual(['Approve changes', 'Approve and merge']);
+    expect(labels({ 0: 'fix' }, { approveAfterFix: false, approveAndMerge: true })).toEqual([]);
+    expect(labels({}, { approveAfterFix: false, approveAndMerge: true })).toEqual([
+      'Approve changes',
+      'Approve and merge',
+    ]);
+    expect(labels({ 0: 'fix' }, { approveAfterFix: true, approveAndMerge: false })).toEqual([
+      'Fix 1 finding',
+      'Fix 1 finding and approve',
+    ]);
+    expect(labels({}, { approveAfterFix: true, approveAndMerge: false })).toEqual([]);
+  });
+
+  it('reads the draft as one follow-up and back, and keeps only a choice on offer', () => {
+    expect([
+      resolveFollowUp(false, false),
+      resolveFollowUp(true, false),
+      resolveFollowUp(true, true),
+    ]).toEqual(['none', 'approve', 'merge']);
+    expect(resolveFollowUpFlags('merge')).toEqual({ thenApprove: true, thenMerge: true });
+    expect(resolveFollowUpFlags('none')).toEqual({ thenApprove: false, thenMerge: false });
+    const choices = listFollowUpChoices(FINDINGS, {}, BOTH);
+    expect([resolveChosenFollowUp(choices, 'merge'), resolveChosenFollowUp(choices, 'approve')]).toEqual([
+      'merge',
+      'none',
+    ]);
+  });
+
+  it('merges once ready only a task that merges and does not follow a bundle lead', () => {
+    const lead = createTask({ id: 'lead' });
+    const follower = createTask({ id: 'follower', stacksOn: ['lead'] });
+    const question = createTask({ id: 'question', mode: 'ask' });
+    const state = createShinsaState({ tasks: [lead, follower, question] });
+    expect([lead, follower, question].map((task) => canMergeAhead(state, task))).toEqual([
+      true,
+      false,
+      false,
+    ]);
   });
 });
