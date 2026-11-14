@@ -37,6 +37,28 @@ describe('the Autopilot judge', () => {
     });
   });
 
+  test('offers cancel and keeps it with the guidance a retry would carry', async () => {
+    const { ask, calls } = createAsk({ verdict: 'cancel', reason: 'The branch is gone.', reply: '' });
+    expect(await Effect.runPromise(createAutopilotJudge(ask)('s', 'p'))).toEqual({
+      verdict: 'cancel',
+      reason: 'The branch is gone.',
+      reply: '',
+    });
+    expect(calls[0]?.schema).toEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          verdict: { type: 'string', enum: ['act', 'forward', 'cancel'] },
+        }),
+      })
+    );
+    const guided = createAsk({ verdict: 'act', reason: 'A flaky test.', reply: 'Rerun the e2e suite once.' });
+    expect(await Effect.runPromise(createAutopilotJudge(guided.ask)('s', 'p'))).toEqual({
+      verdict: 'act',
+      reason: 'A flaky test.',
+      reply: 'Rerun the e2e suite once.',
+    });
+  });
+
   test('gives nothing for no answer or one it cannot read', async () => {
     expect(await Effect.runPromise(createAutopilotJudge(createAsk(null).ask)('s', 'p'))).toBeNull();
     const odd = createAsk({ verdict: 'maybe', reason: 'x' });
