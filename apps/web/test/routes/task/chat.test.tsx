@@ -350,9 +350,9 @@ describe('ChatTab', () => {
     ];
     const view = renderChat(serializeState(createShinsaState({ tasks: [task], runs })), task);
     expect(view.queryByText('Agent')).toBeNull();
-    expect(view.getByRole('button', { name: /^Reviewer/ }).textContent?.trim()).toBe(
-      'Reviewer · Reviewed the change'
-    );
+    expect(view.queryByRole('button', { name: /^Reviewer/ })).toBeNull();
+    const header = view.container.querySelector('#run-review [data-speaker-header]') as HTMLElement;
+    expect(header.textContent?.trim()).toBe('ReviewerReviewed the change');
   });
 
   it('shows a run headline the role header cuts short in full in its tooltip', async () => {
@@ -370,7 +370,7 @@ describe('ChatTab', () => {
         createShinsaState({ tasks: [task], runs: [finishedRun({ role: 'reviewer' })] }),
         task
       );
-      const header = view.container.querySelector('#run-run-1 [data-chat-line]') as HTMLElement;
+      const header = view.container.querySelector('#run-run-1 [data-speaker-header]') as HTMLElement;
       const headline = header.querySelector('[data-slot="truncate"]') as HTMLElement;
       expect(headline.textContent).not.toBe('');
       expect(await findTooltipText(headline)).toBe(headline.textContent ?? '');
