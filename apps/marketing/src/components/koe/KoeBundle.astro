@@ -12,14 +12,22 @@ const said = koeBundle.said.map((part) => ('text' in part ? part.text : `[${part
       {
         koeBundle.files.map((file) => (
           <figure class='flex flex-col gap-2'>
-            <img
-              src={file.src}
-              alt={file.alt}
-              width={file.width}
-              height={file.height}
-              loading='lazy'
-              class='h-auto w-full rounded-lg ring-1 ring-bg-3'
-            />
+            <picture>
+              <source
+                srcset={file.light.src}
+                width={file.light.width}
+                height={file.light.height}
+                media='(prefers-color-scheme: light)'
+              />
+              <img
+                src={file.src}
+                alt={file.alt}
+                width={file.width}
+                height={file.height}
+                loading='lazy'
+                class='h-auto w-full rounded-lg ring-1 ring-bg-3'
+              />
+            </picture>
             <figcaption class='text-fg-2 text-xs'>{file.caption}</figcaption>
           </figure>
         ))
