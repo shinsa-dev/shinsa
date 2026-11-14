@@ -19,9 +19,11 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { SelectedMark } from '@/components/status/check-mark.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { DepthMark, resolveDepthIndent } from '@/components/tasks/row.tsx';
+import { useAppShortcuts } from '@/hooks/use-app-shortcuts.ts';
 import { useCommandHotkey, useCommandKey } from '@/hooks/use-command-key.ts';
 import { useDelay } from '@/hooks/use-delay.ts';
 import { useChangelogAvailable } from '@/lib/changelog.ts';
+import { isMacPlatform } from '@/lib/code/keys.ts';
 import { listAccountSections } from '@/lib/command/accounts.ts';
 import { listExtensionSections } from '@/lib/command/extensions.ts';
 import { listGlobalSections } from '@/lib/command/global.ts';
@@ -63,6 +65,7 @@ import {
 } from '@/lib/command/registry.ts';
 import { listScheduleSections } from '@/lib/command/schedules.ts';
 import { listServiceSections } from '@/lib/command/services.ts';
+import { type AppShortcutTarget, describeShortcut } from '@/lib/command/shortcuts.ts';
 import { resolveTaskPage } from '@/lib/command/task.ts';
 import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -104,6 +107,11 @@ function Trailing({ command }: { command: MenuCommand }) {
   return null;
 }
 
+function ShortcutKeys({ target }: { target: AppShortcutTarget }) {
+  const mac = React.useMemo(() => isMacPlatform(navigator.platform), []);
+  return <Status>{describeShortcut(target, mac)}</Status>;
+}
+
 function CommandRow({
   command,
   state,
@@ -128,6 +136,7 @@ function CommandRow({
       <MatchedLabel text={command.label} query={query} />
       {hint && <CommandHint className='min-w-12 shrink-[4]'>{hint}</CommandHint>}
       {command.trailing && <Status>{command.trailing}</Status>}
+      {command.shortcut && !command.current && <ShortcutKeys target={command.shortcut} />}
       <Trailing command={command} />
     </CommandItem>
   );
@@ -696,6 +705,7 @@ export function CommandMenu() {
   const currentTaskId = useRouteTaskId(state);
 
   useCommandHotkey();
+  useAppShortcuts();
 
   const openRef = React.useRef(open);
   openRef.current = open;

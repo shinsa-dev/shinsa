@@ -133,7 +133,7 @@ describe('typing in the root', () => {
     renderMenu();
     await pressCommandK();
     await type('all tasks');
-    expect(optionNames()).toEqual(['All tasks', 'Create task:all tasks', 'Edit it before starting']);
+    expect(optionNames()).toEqual(['All tasksG T', 'Create task:all tasks', 'Edit it before starting']);
   });
 
   it('finds a task by a word from its title', async () => {
@@ -615,5 +615,58 @@ describe('over a task on Home or All tasks', () => {
     await pressCommandK();
     await pressCommandK();
     expect(input().getAttribute('placeholder')).toBe('Act on this task…');
+  });
+});
+
+describe('app-wide shortcuts', () => {
+  function path() {
+    return location.pathname;
+  }
+
+  it('opens the terminal with Ctrl J and Settings with Ctrl , off a Mac, from anywhere, closing the menu', async () => {
+    navigate('/');
+    renderMenu();
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true });
+    expect(path()).toStartWith('/terminal');
+    await pressCommandK();
+    fireEvent.keyDown(input(), { key: ',', ctrlKey: true });
+    expect(path()).toBe('/settings');
+    await waitFor(() => expect(isMenuOpen()).toBe(false));
+    navigate('/');
+  });
+
+  it('goes Home, to All tasks and to Settings with G then H, T or S, but not while typing', () => {
+    navigate('/settings');
+    renderMenu();
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'h' });
+    expect(path()).toBe('/');
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 't' });
+    expect(path()).toBe('/tasks');
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 's' });
+    expect(path()).toBe('/settings');
+    const notes = screen.getByLabelText('Notes');
+    fireEvent.keyDown(notes, { key: 'g' });
+    fireEvent.keyDown(notes, { key: 'h' });
+    expect(path()).toBe('/settings');
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'x' });
+    fireEvent.keyDown(window, { key: 'h' });
+    expect(path()).toBe('/settings');
+    navigate('/');
+  });
+
+  it('shows each shortcut beside its command, but not on the page you are on', async () => {
+    navigate('/tasks');
+    renderMenu();
+    await pressCommandK();
+    const row = (name: string) => screen.getByRole('option', { name: new RegExp(`^${name}`) }).textContent;
+    expect(row('Home')).toBe('HomeG H');
+    expect(row('Terminal')).toBe('TerminalCtrl+J');
+    expect(row('Settings')).toBe('SettingsCtrl+,');
+    expect(row('All tasks')).toBe('All tasks');
+    navigate('/');
   });
 });

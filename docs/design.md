@@ -846,6 +846,11 @@ Only these, and they win over anything below:
       current step, Mark as done, Cancel task behind a confirm page), then Next and Previous
       task that needs you (`resolveQueueStep`). Request changes and Fix N findings carry the review's
       draft line comments and Approve the changes is disabled while there are any, as on the page.
+    - **Over a task on Home or All tasks**, ⌘K opens on that task's own page of actions, the one the task page
+      shows (its decision, Open with Overview, Code and Chat, then This task), with its title as the crumb;
+      Backspace goes back to the whole menu. The task is the row under the pointer when ⌘K is pressed
+      (`[data-task]`, read once by `lib/command/hover.ts`, and kept while the menu is open); keyboard focus never
+      scopes it, and anywhere else it opens on the root.
     - **On Home** it is about getting to tasks: Needs you lists the tasks waiting on a decision
       (the briefing's Now task first, then queue order, up to eight), each row opening its task;
       their decisions stay out of the root and match only while typing. **Settings** offers Jump to (each section,
@@ -856,7 +861,8 @@ Only these, and they win over anything below:
       (`?status=&q=`), and an active status shows as a removable button beside the search.
     - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, as the rail's and the
       More sheet's New task do, and
-      Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings), Focus (Switch
+      Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings, each with its shortcut
+      at the right, hidden on the page you are on), Focus (Switch
       focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
       typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens
       Settings → Agent usage → Accounts, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
@@ -895,6 +901,11 @@ Only these, and they win over anything below:
       value into view, so the list does it). Closing resets the menu to the root. Escape restores
       focus to where it was; a command that runs declines the restore so what it focuses keeps
       it.
+    - **App-wide moves have keys** (`APP_SHORTCUTS` in `lib/command/shortcuts.ts`, one listener in
+      `hooks/use-app-shortcuts.ts`): ⌘J (Ctrl J) opens the Terminal page and ⌘, (Ctrl ,) Settings, from anywhere,
+      inputs included; G then H, T or S goes to Home, All tasks or Settings, within 1.5 seconds and never while you
+      type in a field. Each closes ⌘K if it is open. The Mac app's menu keeps its own ⌘, for Settings, which does
+      the same. These are the only global keys besides ⌘K; anything else belongs in ⌘K.
 
 15. **Consistency comes from shared pieces, not from care at the call site.** Everything below
     has one owner; a hand-built copy is a bug. Measured in the browser at 900 and 1280, both
@@ -2447,7 +2458,7 @@ Only these, and they win over anything below:
     - **Keys.** While the Code tab is open, and only then, it binds ⌘P (Go to file), ⇧⌘F (Search in files), ⌘F
       (find in the open file) and ⌘G (go to line), Ctrl elsewhere (`hooks/use-code-keys.ts`,
       `lib/code/keys.ts`). Each is also a ⌘K command with its key at the right, so the menu stays the one complete
-      place. This is an exception to ⌘K being the only shortcut, as are the Review tab's J and K (34) and the Terminal
+      place. This is an exception to ⌘K and the app-wide moves (14) being the only shortcuts, as are the Review tab's J and K (34) and the Terminal
       page's ⌘T and ⌘W (37), and `bun lint:conventions` rejects a global key listener anywhere else. Inside the editor, CodeMirror's own keymap gives VS Code's editing keys
       (`lib/code/editor/commands.ts`, `EDITOR_COMMANDS`, each one CodeMirror command; Ctrl for ⌘ off the Mac where
       VS Code does): ⌘S save now, ⌘Z undo, ⇧⌘Z and ⌘Y redo, ⌘F find, ⌥⌘F (Ctrl H) replace, ⌃G and ⌘G go to line,
@@ -3241,8 +3252,9 @@ instead of `CARD`) and `formatAge(…)` or `formatDuration(…)` rendered in JSX
 highlight colour (`transition-colors`, `transition-shadow`, or a bare `transition` or a colour in
 `transition-[…]` on a line with a `hover:` or `active:`; Motion); the `/ui` catalog pages are checked for raw corners
 and those transitions only. Besides that it bans comments (outside `packages/ui`), enforces the verb catalog and rejects a
-global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-code-keys.ts` and
-`hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (32, 34, 37); a terminal's keys go through xterm.js's own
+global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-app-shortcuts.ts`,
+`hooks/use-code-keys.ts`, `hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (14, 32, 34, 37; `SHORTCUT_FILES`
+in `scripts/lint-shortcut.ts`); a terminal's keys go through xterm.js's own
 handler on its element (37). It also rejects an ad hoc selection (`select-text`, `select-all`,
 `select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39). It
 rejects a toast string in the app longer than 40 characters (42): the text passed to `toast.*`, `confirmDone`,

@@ -163,6 +163,7 @@ function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] 
     {
       kind: 'go',
       id: 'go.home',
+      shortcut: 'home',
       label: 'Home',
       icon: 'IconHomeRoundDoor',
       current: route.name === 'home',
@@ -172,6 +173,7 @@ function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] 
     {
       kind: 'go',
       id: 'go.tasks',
+      shortcut: 'tasks',
       label: 'All tasks',
       icon: 'IconListBullets',
       current: route.name === 'tasks',
@@ -181,15 +183,17 @@ function listGoCommands(route: Route, commands: ReadonlySet<string>): Command[] 
     {
       kind: 'go',
       id: 'go.terminal',
+      shortcut: 'terminal',
       label: 'Terminal',
       icon: 'IconConsole',
       current: route.name === 'terminal',
-      keywords: ['shell', 'console', 'command line', 'dev server'],
+      keywords: ['shell', 'console', 'command line', 'dev server', 'open the terminal'],
       to: resolveTerminalEntry(),
     },
     {
       kind: 'go',
       id: 'go.settings',
+      shortcut: 'settings',
       label: 'Settings',
       icon: 'IconSettingsGear4',
       current: route.name === 'settings',

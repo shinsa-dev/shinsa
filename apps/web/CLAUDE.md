@@ -439,7 +439,9 @@ print the whole document.
   hooks private to them; anything that computes (a label, an order, a section list, a command list) is a `.ts`
   function in `lib/` with a test. A component used by one route still lives in `components/<domain>/` when the
   route file would otherwise grow past a screenful.
-- **⌘K is the only shortcut, but for the Code tab, the Review tab and the Terminal page.** Pages add commands with `useRegisterCommands(sections)` while
+- **⌘K is the only shortcut, but for the app-wide moves and the Code tab, the Review tab and the Terminal page.** The
+  moves are one table, `APP_SHORTCUTS` (`lib/command/shortcuts.ts`: ⌘J the terminal, ⌘, Settings, G then H, T or S),
+  read by the one listener `hooks/use-app-shortcuts.ts`; a `go` command names its move in `shortcut` to show the keys. Pages add commands with `useRegisterCommands(sections)` while
   mounted (`docs/design.md`, 14). A command or choice option is disabled only with its reason (`disabled: '…'`, a
   string shown in place of the hint); there is no boolean. While the Code tab is open it binds ⌘P, ⇧⌘F, ⌘F and ⌘G (`hooks/use-code-keys.ts`),
   while the Review tab is open J and K (`hooks/use-review-keys.ts`, not while you type), and while the Terminal page is open ⌘T and ⌘W (`hooks/use-terminal-keys.ts`), each also a ⌘K command or a button; `bun lint:conventions` rejects a global key listener anywhere else.

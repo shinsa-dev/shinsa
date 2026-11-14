@@ -1,5 +1,6 @@
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { useEffect, useId, useRef, useSyncExternalStore } from 'react';
+import type { AppShortcutTarget } from '@/lib/command/shortcuts.ts';
 
 export interface ChoiceOption {
   value: string;
@@ -23,6 +24,7 @@ interface CommandBase {
   disabled?: string;
   current?: boolean;
   trailing?: string;
+  shortcut?: AppShortcutTarget;
   searchOnly?: boolean;
 }
 

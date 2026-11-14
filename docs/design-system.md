@@ -67,7 +67,8 @@ These are the rules every other section applies. When a case is not covered anyw
 13. **Acting never moves you.** An action changes the thing in place; nothing jumps to another page, and a view in
     place beats a dialog. In normal use there is no loading state: data is prefetched, and a wait that could not be
     foreseen stays blank for 300ms before it shows anything. A render error stays inside the part that failed.
-14. **One keyboard shortcut.** ⌘K opens the command menu everywhere. Only three workspaces bind keys of their own,
+14. **One keyboard shortcut, and a few moves.** ⌘K opens the command menu everywhere, and the app's moves have
+    keys: ⌘J the terminal, ⌘, Settings, and G then H, T or S Home, All tasks or Settings (never while typing). Only three workspaces bind keys of their own,
     and only while open: the Code tab (⌘P, ⇧⌘F, ⌘F, ⌘G), the Review tab (J, K) and the Terminal page (⌘T, ⌘W);
     the image viewer takes Esc, ←, →, `+`, `-` and `0` while it is open, and the Mac app's menu has its own
     (⌘, ⌘N ⌘W ⌘[ ⌘] ⇧⌘H). Invent no others.
@@ -7012,7 +7013,7 @@ Example: tabbing onto a list row shows no ring; its tooltip, if any, appears imm
 
 #### One keyboard shortcut
 
-- The app binds one global key: ⌘K (Ctrl K) for the command menu. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
+- The app binds ⌘K (Ctrl K) for the command menu, and a few moves: ⌘J (Ctrl J) opens the terminal, ⌘, (Ctrl ,) Settings, and G then H, T or S goes to Home, All tasks or Settings, within 1.5 seconds and never in a text field; each shows beside its command in ⌘K. With the pointer over a task in a list, ⌘K opens on that task's actions. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
 
 Example: pressing J on the Review tab moves to the next point; pressing J elsewhere does nothing.
 
@@ -10369,9 +10370,9 @@ document.body.dataset.dragging = '';
 
 - **Matches** (syntax rule, app, `.ts` and `.tsx`): any call to `addEventListener` (bare or as a method) whose first
   argument is the string `'keydown'` or `'keyup'`.
-- **Exempt files:** the four shortcut hooks, `use-command-key.ts`, `use-code-keys.ts`, `use-review-keys.ts`,
-  `use-terminal-keys.ts`.
-- **Why:** ⌘K (Ctrl K) is the only global shortcut. The Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K,
+- **Exempt files:** the five shortcut hooks, `use-command-key.ts`, `use-app-shortcuts.ts`, `use-code-keys.ts`,
+  `use-review-keys.ts`, `use-terminal-keys.ts`.
+- **Why:** ⌘K (Ctrl K) and the app-wide moves (⌘J, ⌘, and G then H, T or S) are the only global shortcuts. The Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K,
   the Terminal page ⌘T and ⌘W, while they are open; a terminal keeps its own keys through xterm.js's handler on its
   element, and the editor uses CodeMirror's keymap.
 
