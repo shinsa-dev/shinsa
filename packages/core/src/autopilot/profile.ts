@@ -4,7 +4,7 @@ import type { FindingVerdict } from '../domain/schema.ts';
 import type { Gate, GateDecision, Task } from '../domain/types.ts';
 import type { ReviewFinding, ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { isHeldPlan, isUrgentTask, resolveAutopilotOpenedFacts } from './limits.ts';
+import { isAutopilotJudgedFailure, isHeldPlan, isUrgentTask, resolveAutopilotOpenedFacts } from './limits.ts';
 import { isAutopilotPositive } from './model/learn.ts';
 import { AUTOPILOT_HEAD_OF_KIND, type AutopilotModelGuess, type AutopilotModelHead } from './model/schema.ts';
 import {
@@ -19,6 +19,7 @@ import {
   type AutopilotFindingCounts,
   type AutopilotDecisionKind,
   type AutopilotJudgments,
+  type AutopilotKindProfile,
   type AutopilotProfile,
   type AutopilotRate,
   type AutopilotScoredKind,
@@ -26,6 +27,7 @@ import {
   type AutopilotTrack,
   type AutopilotTrackJudgment,
   type AutopilotVerdict,
+  EMPTY_AUTOPILOT_KIND_PROFILE,
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
 import {
@@ -42,6 +44,7 @@ const GATE_KIND: Partial<Record<Gate['type'], AutopilotDecisionKind>> = {
   review: 'review',
   merge: 'merge',
   proposal: 'proposal',
+  failure: 'failure',
 };
 
 const ANSWER: Record<GateDecision, AutopilotDecisionAnswer> = {
@@ -62,6 +65,7 @@ export interface DecisionDraft {
   kind: AutopilotDecisionKind;
   answer: AutopilotDecisionAnswer;
   note: string | null;
+  finding?: ReviewFinding;
 }
 
 export interface GateDecisionInput {
@@ -80,7 +84,7 @@ function clipNote(note: string | null) {
 
 export function listGateDecisionDrafts(task: Task, input: GateDecisionInput): DecisionDraft[] {
   const kind = GATE_KIND[input.gate.type];
-  if (!kind) return [];
+  if (!kind || (kind === 'failure' && !isAutopilotJudgedFailure(input.gate))) return [];
   const answered: DecisionDraft = {
     task,
     gate: input.gate,
@@ -88,13 +92,17 @@ export function listGateDecisionDrafts(task: Task, input: GateDecisionInput): De
     answer: ANSWER[input.decision],
     note: input.response,
   };
-  const findings = (input.verdicts ?? []).map((verdict): DecisionDraft => ({
-    task,
-    gate: input.gate,
-    kind: 'finding',
-    answer: VERDICT_ANSWER[verdict.verdict],
-    note: verdict.note,
-  }));
+  const findings = (input.verdicts ?? []).map((verdict): DecisionDraft => {
+    const finding = task.findings[verdict.index];
+    return {
+      task,
+      gate: input.gate,
+      kind: 'finding',
+      answer: VERDICT_ANSWER[verdict.verdict],
+      note: verdict.note,
+      ...(finding ? { finding } : {}),
+    };
+  });
   return [answered, ...findings];
 }
 
@@ -135,7 +143,7 @@ function resolveDecisionFacts(state: ShinsaState, draft: DecisionDraft, at: numb
     shape: resolveTaskShape(task),
     repoId: task.repoId,
     revisions: Math.max(0, (task.plan?.version ?? 1) - 1),
-    findings: countFindings(task.findings),
+    findings: countFindings(draft.finding ? [draft.finding] : task.findings),
     heldPlan: isHeldPlan(task),
     waitedMinutes: gate ? Math.max(0, Math.floor((at - gate.openedAt) / MINUTE_MS)) : null,
     ...opened,
@@ -279,23 +287,48 @@ export function selectAutopilotJudgments(
   const base = judgeChance('base', resolveAutopilotBaseRate(rates[head]), positive);
   return Option.some({
     positive,
+    base,
     judgments: listTrackJudgments(decision, base, positive),
     rates: { ...rates, [head]: stepRate(rates[head], positive) },
   });
 }
 
-function scoreDecision(
-  profile: Pick<AutopilotProfile, 'tracks' | 'rates'>,
-  decision: AutopilotScoredDecision
-): Pick<AutopilotProfile, 'tracks' | 'rates'> {
+type ScoredProfile = Pick<AutopilotProfile, 'tracks' | 'rates' | 'kinds'>;
+
+function scoreJudgments(
+  current: Record<AutopilotTrack, AutopilotAgreement>,
+  judgments: readonly AutopilotTrackJudgment[],
+  base: AutopilotTrackJudgment,
+  positive: boolean
+) {
+  const tracks = { ...current };
+  for (const judgment of [base, ...judgments.filter((other) => other.track !== 'base')])
+    tracks[judgment.track] = scoreTrack(tracks[judgment.track], judgment, positive, base.right);
+  return tracks;
+}
+
+function scoreKind(
+  kind: AutopilotKindProfile,
+  judgments: readonly AutopilotTrackJudgment[],
+  positive: boolean
+): AutopilotKindProfile {
+  const base = judgeChance('base', resolveAutopilotBaseRate(kind.rate), positive);
+  return {
+    tracks: scoreJudgments(kind.tracks, judgments, base, positive),
+    rate: stepRate(kind.rate, positive),
+  };
+}
+
+function scoreDecision(profile: ScoredProfile, decision: AutopilotScoredDecision): ScoredProfile {
   const judged = selectAutopilotJudgments(profile.rates, decision);
   if (Option.isNone(judged)) return profile;
-  const { positive, judgments, rates } = judged.value;
-  const baseRight = judgments[0]?.right ?? false;
-  const tracks = { ...profile.tracks };
-  for (const judgment of judgments)
-    tracks[judgment.track] = scoreTrack(tracks[judgment.track], judgment, positive, baseRight);
-  return { tracks, rates };
+  const { positive, base, judgments, rates } = judged.value;
+  const kind = profile.kinds[decision.kind] ?? EMPTY_AUTOPILOT_KIND_PROFILE;
+  return {
+    tracks: scoreJudgments(profile.tracks, judgments, base, positive),
+    rates,
+    kinds: { ...profile.kinds, [decision.kind]: scoreKind(kind, judgments, positive) },
+  };
 }
 
 export function recordAutopilotDecisions(
@@ -305,7 +338,11 @@ export function recordAutopilotDecisions(
   const current = profile ?? EMPTY_AUTOPILOT_PROFILE;
   const tallies = new Map(current.tallies.map((tally) => [tally.key, tally]));
   for (const decision of decisions) countDecision(tallies, decision);
-  const scored = decisions.reduce(scoreDecision, { tracks: current.tracks, rates: current.rates });
+  const scored = decisions.reduce(scoreDecision, {
+    tracks: current.tracks,
+    rates: current.rates,
+    kinds: current.kinds,
+  });
   const topics = decisions.reduce(countDecisionTopics, current.topics);
   const followUps = decisions.reduce(scoreFollowUp, current.followUps);
   return {
@@ -316,6 +353,7 @@ export function recordAutopilotDecisions(
     ].slice(-AUTOPILOT_PROFILE_LIMITS.words),
     tracks: scored.tracks,
     rates: scored.rates,
+    kinds: scored.kinds,
     tallies: [...tallies.values()],
     topics,
     followUps,
@@ -337,6 +375,7 @@ const KIND_NOUN: Record<AutopilotDecisionKind, string> = {
   review: 'reviews',
   merge: 'merges',
   proposal: 'proposals for your OK',
+  failure: 'failed steps',
   finding: 'review findings',
   suggestion: 'suggested tasks',
   message: 'messages to agents',

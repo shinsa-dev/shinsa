@@ -9,12 +9,13 @@ export const AUTOPILOT_HEAD_OF_KIND: Partial<Record<AutopilotDecisionKind, Autop
   review: 'gate',
   merge: 'gate',
   proposal: 'gate',
+  failure: 'gate',
   finding: 'finding',
   suggestion: 'suggestion',
 };
 
 export const AUTOPILOT_POSITIVE_ANSWERS: Record<AutopilotModelHead, readonly AutopilotDecisionAnswer[]> = {
-  gate: ['approved'],
+  gate: ['approved', 'replied'],
   finding: ['fixed'],
   suggestion: ['accepted', 'kept'],
 };

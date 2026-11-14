@@ -21,8 +21,14 @@ function writeApproveAfterFix(state: ShinsaState, taskId: string, at: number, ap
 
 function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (gate.type === 'result') return 'Closed the task';
-  if (event.autopilot && event.decision === 'revise')
-    return `Followed up for you by Autopilot: ${gate.title}`;
+  if (event.autopilot && gate.type === 'failure') {
+    const did = event.decision === 'reject' ? 'Cancelled' : 'Retried';
+    return `${did} for you by Autopilot: ${gate.title}`;
+  }
+  if (event.autopilot && event.decision === 'revise') {
+    const did = event.verdicts?.length ? 'Asked for changes' : 'Followed up';
+    return `${did} for you by Autopilot: ${gate.title}`;
+  }
   if (event.autopilot && gate.type === 'merge')
     return `Approved the merge for you by Autopilot: ${gate.title}`;
   if (event.autopilot && isAgentQuestion(gate)) return `Answered for you by Autopilot: ${gate.title}`;

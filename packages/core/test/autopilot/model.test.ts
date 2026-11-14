@@ -171,6 +171,11 @@ describe('the model', () => {
     expect(isAutopilotPositive('suggestion', decision({ kind: 'suggestion', answer: 'kept' }))).toBe(true);
   });
 
+  test('learns a retry with your guidance as a retry, and a cancel as its opposite', () => {
+    expect(isAutopilotPositive('gate', decision({ kind: 'failure', answer: 'replied' }))).toBe(true);
+    expect(isAutopilotPositive('gate', decision({ kind: 'failure', answer: 'rejected' }))).toBe(false);
+  });
+
   test('comes out the same whether it learns all at once or one decision at a time', () => {
     const all = Array.from({ length: 120 }, (_, index) =>
       decision({ at: index, risk: index % 3 ? 'low' : 'medium', answer: index % 4 ? 'approved' : 'revised' })

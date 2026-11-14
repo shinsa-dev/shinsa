@@ -6,6 +6,7 @@ import {
   resolveAutopilotSuggestionLimit,
   selectAutopilotJudgeRequest,
   selectAutopilotSuggestionRequest,
+  EMPTY_AUTOPILOT_PROFILE,
 } from '../../src/autopilot/index.ts';
 import { AUTOPILOT_DEFAULTS, type AutopilotPolicy } from '../../src/domain/settings.ts';
 import type { SuggestedTask, TaskSuggestion } from '../../src/index.ts';
@@ -113,12 +114,18 @@ describe('Autopilot on a watchdog task’s proposal', () => {
     expect(harness.task(taskId).proposal).toMatchObject({ status: 'open' });
   });
 
-  test('leaves a proposal on a task you filed alone, without a word', () => {
+  test('below Everything, brings a proposal on a task you filed to you and guesses your answer', () => {
     const harness = withAutopilot();
     const taskId = investigate(harness, false);
-    expect(proposalGate(harness, taskId)).toMatchObject({ status: 'open' });
-    expect(proposalGate(harness, taskId)?.autopilotJudging).toBeUndefined();
-    expect(proposalGate(harness, taskId)?.autopilotHeld).toBeUndefined();
+    expect(proposalGate(harness, taskId)).toMatchObject({
+      status: 'open',
+      autopilotHeld: 'Below Everything, Autopilot gives your OK only on tasks a watchdog filed.',
+      autopilotTeaches: false,
+      autopilotJudging: false,
+    });
+    expect(harness.effectsOf('autopilot.judge').at(-1)).toMatchObject({
+      shadow: true,
+    });
   });
 
   test('with Watchdog tasks off, it brings the proposal to you and says why', () => {
@@ -142,6 +149,28 @@ describe('Autopilot on a watchdog task’s proposal', () => {
     });
   });
 
+  test('at Everything, gives your OK on a task you filed once your OKs are ready', () => {
+    const harness = withAutopilot({ level: 'everything' });
+    harness.state.autopilotProfile = {
+      ...EMPTY_AUTOPILOT_PROFILE,
+      kinds: {
+        proposal: {
+          tracks: {
+            ...EMPTY_AUTOPILOT_PROFILE.tracks,
+            combined: { scored: 100, agreed: 95, weight: 100, agreedWeight: 95, baseWeight: 80, loss: 5 },
+          },
+          rate: { positive: 80, negative: 20 },
+        },
+      },
+    };
+    const taskId = investigate(harness, false);
+    expect(proposalGate(harness, taskId)?.autopilotJudging).toBe(true);
+    judgeProposal(harness, taskId, 'act', 'Clear.');
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      'Approved for you by Autopilot: Turn this investigation into a fix?'
+    );
+  });
+
   test('a judgment for a proposal on a task you filed is held back by the limits', () => {
     const harness = withAutopilot();
     const taskId = investigate(harness, false);
@@ -150,7 +179,7 @@ describe('Autopilot on a watchdog task’s proposal', () => {
     harness.state.gates[gate.id] = { ...gate, autopilotJudging: true };
     judgeProposal(harness, taskId, 'act', 'Clear.');
     expect(proposalGate(harness, taskId)).toMatchObject({
-      autopilotHeld: 'Autopilot gives your OK only on tasks a watchdog filed.',
+      autopilotHeld: 'Below Everything, Autopilot gives your OK only on tasks a watchdog filed.',
     });
   });
 });

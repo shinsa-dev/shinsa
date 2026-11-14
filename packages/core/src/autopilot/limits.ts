@@ -1,6 +1,6 @@
 import { Option } from 'effect';
-import { type Gate, HOUR_MS, MINUTE_MS, hasStep } from '../domain/index.ts';
-import { type AutopilotGate, type AutopilotPolicy } from '../domain/settings.ts';
+import { type Gate, HOUR_MS, MINUTE_MS, hasStep, isOfCurrentRound } from '../domain/index.ts';
+import { type AutopilotGate, type AutopilotLevel, type AutopilotPolicy } from '../domain/settings.ts';
 import type { Task, TaskSuggestion } from '../domain/types.ts';
 import { isActiveAt, resolveActiveHours, resolveLocalSlot } from '../presence/hours.ts';
 import type { ReviewRating } from '../report/types.ts';
@@ -8,6 +8,7 @@ import type { ShinsaState } from '../state/project.ts';
 import {
   AUTOPILOT_CEILINGS,
   AUTOPILOT_FOLLOW_UP_GATES,
+  AUTOPILOT_JUDGED_FAILURE_CAUSES,
   AUTOPILOT_LIMITS,
   type AutopilotFacts,
   type AutopilotFollowUpGate,
@@ -16,16 +17,19 @@ import {
   type AutopilotLimits,
   type AutopilotOpenedFacts,
   type AutopilotPresence,
+  type AutopilotReadinessKind,
   type AutopilotScope,
+  AUTOPILOT_READINESS_KINDS,
 } from './schema.ts';
+import { isAutopilotKindReady } from './score.ts';
 
 const RISK_ORDER: Record<ReviewRating, number> = { low: 0, medium: 1, high: 2 };
 
-const GATE_SETTING: Record<Exclude<AutopilotGateKind, 'merge'>, AutopilotGate> = {
+const GATE_SETTING: Record<Exclude<AutopilotGateKind, 'merge' | 'proposal'>, AutopilotGate> = {
   plan: 'plans',
   question: 'questions',
   review: 'reviews',
-  proposal: 'watchdogTasks',
+  failure: 'failures',
 };
 
 const ALLOWED: AutopilotLimit = { allowed: true };
@@ -40,6 +44,11 @@ function refuseBySetting(reason: string): AutopilotLimit {
 
 export function isWatchdogTask(task: Task) {
   return task.createdBy?.kind === 'watchdog';
+}
+
+export function isAutopilotJudgedFailure(gate: Gate) {
+  if (gate.type !== 'failure') return false;
+  return gate.cause === undefined || AUTOPILOT_JUDGED_FAILURE_CAUSES.includes(gate.cause);
 }
 
 export function isUrgentTask(task: Task) {
@@ -91,6 +100,20 @@ export function isHeldPlan(task: Task) {
   );
 }
 
+function isAutopilotRetry(gate: Gate) {
+  return gate.type === 'failure' && gate.autopilotAnswer !== undefined && gate.decision !== 'reject';
+}
+
+function countAutopilotRetries(state: ShinsaState, task: Task) {
+  return Object.values(state.gates).filter(
+    (gate) => gate.taskId === task.id && isAutopilotRetry(gate) && isOfCurrentRound(task, gate)
+  ).length;
+}
+
+function isReadinessKind(kind: AutopilotGateKind): kind is AutopilotGateKind & AutopilotReadinessKind {
+  return (AUTOPILOT_READINESS_KINDS as readonly string[]).includes(kind);
+}
+
 export function resolveAutopilotFacts(
   state: ShinsaState,
   task: Task,
@@ -109,6 +132,8 @@ export function resolveAutopilotFacts(
     heldPlan: isHeldPlan(task),
     escalatedReview: false,
     approvedByYou: !task.autopiloted,
+    ready: isReadinessKind(gate) && isAutopilotKindReady(state, gate),
+    retried: gate === 'failure' ? countAutopilotRetries(state, task) : 0,
     waitedMinutes: Math.max(0, Math.floor((now - openedAt) / MINUTE_MS)),
     presence: resolveAutopilotPresence(state, now),
   };
@@ -128,6 +153,16 @@ function hasBeenAwayLong(facts: AutopilotFacts) {
   return Math.min(away, facts.waitedMinutes) >= AUTOPILOT_LIMITS.awayMinutes;
 }
 
+export function resolveAutopilotLevel(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLevel {
+  return policy.level === 'everything' && !facts.ready ? 'most' : policy.level;
+}
+
+function resolveGateSetting(facts: AutopilotFacts): AutopilotGate | null {
+  if (facts.gate === 'merge') return null;
+  if (facts.gate === 'proposal') return facts.watchdog ? 'watchdogTasks' : 'proposals';
+  return GATE_SETTING[facts.gate];
+}
+
 function limitRatings(facts: AutopilotFacts, ceiling: ReviewRating): AutopilotLimit {
   if (facts.confidence === null || facts.risk === null)
     return refuse('The reviewer did not rate the change.');
@@ -138,34 +173,44 @@ function limitRatings(facts: AutopilotFacts, ceiling: ReviewRating): AutopilotLi
   return ALLOWED;
 }
 
-function limitPlan(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+function limitPlan(facts: AutopilotFacts, level: AutopilotLevel): AutopilotLimit {
   if (facts.heldPlan)
     return refuseBySetting('This plan asks for you: it runs an operation, splits or you asked to see it.');
   const scope = facts.scope;
   if (!scope) return refuse('The plan has no phases yet.');
-  const ceiling = AUTOPILOT_CEILINGS[policy.level].scope;
+  const ceiling = AUTOPILOT_CEILINGS[level].scope;
   if (scope.phases > ceiling.phases || scope.files > ceiling.files) {
     return refuse('The plan is larger than Autopilot approves on its own.');
   }
   return ALLOWED;
 }
 
-function limitProposal(facts: AutopilotFacts): AutopilotLimit {
-  if (!facts.watchdog) return refuseBySetting('Autopilot gives your OK only on tasks a watchdog filed.');
+function limitProposal(facts: AutopilotFacts, level: AutopilotLevel): AutopilotLimit {
+  if (!facts.watchdog && level !== 'everything') {
+    return refuseBySetting('Below Everything, Autopilot gives your OK only on tasks a watchdog filed.');
+  }
   if (facts.heldPlan) {
     return refuseBySetting('This asks for you: it runs an operation or you asked to see its plan.');
   }
   return ALLOWED;
 }
 
-function limitReview(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+function limitFailure(facts: AutopilotFacts, level: AutopilotLevel): AutopilotLimit {
+  if (level !== 'everything') return refuseBySetting('Below Everything, failed steps wait for you.');
+  if (facts.retried >= AUTOPILOT_LIMITS.retriesPerRound) {
+    return refuse('Autopilot already retried this task once and it failed again.');
+  }
+  return ALLOWED;
+}
+
+function limitReview(facts: AutopilotFacts, level: AutopilotLevel): AutopilotLimit {
   if (facts.escalatedReview) return refuseBySetting('The agents could not settle the review.');
-  const ceiling = AUTOPILOT_CEILINGS[policy.level];
+  const ceiling = AUTOPILOT_CEILINGS[level];
   return limitRatings(facts, facts.urgent ? ceiling.urgentRisk : ceiling.risk);
 }
 
 function resolveMergeCeiling(facts: AutopilotFacts, policy: AutopilotPolicy): ReviewRating {
-  const ceiling = AUTOPILOT_CEILINGS[policy.level];
+  const ceiling = AUTOPILOT_CEILINGS[resolveAutopilotLevel(facts, policy)];
   const base = policy.autoMerge === 'low_risk' ? 'low' : ceiling.risk;
   if (!facts.urgent || !hasBeenAwayLong(facts)) return base;
   return isHigher(ceiling.urgentRisk, base) ? ceiling.urgentRisk : base;
@@ -179,20 +224,24 @@ function limitMerge(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLi
 
 function limitAct(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
   if (!policy.enabled) return refuseBySetting('Autopilot is off.');
-  if (facts.gate !== 'merge' && !policy.gates.includes(GATE_SETTING[facts.gate])) {
+  const setting = resolveGateSetting(facts);
+  if (setting !== null && !policy.gates.includes(setting)) {
     return refuseBySetting('Autopilot does not act on this kind of gate.');
   }
+  const level = resolveAutopilotLevel(facts, policy);
   switch (facts.gate) {
     case 'plan':
-      return limitPlan(facts, policy);
+      return limitPlan(facts, level);
     case 'question':
       return ALLOWED;
     case 'review':
-      return limitReview(facts, policy);
+      return limitReview(facts, level);
     case 'merge':
       return limitMerge(facts, policy);
     case 'proposal':
-      return limitProposal(facts);
+      return limitProposal(facts, level);
+    case 'failure':
+      return limitFailure(facts, level);
   }
 }
 
@@ -203,10 +252,10 @@ function isFollowUpGate(gate: AutopilotGateKind): gate is AutopilotFollowUpGate 
 function limitFollowUpOn(facts: AutopilotFacts, gate: AutopilotFollowUpGate, policy: AutopilotPolicy) {
   switch (gate) {
     case 'plan':
-      if (facts.heldPlan) return limitPlan(facts, policy);
+      if (facts.heldPlan) return limitPlan(facts, resolveAutopilotLevel(facts, policy));
       return facts.scope ? ALLOWED : refuse('The plan has no phases yet.');
     case 'review':
-      return facts.escalatedReview ? limitReview(facts, policy) : ALLOWED;
+      return facts.escalatedReview ? limitReview(facts, resolveAutopilotLevel(facts, policy)) : ALLOWED;
     case 'merge':
       if (policy.autoMerge === 'off' || facts.approvedByYou) return limitMerge(facts, policy);
       return ALLOWED;
@@ -243,6 +292,20 @@ export function resolveAutopilotLimits(facts: AutopilotFacts, policy: AutopilotP
     revise: limitRevise(facts, policy),
     escalate: limitEscalate(facts, policy),
   };
+}
+
+export function resolveAutopilotFindingLimit(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  policy: AutopilotPolicy
+): AutopilotLimit {
+  if (!policy.enabled) return refuseBySetting('Autopilot is off.');
+  if (!policy.gates.includes('findings')) return refuseBySetting('Autopilot does not judge review findings.');
+  if (policy.level !== 'everything')
+    return refuseBySetting('Below Everything, review findings wait for you.');
+  if (!isAutopilotKindReady(state, 'finding')) {
+    return refuse('Autopilot does not know how you judge review findings well enough yet.');
+  }
+  return ALLOWED;
 }
 
 export function resolveAutopilotSuggestionLimit(
