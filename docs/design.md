@@ -1097,6 +1097,10 @@ Only these, and they win over anything below:
     a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
+    The list scrolls inside its card, one window over every group that draws the rows in view before the frame
+    paints (`docs/performance.md` → All tasks); once it is scrolled past one screen, an `outline` `sm` Back to top
+    button (`IconArrowUp`) floats at the card's bottom centre, like the chat's Jump to latest, and scrolls the list
+    back to its first row.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
     first. Every open section is drawn as a tree that handles every shape
     (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from
@@ -2947,21 +2951,39 @@ Only these, and they win over anything below:
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
       the task's worktree (its repository when it has none), in its project, and go there.
-    - **Shape.** The page fills the space under the top bar edge to edge, with no column: a 36px `Toolbar` with the
-      project picker, the tabs, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
+    - **Shape.** In Cards (Desk), the page sits in the Code tab's frame (`TerminalFrame`: `CARDS_FRAME`, one `CARD`
+      with its toolbar and terminal inside, 16px below), so its edges line up with the top bar; in Sidebar (Shelf)
+      and on a phone it fills the space under the top bar edge to edge. A 36px `Toolbar` holds the
+      project picker, the tabs, the filter, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
       Restart and Stop (or Start) when a service's tab is in front, and Open after them while it runs with a preview
       URL (the rows' `ServicePreviewButton`: the toolbar acts on the tab in front, and a tab has no room for a second
       button beside its close), else, while any of the project's services is not
       running, one play button that starts them all ("Start all services in ‹project›"; a shell's tab or no tab is
-      in front, `resolveActiveService`), and Find in the scrollback (`IconMagnifyingGlass`), then the terminal on its own
-      background, 8px from the top and 12px from the left. The project picker is the Focus menu's own trigger and
+      in front, `resolveActiveService`), Find in the scrollback (`IconMagnifyingGlass`);
+      then the terminal on its own background, 8px from the top and 12px from the left. The project picker is the Focus menu's own trigger and
       rows (`ProjectMenuTrigger`, `ProjectRadioItems` in `components/focus/menu.tsx`): the project's dot, its name and
       the chevron, a radio list of every project with its dot, which closes on the one you pick (the Focus menu's
       stays open for how long to keep it). A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
+    - **Yours first** (since 2026-11-14; `filter-menu.tsx`, `listShownTerminals`). The page shows the terminals you
+      opened there yourself (no task, no service) by default, so a task's terminals and the services' runs do not
+      crowd your own. The filter after the tabs, just before New terminal (`secondary sm`, its label and a trailing chevron, apart
+      from the project picker so the two menus never sit side by side) is a radio menu: Your terminals, Task
+      terminals, Services and All terminals, each with its count in `fg-2` right after its name
+      (`countTerminalsByFilter`; a task's run of a service counts as a service, so the counts add up to All). The
+      choice is kept on this device (`shinsa.terminal-filter`). The terminal the URL names is always shown and in
+      front, whatever the filter, so Open a terminal on a task lands on it. A filter with nothing in it says so in
+      its own words, with Show all terminals when another filter has some; Open a terminal shows only under Your
+      terminals and All, and Start all services only under Services and All, since either would open a tab the
+      filter hides.
+    - **Terminals close on their own** (`docs/engine.md` → Terminals). A shell that exited closes 10 minutes after
+      its exit or the last time a page had it open; one that runs closes after 8 hours with no output, no typing, no
+      page on it and nothing but the shell in front. A service's terminal never does. The tab simply goes, as when
+      you close it.
     - **Tabs** (`tab-bar.tsx`). A tab is the kit's segmented tab, 22px inside the 26px list: its mark, the label (the
       name you gave it, else the shell's title, else the folder's name; a service's tab is its name, and a task's
-      run of one adds the task's handle, "api · LOC-10"; `resolveTerminalLabel` in core, `resolveTerminalTabLabel`),
+      run of one and a task's own terminal add the task's handle, "api · LOC-10"; `resolveTerminalLabel` in core,
+      `resolveTerminalTabLabel`),
       and a close button (`icon-2xs`, 18px) revealed on hover and always on the
       active tab. The button sits in an even 2px inset: 2px from the tab's top and bottom, and the tab's end padding
       is 2px too (`pe-0.5` over the kit's `px-2`; measured), so the × is centred in its corner. A shell's mark is

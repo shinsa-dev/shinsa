@@ -215,7 +215,12 @@ not chat text.
   to you, and shows How well it knows you: a score as a percentage, how far it is ahead of always giving your usual answer, and a suggested
   level you can take with one click (Most things once the score reaches 90% and is 5 points ahead). It keeps a small model trained on your own decisions, on your machine, whose estimate and your most similar past decisions go into each judgment; a confident model that says you would not approve brings the gate to you, and `bun scripts/autopilot/benchmark.ts` replays a copy of your log to compare it with the model call. Every decision counts, the recent ones the most, and so do your messages to
   agents, your code edits, the tasks you file, priority changes and cancellations. It pauses a kind of gate you keep correcting. It can also accept
-  or dismiss suggested tasks and give your OK on a watchdog task's fix. Everything it did is in Handled by Autopilot on Home and notifies
+  or dismiss suggested tasks and give your OK on a watchdog task's fix. Above Most things, Everything appears once a
+  kind of gate has earned it (100 of your decisions of that kind, 90% agreement and 5 points over your usual answer,
+  each kind listed in By kind of decision): a ready kind may then approve any plan size, any risk the reviewer is
+  highly confident in, your OK on any task, retry a failed step or cancel the task, and mark review findings fix or
+  dismiss, while a kind not ready acts as Most things. Secrets, sign-ins, setup, operations, results, post-merge
+  steps and failures from limits, accounts or your pause stay yours at every level. Everything it did is in Handled by Autopilot on Home and notifies
   until you mark it seen. Only an urgent, high-risk change, after you have been away an hour, goes to your team's
   Needs you, and to Slack channels and on-call teammates you choose, up to five; never while you are active. The
   activity says why it acted (`docs/engine.md` → Autopilot).

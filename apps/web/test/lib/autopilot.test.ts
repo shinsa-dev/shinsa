@@ -15,6 +15,8 @@ import {
   AUTOPILOT_GATE_ROWS,
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
+  listAutopilotLevelItems,
+  listAutopilotReadinessRows,
   resolveAutopilotScoreView,
   CONTACT_PICKER_HINT,
   describeAutopilotContact,
@@ -40,7 +42,14 @@ import {
   resolveEscalationFact,
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
-import { createAutopilotProfile, createGate, createShinsaState, createTask, NOW } from '../support/state.ts';
+import {
+  createAutopilotKindsProfile,
+  createAutopilotProfile,
+  createGate,
+  createShinsaState,
+  createTask,
+  NOW,
+} from '../support/state.ts';
 
 const FINDING = { severity: 'should_fix' as const, file: 'a.ts', line: 3, message: 'Name it.' };
 
@@ -394,6 +403,86 @@ describe('the Autopilot settings', () => {
     expect(ahead.margin?.points).toBe('1 point ahead');
   });
 
+  it('offers Everything only once a kind of gate is ready, or when it is already your level', () => {
+    const levels = (profile: typeof EMPTY_AUTOPILOT_PROFILE, level: 'balanced' | 'everything') =>
+      listAutopilotLevelItems({ autopilotProfile: profile }, level).map((item) => item.value);
+    expect(levels(EMPTY_AUTOPILOT_PROFILE, 'balanced')).toEqual(['ask_first', 'balanced', 'most']);
+    const close = createAutopilotKindsProfile({ review: { scored: 99, agreed: 99, base: 0.5 } });
+    expect(levels(close, 'balanced')).toEqual(['ask_first', 'balanced', 'most']);
+    const ready = createAutopilotKindsProfile({ review: { scored: 120, agreed: 114, base: 0.85 } });
+    expect(levels(ready, 'balanced')).toEqual(['ask_first', 'balanced', 'most', 'everything']);
+    expect(levels(EMPTY_AUTOPILOT_PROFILE, 'everything')).toEqual([
+      'ask_first',
+      'balanced',
+      'most',
+      'everything',
+    ]);
+    const everything = listAutopilotLevelItems({ autopilotProfile: ready }, 'balanced').at(-1);
+    expect(everything).toMatchObject({ label: 'Everything' });
+    expect(everything?.hint).toMatch(/^[A-Z][^.]*\.$/);
+  });
+
+  it('lists every kind of gate with its score and what it still needs for Everything', () => {
+    const profile = createAutopilotKindsProfile({
+      plan: { scored: 120, agreed: 100, base: 0.8 },
+      review: { scored: 120, agreed: 114, base: 0.85 },
+      merge: { scored: 12, agreed: 12, base: 1 },
+      proposal: { scored: 100, agreed: 95, base: 0.95 },
+      finding: { scored: 100, agreed: 98, base: 0.97 },
+    });
+    expect(
+      listAutopilotReadinessRows({ autopilotProfile: profile }).map((row) => [
+        row.title,
+        row.percent,
+        row.ready,
+        row.detail,
+      ])
+    ).toEqual([
+      [
+        'Plans',
+        '83%',
+        false,
+        'It guessed you right on 100 of 120 plans, 3 points ahead of your usual answer. Everything needs 90% and 5 points ahead.',
+      ],
+      [
+        'Reviews',
+        '95%',
+        true,
+        'It guessed you right on 114 of 120 reviews, 10 points ahead of your usual answer. Ready for Everything.',
+      ],
+      ['Merges', '100%', false, 'It guessed you right on 12 of 12 merges. Everything needs 100 of them.'],
+      [
+        'Your OK',
+        '95%',
+        false,
+        'It guessed you right on 95 of 100 proposals for your OK, even with your usual answer. Everything needs 90% and 5 points ahead.',
+      ],
+      ['Failed steps', '0%', false, 'It has not guessed any of your failed steps yet.'],
+      [
+        'Review findings',
+        '98%',
+        false,
+        'It guessed you right on 98 of 100 review findings, 1 point ahead of your usual answer. Everything needs 90% and 5 points ahead.',
+      ],
+    ]);
+    const behind = createAutopilotKindsProfile({ failure: { scored: 100, agreed: 90, base: 0.95 } });
+    expect(listAutopilotReadinessRows({ autopilotProfile: behind })[4]?.detail).toBe(
+      'It guessed you right on 90 of 100 failed steps, 5 points behind your usual answer. Everything needs 90% and 5 points ahead.'
+    );
+  });
+
+  it('keeps Everything in use while the overall score suggests Most things', () => {
+    const sure = createAutopilotProfile({ agreed: 46, disagreed: 4 });
+    expect(resolveAutopilotScoreView({ autopilotProfile: sure }, 'everything').suggested).toMatchObject({
+      level: 'most',
+      apply: null,
+    });
+    const unsure = createAutopilotProfile({ agreed: 40, disagreed: 20 });
+    expect(resolveAutopilotScoreView({ autopilotProfile: unsure }, 'everything').suggested.apply).toBe(
+      'Use Balanced'
+    );
+  });
+
   it('adds or drops one gate and keeps the others', () => {
     expect(toggleAutopilotGate(['plans', 'questions', 'reviews'], 'questions', false)).toEqual([
       'plans',
@@ -684,6 +773,37 @@ describe('the things Autopilot did for you on Home', () => {
       reason: 'Small and clear.',
       at: NOW,
       tone: 'green',
+    });
+  });
+
+  it('says what it did on failed steps, change requests and your OK', () => {
+    const done = createShinsaState({
+      tasks: [
+        createTask({
+          id: 't-1',
+          title: 'Fix the login',
+          createdBy: { kind: 'watchdog', taskId: 't-2', runId: 'r', requestKey: 'k' },
+        }),
+        createTask({ id: 't-2', title: 'Ship the fix' }),
+      ],
+      gates: [
+        createGate({ id: 'g-retry', taskId: 't-2', type: 'failure', decision: 'approve', ...answered }),
+        createGate({ id: 'g-cancel', taskId: 't-2', type: 'failure', decision: 'reject', ...answered }),
+        createGate({ id: 'g-revise', taskId: 't-2', type: 'review', decision: 'revise', ...answered }),
+        createGate({ id: 'g-watchdog', taskId: 't-1', type: 'proposal', ...answered }),
+        createGate({ id: 'g-ok', taskId: 't-2', type: 'proposal', ...answered }),
+      ],
+    });
+    expect(
+      Object.fromEntries(
+        listDoneForYouRows(done).map((row) => [row.gateId, [row.summary, row.icon, row.tone]])
+      )
+    ).toEqual({
+      'g-retry': ['Autopilot retried the failed step for you.', 'IconArrowRotateClockwise', 'orange'],
+      'g-cancel': ['Autopilot cancelled the task after a failed step.', 'IconCircleX', 'neutral'],
+      'g-revise': ['Autopilot asked for changes for you.', 'IconPencil', 'amber'],
+      'g-watchdog': ['Autopilot gave your OK on a watchdog task’s fix.', 'IconCheckCircle2', 'purple'],
+      'g-ok': ['Autopilot gave your OK for you.', 'IconCheckCircle2', 'purple'],
     });
   });
 

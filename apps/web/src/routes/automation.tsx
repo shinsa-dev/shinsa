@@ -14,6 +14,7 @@ import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { createScheduleActions, ScheduleMenu } from '@/components/settings/schedules.tsx';
 import { FACT } from '@/components/task/fact.ts';
+import { TaskRowState } from '@/components/tasks/row-state.tsx';
 import { FILED_COLUMNS, TaskListRow } from '@/components/tasks/row.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
@@ -29,6 +30,7 @@ import {
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeNextRun } from '@/lib/schedules.ts';
+import { resolveTaskRowModel } from '@/lib/tasks/row-model.ts';
 
 function FactLabel({ fact }: { fact: AutomationFact }) {
   if (fact.at === null) return fact.label;
@@ -98,9 +100,11 @@ function TasksPanel({ state, schedule }: { state: ShinsaState; schedule: Schedul
             <span className='max-md:hidden'>Pull request</span>
             <span className='text-right'>Updated</span>
           </div>
-          {tasks.map((task) => (
-            <TaskListRow key={task.id} state={state} task={task} depth={0} columns={FILED_COLUMNS} />
-          ))}
+          <TaskRowState state={state}>
+            {tasks.map((task) => (
+              <TaskListRow key={task.id} model={resolveTaskRowModel(state, task)} columns={FILED_COLUMNS} />
+            ))}
+          </TaskRowState>
         </div>
       )}
     </Panel>

@@ -53,6 +53,12 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
   let lastOutputAt: number | null = null;
   let disposed = false;
 
+  let lastActiveAt = runSync(options.now);
+
+  const touch = () => {
+    lastActiveAt = runSync(options.now);
+  };
+
   const cancelBatch = () => {
     if (batchFiber) runFork(Fiber.interrupt(batchFiber));
     batchFiber = null;
@@ -73,6 +79,7 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
   const receive = (data: Uint8Array) => {
     if (disposed) return;
     lastOutputAt = performance.now();
+    touch();
     mirror.write(data);
     runSync(options.onScreen(session));
     if (viewers.size === 0) return;
@@ -159,6 +166,13 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
     if (session.info.endedAt !== null) receive(ENCODER.encode('\r\n'));
     lastOutputAt = null;
     stopping = false;
+    const process = yield* spawn(command, {
+      cwd: session.info.cwd,
+      cols: mirror.cols,
+      rows: mirror.rows,
+      env,
+      onData: receive,
+    });
     session.info = {
       ...session.info,
       status: 'running',
@@ -167,15 +181,18 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
       endedAt: null,
       title: null,
     };
-    const process = yield* spawn(command, {
-      cwd: session.info.cwd,
-      cols: mirror.cols,
-      rows: mirror.rows,
-      env,
-      onData: receive,
-    });
+    touch();
     running = process;
     yield* Effect.forkDetach(awaitExit(process));
+  });
+
+  const fail = Effect.fn('TerminalSession.fail')(function* (reason: string) {
+    if (running || disposed) return;
+    receive(ENCODER.encode(`${reason}\r\n`));
+    flushBatch();
+    session.info = { ...session.info, status: 'exited', exitCode: null, endedAt: yield* options.now };
+    yield* options.onChange;
+    yield* options.onScreen(session);
   });
 
   const session: TerminalSession = {
@@ -189,14 +206,19 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
     get viewers() {
       return viewers.size;
     },
+    get lastActiveAt() {
+      return lastActiveAt;
+    },
     start,
+    fail,
     attach(viewer) {
       flushBatch();
       viewers.set(viewer, { behind: false });
+      touch();
       sendScreen(viewer);
     },
     detach(viewer) {
-      viewers.delete(viewer);
+      if (viewers.delete(viewer)) touch();
     },
     drain(viewer) {
       const state = viewers.get(viewer);
@@ -206,6 +228,7 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
       sendScreen(viewer);
     },
     input(data) {
+      touch();
       running?.write(data);
     },
     type(command) {

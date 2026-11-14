@@ -18,6 +18,11 @@ export class PortUnavailable extends Schema.TaggedError<PortUnavailable, { reado
   { message: Schema.String }
 ) {}
 
+export class SpawnFailed extends Schema.TaggedError<SpawnFailed, { readonly brand: unique symbol }>()(
+  'SpawnFailed',
+  { message: Schema.String }
+) {}
+
 export class PortTaken extends Schema.TaggedError<PortTaken, { readonly brand: unique symbol }>()(
   'PortTaken',
   {
@@ -107,7 +112,7 @@ export interface TerminalSpawnOptions {
 type TerminalSpawner = (
   command: readonly string[],
   options: TerminalSpawnOptions
-) => Effect.Effect<TerminalProcess>;
+) => Effect.Effect<TerminalProcess, SpawnFailed>;
 
 export type PortListener = (port: number) => number | null;
 
@@ -136,7 +141,9 @@ export interface TerminalSession {
   readonly running: boolean;
   readonly pid: number | null;
   readonly viewers: number;
-  start(start: SessionStart): Effect.Effect<void>;
+  readonly lastActiveAt: number;
+  start(start: SessionStart): Effect.Effect<void, SpawnFailed>;
+  fail(reason: string): Effect.Effect<void>;
   attach(viewer: TerminalViewer): void;
   detach(viewer: TerminalViewer): void;
   drain(viewer: TerminalViewer): void;
@@ -166,8 +173,17 @@ export interface TerminalsInput {
 export const TerminalTimings = Context.Reference<{
   readonly notify: Duration.Duration;
   readonly screen: Duration.Duration;
+  readonly sweep: Duration.Duration;
+  readonly answer: Duration.Duration;
+  readonly answerLimit: Duration.Duration;
 }>('shinsa/engine/terminals/TerminalTimings', {
-  defaultValue: () => ({ notify: Duration.millis(50), screen: Duration.seconds(2) }),
+  defaultValue: () => ({
+    notify: Duration.millis(50),
+    screen: Duration.seconds(2),
+    sweep: Duration.minutes(1),
+    answer: Duration.millis(500),
+    answerLimit: Duration.minutes(10),
+  }),
 });
 
 export const TerminalIds = Context.Reference<Effect.Effect<string>>('shinsa/engine/terminals/TerminalIds', {
@@ -242,11 +258,17 @@ export const NO_FREE_PORT = 'No free port for the service.';
 
 export const FOLDER_GONE_MESSAGE = 'That folder is not there anymore.';
 
+export const SPAWN_FAILED_MESSAGE = 'The command could not be started';
+
 export const HANG_UP_GRACE = Duration.seconds(3);
 
 const GROUP_POLL = Duration.millis(50);
 
 export const GROUP_POLL_SCHEDULE = Schedule.spaced(GROUP_POLL);
+
+export const ANSWER_HOSTS = ['127.0.0.1', '::1'];
+
+export const ANSWER_TIMEOUT = Duration.millis(250);
 
 export const FOREGROUND_TIMEOUT = Duration.seconds(5);
 

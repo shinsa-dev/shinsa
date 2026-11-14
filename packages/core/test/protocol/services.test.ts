@@ -64,6 +64,15 @@ describe('resolveServiceState', () => {
     expect(resolveServiceState(terminal({}), LATER)).toBe('running');
   });
 
+  it('stays starting while its port does not answer, and is running once it does', () => {
+    expect(resolveServiceState(terminal({ answering: false }), LATER)).toBe('starting');
+    expect(resolveServiceState(terminal({ answering: true }), LATER)).toBe('running');
+    expect(resolveServiceState(terminal({ answering: true }), 1)).toBe('starting');
+    expect(resolveServiceState(terminal({ status: 'exited', exitCode: 1, answering: false }), LATER)).toBe(
+      'failed'
+    );
+  });
+
   it('tells a clean exit from a failure, and counts a stop or an interrupt as stopped', () => {
     expect(resolveServiceState(terminal({ status: 'exited', exitCode: 0 }), LATER)).toBe('exited');
     expect(resolveServiceState(terminal({ status: 'exited', exitCode: 1 }), LATER)).toBe('failed');

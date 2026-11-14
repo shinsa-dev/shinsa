@@ -185,7 +185,12 @@ function approveReview(decider: Decider, taskId: string) {
   shipReviewedWork(decider, taskId);
 }
 
-export function approveReviewAhead(decider: Decider, gate: Gate, autopilot: string | null = null) {
+export function approveReviewAhead(
+  decider: Decider,
+  gate: Gate,
+  autopilot: string | null = null,
+  verdicts: FindingVerdict[] = []
+) {
   decider.emit({
     type: 'gate.answered',
     gateId: gate.id,
@@ -193,6 +198,7 @@ export function approveReviewAhead(decider: Decider, gate: Gate, autopilot: stri
     response: null,
     ahead: true,
     ...(autopilot === null ? {} : { autopilot }),
+    ...(verdicts.length > 0 ? { verdicts } : {}),
   });
   decider.requestBriefing(gate.taskId);
   approveReview(decider, gate.taskId);
@@ -259,14 +265,23 @@ function answerDecision(
 export function answerGateForYou(
   decider: Decider,
   gate: Gate,
-  decision: 'approve' | 'reply' | 'revise',
+  decision: GateDecision,
   response: string | null,
-  reason: string
+  reason: string,
+  verdicts: FindingVerdict[] = []
 ) {
-  decider.emit({ type: 'gate.answered', gateId: gate.id, decision, response, autopilot: reason });
+  decider.emit({
+    type: 'gate.answered',
+    gateId: gate.id,
+    decision,
+    response,
+    autopilot: reason,
+    ...(verdicts.length > 0 ? { verdicts } : {}),
+  });
   decider.requestBriefing(gate.taskId);
   if (gate.type === 'question') answerQuestion(decider, gate);
   else if (gate.type === 'proposal') answerProposal(decider, gate, decision);
+  else if (gate.type === 'failure') answerFailure(decider, gate, decision, response);
   else answerDecision(decider, gate, decision, response, []);
 }
 
