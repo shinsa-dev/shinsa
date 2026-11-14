@@ -70,11 +70,11 @@ builds never reviews its own work.
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority, the tasks it waits on with the kind of wait, and the open change it stacks on, each with why |
-| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`), the task's steps composed anew (`reshape_task`, Task shapes, below) or the task moved to another repository of its project (`move_to_repository`, Work across repositories, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
+| Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; its watchdog checks, read-only after the merge, resume a watch session of their own; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`), the task's steps composed anew (`reshape_task`, Task shapes, below) or the task moved to another repository (`move_to_repository`, Work across repositories, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for; in a watchdog check or the home of a watch, each report a read found (`file_report`) and what it read (`report_read`) |
 | Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
-| Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
-| Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
-| Researcher | the Answerer's | the task's session, cannot edit, in the worktree when the task has one, else the repository, else a scratch folder | a report (`submit_report`), optionally a proposed change |
+| Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below), or the task moved to another repository (`move_to_repository`) |
+| Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix, or the task moved (`move_to_repository`) |
+| Researcher | the Answerer's | the task's session, cannot edit, in the worktree when the task has one, else the repository, else a scratch folder | a report (`submit_report`), optionally a proposed change, or the task moved (`move_to_repository`) |
 | Writer | Sonnet | one call, no thinking | the Home guide: now, up next, a heads-up |
 
 Besides its hand-over tool, every working role can ask (`ask`; never the reviewer, which cannot ask the human
@@ -789,24 +789,33 @@ them in the order they need:
   of this task's session (Forking a task). A task created with `after_this` copies it only when it starts, after this
   task finished, so it holds this task's whole conversation, and its fork note says where this task's code is.
 - **A task in the wrong repository moves.** Triage picks the repository from the request's text, so it can guess
-  wrong (a screenshot of another app it cannot read). When all of the work is in another repository of the project
-  and nothing changes in this one, the Agent calls `move_to_repository` (`repository`, by name like `create_task`'s,
-  registered from the folders when named; `reason`) while it plans, instead of filing a second task. The guide and
-  `create_task`'s description say so. Core (`decide/moves.ts`) refuses it for the repository the task works in
-  (`same_repository`), one of another project (`other_project`, so the handle never changes), once a phase reported,
-  a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`);
-  each but the first points at `create_task`. The move takes two events, because removing a worktree reads the
+  wrong (a screenshot of another app it cannot read). Until real work exists, a task moves to any registered
+  repository, in any project, instead of becoming a second task. The Agent calls `move_to_repository` (`repository`,
+  by name like `create_task`'s: the task's own project's repository first, then any registered one, then a folder
+  of the project's folders, registered when named; `reason`) while it plans, answers, investigates or researches; the
+  guide and `create_task`'s description say so. You move it yourself with Move to another repository on the task page
+  (the repository fact and the task menu) or `shinsa tasks move <task> --repo <name>` (`task.move_to_repository`),
+  which also cancels the running agent and withdraws the open gates. Core (`decide/moves.ts`,
+  `resolveMoveRefusal` in `state/queries.ts`, which the web also reads to offer the action) refuses it for the
+  repository the task works in (`same_repository`), a task already moving (`task_moving`), once a phase reported, a
+  pull request exists or an earlier round shipped (`work_started`), for a task in a bundle (`task_stacked`) and, for
+  your move, once the task handed over its result (`result_handed_over`), or for a settled task (`task_settled`);
+  the work-related refusals say to file a new task. The move takes two events, because removing a worktree reads the
   task's repository:
 
   ```
   move_to_repository ─► run ends, task.moving {repoId}   movingTo set,
-                        worktree.remove                  stage triage
-  worktree.gone ─────► worktree.removed, task.moved      repoId changes
+  (or task.move_to_      worktree.remove                 stage triage
+   repository: runs cancelled, gates withdrawn)
+  worktree.gone ─────► worktree.removed, task.moved      repoId changes, and
+                        {projectId, handle} when the     the project and handle
+                        repository is in another project when it crosses one
                         startWork ─► setup verification ─► worktree in
-                        the new repository ─► plan run, same session
+                        the new repository ─► the same step, same session
   ```
 
-  The task keeps its handle, title and branch name; the old branch stays in the old repository with no commits.
+  The task keeps its title, branch name and session; in another project it takes that project's next handle, the
+  way a pick at the setup gate does (`task.repo_bound`). The old branch stays in the old repository with no commits.
   `readyWorktree` ignores a late `worktree.ready` while `movingTo` is set. The resumed run starts in the new
   worktree, so its turn ends with the note that its folder changed (`resolveMovedNote`).
 

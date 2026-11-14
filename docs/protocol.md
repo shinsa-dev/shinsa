@@ -240,7 +240,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `repoId` | string \| null | the repository, from triage, or the one `move_to_repository` moved it to |
+| `repoId` | string \| null | the repository, from triage, or the one a move (`move_to_repository`, `task.move_to_repository`) took it to |
 | `movingTo?` | string \| null | the repository a move is taking it to, while the old worktree is removed (`task.moving` to `task.moved`) |
 | `size` | `small` \| `large` \| null | from triage; a large plan can wait for approval |
 | `branch` | string \| null | the task's branch, once its worktree exists |
@@ -578,9 +578,9 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 | --- | --- | --- | --- | --- |
 | `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan`, `reshape_task` or `move_to_repository` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate), `report_initiative` (lead), `report_read` after any `file_report` (watch and intake, read-only, in the repository) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
-| `answerer` | answerer | yes | the repository itself | `answer` |
-| `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
-| `researcher` | answerer | yes | worktree when there is one, else the repository | `submit_report` |
+| `answerer` | answerer | yes | the repository itself | `answer` or `move_to_repository` |
+| `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` or `move_to_repository` |
+| `researcher` | answerer | yes | worktree when there is one, else the repository | `submit_report` or `move_to_repository` |
 | `planner` (delegated) | agent | yes | its parent's checkout, or its own | its final reply |
 | `builder` (delegated) | agent | no | its parent's checkout, or its own | its final reply |
 
@@ -881,6 +881,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.join_initiative` | adds a task to an initiative in a phase (`phaseId`, null for none), moves it to another phase or initiative, or takes it out (`initiativeId: null`); with `team` (`teamId`, `instanceId`, `name`) the initiative is a teammate's, recorded as `teamInitiative` and refused for a task the team does not see (`initiative_not_shared`); refused for an unknown initiative (`initiative_not_found`) or phase (`initiative_phase_not_found`), or a finished initiative (`initiative_finished`) | `tasks join-initiative`, `tasks leave-initiative` | agent |
 | `initiative.write` | changes an initiative's name, description and phases (`phases` replaces the list; a phase with an `id` keeps it, one without gets a new one; a removed phase drops its tasks to no phase); refused past the limits (`initiative_invalid`) | `initiatives write` | agent |
 | `initiative.adopt_task` | creates an initiative named after a task, adds it and every descendant by `createdBy`, `parentTaskId` and `forkOf` not already in one, and starts its lead forked from the task; refused for a task already in one (`initiative_exists`) or past the limit (`initiative_limit`) | `initiatives adopt` | agent |
+| `task.move_to_repository` | moves a task to another repository in any project (`repoId`) before real work: cancels its runs, withdraws its open gates, removes the old worktree and starts the same step there, in another project with that project's next handle; refused for a settled task (`task_settled`), the same repository (`same_repository`), a task already moving (`task_moving`), once a phase reported, a pull request exists or an earlier round shipped (`work_started`), once a result was handed over (`result_handed_over`) and for a task in a bundle (`task_stacked`) | `tasks move` | agent |
 | `task.move_to_backlog` | puts a task in the backlog; its open plan gate becomes held ("in the backlog"); refused for a settled task (`task_settled`), an inquiry (`backlog_inquiry`) or once a plan was approved or building started (`backlog_started`); a task already there records nothing | `tasks move-to-backlog` | agent |
 | `task.remove_from_backlog` | takes it out; its plan waits in Needs you ("plan ready for you"); a task not there records nothing | `tasks remove-from-backlog` | agent |
 | `task.snooze` | snoozes an open task in any step: its gates leave `ready` and it is listed in `queue.snoozed`, nothing else changes; refused for a settled task (`task_settled`); a snoozed task records nothing | `tasks snooze` | agent |
@@ -992,7 +993,7 @@ role without the tool (`hasTool`).
 | `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the `ratings` (`confidence`, `risk`), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal, each with `reply` while a request of yours is open and only then; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
-| `agent.move_to_repository` | `move_to_repository` | while it plans, moves the task to another repository of its project (`repoId`, `reason`): ends the run, removes the old worktree and, once it is gone, plans again there in the same session; refused for the same repository (`same_repository`), another project's (`other_project`), once a phase reported, a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`) |
+| `agent.move_to_repository` | `move_to_repository` | while it plans, answers, investigates or researches, moves the task to another repository in any project (`repoId`, `reason`): ends the run, removes the old worktree and, once it is gone, starts the same step there in the same session, in another project with that project's next handle; refused for the same repository (`same_repository`), a task already moving (`task_moving`), once a phase reported, a pull request exists or an earlier round shipped (`work_started`) and for a task in a bundle (`task_stacked`) |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
 | `agent.attach_evidence` | `attach_evidence` | attaches evidence, stored under its task and round (`validateEvidence`; `docs/engine.md` → Evidence) |
 | `agent.attach_comparison` | `attach_evidence` with `kind: "comparison"` | attaches one comparison: a piece per part, sharing one `itemId` (`docs/engine.md` → Evidence) |
@@ -1172,7 +1173,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.suggested`, `suggestion.settled` | a task was suggested (`request`; `splitOff` for a split-off); accepted or dismissed (`keptRound` when it was kept here as a round; `autopilot`, the reason, when Autopilot settled it) |
 | `task.account_bound` | the task's account changed |
 | `task.split` | `split_task` made tasks |
-| `task.moving`, `task.moved` | `move_to_repository` started moving the task (`repoId`, `runId`, `reason`; sets `movingTo`), and the old worktree is gone, so the task now works in `repoId` |
+| `task.moving`, `task.moved` | `move_to_repository` or `task.move_to_repository` started moving the task (`repoId`, `reason`, `runId?` for the agent's move; sets `movingTo`), and the old worktree is gone, so the task now works in `repoId`, with `projectId?` and `handle?` when the repository is in another project |
 | `config.verified` | setup verification ran |
 | `budget.acknowledged` | you allowed more past a usage or cost limit |
 | `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
@@ -1318,7 +1319,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `propose_plan` | ✓ plan | | | | | | |
 | `reshape_task` | ✓ plan | | | | | | |
-| `move_to_repository` | ✓ plan | | | | | | |
+| `move_to_repository` | ✓ plan | | ✓ | ✓ | ✓ | | |
 | `complete_phase` | ✓ build | | | | | | |
 | `complete_fix` | ✓ fix | | | | | | |
 | `report_review` | | ✓ | | | | | |
@@ -1381,7 +1382,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `report_initiative` | **`narrative`**: where the initiative stands and what comes next | narrative 2,000 (`INITIATIVE_LIMITS`) |
 | `file_report` | **`title`**, **`request`**, **`text`**; `report_id` or `link` (one is required), `author`, `posted_at`, `fork_from` (a task id or handle; a watchdog's is always the shipped task), `repository` (a name or id), `urgency` (`low`, `normal`, `high` or `urgent`: the filed task's priority) | title 100; request 2,000; report_id 200; link 2,000; author 120; posted_at 60; text 4,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
-| `move_to_repository` | **`repository`** (a repository of the task's project by name, or the folder name of one in its folders, registered when named), **`reason`** | reason 240 |
+| `move_to_repository` | **`repository`** (a registered repository by name, the task's project's first, or the folder name of one in its project's folders, registered when named), **`reason`** | reason 240 |
 | `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview); for test or check only **`check`** (a check id of the task) and `detail`; otherwise **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); `key`: what it shows, lower-case words and hyphens (not for a test or check); `replaces`: earlier items by key or id; exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; check 12; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40; key 60; replaces 24 |
 | `remove_evidence` | **`items`** (by key or id), **`reason`**: why it no longer applies | 1 to 24 items of 60; reason 200 |
 
