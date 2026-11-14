@@ -1,4 +1,4 @@
 ---
 kind: improved
 ---
-Each service in the Services popover is now one line, folded until you press it, and remembers how you left it. A Terminal button on the line opens its terminal in one press.
+Services in the Services popover are now one short line each, with Restart and Stop under the pointer and a Terminal button that opens the terminal in one press. A service's runs in tasks stay folded until you expand them.

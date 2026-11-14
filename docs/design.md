@@ -2822,29 +2822,33 @@ Only these, and they win over anything below:
       a folded section `data-folded`), so a project folded on its own sits as far from the footer's hairline as from the
       popover's top (12px each); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
       sits from the popover's sides. A row
-      (`ServiceRow`) is one line, folded by default: a `DisclosureHeader` with the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
+      (`ServiceRow`) is one short line (`h-7`, no command: the command is Manage's): the state's tile, `sm`, in the
+      icon slot so it sits under the project's dot (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
       mark that never reads as a checkbox), the name and the state beside it in its tone ("Running for 12m", "Failed
-      with code 1"), its chevron shown under the pointer. Each service keeps its fold in the disclosure store
-      (`resolveServiceRowId`, `services:service:<id>`), across openings and reloads, and one fold serves the top bar's
-      popover and a task's Services popover alike. The line ends with its buttons, `icon-sm`, 1px apart (`gap-px`):
-      Terminal (`IconConsole`, "Open the terminal of ‹name›", `describeServiceTerminal`) once the service has a
-      terminal, so it opens in one press without expanding the row; then Start (`IconPlay`) on a service that does not
-      run, or Open (`ServicePreviewButton`, `IconArrowUpRight`) on a running one with a preview URL, always on the line
-      since the link is what you came for; its tooltip "Open ‹name›" ("Open ‹name› for ‹task›" on a
+      with code 1"). The line ends with its buttons, `icon-xs`, 1px apart (`gap-px`): Restart
+      (`IconArrowRotateClockwise`) and Stop (`IconStop`) on a running service and Share on a task's run with a preview,
+      those three shown under the pointer; Terminal (`IconConsole`, "Open the terminal of ‹name›",
+      `describeServiceTerminal`) once the service has a terminal, so it opens in one press; then Start (`IconPlay`) on
+      a service that does not run, or Open (`ServicePreviewButton`, `IconArrowUpRight`) on a running one with a
+      preview URL, an empty slot of its size when it has neither, so every row's last button stays in one column. Its
+      tooltip is "Open ‹name›" ("Open ‹name› for ‹task›" on a
       task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
       port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
-      Terminal page's toolbar have the same button. Pressing the line expands it: a second line under the name with the
-      command in mono and, on a running service, Restart (`IconArrowRotateClockwise`) and Stop (`IconStop`), then Share
-      on a task's run with a preview, and under it the service's runs in tasks on a tree line, each with its own
-      buttons. Evidence's Preview group links the task's running previews too,
+      Terminal page's toolbar have the same button. Last comes the chevron column: a service with runs in tasks folds
+      them under it, closed by default, its chevron (shown under the pointer) at the line's end, and keeps its fold in
+      the disclosure store (`resolveServiceRowId`, `services:service:<id>`) across openings and reloads, one fold for
+      the top bar's popover and a task's alike; expanded, the runs hang under it on a tree line, each with its own
+      buttons. A service without runs keeps an empty slot there. The project header puts its chevron in the same
+      column (`CompactSection`'s `chevronAtEnd`, the queue keeps its chevron after the counts), after the play button
+      that starts all, so the header's play lines up with the rows' Start. Evidence's Preview group links the task's running previews too,
       after the ones the agent attached, as a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's
       name, its URL; `listTaskPreviews`), there only while the run is active and left out when the agent attached a
       link to the same server already (`listUnattachedPreviews`, by origin, since the agent's carries the screen's
       path). How to test stays the agent's: it names the preview it attached. A row has no `•••`: editing and removing are Manage's. Measured in the
-      browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
-      24px wide.
+      browser: the header's play button and every row's last button at the same x, 22px wide, and the header's chevron
+      after them, 11px from the popover's end.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the
       trigger (`max-h-(--available-height)`, `COMPACT_POPOVER`, the queue popover's classes) and then scrolls,
       its footer staying put. Add services, the custom form and a service's form keep one height of their own,

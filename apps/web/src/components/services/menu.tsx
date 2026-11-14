@@ -91,12 +91,14 @@ function ServiceGroupSection({
       leading={<ProjectDot color={group.project.color} />}
       title={group.project.name}
       count={<GroupSummary views={group.views} />}
+      chevronAtEnd
       action={
         !manage &&
         canStartAll(group.views) && (
           <ServiceActionButton
             label={describeStartAll(group.project)}
             icon='IconPlay'
+            size='icon-xs'
             onClick={() => handlers.startAll(group.project)}
           />
         )

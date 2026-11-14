@@ -351,7 +351,7 @@ export function TerminalSpecimens() {
           </button>
         </div>
       </Specimen>
-      <Specimen label='ServiceRow · running, starting, failed, exited and never started, each folded to one line (press a row for its command, Restart and Stop)'>
+      <Specimen label='ServiceRow · running, starting, failed, exited and never started, each one short line, Restart and Stop on hover'>
         <HoverHighlight className={cn(INSET, 'flex w-88 flex-col gap-px p-1')}>
           {VIEWS.map((view) => (
             <ServiceRow key={view.service.id} view={view} project={PROJECT} now={NOW} handlers={HANDLERS} />

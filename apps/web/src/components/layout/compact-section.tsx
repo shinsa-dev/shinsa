@@ -40,6 +40,7 @@ export function CompactSection({
   title,
   count,
   action,
+  chevronAtEnd = false,
   children,
 }: {
   persistId: DisclosurePersistId;
@@ -49,6 +50,7 @@ export function CompactSection({
   title: string;
   count: React.ReactNode;
   action?: React.ReactNode;
+  chevronAtEnd?: boolean;
   children: React.ReactNode;
 }) {
   const disclosure = useDisclosure(persistId, defaultOpen);
@@ -62,13 +64,15 @@ export function CompactSection({
           disclosure={disclosure}
           label={label}
           action={action}
-          className={cn(HEADER, 'h-6 pe-1')}
+          chevron={chevronAtEnd ? 'glyph' : undefined}
+          chevronClassName={REVEAL}
+          className={cn(HEADER, chevronAtEnd ? 'h-7 pe-1' : 'h-6 pe-1')}
         >
           <span className={ICON_SLOT}>{leading}</span>
           <span className='min-w-0 truncate'>{title}</span>
           <span className='flex min-w-0 items-center gap-1.5 font-normal tabular-nums'>
             {count}
-            <DisclosureChevron className={REVEAL} />
+            {!chevronAtEnd && <DisclosureChevron className={REVEAL} />}
           </span>
         </DisclosureHeader>
       </div>
