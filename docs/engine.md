@@ -6810,6 +6810,36 @@ must keep up with the SDK, never the other way round.
   and `run` (`VersionsOptions`, the engine options' `versions`); the one test of the default runner points it at the fake
   `claude` in `test/helpers/bin`, whose `update` does nothing.
 
+### Updating Shinsa for Mac from another device
+
+Only Shinsa for Mac's updater, in the app's main process, can download and install a version, so a page on another
+device updates a machine through that machine's engine (`apps/engine/src/app-updates/`, the `app-updates` feature).
+
+- **The link.** The app's `UpdateLink` (`apps/desktop/src/update-link/`) posts its updater's state to
+  `POST /api/app-updates/report` (local-only: `AppUpdateReport`, the app's version, protocol, channel and `AppUpdate`)
+  at launch, on every change and every 5 s, and the answer carries the requests waiting for it
+  (`AppUpdateReportAnswer`), which it runs on `Updater` as Settings on the Mac would: check, install, switch channel, stay or go back.
+  A check and a channel switch from there run quietly (`applyChannel(channel, false)`), so no dialog opens on a Mac
+  nobody is at: the go-back offer waits as the `downgrade` status for that device to answer.
+- **The engine keeps it in memory** (`AppUpdates`): the last report and when it came, the queued requests (one per
+  kind, the latest wins) and the install under way. It is machine state, not the event log, so a restart forgets it
+  and the next report fills it again. A report older than 15 s (`APP_REPORT_FRESH`) means the app is not running.
+- **The routes** are owner-only: `GET /api/app-updates` (`AppUpdatesAnswer`: `source` `app` when the engine runs from
+  a `Shinsa.app` bundle or an app has reported, else `standalone`; `running`; the last report; `installing`; the
+  engine's version), `POST /api/app-updates/request` (refused while the app is not running, or install with no update
+  ready) and `POST /api/app-updates/open`, which opens the app in the background (`open -g`) on that machine.
+- **The restart after an install.** An install records the version it leaves and the one it goes to. Once the
+  relaunched app reports a new version, the engine restarts itself `now` through `EngineRestarter` when the app is
+  newer, as after a local update, so agents resume where they were. An install that fails, or shows no change within
+  5 minutes (`APP_INSTALL_WINDOW`), is dropped.
+- **The page** (`apps/web/src/components/settings/updates.tsx`, `lib/connection/app-updates.ts`): in Shinsa for Mac
+  Updates keeps reading the bridge. In a browser it shows a card per machine you own (the engine it reaches, or each
+  of your machines on the remote dashboard; a teammate's or a shared machine gets none), read every 3 s
+  (`APP_UPDATES_POLL`) while Settings is open, and sends each request to that machine (`EngineClient.onMachine`). A
+  card says when the app is not running (with Open Shinsa for Mac), when it is installing, when the engine is older
+  than the app (with Restart engine), when the engine was installed with npm or the install script (its version
+  only) and when the engine predates the feature.
+
 ### What's new
 
 Every release carries its changelog (`docs/release.md` → The changelog), and the web app shows what changed after an

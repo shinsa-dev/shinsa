@@ -41,6 +41,7 @@ import { EngineSource } from '../../src/source/service.ts';
 import type { TrayClick, TrayView } from '../../src/tray/schema.ts';
 import { StatusTray } from '../../src/tray/service.ts';
 import { UpdateClient } from '../../src/update-client/service.ts';
+import { UpdateLink } from '../../src/update-link/service.ts';
 import { UpdateLog } from '../../src/update-log/service.ts';
 import { UpdateCheckFailed, type UpdateEvent, type UpdaterOptions } from '../../src/updates/schema.ts';
 import { Updater } from '../../src/updates/service.ts';
@@ -67,6 +68,7 @@ export interface DesktopWorld {
   answer: (path: string) => HttpAnswer;
   requests: string[];
   posts: { url: string; body: unknown }[];
+  posted: { path: string; body: string }[];
   cookies: SessionCookie[];
   cookiesFail: boolean;
   launchctl: string[][];
@@ -135,6 +137,7 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     answer: () => 'refuse',
     requests: [],
     posts: [],
+    posted: [],
     cookies: [],
     cookiesFail: false,
     launchctl: [],
@@ -191,6 +194,8 @@ function makeHttpLayer(world: DesktopWorld) {
     HttpClient.HttpClient,
     HttpClient.make((request, url) => {
       world.requests.push(url.pathname);
+      if (request.body._tag === 'Uint8Array')
+        world.posted.push({ path: url.pathname, body: new TextDecoder().decode(request.body.body) });
       if (request.method === 'POST')
         world.posts.push({
           url: url.toString(),
@@ -591,5 +596,15 @@ export type ConnectedServices = Layer.Success<ReturnType<typeof makeConnectedLay
 export function runConnected<A, E>(world: DesktopWorld, effect: Effect.Effect<A, E, ConnectedServices>) {
   return Effect.runPromise(
     Effect.scoped(effect).pipe(Effect.provide(Layer.merge(makeConnectedLayer(world), Logger.layer([]))))
+  );
+}
+
+export function runLinked<A, E>(world: DesktopWorld, effect: Effect.Effect<A, E, DesktopServices>) {
+  return Effect.runPromise(
+    Effect.scoped(effect).pipe(
+      Effect.provide(
+        Layer.merge(UpdateLink.pipe(Layer.provideMerge(makeDesktopLayer(world))), Logger.layer([]))
+      )
+    )
   );
 }

@@ -1,4 +1,5 @@
 import { EngineApi } from '@shinsa/core/engine-api';
+import type { AppUpdateReport, AppUpdateReportAnswer } from '@shinsa/core/engine-api/schema';
 import { RemoteApi } from '@shinsa/core/remote/api';
 import { Context, Effect, Layer, Option, Schema } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
@@ -22,6 +23,7 @@ export class EngineServer extends Context.Service<
     readonly origin: string;
     readonly requestHealth: Effect.Effect<ServerHealth, EngineUnreachable>;
     readonly requestQueue: Effect.Effect<TrayQueue, EngineUnreachable>;
+    reportUpdates(report: AppUpdateReport): Effect.Effect<AppUpdateReportAnswer, EngineUnreachable>;
   }
 >()('shinsa/desktop/server/EngineServer') {
   static readonly layer = Layer.effect(
@@ -42,6 +44,7 @@ export class EngineServer extends Context.Service<
         HttpClient.filterStatusOk
       );
       const server = yield* HttpApiClient.group(EngineApi, { group: 'server', httpClient });
+      const appUpdates = yield* HttpApiClient.group(EngineApi, { group: 'appUpdates', httpClient });
       const decodeHealth = Schema.decodeUnknownEffect(HealthAnswer);
       const cloud = yield* HttpApiClient.group(RemoteApi, { group: 'session', httpClient });
       const readCloudHealth = () => Effect.succeed(CLOUD_HEALTH);
@@ -67,6 +70,10 @@ export class EngineServer extends Context.Service<
           : reach(server.health(), decodeHealth)
         ).pipe(Effect.withSpan('EngineServer.requestHealth')),
         requestQueue: reach(server.queue(), decodeQueue).pipe(Effect.withSpan('EngineServer.requestQueue')),
+        reportUpdates: (report) =>
+          reach(appUpdates.report({ payload: report }), Effect.succeed).pipe(
+            Effect.withSpan('EngineServer.reportUpdates')
+          ),
       });
     })
   );

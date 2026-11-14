@@ -13,6 +13,10 @@ import {
   AccountsAnswer,
   ActivityAnswer,
   AnyBody,
+  AppUpdateReport,
+  AppUpdateReportAnswer,
+  AppUpdateRequest,
+  AppUpdatesAnswer,
   ATTACHMENT_UPLOAD_LIMIT_BYTES,
   BodyTooLarge,
   BROWSER_ONLY_INSTALL,
@@ -449,6 +453,35 @@ class VersionsGroup extends HttpApiGroup.make('versions')
   )
   .middleware(EngineGate) {}
 
+class AppUpdatesGroup extends HttpApiGroup.make('appUpdates')
+  .add(
+    HttpApiEndpoint.post('report', '/api/app-updates/report', {
+      payload: AppUpdateReport,
+      success: AppUpdateReportAnswer,
+    }).annotate(LocalOnlyRoute, true),
+    HttpApiEndpoint.get('view', '/api/app-updates', { success: AppUpdatesAnswer }).annotate(
+      OwnerOnlyRoute,
+      true
+    ),
+    HttpApiEndpoint.post('request', '/api/app-updates/request', {
+      payload: AppUpdateRequest,
+      success: AppUpdatesAnswer,
+    })
+      .annotate(OwnerOnlyRoute, true)
+      .annotate(RouteFieldFailures, {
+        kind: {
+          code: 'request_invalid',
+          message: 'Check, install, switch channel or answer the go-back offer.',
+        },
+      }),
+    HttpApiEndpoint.post('open', '/api/app-updates/open', {
+      payload: EmptyBody,
+      success: AppUpdatesAnswer,
+    }).annotate(OwnerOnlyRoute, true)
+  )
+  .annotateEndpoints(EngineFeatureRoute, 'app-updates')
+  .middleware(EngineGate) {}
+
 class ChangelogGroup extends HttpApiGroup.make('changelog')
   .add(
     HttpApiEndpoint.get('list', '/api/changelog', { success: Changelog }).annotate(
@@ -814,6 +847,7 @@ export class EngineApi extends HttpApi.make('engine').add(
   SecretsGroup,
   ExtensionsGroup,
   VersionsGroup,
+  AppUpdatesGroup,
   ChangelogGroup,
   RemoteGroup,
   TeamsGroup,

@@ -1,7 +1,7 @@
 import type { AwaySpan } from '@shinsa/core';
+import type { AppUpdate, AppUpdateChannel } from '@shinsa/core/engine-api/schema';
 import type { DesktopNotice } from '../notifications/schema.ts';
 import type { PinnedMachine, SourceSetting } from '../source/schema.ts';
-import type { UpdateChannel } from '../updates/schema.ts';
 
 export const PAGE_ACTIONS = ['new-task', 'command-menu', 'whats-new'] as const;
 
@@ -9,22 +9,11 @@ export type PageAction = (typeof PAGE_ACTIONS)[number];
 
 export type DesktopWindowState = 'window' | 'fullscreen';
 
-export type DesktopUpdate =
-  | { status: 'none' }
-  | { status: 'checking' }
-  | { status: 'current' }
-  | { status: 'failed'; message: string }
-  | { status: 'downloading'; version: string; percent: number }
-  | { status: 'preparing'; version: string }
-  | { status: 'ready'; version: string }
-  | { status: 'installing'; version: string }
-  | { status: 'downgrade'; version: string };
-
 export interface DesktopStart {
   version: string;
   protocol: number;
-  update: DesktopUpdate;
-  channel: UpdateChannel;
+  update: AppUpdate;
+  channel: AppUpdateChannel;
   windowState: DesktopWindowState;
   source: SourceSetting;
 }
@@ -36,14 +25,14 @@ export interface DesktopBridge extends DesktopStart {
   onNotifyFailed: (listener: () => void) => () => void;
   installUpdate: () => void;
   checkForUpdates: () => void;
-  applyUpdateChannel: (channel: UpdateChannel) => void;
+  applyUpdateChannel: (channel: AppUpdateChannel) => void;
   answerDowngrade: (accept: boolean) => void;
   signIn: () => void;
   useLocalEngine: () => void;
   useMachine: (machine: PinnedMachine | null) => void;
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
-  onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
+  onUpdate: (listener: (update: AppUpdate) => void) => () => void;
   onAway: (listener: (span: AwaySpan) => void) => () => void;
   onAction: (listener: (action: PageAction) => void) => () => void;
 }

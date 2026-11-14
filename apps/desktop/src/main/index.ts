@@ -22,6 +22,7 @@ import { Prefs } from '../prefs/service.ts';
 import { EngineServer } from '../server/service.ts';
 import { EngineSource } from '../source/service.ts';
 import { StatusTray } from '../tray/service.ts';
+import { UpdateLink } from '../update-link/service.ts';
 import { UpdateLog } from '../update-log/service.ts';
 import { Updater } from '../updates/service.ts';
 import { AppWindow } from '../window/service.ts';
@@ -62,7 +63,7 @@ const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, Co
   Layer.provideMerge(ElectronLayer)
 );
 
-const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AwayWatch, AppMenu.layer).pipe(
+const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, UpdateLink, AwayWatch, AppMenu.layer).pipe(
   Layer.provideMerge(StatusTray.layer),
   Layer.provideMerge(CloudSignIn.layer),
   Layer.provideMerge(Updater.layer),

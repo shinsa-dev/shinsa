@@ -12,7 +12,7 @@ import { LOCAL_SOURCE, type SourceSetting } from '../source/schema.ts';
 import { EngineSource } from '../source/service.ts';
 import { StatusTray } from '../tray/service.ts';
 import { Updater } from '../updates/service.ts';
-import { resolveDesktopUpdate } from '../updates/state.ts';
+import { resolveAppUpdate } from '../updates/state.ts';
 import { AppWindow } from '../window/service.ts';
 import { CHANNELS, type DesktopStart } from './schema.ts';
 
@@ -69,7 +69,7 @@ export const PageBridge = Layer.effectDiscard(
       const started: DesktopStart = {
         version: host.version,
         protocol: ENGINE_PROTOCOL,
-        update: resolveDesktopUpdate(snapshot.state),
+        update: resolveAppUpdate(snapshot.state),
         channel: snapshot.channel,
         windowState: yield* window.windowState,
         source: yield* source.current,
@@ -80,7 +80,7 @@ export const PageBridge = Layer.effectDiscard(
     yield* Effect.forkScoped(Stream.runForEach(channel.messages, answer), { startImmediately: true });
     yield* Effect.forkScoped(
       Stream.runForEach(Stream.drop(updater.changes, 1), (snapshot) =>
-        window.sendToPage(CHANNELS.update, resolveDesktopUpdate(snapshot.state))
+        window.sendToPage(CHANNELS.update, resolveAppUpdate(snapshot.state))
       ),
       { startImmediately: true }
     );

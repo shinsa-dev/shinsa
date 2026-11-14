@@ -1,10 +1,10 @@
 import type { AwaySpan } from '@shinsa/core';
+import type { AppUpdate } from '@shinsa/core/engine-api/schema';
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron';
 import {
   CHANNELS,
   type DesktopBridge,
   type DesktopStart,
-  type DesktopUpdate,
   type DesktopWindowState,
   type PageAction,
 } from '../bridge/schema.ts';
@@ -40,7 +40,7 @@ if (start) {
     useMachine: (machine) => ipcRenderer.send(CHANNELS.useMachine, machine),
     onNavigate: (listener) => subscribe<string>(CHANNELS.navigate, listener),
     onWindowState: (listener) => subscribe<DesktopWindowState>(CHANNELS.windowState, listener),
-    onUpdate: (listener) => subscribe<DesktopUpdate>(CHANNELS.update, listener),
+    onUpdate: (listener) => subscribe<AppUpdate>(CHANNELS.update, listener),
     onAway: (listener) => subscribe<AwaySpan>(CHANNELS.away, listener),
     onAction: (listener) => subscribe<PageAction>(CHANNELS.action, listener),
   };

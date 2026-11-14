@@ -45,6 +45,8 @@ src/
 │   source/         source.ts (This Mac or a Shinsa Cloud machine, the cloud origin, the Engine menu's options,
 │                   whether a switch reloads or relaunches); EngineSource (the source read once at start, `use`)
 │   tray/           menu.ts (the menu bar item's status line, count and menu); StatusTray
+│   update-link/    report.ts (the updater's snapshot as core's `AppUpdateReport`); UpdateLink (reports to the
+│                   engine at launch, on every change and every 5 s, and runs the requests it gets back)
 │   update-log/     log.ts (lines and rotation); UpdateLog, `~/Library/Logs/<app>/updater.log`
 │   updates/        state.ts (states, menu item, notices, the go-back dialog), channel.ts (the channels, their
 │                   options, when a version ahead is offered the latest there); Updater (start, every four hours,
@@ -228,7 +230,10 @@ interrupts an agent. Everything that waits happens before Restart is offered, so
 and relaunch follow: the updater goes `downloading` (with its percent) → `preparing` (electron-updater has the zip,
 Squirrel.Mac pulls it from electron-updater's local proxy, unpacks and verifies it and stages ShipIt; about 10 s) →
 `ready` only on Squirrel.Mac's own `update-downloaded` → `installing` after the click. The menu, Settings → General →
-Updates and the page's bridge (`DesktopUpdate`) show each state, and Restart appears only at `ready`.
+Updates and the page's bridge (`DesktopUpdate`, core's `AppUpdate`) show each state, and Restart appears only at `ready`.
+From another device the same updater runs through the engine: `UpdateLink` reports its state to
+`/api/app-updates/report` and runs what Settings → General → Updates in a browser asked for (`docs/engine.md` →
+Updating Shinsa for Mac from another device). A check or a channel switch asked from there runs quietly, so no dialog opens: the go-back offer waits in Updates for that device to answer.
 `quitAndInstall()` closes every window before `before-quit`, so `Updater` marks the window quitting before it calls it and on the built-in
 updater's `before-quit-for-update`; without it the close would hide the window, cancel the quit and leave ShipIt
 refusing to replace a running app (`App Still Running Error`). If the app still runs `INSTALL_TIMEOUT` (15 s)

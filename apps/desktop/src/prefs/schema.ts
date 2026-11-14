@@ -1,6 +1,6 @@
+import { AppUpdateChannel } from '@shinsa/core/engine-api/schema';
 import { Effect, Option, Schema } from 'effect';
 import { SourceSetting } from '../source/schema.ts';
-import { UpdateChannel } from '../updates/schema.ts';
 import { SavedBounds } from '../window/schema.ts';
 
 export const PREFS_FILE = 'prefs.json';
@@ -10,7 +10,7 @@ export const StoredPrefs = Schema.Struct({
     SavedBounds.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))
   ),
   updateChannel: Schema.optionalKey(
-    UpdateChannel.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))
+    AppUpdateChannel.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))
   ),
   engineSource: Schema.optionalKey(
     SourceSetting.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))

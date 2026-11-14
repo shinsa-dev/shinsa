@@ -5,6 +5,7 @@ import {
   type Surface,
   type TimingSpan,
 } from '@shinsa/core';
+import type { AppUpdate, AppUpdateChannel } from '@shinsa/core/engine-api/schema';
 import { createContext } from 'react';
 import { isRemoteBuild } from '@/lib/remote/mode.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -20,7 +21,7 @@ export interface DesktopNotice {
   path: string | null;
 }
 
-export type UpdateChannel = 'stable' | 'beta' | 'canary';
+export type UpdateChannel = AppUpdateChannel;
 
 const DESKTOP_ACTIONS = ['new-task', 'command-menu', 'whats-new'] as const;
 
@@ -28,16 +29,7 @@ export type DesktopAction = (typeof DESKTOP_ACTIONS)[number];
 
 export type DesktopActions = Record<DesktopAction, () => void>;
 
-export type DesktopUpdate =
-  | { status: 'none' }
-  | { status: 'checking' }
-  | { status: 'current' }
-  | { status: 'failed'; message: string }
-  | { status: 'downloading'; version: string; percent: number }
-  | { status: 'preparing'; version: string }
-  | { status: 'ready'; version: string }
-  | { status: 'installing'; version: string }
-  | { status: 'downgrade'; version: string };
+export type DesktopUpdate = AppUpdate;
 
 export interface PinnedMachine {
   id: string;
