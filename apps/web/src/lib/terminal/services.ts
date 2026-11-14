@@ -199,6 +199,14 @@ export function resolveServiceGroupId(projectId: string) {
   return createDisclosureId('services', 'project', projectId);
 }
 
+export function resolveServiceRowId(serviceId: string) {
+  return createDisclosureId('services', 'service', serviceId);
+}
+
+export function describeServiceTerminal(view: Pick<ServiceView, 'service'>) {
+  return `Open the terminal of ${view.service.name}`;
+}
+
 export function listStoppedServices(views: ServiceView[]) {
   return views.filter((view) => !isServiceActive(view));
 }

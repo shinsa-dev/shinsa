@@ -334,14 +334,12 @@ export const handleOrchestrationTool = Effect.fn('OrchestrationTool.handle')(fun
     const projectId = Option.getOrNull(resolveTaskProject(state, task));
     const repo =
       selectKnownRepo(state, repository, projectId, true) ??
-      (yield* call.registerRepo(projectId, repository)) ??
-      selectKnownRepo(state, repository, projectId, false);
+      selectKnownRepo(state, repository, projectId, false) ??
+      (yield* call.registerRepo(projectId, repository));
     if (!repo) {
-      const known = Object.values(state.repos)
-        .filter((candidate) => candidate.projectId === projectId)
-        .map((candidate) => candidate.name);
+      const known = Object.values(state.repos).map((candidate) => candidate.name);
       return yield* refuse(
-        `There is no repository "${repository}" in this task's project or its folders. Known: ${known.join(', ') || 'none'}.`
+        `There is no repository "${repository}" registered or in this task's project folders. Known: ${known.join(', ') || 'none'}.`
       );
     }
     yield* call.dispatch({ type: 'agent.move_to_repository', runId: call.runId, repoId: repo.id, reason });

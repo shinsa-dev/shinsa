@@ -249,7 +249,7 @@ Only these, and they win over anything below:
 8. **One queue, two sizes.** `components/queue/queue.tsx` is the only list of tasks by what they
    need: Needs you (every open decision in focus, in `resolveQueue` order, which `docs/engine.md` →
    Scheduling owns: priority, then what it unblocks, then the kind of decision, then age), In progress,
-   and Waiting on another task (in chain order, collapsed). In In progress, Waiting and Snoozed, two or more tasks of
+   and Waiting on another task (in chain order, collapsed). In every section, two or more tasks of
    one initiative or one bundle sit under a small `ListRow` (`size='sm'`, 24px): the group's icon (the initiative's
    target, the bundle's layers) centred in the 20px slot the task tiles use, its name in medium `text-fg-3` and
    "‹n› tasks here · ‹progress›" in `text-fg-2` after it (`QueueGroupRows`). It hovers and highlights like a task row
@@ -259,7 +259,7 @@ Only these, and they win over anything below:
    them. The hover highlight holds on the last row while the pointer crosses a gap, an indent or a guide line
    (`HoverHighlight`'s `holdOverGaps`, on Home's sections and the compact queue only), so it slides from row to
    row; a section header is marked `data-highlight-release`, so pointing at it lets the highlight go back to the
-   task on screen. Once an initiative's lead task is done, its tasks are plain rows again. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
+   task on screen. Once an initiative's lead task is done, its tasks are plain rows again. In Needs you each decision keeps its own row inside the group, the group takes the place of its first decision and its rows keep Needs you's order, and the lead's own decision (a question, a pause) is the group's first row instead of a row of its own. Every section holds only the focus project's
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from All tasks' groups (`lib/tasks/groups.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
@@ -1109,8 +1109,10 @@ Only these, and they win over anything below:
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
     approve, Needs your answer, Answered, Paused, In progress, Backlog, Done and Cancelled
-    (both collapsed). There is no section for waiting: a task waiting on another task is filed in the section of the
-    task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
+    (both collapsed). A task you approved to merge files under Done while GitHub merges it or holds it in the merge
+    queue (`isMergeInFlight`), its status Merging in green with the merged icon; a merge that fails opens its failure
+    gate and moves it to Paused. There is no section for waiting: a task waiting on another task is filed in the
+    section of the task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
     a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
@@ -2838,34 +2840,39 @@ Only these, and they win over anything below:
       row (measured: 4px right, 4px top), so every Start, Restart and Stop and the header's play button share one x and
       no row's button sits tighter to its edge than another's (a 2px inset, tried on 2026-10-28, matched the task runs
       and crowded the two-line service rows). The rows follow one
-      another with no gap, as the queue's do. The list's top is inset 6px more than a section's own padding
-      (`COMPACT_POPOVER_INSET`, the queue popover's too), so the first header's dot sits as far from the top as from
-      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). Its bottom is inset by as much
-      only while the last project is folded (`has-[>section:last-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
-      a folded section `data-folded`), so a project folded on its own sits as far from the footer's hairline as from the
-      popover's top (12px each); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
+      another with no gap, as the queue's do. Unlike the queue's, the list's top takes only a section's own padding,
+      without `COMPACT_POPOVER_INSET`, so the first header sits as far from the popover's top as the section's last row
+      from its hairline (measured: 6px and 6px; asked for on 2026-11-14, the extra 6px read as a gap). Its bottom is inset 6px more
+      only while the only project is folded (`has-[>section:only-of-type[data-folded]]:pb-1.5`; `CompactSection` marks
+      a folded section `data-folded`); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
       sits from the popover's sides. A row
-      (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
+      (`ServiceRow`) is one short line (`h-7`, no command: the command is Manage's): the state's tile, `sm`, in the
+      icon slot so it sits under the project's dot (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
-      mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
-      1") and the command in mono. Pressing the row opens its terminal once it has one. The row's actions sit at its
-      end, `icon-sm`: Start (`IconPlay`) is always there on a service that does not run; Restart
-      (`IconArrowRotateClockwise`) and Stop (`IconStop`) show on a running one while the row is under the pointer (the
-      shared highlight's `data-hovered`), 1px apart (`gap-px`), as the same pair is on the Terminal page's toolbar and
-      as adjacent ghost buttons in an `InputGroup` addon are: each hover wash is its own edge, so the pair reads as one
-      set (measured: 1px between Restart and Stop, each 24px). A running row whose service has a preview URL ends
-      with Open (`ServicePreviewButton`, `icon-sm`, `IconArrowUpRight`, after Stop, 1px apart): always shown, not only
-      under the pointer, since the link is what you came for; its tooltip "Open ‹name›" ("Open ‹name› for ‹task›" on a
+      mark that never reads as a checkbox), the name and the state beside it in its tone ("Running for 12m", "Failed
+      with code 1"), then the chevron right after the state, as the project header has it after its counts, on a service
+      with runs in tasks. The line ends with its buttons, `icon-xs`, 1px apart (`gap-px`): Restart
+      (`IconArrowRotateClockwise`) and Stop (`IconStop`) on a running service and Share on a task's run with a preview,
+      those three shown under the pointer; Terminal (`IconConsole`, "Open the terminal of ‹name›",
+      `describeServiceTerminal`) once the service has a terminal, so it opens in one press; then Start (`IconPlay`) on
+      a service that does not run, or Open (`ServicePreviewButton`, `IconArrowUpRight`) on a running one with a
+      preview URL, an empty slot of its size when it has neither, so every row's last button stays in one column. Its
+      tooltip is "Open ‹name›" ("Open ‹name› for ‹task›" on a
       task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
       port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
-      Terminal page's toolbar have the same button. Evidence's Preview group links the task's running previews too,
+      Terminal page's toolbar have the same button. A service with runs in tasks folds
+      them under it, closed by default, its chevron shown under the pointer, and keeps its fold in
+      the disclosure store (`resolveServiceRowId`, `services:service:<id>`) across openings and reloads. Only the top
+      bar's popover passes runs, so a task's Services popover never folds; expanded, the runs hang under it on a tree line, each with its own
+      buttons. The project header keeps its chevron after its counts, as the queue's does (putting it after the play
+      button, tried on 2026-11-14, pushed the play out of the rows' column), and its play button is `icon-xs` as the rows' are, so
+      the header's play lines up with the rows' Start. Evidence's Preview group links the task's running previews too,
       after the ones the agent attached, as a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's
       name, its URL; `listTaskPreviews`), there only while the run is active and left out when the agent attached a
       link to the same server already (`listUnattachedPreviews`, by origin, since the agent's carries the screen's
       path). How to test stays the agent's: it names the preview it attached. A row has no `•••`: editing and removing are Manage's. Measured in the
-      browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
-      24px wide.
+      browser: the header's play button and every row's last button at the same x, 22px wide.
     - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the
       trigger (`max-h-(--available-height)`, `COMPACT_POPOVER`, the queue popover's classes) and then scrolls,
       its footer staying put. Add services, the custom form and a service's form keep one height of their own,
@@ -2955,8 +2962,8 @@ Only these, and they win over anything below:
       washed while open like a fact's. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
       ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
       `ServiceRow` per service for this task, the list inset 6px on every side (`p-1.5`) so the first tile sits 12px
-      from the popover's side and 12px from the header's hairline: its state is the task's run's, Start starts it in
-      the worktree, and the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
+      from the popover's side and 12px from the header's hairline, folded the same way: its state is the task's run's,
+      Start starts it in the worktree, and its Terminal button opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
@@ -3166,7 +3173,8 @@ Only these, and they win over anything below:
     `lib/tasks/fork.ts`; `docs/engine.md` → Watchdogs, Forking a task).
     - **Watching is a status.** A merged task with a watchdog still watching or waiting for a source reads Watching
       (`IconRadar`, blue) wherever its status shows, and its Now card says "Merged. Its watchdogs keep watching the
-      change." A check running is the stage Checking a watchdog.
+      change." A check running changes nothing in the lists: the task stays in Done with its Watching status, never
+      In progress, and keeps its place (`resolveShownStage`).
     - **The Watchdogs panel** sits under the Now card on the Overview (`Panel`, `IconRadar`, its own `persistId`): how
       many still watch and how long is left, then one row per watchdog in two lines. The first has its title, its
       status in its tone and, quiet right after it at the same size, where it stands ("18 h left · 5 checks", "3
@@ -3237,7 +3245,7 @@ Only these, and they win over anything below:
     Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'
     judgement calls are entries of the lead's Activity, among its own. Home and the queue are for tasks: they list an
     initiative's members where any task sits (Needs you, In progress, Waiting) and never its lead, which you reach from a
-    member's initiative fact or ⌘K. The composer has no kind of task to pick. A member's Overview facts name its initiative and phase and open the lead task, and its menus
+    member's initiative fact or ⌘K; only a decision of the lead's own shows, first under the initiative's row in Needs you. The composer has no kind of task to pick. A member's Overview facts name its initiative and phase and open the lead task, and its menus
     carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's
     menu carries Edit the initiative and Share with a team (a submenu of your teams, each ticked while shared). Once a
     teammate's task is in the initiative the card uses All tasks' team table (`TEAM_TASK_LIST_COLUMNS`, with Repository

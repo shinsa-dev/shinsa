@@ -7,8 +7,10 @@ import type { ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
   AUTOPILOT_CEILINGS,
+  AUTOPILOT_FOLLOW_UP_GATES,
   AUTOPILOT_LIMITS,
   type AutopilotFacts,
+  type AutopilotFollowUpGate,
   type AutopilotGateKind,
   type AutopilotLimit,
   type AutopilotLimits,
@@ -194,6 +196,34 @@ function limitAct(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimi
   }
 }
 
+function isFollowUpGate(gate: AutopilotGateKind): gate is AutopilotFollowUpGate {
+  return (AUTOPILOT_FOLLOW_UP_GATES as readonly string[]).includes(gate);
+}
+
+function limitFollowUpOn(facts: AutopilotFacts, gate: AutopilotFollowUpGate, policy: AutopilotPolicy) {
+  switch (gate) {
+    case 'plan':
+      if (facts.heldPlan) return limitPlan(facts, policy);
+      return facts.scope ? ALLOWED : refuse('The plan has no phases yet.');
+    case 'review':
+      return facts.escalatedReview ? limitReview(facts, policy) : ALLOWED;
+    case 'merge':
+      if (policy.autoMerge === 'off' || facts.approvedByYou) return limitMerge(facts, policy);
+      return ALLOWED;
+  }
+}
+
+function limitRevise(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+  if (!policy.enabled) return refuseBySetting('Autopilot is off.');
+  const gate = facts.gate;
+  if (!isFollowUpGate(gate))
+    return refuseBySetting('Autopilot follows up only on plans, reviews and merges.');
+  if (gate !== 'merge' && !policy.gates.includes(GATE_SETTING[gate])) {
+    return refuseBySetting('Autopilot does not act on this kind of gate.');
+  }
+  return limitFollowUpOn(facts, gate, policy);
+}
+
 function limitEscalate(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
   if (!policy.enabled || !policy.escalate) return refuse('Autopilot does not contact your team.');
   if (!facts.urgent) return refuse('Only urgent changes go to your team.');
@@ -208,7 +238,11 @@ function limitEscalate(facts: AutopilotFacts, policy: AutopilotPolicy): Autopilo
 }
 
 export function resolveAutopilotLimits(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimits {
-  return { act: limitAct(facts, policy), escalate: limitEscalate(facts, policy) };
+  return {
+    act: limitAct(facts, policy),
+    revise: limitRevise(facts, policy),
+    escalate: limitEscalate(facts, policy),
+  };
 }
 
 export function resolveAutopilotSuggestionLimit(

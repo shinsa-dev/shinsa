@@ -14,7 +14,7 @@ export const COMPACT_POPOVER_INSET = 'pt-1.5';
 const HEADER =
   'w-full gap-2 rounded-control ps-1.5 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4';
 
-const REVEAL = 'opacity-0 group-hover/disclosure:opacity-100';
+export const CHEVRON_REVEAL = 'opacity-0 group-hover/disclosure:opacity-100';
 
 export function CompactSections({
   className,
@@ -68,7 +68,7 @@ export function CompactSection({
           <span className='min-w-0 truncate'>{title}</span>
           <span className='flex min-w-0 items-center gap-1.5 font-normal tabular-nums'>
             {count}
-            <DisclosureChevron className={REVEAL} />
+            <DisclosureChevron className={CHEVRON_REVEAL} />
           </span>
         </DisclosureHeader>
       </div>
