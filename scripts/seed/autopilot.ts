@@ -126,6 +126,7 @@ function createSeedFacts(answer: AutopilotDecisionAnswer, index: number): Autopi
     active: index % 6 !== 0,
     inHours: index % 6 !== 0,
     hour: (9 + index) % 24,
+    work: null,
   };
 }
 

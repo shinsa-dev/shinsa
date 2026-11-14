@@ -37,6 +37,7 @@ import {
   resolveAutopilotLoss,
 } from './score.ts';
 import { countDecisionTopics, scoreFollowUp } from './topics.ts';
+import { resolveAutopilotWorkFacts } from './work/index.ts';
 
 const GATE_KIND: Partial<Record<Gate['type'], AutopilotDecisionKind>> = {
   plan: 'plan',
@@ -147,6 +148,7 @@ function resolveDecisionFacts(state: ShinsaState, draft: DecisionDraft, at: numb
     heldPlan: isHeldPlan(task),
     waitedMinutes: gate ? Math.max(0, Math.floor((at - gate.openedAt) / MINUTE_MS)) : null,
     ...opened,
+    work: resolveAutopilotWorkFacts(task),
   };
 }
 

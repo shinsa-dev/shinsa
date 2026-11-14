@@ -138,3 +138,11 @@ export {
   selectAutopilotJudgeRequest,
   selectJudgedGateKind,
 } from './prompt.ts';
+export {
+  AUTOPILOT_WORK_LIMITS,
+  resolveAutopilotWorkFacts,
+  type AutopilotWorkFacts,
+  type AutopilotWorkNovelty,
+  type AutopilotWorkSize,
+  type AutopilotWorkSurface,
+} from './work/index.ts';

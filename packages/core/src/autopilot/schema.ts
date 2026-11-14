@@ -4,6 +4,7 @@ import type { GateCause } from '../domain/types.ts';
 import type { ReviewRating } from '../report/types.ts';
 import type { AutopilotModelGuess } from './model/schema.ts';
 import type { AutopilotModelHead } from './model/schema.ts';
+import type { AutopilotWorkFacts } from './work/schema.ts';
 
 export type AutopilotGateKind = 'plan' | 'question' | 'review' | 'merge' | 'proposal' | 'failure';
 
@@ -217,6 +218,7 @@ export interface AutopilotDecisionFacts {
   active: boolean;
   inHours: boolean | null;
   hour: number;
+  work: AutopilotWorkFacts | null;
 }
 
 export interface AutopilotDecision {

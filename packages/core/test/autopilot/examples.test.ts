@@ -26,6 +26,7 @@ const FACTS: AutopilotDecisionFacts = {
   active: true,
   inHours: true,
   hour: 10,
+  work: null,
 };
 
 function decision(overrides: Partial<AutopilotLearnedDecision> = {}): AutopilotLearnedDecision {
