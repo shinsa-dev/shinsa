@@ -822,8 +822,9 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   findings, fix budget, result, proposal, pull request) are the current round's.
 - **How a new round is decided.** The classifier decides, not the agent, for every message, the task resting or not,
   except where you decide (below): one quick call on the classifier model reads your message against the task's rounds (each with its kind of work, its
-  status and what it did: the result, the report's headline or the plan's goal) and where the current round is, and
-  answers `acknowledge`, `feedback`, `new_round` or `separate_task`. Most messages are no new work: thanks, "ok" or
+  status and what it did: the result, the report's headline or the plan's goal), where the current round is and, while
+  it works or waits at a gate, its plan's phases (so asking for what a phase already does is `feedback`, never a new
+  round), and answers `acknowledge`, `feedback`, `new_round` or `separate_task`. Most messages are no new work: thanks, "ok" or
   small talk is `acknowledge`, and a question about what a round did, or a request to check, confirm, verify or look
   into it (its deploy, its logs, its live data), is `feedback`; only a message that asks for a new change or operation
   that has not been done is a new round (on a resting task a correction to finished work is one).

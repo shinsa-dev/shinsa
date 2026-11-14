@@ -107,6 +107,78 @@ describe('reading what a message asks for', () => {
     expect(call?.prompt).toContain('Message:\nAlso add search');
   });
 
+  test.each(['building', 'awaiting_merge'] as const)(
+    'a round with a plan (%s) shows the classifier its phases, so asking for one is feedback',
+    async (stage) => {
+      const asked: string[] = [];
+      const ask: QuickJson = <T>(_system: string, prompt: string) => {
+        asked.push(prompt);
+        return Effect.succeed({ kind: 'feedback', shape: 'answer', title: 'Lead fix', why: 'Phase 3.' } as T);
+      };
+      const phases = [
+        { title: 'Teach initiative splits', detail: 'Rewrite the split guidance.' },
+        { title: 'Let an adopted lead run', detail: 'A lead with a repository runs in scratch.' },
+      ];
+      const task = createTask({
+        title: 'Teach initiatives',
+        stage,
+        stageReason: 'phase 1 of 2',
+        plan: {
+          version: 1,
+          body: '',
+          proposedAt: 0,
+          document: {
+            goal: 'g',
+            phases,
+            behaviour: [],
+            approach: '',
+            files: [],
+            outOfScope: [],
+            verification: [],
+            questions: [],
+          },
+        },
+      });
+      expect(await resolveMessageClass(task, 'and lets also get the lead fixed', ask)).toMatchObject({
+        kind: 'feedback',
+      });
+      const [read] = asked;
+      expect(read).toContain(
+        'The plan of round 1, whose phases this round already covers:\n1. Teach initiative splits: Rewrite the split guidance.\n2. Let an adopted lead run: A lead with a repository runs in scratch.'
+      );
+      expect(read).toContain('a request for something a phase of the plan of the round already does');
+    }
+  );
+
+  test('a resting task or a round without a plan lists no plan phases', async () => {
+    const asked: string[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string) => {
+      asked.push(prompt);
+      return Effect.succeed({ kind: 'feedback', shape: 'answer', title: 'x', why: 'x' } as T);
+    };
+    const document = {
+      goal: 'g',
+      phases: [{ title: 'Old', detail: 'd' }],
+      behaviour: [],
+      approach: '',
+      files: [],
+      outOfScope: [],
+      verification: [],
+      questions: [],
+    };
+    await resolveMessageClass(
+      createTask({
+        stage: 'merged',
+        stageReason: 'merged',
+        plan: { version: 1, body: '', proposedAt: 0, document },
+      }),
+      'why?',
+      ask
+    );
+    await resolveMessageClass(createTask({ stageReason: 'planning' }), 'why?', ask);
+    expect(asked.every((prompt) => !prompt.includes('The plan of round'))).toBe(true);
+  });
+
   test.each([
     ['awaiting_merge', 'merge'],
     ['awaiting_review', 'review'],

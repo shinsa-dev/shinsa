@@ -59,9 +59,9 @@ export const WORKING_KIND_QUESTION: ChoiceQuestion = {
   criteria: {
     acknowledge: ACKNOWLEDGE,
     feedback:
-      'about the work of the current round: a correction, an answer, guidance, a nudge or a question about what it does, including its files, its steps around the merge and what it needs in other repositories',
+      'about the work of the current round: a correction, an answer, guidance, a nudge or a question about what it does, including its files, its steps around the merge and what it needs in other repositories, and a request for something a phase of the plan of the round already does',
     new_round:
-      'new work for this task that the current round does not cover: a new idea, an extension or the next step of the same goal',
+      'new work for this task that the current round does not cover, its plan included: a new idea, an extension or the next step of the same goal',
     separate_task: SEPARATE_TASK,
   },
 };

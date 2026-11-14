@@ -30,7 +30,7 @@ function createGateKindQuestion(decision: string): ChoiceQuestion {
     instructions: `The work of the current round is finished and waits for the human to ${decision} it. Nothing else is in progress. What is this message?`,
     criteria: {
       acknowledge: ACKNOWLEDGE,
-      feedback: `about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script), something to check, a question about it, or its files, its steps around the merge and what it needs in other repositories (even when the message names another checkout)`,
+      feedback: `about this round before the ${decision}: a change to it, something to run or start for it so the human can try it (a dev server, a service, a script), something to check, a question about it, or its files, its steps around the merge and what it needs in other repositories (even when the message names another checkout), and a request for something a phase of the plan of the round already does`,
       new_round:
         'the next piece of work after this round: a new idea or an extension of the same goal that is a code change of its own, not something needed to try or finish this round',
       separate_task: SEPARATE_TASK,
@@ -94,6 +94,17 @@ function describeNow(task: Task) {
   return `Now: round ${current.number} is in progress, ${task.stageReason}.`;
 }
 
+function describePlan(task: Task) {
+  const phases = task.plan?.document?.phases ?? [];
+  if (isTaskResting(task) || phases.length === 0) return [];
+  return [
+    `The plan of round ${resolveCurrentRound(task).number}, whose phases this round already covers:`,
+    ...phases.map(
+      (phase, index) => `${index + 1}. ${phase.title}: ${excerptText(phase.detail, STEP_EXCERPT)}`
+    ),
+  ];
+}
+
 export function describeTask(task: Task) {
   return [
     `Task: ${task.title}`,
@@ -101,6 +112,7 @@ export function describeTask(task: Task) {
     'Its rounds:',
     ...resolveTaskRounds(task).map((round) => describeRound(task, round)),
     describeNow(task),
+    ...describePlan(task),
     ...describeOpenSteps(task),
   ];
 }
