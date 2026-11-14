@@ -173,7 +173,7 @@ exist, so the menu stays the one complete place.
 
 - `packages/core/src/protocol/messages.ts`: `TaskRefs`, `RepoEntry`, `FileContent`, `SearchMatch`; `DiffFile.binary`.
   `packages/core/src/protocol/diff.ts`: parse `Binary files … differ`. Fuzzy path ranking either reuses
-  `apps/web/src/lib/command/score.ts` or moves a pure ranker into core (T3: `packages/shared/src/searchRanking.ts`).
+  `apps/web/src/lib/command/search/score.ts` or moves a pure ranker into core (T3: `packages/shared/src/searchRanking.ts`).
 - `apps/engine/src/git/files.ts` (new): `listPaths`, `listTree`, `readBlob` (batch process), `searchFiles`,
   `resolveTaskRefs`; `git/diff.ts`: a sha-to-sha `resolveCommitDiff` beside today's working-copy diff;
   `http/routes.ts`: the routes above; `http/paths.ts`: `assertRepoPath`. Tests under `apps/engine/test/git` and

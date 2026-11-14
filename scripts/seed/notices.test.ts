@@ -4,6 +4,8 @@ import { insertNotices } from './notices.ts';
 
 const NOTICES = [{ kind: 'account_switched' }, { kind: 'handoff' }];
 
+const PLACEMENT = { runId: 'task-account-move-run-1', now: 600_000, context: true };
+
 const Entry = Schema.fromJsonString(
   Schema.Struct({ id: Schema.String, at: Schema.Number, type: Schema.String, runId: Schema.String })
 );
@@ -11,7 +13,7 @@ const Entry = Schema.fromJsonString(
 const line = (id: string, at: number) => JSON.stringify({ id, at, type: 'text', runId: 'run-1' });
 
 const listEntries = (lines: readonly string[]) =>
-  Option.getOrThrow(insertNotices(lines.join('\n'), NOTICES, 600_000))
+  Option.getOrThrow(insertNotices(lines.join('\n'), NOTICES, PLACEMENT))
     .trim()
     .split('\n')
     .map((entry) => Schema.decodeUnknownSync(Entry)(entry));
@@ -45,8 +47,20 @@ describe('insertNotices', () => {
     expect(listEntries([line('a', 5)])[1]).toMatchObject({ id: 'task-account-move-run-1-notice-0', at: 6 });
   });
 
+  test('leaves the context notice out when asked to', () => {
+    const lines = Option.getOrThrow(
+      insertNotices(line('a', 1), NOTICES, { runId: 'run-0', now: 0, context: false })
+    );
+    expect(
+      lines
+        .trim()
+        .split('\n')
+        .map((entry) => Schema.decodeUnknownSync(Entry)(entry).id)
+    ).toEqual(['a', 'run-0-notice-0', 'run-0-notice-1']);
+  });
+
   test('a line that is not a transcript entry gives nothing', () => {
-    expect(insertNotices(`${line('a', 1)}\nnot json`, NOTICES, 0)).toEqual(Option.none());
-    expect(insertNotices(JSON.stringify({ id: 'a' }), NOTICES, 0)).toEqual(Option.none());
+    expect(insertNotices(`${line('a', 1)}\nnot json`, NOTICES, PLACEMENT)).toEqual(Option.none());
+    expect(insertNotices(JSON.stringify({ id: 'a' }), NOTICES, PLACEMENT)).toEqual(Option.none());
   });
 });

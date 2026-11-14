@@ -67,7 +67,8 @@ These are the rules every other section applies. When a case is not covered anyw
 13. **Acting never moves you.** An action changes the thing in place; nothing jumps to another page, and a view in
     place beats a dialog. In normal use there is no loading state: data is prefetched, and a wait that could not be
     foreseen stays blank for 300ms before it shows anything. A render error stays inside the part that failed.
-14. **One keyboard shortcut.** ⌘K opens the command menu everywhere. Only three workspaces bind keys of their own,
+14. **One keyboard shortcut, and a few moves.** ⌘K opens the command menu everywhere, and the app's moves have
+    keys: ⌘J the terminal, ⌘, Settings, and G then H, T or S Home, All tasks or Settings (never while typing). Only three workspaces bind keys of their own,
     and only while open: the Code tab (⌘P, ⇧⌘F, ⌘F, ⌘G), the Review tab (J, K) and the Terminal page (⌘T, ⌘W);
     the image viewer takes Esc, ←, →, `+`, `-` and `0` while it is open, and the Mac app's menu has its own
     (⌘, ⌘N ⌘W ⌘[ ⌘] ⇧⌘H). Invent no others.
@@ -6922,7 +6923,7 @@ Example: an agent reply with a heading at 14px, a list and an inline `code` span
 - Pages contribute what they know: a mounted component registers ranked sections and drops them on unmount; the menu re-renders only when the serialised sections change. Order: the current context first, then the queue (next and previous item that needs you), then global groups.
 - Context: on an item's page its decision leads, each named for what it does ("Approve the plan", "Merge #4531", "Answer the question"), then View (its tabs), then tab-specific groups while that tab is open (with their keys), then actions on this item, then next/previous. Global groups: Tasks, Go to, Focus, Appearance, Accounts, Schedules, Integrations, Versions. With an empty query, Recent lists the last items visited that no group already shows. Commands that only make sense while typing (`searchOnly`) appear only then.
 - Disabled always says why: `disabled` is the reason string (no boolean). The row greys, cannot be run by click or Enter, keyboard navigation skips it, and the reason replaces its hint. Typing never ranks a group by a disabled match; the first highlighted row is the first enabled one; a choice page opens on the current value only when it is enabled. Reasons are plain sentences: "Send or clear your comments first", "Updating…", "Unavailable: needs usage credits", "Kept until it merges or is cancelled".
-- Typing matches by word: whole label, label prefix, word prefix, then substring; hints and keywords count at 0.7. Groups are ordered by their best match (cmdk's own group sort does not work). Choices flatten into their options ("dark", "urgent"); items match by title, repository, branch and status; decisions match across items ("merge" finds Merge #4531 wherever it is). Always at the bottom: "Create task: …" (starts it) and "Edit it before starting" (opens the composer filled in). "Create task: …" and "Search all tasks for “…”" keep the query in `fg-4`.
+- Typing ranks once, before anything renders, so no row appears and then moves. Each word matches the whole text, its prefix, a word's prefix or a substring, then, on a label, a title, a handle or a branch, a fuzzy match from the start of a word ("fdv" finds Fix decide invariant violations); hints and keywords count at 0.7, and the matched letters show in the full text colour. Groups are ordered by their best match. Choices flatten into their options ("dark", "urgent"); items match by title, handle, branch, repository, summary and status; decisions match across items ("merge" finds Merge #4531 wherever it is). Always at the bottom: "Create task: …" (starts it) and "Edit it before starting" (opens the composer filled in). "Create task: …" and "Search all tasks for “…”" keep the query in `fg-4`.
 - Navigation: entering a page scrolls the list to the top; Backspace on an empty input goes back and re-selects the row that opened the page, restoring the scroll it had; the highlight slides from its on-screen position to the new row (the list scrolls the controlled value into view itself, since cmdk does not). A choice page opens on the current value. Closing resets to the root. Escape restores focus to where it was; a command that runs declines the restore so what it focuses keeps focus.
 - Filters and searches a command sets live in the URL; an active filter shows as a removable button beside the page's search.
 
@@ -7008,7 +7009,7 @@ Example: tabbing onto a list row shows no ring; its tooltip, if any, appears imm
 
 #### One keyboard shortcut
 
-- The app binds one global key: ⌘K (Ctrl K) for the command menu. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
+- The app binds ⌘K (Ctrl K) for the command menu, and a few moves: ⌘J (Ctrl J) opens the terminal, ⌘, (Ctrl ,) Settings, and G then H, T or S goes to Home, All tasks or Settings, within 1.5 seconds and never in a text field; each shows beside its command in ⌘K. With the pointer over a task in a list, ⌘K opens on that task's actions. Views bind their own keys only while they are open (a code view's ⌘P, ⇧⌘F, ⌘F, ⌘G; a review's J and K; a terminal's ⌘T, ⌘W; the image viewer's Esc, ← and →, and `+`, `-`, `0` for zoom). Enter sends in every input. A focused list box takes arrows, Home, End, Enter and Space. The Mac app's menu adds its own (Settings ⌘,, New Task ⌘N, Close Window ⌘W, Back ⌘[, Forward ⌘], Home ⇧⌘H); it never zooms the page and has no Reload or developer tools.
 
 Example: pressing J on the Review tab moves to the next point; pressing J elsewhere does nothing.
 
@@ -10364,9 +10365,9 @@ document.body.dataset.dragging = '';
 
 - **Matches** (syntax rule, app, `.ts` and `.tsx`): any call to `addEventListener` (bare or as a method) whose first
   argument is the string `'keydown'` or `'keyup'`.
-- **Exempt files:** the four shortcut hooks, `use-command-key.ts`, `use-code-keys.ts`, `use-review-keys.ts`,
-  `use-terminal-keys.ts`.
-- **Why:** ⌘K (Ctrl K) is the only global shortcut. The Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K,
+- **Exempt files:** the five shortcut hooks, `use-command-key.ts`, `use-app-shortcuts.ts`, `use-code-keys.ts`,
+  `use-review-keys.ts`, `use-terminal-keys.ts`.
+- **Why:** ⌘K (Ctrl K) and the app-wide moves (⌘J, ⌘, and G then H, T or S) are the only global shortcuts. The Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K,
   the Terminal page ⌘T and ⌘W, while they are open; a terminal keeps its own keys through xterm.js's handler on its
   element, and the editor uses CodeMirror's keymap.
 

@@ -7,13 +7,14 @@ import {
 } from '@shinsa/core';
 import {
   hasHandOverWalkthrough,
+  isCurrentReview,
   readHandOverReply,
   readHandOverSpots,
   readPlanParameters,
   readProposedChange,
   resolveAskAnswer,
   resolveAskMeta,
-  resolveSpotsMeta,
+  resolveSummaryMeta,
 } from '@/lib/chat/handover.ts';
 import { createToolCall, shinsaTool } from '../../support/chat.ts';
 
@@ -75,15 +76,22 @@ describe('resolveAskAnswer', () => {
   });
 });
 
-describe('resolveSpotsMeta', () => {
+describe('resolveSummaryMeta', () => {
   it('counts the spots a hand-over asks you to review', () => {
-    expect(resolveSpotsMeta({ spots: [{ path: 'a.ts' }] })).toBe('1 spot to review');
-    expect(resolveSpotsMeta({ spots: [{ path: 'a.ts' }, { path: 'b.ts' }] })).toBe('2 spots to review');
+    expect(resolveSummaryMeta({ spots: [{ path: 'a.ts' }] })).toBe('1 spot to review');
+    expect(resolveSummaryMeta({ spots: [{ path: 'a.ts' }, { path: 'b.ts' }] })).toBe('2 spots to review');
   });
 
-  it('says nothing when there are no spots', () => {
-    expect(resolveSpotsMeta({ spots: [] })).toBeNull();
-    expect(resolveSpotsMeta({})).toBeNull();
+  it('counts the judgement calls beside the spots', () => {
+    expect(resolveSummaryMeta({ judgement_calls: [{ title: 'A' }] })).toBe('1 judgement call');
+    expect(resolveSummaryMeta({ spots: [{ path: 'a.ts' }], judgement_calls: [{}, {}] })).toBe(
+      '1 spot to review · 2 judgement calls'
+    );
+  });
+
+  it('says nothing when there are neither', () => {
+    expect(resolveSummaryMeta({ spots: [], judgement_calls: [] })).toBeNull();
+    expect(resolveSummaryMeta({})).toBeNull();
   });
 });
 
@@ -209,5 +217,21 @@ describe('readHandOverReply', () => {
       points: [],
       next: null,
     });
+  });
+});
+
+describe('isCurrentReview', () => {
+  const blocking = { severity: 'blocking', file: 'a.ts', line: 1, message: 'Breaks.' } as const;
+  const optional = { severity: 'optional', file: 'a.ts', line: 2, message: 'Tidy.' } as const;
+
+  it('matches the findings the task holds now, in order', () => {
+    expect(isCurrentReview([blocking, optional], [blocking, optional])).toBe(true);
+  });
+
+  it('tells an earlier review apart by its count, its order or any finding', () => {
+    expect(isCurrentReview([blocking], [blocking, optional])).toBe(false);
+    expect(isCurrentReview([optional, blocking], [blocking, optional])).toBe(false);
+    expect(isCurrentReview([{ ...blocking, message: 'Other.' }], [blocking])).toBe(false);
+    expect(isCurrentReview([], [])).toBe(false);
   });
 });

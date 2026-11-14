@@ -13,7 +13,7 @@ import {
 import { BrowserHost } from '../../src/browser/host/service.ts';
 import { until } from '../helpers/until.ts';
 import { startFakeCdp } from './cdp.ts';
-import { awaitLaunches, awaitPid, createFakeChrome, isAlive, runHost, SHINSA, SUPERWALL } from './harness.ts';
+import { awaitPid, createFakeChrome, isAlive, runHost, SHINSA, SUPERWALL } from './harness.ts';
 
 const SIGN_IN = SignInUrl.make('https://accounts.google.com/');
 
@@ -154,7 +154,6 @@ describe('the browser host', () => {
         yield* host.openWindow(SHINSA, SIGN_IN);
         yield* awaitPid(chrome, SHINSA, headless);
         yield* host.openWindow(SHINSA, SIGN_IN);
-        yield* awaitLaunches(chrome, 3);
         const refusal = yield* Effect.flip(host.acquire(SHINSA));
         const signingIn = yield* host.resolveMode(SHINSA);
         yield* Scope.close(scope, Exit.void);
@@ -176,6 +175,29 @@ describe('the browser host', () => {
     expect(launches[1]).not.toContain('remote-debugging');
     expect(launches[1]).toContain('--use-mock-keychain');
     expect(launches[1]?.endsWith(SIGN_IN)).toBe(true);
+    expect(chrome.handoffs()).toEqual(launches.slice(2, 3));
+  });
+
+  test('waits for a slow hand-off to the open window before closing it, so no second window starts', async () => {
+    const chrome = createFakeChrome();
+    chrome.slowHandoff();
+    const mode = await runHost(
+      chrome,
+      Effect.gen(function* () {
+        const host = yield* BrowserHost;
+        yield* host.openWindow(SHINSA, SIGN_IN);
+        yield* awaitPid(chrome, SHINSA);
+        yield* host.openWindow(SHINSA, SIGN_IN);
+        yield* host.closeWindow(SHINSA);
+        yield* host.acquire(SHINSA);
+        return yield* host.resolveMode(SHINSA);
+      })
+    );
+    expect(mode).toBe('headless');
+    const launches = chrome.launches();
+    expect(launches).toHaveLength(3);
+    expect(chrome.handoffs()).toEqual(launches.slice(1, 2));
+    expect(launches[2]).toContain('--headless=new');
   });
 
   test('forgets a browser that quits on its own', async () => {
