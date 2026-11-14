@@ -36,6 +36,8 @@ export const STATE_FIELDS = [
 
 export type StateFieldKey = (typeof STATE_FIELDS)[number];
 
+export const ENGINE_STATE_FIELDS = ['autopilotModel', 'autopilotHistory'] as const;
+
 type StateEntry<K extends StateRecordKey> = ShinsaState[K][string];
 
 export type StateChanges = Partial<Record<StateRecordKey, string[]>>;
