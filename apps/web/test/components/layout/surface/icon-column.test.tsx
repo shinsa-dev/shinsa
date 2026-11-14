@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { ChatTool } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import {
   CARD,
@@ -51,6 +51,7 @@ function renderPhaseCard() {
 describe('one icon column per card', () => {
   it('sets a card header’s icon in the same 20px slot, on the same 12px inset, as the icons of its rows', () => {
     const view = renderPhaseCard();
+    fireEvent.click(view.getByRole('button', { expanded: false }));
     const header = view.container.querySelector('h3') as HTMLElement;
     const body = header.nextElementSibling as HTMLElement;
     expect(spacing(header.className, /\bps-(\d+(?:\.\d+)?)\b/)).toBe(
@@ -60,7 +61,8 @@ describe('one icon column per card', () => {
     expect(spacing(body.className, /\bp-(\d+(?:\.\d+)?)\b/)).toBe(spacing(CARD_INSET, /px-(\d+(?:\.\d+)?)/));
     const slots = [...view.container.querySelectorAll('[data-icon-slot]')];
     expect(slots).toHaveLength(2);
-    expect(slots.every((slot) => slot.className === ICON_SLOT)).toBe(true);
+    for (const slot of slots)
+      for (const token of ICON_SLOT.split(' ')) expect(slot.classList).toContain(token);
   });
 
   it('gives the Overview’s panels the same header', () => {

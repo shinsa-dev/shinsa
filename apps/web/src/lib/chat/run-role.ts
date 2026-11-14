@@ -116,3 +116,25 @@ export function resolveRunHeadline(run: WireRun, task: Task, entries: ChatEntry[
       return done ? 'Wrote the report' : 'Researching';
   }
 }
+
+const OWN_VOICE_PURPOSES: RunPurpose[] = ['plan', 'build', 'fix', 'operate'];
+
+export function isAgentVoice(run: Pick<WireRun, 'role' | 'purpose' | 'delegation'>) {
+  if (run.delegation) return false;
+  if (run.role === 'reviewer') return false;
+  if (run.role !== 'agent') return true;
+  return OWN_VOICE_PURPOSES.includes(run.purpose ?? 'build');
+}
+
+export function resolvePhaseDoneTitle(run: WireRun, task: Task | null) {
+  const index = run.phaseIndex ?? null;
+  if (index === null) return 'Finished the phase';
+  const phases = task?.plan?.document?.phases ?? [];
+  const phase = phases[index];
+  if (!phase) return `Finished phase ${index + 1}`;
+  return `Finished phase ${index + 1} of ${phases.length}: ${phase.title}`;
+}
+
+export function resolveFixDoneTitle(run: WireRun) {
+  return run.fixFocus ? FIX_HEADLINE[run.fixFocus].done : 'Finished the fix';
+}
