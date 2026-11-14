@@ -7,14 +7,18 @@ import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { LIST_ROW, LIST_ROW_LINES, LIST_ROW_META, LIST_ROW_TITLE } from '@/components/layout/list-row.tsx';
 import { ICON_SLOT } from '@/components/layout/surface/card.ts';
+import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { PREVIEW_SHARE_TITLE, PREVIEW_SHARED_TITLE } from '@/lib/share/previews.ts';
 import {
   describeServicePreview,
+  describeServiceTerminal,
   describeServiceState,
   resolveServiceLink,
+  resolveServiceRowId,
   SERVICE_GLYPHS,
   selectServicePreview,
   type TaskServiceRun,
@@ -32,7 +36,9 @@ export interface ServiceHandlers {
   sharing?: (view: ServiceView) => boolean;
 }
 
-const REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
+const REVEAL = 'opacity-0 group-hover/disclosure:opacity-100';
+
+const RUN_REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
 
 const TREE_LINE = 'pointer-events-none absolute start-3.75 w-px bg-bg-a4';
 
@@ -122,45 +128,116 @@ export function ServiceRow({
   project,
   now,
   handlers,
-  hasRuns = false,
+  runs = [],
 }: {
   view: ServiceView;
   project: Project | null;
   now: number;
   handlers: ServiceHandlers;
-  hasRuns?: boolean;
+  runs?: TaskServiceRun[];
 }) {
+  const disclosure = useDisclosure(resolveServiceRowId(view.service.id), false);
   const glyph = SERVICE_GLYPHS[view.state];
   const state = describeServiceState(view, now);
   const name = view.service.name;
+  const controls = project !== null;
   return (
     <div
-      data-highlight-item=''
-      className='group/service relative flex items-center gap-1 rounded-control pe-1'
+      data-service-row=''
+      data-folded={disclosure.open ? undefined : ''}
+      className='relative flex flex-col'
     >
-      {hasRuns && <span aria-hidden className={cn(TREE_LINE, 'top-7.5 bottom-0')} />}
-      <button
-        type='button'
-        disabled={!(view.terminal && project)}
-        aria-label={view.terminal && project ? `Open the terminal of ${name}` : name}
-        onClick={() => project && handlers.open(view, project)}
-        className={cn(LIST_ROW, LIST_ROW_LINES, 'min-w-0 flex-1 ps-1.5 disabled:cursor-default')}
-      >
-        <StatusTile icon={glyph.icon} tone={glyph.tone} label={state} />
-        <ServiceLines view={view} now={now} />
-      </button>
-      <RowRunButtons view={view} handlers={handlers} controls={project !== null} />
+      {disclosure.open && runs.length > 0 && <span aria-hidden className={cn(TREE_LINE, 'top-8 bottom-0')} />}
+      <div data-highlight-item='' className='group/service flex items-center gap-1 rounded-control pe-1'>
+        <DisclosureHeader
+          disclosure={disclosure}
+          label={name}
+          className={cn(LIST_ROW, 'h-8 min-w-0 flex-1 items-center ps-1.5')}
+        >
+          <StatusTile icon={glyph.icon} tone={glyph.tone} label={state} />
+          <Truncate className={cn(LIST_ROW_TITLE, 'min-w-0 shrink')}>{name}</Truncate>
+          <span
+            className={cn(
+              'shrink-0 text-2xs',
+              glyph.tone === 'neutral' ? 'text-fg-2' : TONE_TEXT[glyph.tone]
+            )}
+          >
+            {state}
+          </span>
+          <DisclosureChevron className={REVEAL} />
+        </DisclosureHeader>
+        <span className='flex shrink-0 items-center gap-px'>
+          {view.terminal && project && (
+            <ServiceActionButton
+              label={describeServiceTerminal(view)}
+              icon='IconConsole'
+              onClick={() => handlers.open(view, project)}
+            />
+          )}
+          {controls && !isServiceActive(view) ? (
+            <ServiceActionButton
+              label={`Start ${name}`}
+              icon='IconPlay'
+              onClick={() => handlers.start(view)}
+            />
+          ) : (
+            <ServicePreviewButton view={view} onPreview={() => handlers.preview(view)} />
+          )}
+        </span>
+      </div>
+      {disclosure.open && (
+        <div data-service-details='' className='flex h-8 items-center gap-1 ps-8.5 pe-1'>
+          <Truncate className='min-w-0 flex-1 font-mono text-2xs text-fg-2'>{view.service.command}</Truncate>
+          <span className='flex shrink-0 items-center gap-px'>
+            {controls && isServiceActive(view) && (
+              <>
+                <ServiceActionButton
+                  label={`Restart ${name}`}
+                  icon='IconArrowRotateClockwise'
+                  onClick={() => handlers.restart(view)}
+                />
+                <ServiceActionButton
+                  label={`Stop ${name}`}
+                  icon='IconStop'
+                  onClick={() => handlers.stop(view)}
+                />
+              </>
+            )}
+            <ServiceShareButton view={view} handlers={handlers} />
+          </span>
+        </div>
+      )}
+      {disclosure.open &&
+        project &&
+        runs.map((run, index) => (
+          <TaskRunRow
+            key={run.view.terminal?.id ?? run.view.taskId}
+            run={run}
+            last={index === runs.length - 1}
+            project={project}
+            now={now}
+            handlers={handlers}
+          />
+        ))}
     </div>
   );
 }
 
-function ServiceShareButton({ view, handlers }: { view: ServiceView; handlers: ServiceHandlers }) {
+function ServiceShareButton({
+  view,
+  handlers,
+  reveal = false,
+}: {
+  view: ServiceView;
+  handlers: ServiceHandlers;
+  reveal?: boolean;
+}) {
   const share = handlers.share;
   if (!(share && view.taskId && selectServicePreview(view))) return null;
   if (handlers.canShare && !handlers.canShare(view)) return null;
   const shared = handlers.sharing?.(view) ?? false;
   return (
-    <span className={cn('flex items-center', !shared && REVEAL)}>
+    <span className={cn('flex items-center', reveal && !shared && RUN_REVEAL)}>
       <ServiceActionButton
         label={shared ? PREVIEW_SHARED_TITLE : PREVIEW_SHARE_TITLE}
         icon={shared ? 'IconLiveFull' : 'IconShareOs'}
@@ -173,32 +250,23 @@ function ServiceShareButton({ view, handlers }: { view: ServiceView; handlers: S
   );
 }
 
-function RowRunButtons({
+function RunButtons({
   view,
-  label = null,
+  label,
   handlers,
-  controls = true,
 }: {
   view: ServiceView;
-  label?: string | null;
+  label: string;
   handlers: ServiceHandlers;
-  controls?: boolean;
 }) {
   const name = view.service.name;
-  if (!controls)
-    return (
-      <span className='flex shrink-0 items-center gap-px'>
-        <ServiceShareButton view={view} handlers={handlers} />
-        <ServicePreviewButton view={view} label={label} onPreview={() => handlers.preview(view)} />
-      </span>
-    );
   if (!isServiceActive(view))
     return (
       <ServiceActionButton label={`Start ${name}`} icon='IconPlay' onClick={() => handlers.start(view)} />
     );
   return (
     <span className='flex shrink-0 items-center gap-px'>
-      <span className={cn('flex items-center gap-px', REVEAL)}>
+      <span className={cn('flex items-center gap-px', RUN_REVEAL)}>
         <ServiceActionButton
           label={`Restart ${name}`}
           icon='IconArrowRotateClockwise'
@@ -206,13 +274,13 @@ function RowRunButtons({
         />
         <ServiceActionButton label={`Stop ${name}`} icon='IconStop' onClick={() => handlers.stop(view)} />
       </span>
-      <ServiceShareButton view={view} handlers={handlers} />
+      <ServiceShareButton view={view} handlers={handlers} reveal />
       <ServicePreviewButton view={view} label={label} onPreview={() => handlers.preview(view)} />
     </span>
   );
 }
 
-export function TaskRunRow({
+function TaskRunRow({
   run,
   last,
   project,
@@ -249,7 +317,7 @@ export function TaskRunRow({
           {state}
         </span>
       </button>
-      <RowRunButtons view={view} label={label} handlers={handlers} />
+      <RunButtons view={view} label={label} handlers={handlers} />
     </div>
   );
 }

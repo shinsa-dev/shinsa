@@ -34,6 +34,7 @@ describe('TaskServicesPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start api' }));
     expect(calls).toEqual(['start api fix']);
     expect(screen.queryByRole('button', { name: 'Open api' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Expand api' }).getAttribute('aria-expanded')).toBe('false');
   });
 
   it('opens the preview of a task’s running service, never one that has stopped', () => {
@@ -67,7 +68,9 @@ describe('TaskServicesPanel', () => {
       </TooltipProvider>
     );
     fireEvent.click(screen.getByRole('button', { name: 'Open web' }));
-    expect(calls).toEqual(['preview http://localhost:4123/tasks/SH-4']);
+    fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of web' }));
+    expect(screen.getByRole('button', { name: 'Expand web' })).toBeTruthy();
+    expect(calls).toEqual(['preview http://localhost:4123/tasks/SH-4', 'open web']);
   });
 
   it('shares the preview of a task’s running service, and marks one already shared', () => {
@@ -105,6 +108,8 @@ describe('TaskServicesPanel', () => {
       );
     }
     const first = show(false);
+    expect(screen.queryByRole('button', { name: 'Share preview' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand web' }));
     fireEvent.click(screen.getByRole('button', { name: 'Share preview' }));
     expect(calls).toEqual(['share web fix']);
     first.unmount();

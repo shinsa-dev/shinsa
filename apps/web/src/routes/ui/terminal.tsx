@@ -351,17 +351,17 @@ export function TerminalSpecimens() {
           </button>
         </div>
       </Specimen>
-      <Specimen label='ServiceRow · running, starting, failed, exited and never started (hover a running row for Restart and Stop)'>
+      <Specimen label='ServiceRow · running, starting, failed, exited and never started, each folded to one line (press a row for its command, Restart and Stop)'>
         <HoverHighlight className={cn(INSET, 'flex w-88 flex-col gap-px p-1')}>
           {VIEWS.map((view) => (
             <ServiceRow key={view.service.id} view={view} project={PROJECT} now={NOW} handlers={HANDLERS} />
           ))}
         </HoverHighlight>
       </Specimen>
-      <Specimen label='The Services popover · three projects, each folding from its header, the play button that starts all where two or more are stopped, and a service’s runs in tasks under it'>
+      <Specimen label='The Services popover · three projects, each folding from its header, the play button that starts all where two or more are stopped, and a service’s runs in tasks under it once you expand it'>
         <PanelSample groups={GROUPS_MANY} start={[]} />
       </Specimen>
-      <Specimen label='A task’s Services popover · one running in its worktree and shared by link (the live mark opens Share preview), one it has not started'>
+      <Specimen label='A task’s Services popover · one running in its worktree and shared by link (expand it for Share preview), one it has not started'>
         <div className={cn(INSET, SERVICES_PANEL, 'overflow-hidden bg-popover')}>
           <TaskServicesPanel
             task={{ handle: 'SH-4' }}

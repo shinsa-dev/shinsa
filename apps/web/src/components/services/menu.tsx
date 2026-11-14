@@ -25,7 +25,6 @@ import {
   ServiceActionButton,
   type ServiceHandlers,
   ServiceRow,
-  TaskRunRow,
 } from '@/components/services/service-row.tsx';
 import { useServiceActions } from '@/components/services/use-service-actions.ts';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
@@ -114,25 +113,14 @@ function ServiceGroupSection({
             onEdit={() => manage.onEdit(view.service.id)}
           />
         ) : (
-          <React.Fragment key={view.service.id}>
-            <ServiceRow
-              view={view}
-              project={group.project}
-              now={now}
-              handlers={handlers}
-              hasRuns={(group.runs?.[view.service.id]?.length ?? 0) > 0}
-            />
-            {group.runs?.[view.service.id]?.map((run, index, runs) => (
-              <TaskRunRow
-                key={run.view.terminal?.id ?? run.view.taskId}
-                run={run}
-                last={index === runs.length - 1}
-                project={group.project}
-                now={now}
-                handlers={handlers}
-              />
-            ))}
-          </React.Fragment>
+          <ServiceRow
+            key={view.service.id}
+            view={view}
+            project={group.project}
+            now={now}
+            handlers={handlers}
+            runs={group.runs?.[view.service.id]}
+          />
         )
       )}
     </CompactSection>

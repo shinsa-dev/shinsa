@@ -163,7 +163,7 @@ function renderPanel(
   const { calls, handlers } = createHandlers();
   const panel = createActions(suggestions, refine);
   const created = mock(() => undefined);
-  render(
+  const view = render(
     <TooltipProvider>
       <Harness
         groups={groups}
@@ -175,7 +175,7 @@ function renderPanel(
       />
     </TooltipProvider>
   );
-  return { calls, created, sent: panel.calls };
+  return { calls, created, sent: panel.calls, unmount: view.unmount };
 }
 
 afterEach(() => {
@@ -337,6 +337,8 @@ describe('the Services popover', () => {
         },
       },
     ]);
+    expect(screen.queryByText('SH-4 Fix the cart')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand api' }));
     expect(screen.getByText('SH-4 Fix the cart')).toBeTruthy();
     expect(screen.getByText('Failed with code 1')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of api for SH-4 Fix the cart' }));
@@ -348,8 +350,8 @@ describe('the Services popover', () => {
       (screen.getByText(label).closest('[data-highlight-item]') as HTMLElement).querySelector('span');
     expect(guide('SH-4 Fix the cart')?.className).toContain('bottom-0');
     expect(guide('SH-7 Show the total')?.className).toContain('h-1/2');
-    const parent = screen.getByText('api').closest('[data-highlight-item]') as HTMLElement;
-    expect(parent.querySelector(':scope > span[aria-hidden]')?.className).toContain('top-7.5');
+    const parent = screen.getByText('api').closest('[data-service-row]') as HTMLElement;
+    expect(parent.querySelector(':scope > span[aria-hidden]')?.className).toContain('top-8');
     const shop = screen.getByText('Shop').closest('section') as HTMLElement;
     expect(shop.hasAttribute('data-folded')).toBe(false);
     fireEvent.click(shop.querySelector('[data-disclosure-header]') as HTMLElement);
@@ -400,23 +402,42 @@ describe('the Services popover', () => {
     expect(queueChevron.parentElement?.className).toBe(chevron.parentElement?.className);
   });
 
-  it('keeps a running row’s Restart and Stop 1px apart, as the Terminal page’s pair is', () => {
+  it('folds every service to one line by default, and shows its command and Restart and Stop once expanded', () => {
     renderPanel([{ project: SHOP, views: [running('api')] }]);
+    const toggle = screen.getByRole('button', { name: 'Expand api' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('bun run dev')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Restart api' })).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'Collapse api' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('bun run dev').className).toContain('font-mono');
     const restart = screen.getByRole('button', { name: 'Restart api' });
     const stop = screen.getByRole('button', { name: 'Stop api' });
     expect(restart.parentElement).toBe(stop.parentElement);
     expect(restart.parentElement?.className.split(' ')).toContain('gap-px');
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse api' }));
+    expect(screen.queryByText('bun run dev')).toBeNull();
   });
 
-  it('starts a stopped service, restarts or stops a running one and opens its terminal from the row', () => {
+  it('keeps a service expanded across openings of the popover', () => {
+    const first = renderPanel([{ project: SHOP, views: [running('api')] }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Expand api' }));
+    first.unmount();
+    renderPanel([{ project: SHOP, views: [running('api')] }]);
+    expect(screen.getByRole('button', { name: 'Collapse api' })).toBeTruthy();
+  });
+
+  it('starts a stopped service and opens a running one’s terminal from its folded row, without expanding it', () => {
     const { calls } = renderPanel([{ project: SHOP, views: [running('api'), stopped('web')] }]);
     fireEvent.click(screen.getByRole('button', { name: 'Start web' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of api' }));
+    expect(screen.queryByRole('button', { name: 'Open the terminal of web' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Expand api' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand api' }));
     fireEvent.click(screen.getByRole('button', { name: 'Restart api' }));
     fireEvent.click(screen.getByRole('button', { name: 'Stop api' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of api' }));
-    expect(screen.getByRole('button', { name: 'web' }).hasAttribute('disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: /^More for/ })).toBeNull();
-    expect(calls).toEqual(['start web', 'restart api', 'stop api', 'open api']);
+    expect(calls).toEqual(['start web', 'open api', 'restart api', 'stop api']);
   });
 
   it('adds the ticked services found, inline, the recommended ones ticked and Select all in the list', async () => {
