@@ -23,6 +23,7 @@ import {
   pullRequest,
   pushed,
   refreshWorktree,
+  resolveReply,
 } from '../harness.ts';
 
 const HIGH_LOW: ReviewRatings = { confidence: 'high', risk: 'low' };
@@ -47,6 +48,17 @@ function reachReview(harness: Harness, ratings = HIGH_LOW) {
     summary: null,
     findings: [],
   });
+  const gate = harness.openGate(taskId);
+  if (gate.autopilotFollowUpOnly)
+    harness.send({
+      type: 'autopilot.judgment',
+      taskId,
+      gateId: gate.id,
+      verdict: 'forward',
+      reason: 'Nothing to ask.',
+      reply: null,
+      shadow: false,
+    });
   return taskId;
 }
 
@@ -250,6 +262,56 @@ describe('what Autopilot learns when it did more than one thing', () => {
   });
 });
 
+function reachReviewAfterFollowUp(harness: Harness) {
+  const taskId = reachReview(harness);
+  const gate = judgedGate(harness, taskId);
+  if (!gate) throw new Error('No gate waits for Autopilot.');
+  harness.send({
+    type: 'autopilot.judgment',
+    taskId,
+    gateId: gate.id,
+    verdict: 'revise',
+    reason: 'They probe auth.',
+    reply: 'How is auth handled?',
+    shadow: false,
+  });
+  const runId = harness.activeRun(taskId).id;
+  harness.send({
+    type: 'agent.complete_fix',
+    runId,
+    summary: 'Answered.',
+    treeHash: 'tree-1',
+    ...resolveReply(harness, runId),
+  });
+  harness.send({ type: 'checks.record', taskId, results: PASSING });
+  harness.send({
+    type: 'agent.report_review',
+    ratings: HIGH_LOW,
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    findings: [],
+  });
+  judge(harness, taskId, 'Unsure.', 'forward');
+  return taskId;
+}
+
+describe('what Autopilot learns from a follow-up it sent', () => {
+  test('your answer at the next gate says how the follow-up went, and only a rejection corrects it', () => {
+    const harness = createHarness();
+    enable(harness);
+    answer(harness, reachReviewAfterFollowUp(harness), 'approve');
+    answer(harness, reachReviewAfterFollowUp(harness), 'revise', 'Also the rate limit.');
+    expect(lessons(harness)?.filter((lesson) => lesson.kind === 'revised')).toEqual([
+      expect.objectContaining({ gate: 'review', answer: 'approved', reason: 'They probe auth.' }),
+      expect.objectContaining({ gate: 'review', answer: 'revised', note: 'Also the rate limit.' }),
+    ]);
+    expect(resolveLessonLimit(harness.state, 'review')).toEqual({ allowed: true });
+    answer(harness, reachReviewAfterFollowUp(harness), 'reject');
+    answer(harness, reachReviewAfterFollowUp(harness), 'reject');
+    expect(resolveLessonLimit(harness.state, 'review')).toMatchObject({ allowed: false });
+  });
+});
+
 describe('what Autopilot does with what it learned', () => {
   test('brings reviews to you after you changed what it approved twice of the last four', () => {
     const harness = createHarness();
@@ -326,6 +388,10 @@ describe('describing a lesson', () => {
       'You brought a merge to them; they asked for changes: “Wait.”.',
     ],
     [lesson({ kind: 'forwarded', answer: 'rejected' }), 'You brought a plan to them; they rejected it.'],
+    [
+      lesson({ gate: 'review', kind: 'revised', answer: 'approved' }),
+      'You sent the agent a follow-up on a review for them; they approved what came of it.',
+    ],
     [
       lesson({
         gate: 'review',

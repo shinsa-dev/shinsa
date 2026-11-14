@@ -1,6 +1,7 @@
 import { Option } from 'effect';
 import { isAutopilotDoneSeeable } from '../autopilot/done.ts';
 import { selectAutopilotEstimate } from '../autopilot/examples.ts';
+import { resolveFollowUpLimit } from '../autopilot/follow-ups.ts';
 import { resolveLessonLimit } from '../autopilot/lessons.ts';
 import {
   isUrgentTask,
@@ -157,10 +158,14 @@ function forward(decider: Decider, gateId: string, { reason, teaches }: Refusal)
   return true;
 }
 
-function requestJudgment(decider: Decider, gateId: string) {
+function requestJudgment(decider: Decider, gateId: string, followUpOnly: string | null = null) {
   const gate = decider.state.gates[gateId];
   if (!gate || gate.autopilotJudging === true) return;
-  decider.emit({ type: 'autopilot.judging', gateId });
+  decider.emit({
+    type: 'autopilot.judging',
+    gateId,
+    ...(followUpOnly === null ? {} : { followUpOnly }),
+  });
   decider.run({ kind: 'autopilot.judge', taskId: gate.taskId, gateId, shadow: false });
 }
 
@@ -189,9 +194,18 @@ function recordGuess(
   decider.emit({ type: 'autopilot.guessed', gateId: gate.id, verdict, estimate });
 }
 
-function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): Refusal | null {
+interface Refusals {
+  act: Refusal | null;
+  revise: Refusal | null;
+}
+
+function toRefusal(limit: AutopilotLimit, guesses: boolean): Refusal | null {
+  return limit.allowed ? null : { reason: limit.reason, teaches: !limit.setting, guesses };
+}
+
+function resolveRefusals(decider: Decider, gate: Gate, kind: AutopilotGateKind): Refusals {
   const task = decider.task(gate.taskId);
-  const { act } = resolveLimits(
+  const { act, revise } = resolveLimits(
     decider.state,
     task,
     kind,
@@ -201,10 +215,13 @@ function resolveRefusal(decider: Decider, gate: Gate, kind: AutopilotGateKind): 
   ).limits;
   const block = kind === 'merge' ? resolveMergeRefusal(decider, task) : null;
   const guesses = block === null;
-  if (!act.allowed) return { reason: act.reason, teaches: !act.setting, guesses };
-  const lesson = resolveLessonLimit(decider.state, kind);
-  if (!lesson.allowed) return { reason: lesson.reason, teaches: true, guesses };
-  return block === null ? null : { reason: MERGE_BLOCK_TEXT[block], teaches: false, guesses };
+  const lesson = toRefusal(resolveLessonLimit(decider.state, kind), guesses);
+  const blocked = block === null ? null : { reason: MERGE_BLOCK_TEXT[block], teaches: false, guesses };
+  const followUps = toRefusal(resolveFollowUpLimit(decider.state, gate), guesses);
+  return {
+    act: toRefusal(act, guesses) ?? lesson ?? blocked,
+    revise: toRefusal(revise, guesses) ?? lesson ?? followUps,
+  };
 }
 
 export function askAutopilot(decider: Decider, gate: Gate) {
@@ -212,19 +229,22 @@ export function askAutopilot(decider: Decider, gate: Gate) {
   const kind = Option.getOrNull(selectJudgedGateKind(gate));
   if (!kind) return;
   if (kind === 'proposal' && !isWatchdogTask(decider.task(gate.taskId))) return;
-  const refusal = resolveRefusal(decider, gate, kind);
-  if (refusal === null) {
-    requestJudgment(decider, gate.id);
+  const { act, revise } = resolveRefusals(decider, gate, kind);
+  if (act === null || revise === null) {
+    requestJudgment(decider, gate.id, act?.reason ?? null);
     return;
   }
   const firstTime = gate.autopilotHeld === undefined;
-  if (forward(decider, gate.id, refusal) && firstTime && refusal.guesses)
-    requestShadowJudgment(decider, gate, kind);
+  if (forward(decider, gate.id, act) && firstTime && act.guesses) requestShadowJudgment(decider, gate, kind);
 }
 
 const NOT_SURE = 'Autopilot was not sure what to answer, so the question waits for you.';
 
 const NO_REASON = 'Autopilot judged it clear and small enough to do for you.';
+
+const NO_FOLLOW_UP = 'Autopilot had no follow-up to send, so this waits for you.';
+
+const FOLLOW_UP_REASON = 'Autopilot asked the agent what you would ask here.';
 
 function selectJudgedGate(decider: Decider, command: CommandOf<'autopilot.judgment'>) {
   const gate = decider.state.gates[command.gateId];
@@ -245,6 +265,48 @@ function describeVeto(guess: AutopilotModelGuess) {
   return `From ${similar} decisions like this one, Autopilot puts the chance you would approve it at only ${share}%, so it waits for you.`;
 }
 
+const OFF: Refusals = {
+  act: { reason: 'Autopilot is off.', teaches: false, guesses: true },
+  revise: { reason: 'Autopilot is off.', teaches: false, guesses: true },
+};
+
+function forwardRefused(
+  decider: Decider,
+  gate: Gate,
+  kind: AutopilotGateKind,
+  refusal: Refusal,
+  verdict: AutopilotVerdict
+) {
+  forward(decider, gate.id, refusal);
+  if (refusal.guesses) recordGuess(decider, gate, kind, verdict);
+}
+
+function followUpForYou(
+  decider: Decider,
+  gate: Gate,
+  kind: AutopilotGateKind,
+  { act, revise }: Refusals,
+  command: CommandOf<'autopilot.judgment'>
+) {
+  if (revise !== null) {
+    forwardRefused(decider, gate, kind, act ?? revise, 'revise');
+    return;
+  }
+  const followUp = clip(command.reply, AUTOPILOT_JUDGMENT_LIMITS.reply);
+  if (!followUp) {
+    forwardRefused(
+      decider,
+      gate,
+      kind,
+      act ?? { reason: NO_FOLLOW_UP, teaches: true, guesses: true },
+      'revise'
+    );
+    return;
+  }
+  const why = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason) || FOLLOW_UP_REASON;
+  answerGateForYou(decider, gate, 'revise', followUp, why);
+}
+
 export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'autopilot.judgment'>) {
   const found = selectJudgedGate(decider, command);
   if (!found) return;
@@ -254,12 +316,15 @@ export function applyAutopilotJudgment(decider: Decider, command: CommandOf<'aut
     return;
   }
   const reason = clip(command.reason, AUTOPILOT_JUDGMENT_LIMITS.reason);
-  const refusal = resolveAutopilotPolicy(decider.state.settings).enabled
-    ? resolveRefusal(decider, gate, kind)
-    : { reason: 'Autopilot is off.', teaches: false, guesses: true };
-  if (refusal !== null) {
-    forward(decider, gate.id, refusal);
-    if (refusal.guesses) recordGuess(decider, gate, kind, command.verdict);
+  const refusals = resolveAutopilotPolicy(decider.state.settings).enabled
+    ? resolveRefusals(decider, gate, kind)
+    : OFF;
+  if (command.verdict === 'revise') {
+    followUpForYou(decider, gate, kind, refusals, command);
+    return;
+  }
+  if (refusals.act !== null) {
+    forwardRefused(decider, gate, kind, refusals.act, command.verdict);
     return;
   }
   if (command.verdict === 'forward') {

@@ -14,7 +14,10 @@ export function applyAutopilotScheduled(state: ShinsaState, event: EventOf<'auto
 }
 
 export function applyAutopilotJudging(state: ShinsaState, event: EventOf<'autopilot.judging'>) {
-  updateGate(state, event.gateId, { autopilotJudging: true });
+  updateGate(state, event.gateId, {
+    autopilotJudging: true,
+    autopilotFollowUpOnly: event.followUpOnly ?? null,
+  });
 }
 
 export function applyAutopilotGuessed(state: ShinsaState, event: EventOf<'autopilot.guessed'>) {
