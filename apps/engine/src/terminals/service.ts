@@ -264,18 +264,27 @@ export class Terminals extends Context.Service<
           return { ...own, [service.portVariable]: String(port) };
         });
 
-        const start = Effect.fn('Terminals.start')(function* (session: TerminalSession) {
-          const env = resolveTerminalEnv(input.env, input.version);
-          const shell = resolveLoginShell(input.env);
-          const service = session.info.serviceId
-            ? (yield* Ref.get(services)).get(session.info.serviceId)
-            : undefined;
-          const command = service
-            ? resolveServiceCommand(shell, service.command)
-            : resolveShellCommand(shell);
-          const runEnv = service ? yield* resolveServiceEnv(session, service, env) : env;
-          yield* session.start({ command, env: runEnv, spawn: pty.spawn });
-        });
+        const start = Effect.fn('Terminals.start')(
+          function* (session: TerminalSession) {
+            const env = resolveTerminalEnv(input.env, input.version);
+            const shell = resolveLoginShell(input.env);
+            const service = session.info.serviceId
+              ? (yield* Ref.get(services)).get(session.info.serviceId)
+              : undefined;
+            const command = service
+              ? resolveServiceCommand(shell, service.command)
+              : resolveShellCommand(shell);
+            const runEnv = service ? yield* resolveServiceEnv(session, service, env) : env;
+            yield* session.start({ command, env: runEnv, spawn: pty.spawn });
+          },
+          (effect, session) =>
+            effect.pipe(
+              Effect.catchTag('SpawnFailed', (failure) =>
+                Effect.fail(new DomainError({ code: 'terminal_start_failed', message: failure.message }))
+              ),
+              Effect.tapError((failure) => session.fail(failure.message))
+            )
+        );
 
         const listTasks = Option.match(engine, {
           onNone: () => Effect.succeed({}),
@@ -566,19 +575,33 @@ export class Terminals extends Context.Service<
           yield* changed;
         });
 
+        const resumeService = Effect.fn('Terminals.resumeService')(function* (
+          state: ShinsaState,
+          terminalId: string
+        ) {
+          const info = (yield* select(terminalId))?.info;
+          const service = (yield* Ref.get(services)).get(info?.serviceId ?? '');
+          if (!(info && service)) return;
+          yield* withFiles(selectServiceRunIn(state, service, info.taskId, { home, dataDir })).pipe(
+            Effect.flatMap((serviceRun) =>
+              Option.isSome(serviceRun) ? startService(service.id, serviceRun.value) : Effect.void
+            ),
+            Effect.catch((failure) =>
+              Effect.logWarning('[Terminals] Could not start a service again after the restart').pipe(
+                Effect.annotateLogs({
+                  service: service.name,
+                  taskId: info.taskId,
+                  error: failure.message,
+                })
+              )
+            )
+          );
+        });
+
         const resumeServices = Effect.fn('Terminals.resumeServices')(function* (state: ShinsaState) {
           if (readOnly) return;
           yield* pruneSettled(state);
-          for (const terminalId of yield* Ref.get(resumable)) {
-            const info = (yield* select(terminalId))?.info;
-            const service = (yield* Ref.get(services)).get(info?.serviceId ?? '');
-            if (!(info && service)) continue;
-            const serviceRun = yield* withFiles(
-              selectServiceRunIn(state, service, info.taskId, { home, dataDir })
-            );
-            if (Option.isSome(serviceRun))
-              yield* startService(service.id, serviceRun.value).pipe(Effect.orDie);
-          }
+          for (const terminalId of yield* Ref.get(resumable)) yield* resumeService(state, terminalId);
           yield* Ref.set(resumable, new Set());
         });
 

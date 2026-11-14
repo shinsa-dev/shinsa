@@ -11,13 +11,19 @@ import {
 import { Duration, Effect, Layer } from 'effect';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { TerminalPty } from '../../src/terminals/pty/service.ts';
-import { PortUnavailable, TerminalIds, TerminalTimings } from '../../src/terminals/schema.ts';
+import {
+  PortUnavailable,
+  SPAWN_FAILED_MESSAGE,
+  SpawnFailed,
+  TerminalIds,
+  TerminalTimings,
+} from '../../src/terminals/schema.ts';
 import { TYPE_LIMITS } from '../../src/terminals/session.ts';
 import { parseStoredService, parseStoredTerminal } from '../../src/terminals/store.ts';
 import { captureLogs } from '../helpers/logs.ts';
 import { createTempDir } from '../helpers/temp.ts';
 import { until } from '../helpers/until.ts';
-import { createFakeViewer, createInfo } from './fakes.ts';
+import { createFakeSpawner, createFakeViewer, createInfo } from './fakes.ts';
 import { createTerminals, runAsync } from './harness.ts';
 
 const START = { projectId: 'p1', cwd: '/code/web', place: 'repository', taskId: null } as const;
@@ -210,6 +216,8 @@ const SERVICE = {
   portVariable: 'PORT',
 };
 
+const BROKEN_CWD = '/code/web/apps/broken';
+
 function main(place: TerminalPlaceKind, cwd = SERVICE.cwd) {
   return { cwd, place, taskId: null };
 }
@@ -315,6 +323,67 @@ describe('Terminals services', () => {
     const readOnly = await createTerminals({ dataDir, readOnly: true });
     await runAsync(readOnly.terminals.resumeServices(STATE));
     expect(readOnly.fake.spawned).toHaveLength(0);
+  });
+
+  it('starts every other service again when one cannot start after a restart, and ends that one as failed with why', async () => {
+    const { terminals, dataDir } = await createTerminals();
+    const broken = await runAsync(
+      terminals.addService('p1', { ...SERVICE, name: 'broken', cwd: BROKEN_CWD })
+    );
+    const kept = await runAsync(terminals.addService('p1', SERVICE));
+    await runAsync(terminals.startService(broken.id, main('repository', BROKEN_CWD)));
+    await runAsync(terminals.startService(kept.id, main('repository')));
+    await runAsync(terminals.stop);
+    const fake = createFakeSpawner();
+    const logs = captureLogs();
+    const again = await createTerminals({
+      dataDir,
+      pty: {
+        spawn: (command, options) =>
+          options.cwd === BROKEN_CWD
+            ? Effect.fail(new SpawnFailed({ message: `${SPAWN_FAILED_MESSAGE}: ENOENT` }))
+            : Effect.sync(() => fake.spawn(command, options)),
+      },
+    });
+    await runAsync(again.terminals.resumeServices(STATE));
+    logs.restore();
+    expect(fake.spawned.map((each) => each.options.cwd)).toEqual([SERVICE.cwd]);
+    expect(logs.fieldsOf('[Terminals] Could not start a service again after the restart')).toEqual([
+      { service: 'broken', taskId: null, error: `${SPAWN_FAILED_MESSAGE}: ENOENT` },
+    ]);
+    const [failed, running] = (await runAsync(again.terminals.snapshot)).terminals;
+    expect([failed?.status, failed?.exitCode, running?.status]).toEqual(['exited', null, 'running']);
+    expect(await runAsync(again.terminals.readServiceOutput(broken.id, null, 1))).toEqual([
+      `${SPAWN_FAILED_MESSAGE}: ENOENT`,
+    ]);
+    const saved = JSON.parse(readFileSync(join(dataDir, 'terminals/terminals.json'), 'utf8'));
+    expect(saved.terminals.map((each: { status: string }) => each.status)).toEqual(['exited', 'running']);
+    const third = await createTerminals({ dataDir });
+    await runAsync(third.terminals.resumeServices(STATE));
+    expect(third.fake.spawned.map((each) => each.options.cwd)).toEqual([SERVICE.cwd]);
+  });
+
+  it('never marks a service running when its command could not be started', async () => {
+    const { terminals } = await createTerminals({
+      pty: { spawn: () => Effect.fail(new SpawnFailed({ message: `${SPAWN_FAILED_MESSAGE}: ENOENT` })) },
+    });
+    const service = await runAsync(terminals.addService('p1', SERVICE));
+    const failure = await runAsync(Effect.flip(terminals.startService(service.id, main('repository'))));
+    expect(failure).toMatchObject({
+      code: 'terminal_start_failed',
+      message: `${SPAWN_FAILED_MESSAGE}: ENOENT`,
+    });
+    expect((await runAsync(terminals.snapshot)).terminals[0]).toMatchObject({
+      status: 'exited',
+      exitCode: null,
+      endedAt: 100,
+    });
+    await runAsync(Effect.flip(terminals.startService(service.id, main('repository'))));
+    expect(await runAsync(terminals.readServiceOutput(service.id, null, 10))).toEqual([
+      `${SPAWN_FAILED_MESSAGE}: ENOENT`,
+      '',
+      `${SPAWN_FAILED_MESSAGE}: ENOENT`,
+    ]);
   });
 
   it('runs a service for a task beside its main run, each in a tab of its own', async () => {
@@ -588,6 +657,13 @@ describe('Terminals services', () => {
       message: 'No free port for the service.',
     });
     expect(fake.spawned).toHaveLength(0);
+    expect((await runAsync(terminals.snapshot)).terminals[0]).toMatchObject({
+      status: 'exited',
+      exitCode: null,
+    });
+    expect(await runAsync(terminals.readServiceOutput(service.id, 'a', 1))).toEqual([
+      'No free port for the service.',
+    ]);
   });
 
   it('refuses more services than the limit', async () => {

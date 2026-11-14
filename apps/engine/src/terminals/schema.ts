@@ -18,6 +18,11 @@ export class PortUnavailable extends Schema.TaggedError<PortUnavailable, { reado
   { message: Schema.String }
 ) {}
 
+export class SpawnFailed extends Schema.TaggedError<SpawnFailed, { readonly brand: unique symbol }>()(
+  'SpawnFailed',
+  { message: Schema.String }
+) {}
+
 export class PortTaken extends Schema.TaggedError<PortTaken, { readonly brand: unique symbol }>()(
   'PortTaken',
   {
@@ -107,7 +112,7 @@ export interface TerminalSpawnOptions {
 type TerminalSpawner = (
   command: readonly string[],
   options: TerminalSpawnOptions
-) => Effect.Effect<TerminalProcess>;
+) => Effect.Effect<TerminalProcess, SpawnFailed>;
 
 export type PortListener = (port: number) => number | null;
 
@@ -136,7 +141,8 @@ export interface TerminalSession {
   readonly running: boolean;
   readonly pid: number | null;
   readonly viewers: number;
-  start(start: SessionStart): Effect.Effect<void>;
+  start(start: SessionStart): Effect.Effect<void, SpawnFailed>;
+  fail(reason: string): Effect.Effect<void>;
   attach(viewer: TerminalViewer): void;
   detach(viewer: TerminalViewer): void;
   drain(viewer: TerminalViewer): void;
@@ -241,6 +247,8 @@ export const PORT_RELEASE_SCHEDULE = Schedule.spaced(PORT_RELEASE_POLL).pipe(
 export const NO_FREE_PORT = 'No free port for the service.';
 
 export const FOLDER_GONE_MESSAGE = 'That folder is not there anymore.';
+
+export const SPAWN_FAILED_MESSAGE = 'The command could not be started';
 
 export const HANG_UP_GRACE = Duration.seconds(3);
 

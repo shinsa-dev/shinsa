@@ -11,7 +11,11 @@ import {
   resolveTerminalEnv,
 } from '../../src/terminals/pty.ts';
 import { TerminalPty } from '../../src/terminals/pty/service.ts';
-import type { PortListener, TerminalSpawnOptions } from '../../src/terminals/schema.ts';
+import {
+  type PortListener,
+  SPAWN_FAILED_MESSAGE,
+  type TerminalSpawnOptions,
+} from '../../src/terminals/schema.ts';
 
 const PTY = TerminalPty.layer.pipe(Layer.provide(ShellLayer));
 
@@ -43,6 +47,24 @@ function spawnShell(onText: (text: string) => void) {
 }
 
 describe('TerminalPty.spawn', () => {
+  it('fails with why when the command cannot be started, as in a folder that is gone', () => {
+    const failure = Effect.runSync(
+      Effect.flip(
+        TerminalPty.use((pty) =>
+          pty.spawn(['/bin/sh'], {
+            cwd: '/nowhere/at/all',
+            cols: 80,
+            rows: 24,
+            env: { PATH: '/usr/bin:/bin' },
+            onData: () => undefined,
+          })
+        )
+      ).pipe(Effect.provide(PTY))
+    );
+    expect(failure._tag).toBe('SpawnFailed');
+    expect(failure.message).toStartWith(`${SPAWN_FAILED_MESSAGE}: `);
+  });
+
   it('runs a real shell in a pseudo-terminal: it echoes, resizes and reports its exit code', async () => {
     let output = '';
     const shell = spawnShell((text) => {

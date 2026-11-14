@@ -11,6 +11,8 @@ import {
   type PortListener,
   PortTaken,
   PortUnavailable,
+  SPAWN_FAILED_MESSAGE,
+  SpawnFailed,
   type TerminalProcess,
   type TerminalSpawnOptions,
 } from '../schema.ts';
@@ -19,7 +21,10 @@ import { spawnTerminal } from './spawn.ts';
 export class TerminalPty extends Context.Service<
   TerminalPty,
   {
-    spawn(command: readonly string[], options: TerminalSpawnOptions): Effect.Effect<TerminalProcess>;
+    spawn(
+      command: readonly string[],
+      options: TerminalSpawnOptions
+    ): Effect.Effect<TerminalProcess, SpawnFailed>;
     readForeground(pid: number): Effect.Effect<string | null>;
     pickPort(
       preferred: number | null,
@@ -66,7 +71,13 @@ export class TerminalPty extends Context.Service<
         const scope = yield* Scope.make();
         const ended = yield* Deferred.make<void>();
         const child = yield* Effect.acquireRelease(
-          Effect.sync(() => spawnTerminal(command, options)),
+          Effect.try({
+            try: () => spawnTerminal(command, options),
+            catch: (cause) =>
+              new SpawnFailed({
+                message: `${SPAWN_FAILED_MESSAGE}: ${cause instanceof Error ? cause.message : String(cause)}`,
+              }),
+          }),
           (spawned) => hangUpGroup(spawned).pipe(Effect.ensuring(Deferred.done(ended, Exit.void)))
         ).pipe(Scope.provide(scope));
         const close = () => runFork(Scope.close(scope, Exit.void));
