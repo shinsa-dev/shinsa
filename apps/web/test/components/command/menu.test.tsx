@@ -133,7 +133,7 @@ describe('typing in the root', () => {
     renderMenu();
     await pressCommandK();
     await type('all tasks');
-    expect(optionNames()).toEqual(['All tasks', 'Create task:all tasks', 'Edit it before starting']);
+    expect(optionNames()).toEqual(['All tasksG T', 'Create task:all tasks', 'Edit it before starting']);
   });
 
   it('finds a task by a word from its title', async () => {
@@ -145,6 +145,25 @@ describe('typing in the root', () => {
       'Create task:billing',
       'Edit it before starting',
     ]);
+  });
+
+  it('finds a task by the first letters of its words and marks the letters it matched', async () => {
+    renderMenu();
+    await pressCommandK();
+    await type('frd');
+    expect(optionNames()[0]).toBe('Fix the login redirectBuilding');
+    const marks = screen.getAllByRole('option')[0]?.querySelectorAll('mark') ?? [];
+    expect([...marks].map((mark) => mark.textContent)).toEqual(['F', 'r', 'd']);
+    expect(selectedOption()).toBe('Fix the login redirectBuilding');
+  });
+
+  it('lists a better task match above New task and Jump to a task', async () => {
+    renderMenu();
+    await pressCommandK();
+    await type('rework');
+    expect(optionNames().slice(0, 1)).toEqual(['Rework billing emailsBuilding']);
+    await type('jump');
+    expect(optionNames()[0]).toMatch(/^Jump to a task/);
   });
 
   it('finds a task older than the newest 300', async () => {
@@ -217,6 +236,15 @@ describe('pages', () => {
     expect(input().getAttribute('placeholder')).toBe('Change theme…');
     expect(optionNames()).toEqual(['System', 'Light', 'Dark']);
     await waitFor(() => expect(selectedOption()).toBe('Dark'));
+  });
+
+  it('narrows a choice page to the options that match', async () => {
+    renderMenu();
+    await pressCommandK();
+    await type('change theme');
+    await choose(/^Change theme/);
+    await type('dar');
+    expect(optionNames()).toEqual(['Dark']);
   });
 
   it('applies the option picked on a choice page', async () => {
@@ -525,5 +553,120 @@ describe('on a task page', () => {
     expect(optionNames()).toContain('Request changes with 1 comment');
     fireEvent.click(approve);
     expect(listSentCommands()).toEqual([]);
+  });
+});
+
+describe('over a task on Home or All tasks', () => {
+  const row = (
+    <a href='/tasks/billing'>
+      <span data-task='billing'>Rework billing emails</span>
+    </a>
+  );
+
+  function crumb() {
+    return input().parentElement as HTMLElement;
+  }
+
+  it('opens on the task under the pointer, and Backspace goes back to everything', async () => {
+    navigate('/');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    expect(within(crumb()).getByText('Rework billing emails')).toBeTruthy();
+    expect(input().getAttribute('placeholder')).toBe('Act on this task…');
+    expect(headings()).toEqual(['Open', 'Task']);
+    await press('Backspace');
+    expect(input().getAttribute('placeholder')).toBe('Search tasks and actions, or describe a new task…');
+  });
+
+  it('scopes on All tasks too', async () => {
+    navigate('/tasks');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).toBe('Act on this task…');
+    navigate('/');
+  });
+
+  it('opens on everything elsewhere, once the pointer leaves the task or the window', async () => {
+    navigate('/settings');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).not.toBe('Act on this task…');
+    await pressCommandK();
+    navigate('/');
+    fireEvent.pointerOver(screen.getByLabelText('Notes'));
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).not.toBe('Act on this task…');
+    await pressCommandK();
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    fireEvent.pointerOut(screen.getByText('Rework billing emails'), { relatedTarget: null });
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).not.toBe('Act on this task…');
+  });
+
+  it('keeps the task it opened on while the pointer moves over the open menu', async () => {
+    navigate('/');
+    renderMenu(row);
+    fireEvent.pointerOver(screen.getByText('Rework billing emails'));
+    await pressCommandK();
+    fireEvent.pointerOver(input());
+    await pressCommandK();
+    await pressCommandK();
+    expect(input().getAttribute('placeholder')).toBe('Act on this task…');
+  });
+});
+
+describe('app-wide shortcuts', () => {
+  function path() {
+    return location.pathname;
+  }
+
+  it('opens the terminal with Ctrl J and Settings with Ctrl , off a Mac, from anywhere, closing the menu', async () => {
+    navigate('/');
+    renderMenu();
+    fireEvent.keyDown(window, { key: 'j', ctrlKey: true });
+    expect(path()).toStartWith('/terminal');
+    await pressCommandK();
+    fireEvent.keyDown(input(), { key: ',', ctrlKey: true });
+    expect(path()).toBe('/settings');
+    await waitFor(() => expect(isMenuOpen()).toBe(false));
+    navigate('/');
+  });
+
+  it('goes Home, to All tasks and to Settings with G then H, T or S, but not while typing', () => {
+    navigate('/settings');
+    renderMenu();
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'h' });
+    expect(path()).toBe('/');
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 't' });
+    expect(path()).toBe('/tasks');
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 's' });
+    expect(path()).toBe('/settings');
+    const notes = screen.getByLabelText('Notes');
+    fireEvent.keyDown(notes, { key: 'g' });
+    fireEvent.keyDown(notes, { key: 'h' });
+    expect(path()).toBe('/settings');
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'x' });
+    fireEvent.keyDown(window, { key: 'h' });
+    expect(path()).toBe('/settings');
+    navigate('/');
+  });
+
+  it('shows each shortcut beside its command, but not on the page you are on', async () => {
+    navigate('/tasks');
+    renderMenu();
+    await pressCommandK();
+    const row = (name: string) => screen.getByRole('option', { name: new RegExp(`^${name}`) }).textContent;
+    expect(row('Home')).toBe('HomeG H');
+    expect(row('Terminal')).toBe('TerminalCtrl+J');
+    expect(row('Settings')).toBe('SettingsCtrl+,');
+    expect(row('All tasks')).toBe('All tasks');
+    navigate('/');
   });
 });

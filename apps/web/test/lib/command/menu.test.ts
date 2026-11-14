@@ -6,6 +6,7 @@ import {
   type ChoiceCommand,
   isCommandShown,
   listChoiceCommands,
+  listChoiceMatches,
   listCommandKeywords,
   listDecisionCommands,
   listJumpEntries,
@@ -16,7 +17,7 @@ import {
   listRootBlocks,
   listSearchCommands,
   listSectionBlocks,
-  listTaskKeywords,
+  listTaskFields,
   listTaskMatches,
   type MenuBlock,
   NEW_TASK_COMMAND,
@@ -85,26 +86,39 @@ describe('keywords', () => {
     expect(listOptionKeywords(command, system)).toEqual(['System', 'Theme', 'Change theme…']);
   });
 
-  it('matches a task by title, handle, repository, branch, status and intent', () => {
+  it('matches a task by title, handle, branch, repository, summary, intent and status', () => {
     const task = createTask({
       id: 't1',
       title: 'Fix login',
       handle: 'SW-142',
       repoId: 'r1',
       branch: 'fix/login',
+      summary: 'Sends people back to where they were.',
       request: 'x'.repeat(300),
     });
     const state = createShinsaState({ tasks: [task], repos: [createRepo({ id: 'r1', name: 'web' })] });
-    expect(listTaskKeywords(state, task)).toEqual([
-      'Fix login',
-      'SW-142',
-      'web',
-      'fix/login',
-      resolveTaskStatus(state, task).label,
-      'x'.repeat(200),
+    expect(listTaskFields(state, task).map((field) => [field.text, field.weight, field.fuzzy])).toEqual([
+      ['Fix login', 1, true],
+      ['SW-142', 1, true],
+      ['SW142', 1, false],
+      ['fix/login', 0.8, true],
+      ['web', 0.7, false],
+      ['Sends people back to where they were.', 0.6, false],
+      ['x'.repeat(200), 0.5, false],
+      [resolveTaskStatus(state, task).label, 0.7, false],
     ]);
-    const bare = listTaskKeywords(state, createTask({ id: 't2' }));
-    expect([bare[1], bare[3]]).toEqual(['', '']);
+    const bare = listTaskFields(state, createTask({ id: 't2', title: 'Bare', request: '' }));
+    expect(bare.map((field) => field.text)).toEqual(['Bare', resolveTaskStatus(state, task).label]);
+  });
+
+  it('keeps a task’s fields until the task or its repository name changes', () => {
+    const task = createTask({ id: 't1', title: 'Fix login', repoId: 'r1' });
+    const state = createShinsaState({ tasks: [task], repos: [createRepo({ id: 'r1', name: 'web' })] });
+    const [first] = listTaskFields(state, task);
+    expect(listTaskFields(state, task)[0]).toBe(first);
+    const renamed = createShinsaState({ tasks: [task], repos: [createRepo({ id: 'r1', name: 'api' })] });
+    expect(listTaskFields(renamed, task)[0]).not.toBe(first);
+    expect(listTaskFields(renamed, task).map((field) => field.text)).toContain('api');
   });
 });
 
@@ -133,11 +147,11 @@ describe('listMenuTasks', () => {
 });
 
 describe('resolveTaskIndex', () => {
-  it('builds the index once per state, with each task’s keywords', () => {
+  it('builds the index once per state, with each task’s fields', () => {
     const state = createShinsaState({ tasks: [createTask({ id: 'a', title: 'Fix login' })] });
     const index = resolveTaskIndex(state);
     expect(resolveTaskIndex(state)).toBe(index);
-    expect(index[0]?.keywords[0]).toBe('Fix login');
+    expect(index[0]?.fields[0]?.text).toBe('Fix login');
     expect(resolveTaskIndex({ ...state })).not.toBe(index);
   });
 });
@@ -155,6 +169,48 @@ describe('listTaskMatches', () => {
     const matches = listTaskMatches(resolveTaskIndex(state), 'login');
     expect(matches.map((match) => match.task.id)).toEqual(['title', 'also', 'body']);
     expect(listTaskMatches(resolveTaskIndex(state), 'nothing')).toEqual([]);
+  });
+
+  it('ranks the task whose handle is the one typed above longer handles that start with it', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'longer', title: 'Later work', handle: 'LOC-2879', updatedAt: 2 }),
+        createTask({ id: 'exact', title: 'Earlier work', handle: 'LOC-287', updatedAt: 1 }),
+      ],
+    });
+    const ids = (query: string) =>
+      listTaskMatches(resolveTaskIndex(state), query).map((match) => match.task.id);
+    expect(ids('loc287')).toEqual(['exact', 'longer']);
+    expect(ids('287')).toEqual(['exact', 'longer']);
+    expect(ids('LOC-287')).toEqual(['exact', 'longer']);
+  });
+
+  it('finds a task by the letters of its title, its handle, its branch or its summary', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({
+          id: 'decide',
+          title: 'Fix decide invariant violations',
+          handle: 'LOC-287',
+          updatedAt: 3,
+        }),
+        createTask({ id: 'font', title: 'Add a setting', branch: 'feat/default-font-setting', updatedAt: 2 }),
+        createTask({
+          id: 'summary',
+          title: 'Rework',
+          summary: 'Moves billing emails to Resend.',
+          updatedAt: 1,
+        }),
+      ],
+    });
+    const ids = (query: string) =>
+      listTaskMatches(resolveTaskIndex(state), query).map((match) => match.task.id);
+    expect(ids('fdv')).toEqual(['decide']);
+    expect(ids('loc287')).toEqual(['decide']);
+    expect(ids('287')).toEqual(['decide']);
+    expect(ids('dfs')).toEqual(['font']);
+    expect(ids('loc-287')).toEqual(['decide']);
+    expect(ids('resend')).toEqual(['summary']);
   });
 });
 
@@ -409,6 +465,34 @@ describe('listChoiceCommands and listSearchCommands', () => {
   });
 });
 
+describe('listChoiceMatches', () => {
+  it('keeps every option in order before you type', () => {
+    expect(listChoiceMatches(choice('dark'), '')).toMatchObject({
+      options: [{ value: 'system' }, { value: 'dark' }],
+      score: 1,
+    });
+  });
+
+  it('keeps the options that match, best first, by label, choice or own keywords', () => {
+    expect(listChoiceMatches(choice('dark'), 'night').options.map((option) => option.value)).toEqual([
+      'dark',
+    ]);
+    expect(listChoiceMatches(choice('dark'), 'theme').options).toHaveLength(2);
+    expect(listChoiceMatches(choice('dark'), 'zebra')).toEqual({ options: [], score: 0 });
+  });
+
+  it('scores the choice by its best enabled option', () => {
+    const held = choice('dark');
+    const options = held.options.map((option) =>
+      option.value === 'dark' ? { ...option, disabled: 'Not here' } : option
+    );
+    expect(listChoiceMatches({ ...held, options }, 'dark')).toMatchObject({
+      options: [{ value: 'dark' }],
+      score: 0,
+    });
+  });
+});
+
 describe('isCommandShown', () => {
   it('hides search rows always and searchOnly rows until you type', () => {
     expect(isCommandShown(runCommand('a'), false)).toBe(true);
@@ -455,7 +539,7 @@ describe('listSectionBlocks', () => {
 
   it('scores a section by its best command', () => {
     const [task] = listSectionBlocks(sections, 'cancel');
-    expect(task?.score).toBe(0.9);
+    expect(task?.score).toBe(0.95);
   });
 
   it('shows the best twenty matches of a long section', () => {
@@ -517,21 +601,80 @@ describe('listRootBlocks', () => {
 
   it('puts the page’s sections, Recent and Tasks before the global sections while the query is empty', () => {
     expect(keys(root('', ['billing']))).toEqual(['page', 'recent', 'tasks', 'appearance']);
-    expect(root('').find((block) => block.kind === 'tasks')).toMatchObject({ tasks: [], total: 2 });
+    expect(root('').find((block) => block.kind === 'tasks')).toMatchObject({
+      tasks: [],
+      actions: ['new', 'jump'],
+      actionsFirst: true,
+      total: 2,
+    });
   });
 
   it('adds decisions, matching tasks, choices, searches and New task once you type, best match first', () => {
     const blocks = root('dark');
     expect(keys(blocks)[0]).toBe('appearance.theme');
-    expect(keys(blocks)).toEqual(expect.arrayContaining(['decisions', 'tasks', 'search', 'new-task']));
+    expect(keys(blocks)).toEqual(expect.arrayContaining(['tasks', 'search', 'new-task']));
     expect(keys(blocks)).not.toContain('recent');
-    expect(blocks.find((block) => block.kind === 'tasks')).toMatchObject({ tasks: [], total: 2 });
+    expect(blocks.find((block) => block.kind === 'tasks')).toMatchObject({
+      tasks: [],
+      actions: [],
+      total: 2,
+    });
+    expect(blocks.find((block) => block.kind === 'choice')).toMatchObject({ options: [{ value: 'dark' }] });
+  });
+
+  it('leaves out matches far weaker than the best one, and keeps weak ones when nothing matches well', () => {
+    const scattered: CommandSection = {
+      id: 'skills',
+      heading: 'Integrations',
+      rank: RANK.global,
+      commands: [runCommand('skills.off', { label: 'Turn off the routing-middleware skill' })],
+    };
+    const goTo: CommandSection = {
+      id: 'go',
+      heading: 'Go to',
+      rank: RANK.global,
+      commands: [runCommand('go.terminal', { label: 'Terminal' })],
+    };
+    const typed = (query: string, extra: CommandSection[]) =>
+      keys(
+        listRootBlocks({
+          state,
+          sections: extra,
+          registered: [],
+          decisions: [],
+          recent: [],
+          currentTaskId: null,
+          query,
+          now: NOW,
+        })
+      );
+    expect(typed('term', [goTo, scattered])).toContain('go');
+    expect(typed('term', [goTo, scattered])).not.toContain('skills');
+    expect(typed('term', [scattered])).toContain('skills');
+  });
+
+  it('keeps only the decisions that match', () => {
+    expect(root('merge').find((block) => block.kind === 'decisions')).toBeUndefined();
+    expect(root('approve').find((block) => block.kind === 'decisions')).toMatchObject({
+      commands: [{ label: 'Approve the changes' }],
+    });
   });
 
   it('lists only the tasks that match, ranking the block by its best task', () => {
     const tasks = root('login').find((block) => block.kind === 'tasks');
-    expect(tasks).toMatchObject({ tasks: [{ id: 'login' }], total: 2 });
+    expect(tasks).toMatchObject({ tasks: [{ id: 'login' }], actions: [], actionsFirst: false, total: 2 });
     expect(tasks?.score).toBeGreaterThan(0.5);
+  });
+
+  it('keeps New task and Jump to a task when they match, above tasks that match less well', () => {
+    expect(root('new').find((block) => block.kind === 'tasks')).toMatchObject({
+      actions: ['new'],
+      actionsFirst: true,
+    });
+    expect(root('jump').find((block) => block.kind === 'tasks')).toMatchObject({
+      actions: ['jump'],
+      actionsFirst: true,
+    });
   });
 
   it('shows at most twenty matching tasks out of every task, leaving out the ones a page lists', () => {
@@ -594,7 +737,7 @@ describe('listRootBlocks', () => {
       query: 'refresh',
       now: NOW,
     });
-    expect(keys(blocks)).toEqual(['page', 'decisions', 'tasks', 'new-task']);
+    expect(keys(blocks)).toEqual(['page', 'tasks', 'new-task']);
   });
 });
 
