@@ -7089,7 +7089,9 @@ you: Settings → Browser ─────────┤
   refused with `signing_in`; Done, or quitting that Chrome (⌘Q), hands the profile back, and the next agent starts it
   headless again with your sign-in in it. Closing its last window does not, since Chrome on macOS keeps running
   without one; Open sign-in window then opens a new window in that Chrome (`BrowserHost.reveal`, a second launch on the
-  profile that Chrome hands to the one running).
+  profile that Chrome hands to the one running). It waits for that launch to exit, at most `stopTimeout`, while it holds
+  the host's lock, so a Done or an agent that follows cannot race a hand-off still running and leave a second window on
+  the profile.
 - **Agents ask with `request_browser_sign_in {url, reason}`** (`agent.request_browser_sign_in`), the building Agent and
   the investigator only. It opens a `browser_sign_in` gate naming the site (`browserSignIn: {url, site}`) and the run
   waits on it like a question (Gates, above); a task with no project is refused (`browser_no_project`). The task

@@ -26,7 +26,10 @@ const FAKE_CHROME = `#!/bin/bash
 here="$(dirname "$0")"
 for arg in "$@"; do case "$arg" in --user-data-dir=*) profile="\${arg#--user-data-dir=}";; esac; done
 echo "$*" >> "$here/launches"
-case "$*" in *--headless=new*) ;; *) [ -f "$profile/pid" ] && kill -0 "$(cat "$profile/pid")" 2>/dev/null && exit 0;; esac
+case "$*" in *--headless=new*) ;; *)
+  [ -f "$here/slow-handoff" ] && sleep 0.3
+  [ -f "$profile/pid" ] && kill -0 "$(cat "$profile/pid")" 2>/dev/null && echo "$*" >> "$here/handoffs" && exit 0;;
+esac
 [ -f "$here/busy" ] && exit 21
 [ -f "$here/busy-once" ] && rm "$here/busy-once" && exit 21
 holder="$(readlink "$profile/SingletonLock" 2>/dev/null)"
@@ -47,12 +50,14 @@ export interface FakeChrome {
   readonly path: string;
   readonly home: string;
   launches(): string[];
+  handoffs(): string[];
   pidOf(profile: BrowserProfile): number;
   fail(): void;
   writeGarbage(): void;
   listenOn(port: number): void;
   busy(): void;
   busyOnce(): void;
+  slowHandoff(): void;
   lockProfile(profile: BrowserProfile, pid: number, host?: string): void;
   renameLockHost(profile: BrowserProfile, host: string): void;
   startOrphan(profile: BrowserProfile, mode?: 'headless' | 'window'): number;
@@ -72,12 +77,17 @@ export function createFakeChrome(): FakeChrome {
       const file = join(dir, 'launches');
       return existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [];
     },
+    handoffs: () => {
+      const file = join(dir, 'handoffs');
+      return existsSync(file) ? readFileSync(file, 'utf8').trim().split('\n') : [];
+    },
     pidOf: (profile) => Number(readFileSync(join(home, 'data', 'browser', profile, 'pid'), 'utf8').trim()),
     fail: () => writeFileSync(join(dir, 'fail'), ''),
     writeGarbage: () => writeFileSync(join(dir, 'garbage'), ''),
     listenOn: (port) => writeFileSync(join(dir, 'port'), String(port)),
     busy: () => writeFileSync(join(dir, 'busy'), ''),
     busyOnce: () => writeFileSync(join(dir, 'busy-once'), ''),
+    slowHandoff: () => writeFileSync(join(dir, 'slow-handoff'), ''),
     lockProfile: (profile, pid, host = hostname()) => {
       const folder = join(home, 'data', 'browser', profile);
       mkdirSync(folder, { recursive: true });
@@ -125,10 +135,6 @@ export function runHost<A, E>(
     Layer.provide(BunServices.layer)
   );
   return Effect.runPromise(Effect.scoped(Effect.provide(effect, layer)));
-}
-
-export function awaitLaunches(chrome: FakeChrome, count: number) {
-  return Effect.promise(() => until(`${count} launches of Chrome`, () => chrome.launches().length >= count));
 }
 
 export function awaitPid(chrome: FakeChrome, profile: BrowserProfile, replacing?: number) {
