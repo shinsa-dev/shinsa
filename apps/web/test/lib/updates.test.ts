@@ -4,9 +4,12 @@ import {
   describeChannelDetail,
   describeStayLabel,
   describeUpdateStatus,
+  describeInstalling,
   parseUpdateChannel,
+  resolveMachineUpdates,
   UPDATE_CHANNEL_ITEMS,
 } from '@/lib/updates.ts';
+import { createAppReport, createAppUpdatesAnswer } from '../support/app-updates.ts';
 
 describe('the Updates settings', () => {
   it('offers Stable, Beta and Canary', () => {
@@ -72,5 +75,62 @@ describe('the Updates settings', () => {
       label: 'Go back to 1.2.0 (stable)?',
       tone: 'blue',
     });
+  });
+});
+
+describe('a machine’s updates, read from its engine', () => {
+  const read = (answer = createAppUpdatesAnswer()) => ({ answer, failure: null, busy: null });
+
+  it('asks to update Shinsa on that machine when its engine predates the feature', () => {
+    expect(resolveMachineUpdates(read(), false)).toEqual({ kind: 'outdated' });
+  });
+
+  it('is reading until the first answer, and keeps the failure when there is none', () => {
+    expect(resolveMachineUpdates({ answer: null, failure: null, busy: null }, true)).toEqual({
+      kind: 'reading',
+    });
+    expect(resolveMachineUpdates({ answer: null, failure: 'Offline', busy: null }, true)).toEqual({
+      kind: 'failed',
+      message: 'Offline',
+    });
+  });
+
+  it('shows only the engine’s version for an engine installed without the app', () => {
+    const answer = createAppUpdatesAnswer({ source: 'standalone', running: false, app: null });
+    expect(resolveMachineUpdates(read(answer), true)).toEqual({ kind: 'standalone', engine: '1.4.0' });
+  });
+
+  it('shows the app with its report while it runs, and offers to restart an older engine', () => {
+    expect(resolveMachineUpdates(read(), true)).toEqual({
+      kind: 'running',
+      engine: '1.4.0',
+      app: createAppReport(),
+      restartEngine: false,
+    });
+    const older = createAppUpdatesAnswer({ engine: { version: '1.3.0', protocol: 1 } });
+    expect(resolveMachineUpdates(read(older), true)).toMatchObject({ kind: 'running', restartEngine: true });
+  });
+
+  it('says the app is not running, or installing while it relaunches', () => {
+    const stale = createAppUpdatesAnswer({ running: false });
+    expect(resolveMachineUpdates(read(stale), true)).toEqual({
+      kind: 'not_running',
+      engine: '1.4.0',
+      app: '1.4.0',
+    });
+    const never = createAppUpdatesAnswer({ running: false, app: null });
+    expect(resolveMachineUpdates(read(never), true)).toEqual({
+      kind: 'not_running',
+      engine: '1.4.0',
+      app: null,
+    });
+    const installing = createAppUpdatesAnswer({ running: false, installing: '1.5.0' });
+    expect(resolveMachineUpdates(read(installing), true)).toEqual({
+      kind: 'installing',
+      engine: '1.4.0',
+      app: '1.4.0',
+      version: '1.5.0',
+    });
+    expect(describeInstalling('1.5.0')).toBe('Installing 1.5.0…');
   });
 });

@@ -1,11 +1,22 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { resolveEngineInfo } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { type UpdateActions, UpdateSettings, UpdatesGroup } from '@/components/settings/updates.tsx';
+import {
+  MachineUpdatesCard,
+  type UpdateActions,
+  UpdateSettings,
+  UpdatesGroup,
+} from '@/components/settings/updates.tsx';
 import { selectChangelogView } from '@/lib/changelog.ts';
+import { type AppUpdatesActions, resetAppUpdates } from '@/lib/connection/app-updates.ts';
 import { refreshHealth } from '@/lib/connection/health.ts';
+import { connection, replaceConnection } from '@/lib/connection/socket.ts';
 import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
+import type { MachineUpdates } from '@/lib/updates.ts';
+import { createAppReport, createAppUpdatesAnswer } from '../../support/app-updates.ts';
 import { installDesktop } from '../../support/desktop.ts';
+import { spyOnEngine } from '../../support/engine.ts';
 import { answerFetch } from '../../support/fetch-fake.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 
@@ -139,19 +150,6 @@ describe('the Updates settings', () => {
     expect(screen.getByText('1.1.0')).toBeTruthy();
   });
 
-  it('in a browser points to the app', () => {
-    render(
-      <TooltipProvider>
-        <UpdateSettings />
-      </TooltipProvider>
-    );
-    expect(
-      screen.getByText(
-        'Shinsa for Mac updates itself. Its version and update channel are in its own Settings.'
-      )
-    ).toBeTruthy();
-  });
-
   it('in the app reads the bridge', () => {
     fake = installDesktop();
     fake.bridge.version = '1.2.0';
@@ -166,7 +164,7 @@ describe('the Updates settings', () => {
     expect(screen.getByText('Stable channel · Updates install when you quit Shinsa')).toBeTruthy();
   });
 
-  it('opens the changelog from its own row, in the app and in a browser', async () => {
+  it('opens the changelog from its own row', async () => {
     const requests = answerFetch(() => Response.json({ releases: [] }));
     const actions: UpdateActions = {
       check: mock(),
@@ -174,16 +172,7 @@ describe('the Updates settings', () => {
       changeChannel: mock(),
       answerDowngrade: mock(),
     };
-    const { rerender } = render(
-      <TooltipProvider>
-        <UpdatesGroup app={null} changelog actions={actions} />
-      </TooltipProvider>
-    );
-    expect(screen.getByText('What changed in each version of Shinsa.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Open the changelog' }));
-    expect(selectChangelogView()).toMatchObject({ open: true, since: null });
-    await waitFor(() => expect(requests.map((request) => request.path)).toEqual(['/api/changelog']));
-    rerender(
+    render(
       <TooltipProvider>
         <UpdatesGroup
           app={{ version: '1.3.0', channel: 'stable', update: { status: 'current' } }}
@@ -192,11 +181,176 @@ describe('the Updates settings', () => {
         />
       </TooltipProvider>
     );
-    expect(screen.getByRole('button', { name: 'Open the changelog' })).toBeTruthy();
+    expect(screen.getByText('What changed in each version of Shinsa.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open the changelog' }));
+    expect(selectChangelogView()).toMatchObject({ open: true, since: null });
+    await waitFor(() => expect(requests.map((request) => request.path)).toEqual(['/api/changelog']));
   });
 
   it('leaves the changelog row out for an engine without one', () => {
     renderGroup({ status: 'current' });
     expect(screen.queryByRole('button', { name: 'Open the changelog' })).toBeNull();
+  });
+});
+
+function createMachineActions(): AppUpdatesActions {
+  return {
+    check: mock(async () => undefined),
+    install: mock(async () => undefined),
+    changeChannel: mock(async () => undefined),
+    answerDowngrade: mock(async () => undefined),
+    open: mock(async () => undefined),
+    restartEngine: mock(async () => undefined),
+  };
+}
+
+function renderCard(updates: MachineUpdates, name: string | null = 'Studio', busy = false) {
+  const actions = createMachineActions();
+  render(
+    <TooltipProvider>
+      <MachineUpdatesCard name={name} updates={updates} actions={actions} busy={busy} />
+    </TooltipProvider>
+  );
+  return actions;
+}
+
+describe('a machine’s updates, from another device', () => {
+  it('shows the app, the engine and the channel of a running app, and installs a ready update', async () => {
+    const app = createAppReport({ channel: 'beta', update: { status: 'ready', version: '1.5.0' } });
+    const actions = renderCard({ kind: 'running', engine: '1.4.0', app, restartEngine: false });
+    expect(screen.getByText('Studio')).toBeTruthy();
+    expect(screen.getByText('1.5.0 is ready')).toBeTruthy();
+    expect(screen.getByText('Engine')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Update channel' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restart engine' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to update' }));
+    expect(actions.install).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('combobox', { name: 'Update channel' }));
+    const canary = await screen.findByRole('option', { name: 'Canary' });
+    fireEvent.pointerDown(canary, { pointerType: 'mouse' });
+    fireEvent.click(canary);
+    await waitFor(() => expect(actions.changeChannel).toHaveBeenCalled());
+    expect(actions.changeChannel).toHaveBeenCalledWith('canary');
+  });
+
+  it('offers to restart an engine older than its app', () => {
+    const actions = renderCard({
+      kind: 'running',
+      engine: '1.3.0',
+      app: createAppReport(),
+      restartEngine: true,
+    });
+    expect(screen.getByText('Older than the app')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restart engine' }));
+    expect(actions.restartEngine).toHaveBeenCalled();
+  });
+
+  it('answers the go-back offer on that machine', () => {
+    const app = createAppReport({
+      version: '1.3.0-beta.2',
+      update: { status: 'downgrade', version: '1.2.0' },
+    });
+    const actions = renderCard({ kind: 'running', engine: '1.3.0-beta.2', app, restartEngine: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Stay on this beta' }));
+    expect(actions.answerDowngrade).toHaveBeenCalledWith(false);
+  });
+
+  it('disables the buttons while a request is under way', () => {
+    const app = createAppReport({ update: { status: 'ready', version: '1.5.0' } });
+    renderCard({ kind: 'running', engine: '1.4.0', app, restartEngine: true }, 'Studio', true);
+    expect(screen.getByRole('button', { name: 'Restart to update' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Restart engine' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('says the app is not running and opens it', () => {
+    const actions = renderCard({ kind: 'not_running', engine: '1.4.0', app: '1.4.0' });
+    expect(screen.getByText('Not running')).toBeTruthy();
+    expect(
+      screen.getByText('Open it to check for updates and install them from here. Agents keep running.')
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open Shinsa for Mac' }));
+    expect(actions.open).toHaveBeenCalled();
+  });
+
+  it('follows an install while the app relaunches, with nothing to click', () => {
+    renderCard({ kind: 'installing', engine: '1.4.0', app: null, version: '1.5.0' }, null);
+    expect(screen.getByText('Installing 1.5.0…')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open Shinsa for Mac' })).toBeNull();
+  });
+
+  it('shows the engine alone when it was installed without the app', () => {
+    renderCard({ kind: 'standalone', engine: '1.4.0' });
+    expect(screen.getByText('1.4.0')).toBeTruthy();
+    expect(
+      screen.getByText('Installed with npm or the install script, so it updates on that machine.')
+    ).toBeTruthy();
+  });
+
+  it('asks to update an engine that predates this, and says while it reads or when it cannot', () => {
+    renderCard({ kind: 'outdated' });
+    expect(
+      screen.getByText('Update Shinsa on that machine first to see and install its updates from here.')
+    ).toBeTruthy();
+    renderCard({ kind: 'reading' });
+    expect(screen.getByText('Reading the versions on that machine…')).toBeTruthy();
+    renderCard({ kind: 'failed', message: 'That machine is offline.' });
+    expect(screen.getByText('That machine is offline.')).toBeTruthy();
+  });
+});
+
+describe('Updates in a browser', () => {
+  afterEach(() => {
+    replaceConnection(null);
+    act(() => resetAppUpdates());
+  });
+
+  it('reads the engine it reaches, and checks for updates there', async () => {
+    spyOnEngine(resolveEngineInfo('1.4.0'));
+    const requests = answerFetch((request) => {
+      if (request.path === '/api/app-updates') return Response.json(createAppUpdatesAnswer());
+      if (request.path === '/api/app-updates/request') return Response.json(createAppUpdatesAnswer());
+      return Response.json({ releases: [] });
+    });
+    render(
+      <TooltipProvider>
+        <UpdateSettings />
+      </TooltipProvider>
+    );
+    expect(await screen.findByText('Up to date')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open the changelog' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    await waitFor(() =>
+      expect(requests.find((request) => request.path === '/api/app-updates/request')?.body).toEqual({
+        kind: 'check',
+      })
+    );
+  });
+
+  it('gives each of your machines its own card, and none to a shared machine', async () => {
+    const machines = [
+      { id: 'studio', name: 'Studio', current: false },
+      { id: 'laptop', name: 'Laptop', current: false },
+      { id: 'kai', name: 'Kai’s Mac', current: false, member: true },
+    ];
+    const studio = resolveEngineInfo('1.4.0');
+    const laptop = { ...studio, features: studio.features.filter((feature) => feature !== 'app-updates') };
+    replaceConnection({
+      ...connection,
+      listMachines: () => machines as never,
+      selectEngine: (id) => (id === 'laptop' ? laptop : studio),
+    });
+    answerFetch(() => Response.json(createAppUpdatesAnswer({ running: false })));
+    render(
+      <TooltipProvider>
+        <UpdateSettings />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Studio')).toBeTruthy();
+    expect(screen.getByText('Laptop')).toBeTruthy();
+    expect(screen.queryByText('Kai’s Mac')).toBeNull();
+    expect(await screen.findByText('Not running')).toBeTruthy();
+    expect(
+      screen.getByText('Update Shinsa on that machine first to see and install its updates from here.')
+    ).toBeTruthy();
   });
 });
