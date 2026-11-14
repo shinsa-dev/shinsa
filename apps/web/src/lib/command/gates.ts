@@ -16,8 +16,12 @@ import { OPERATION_SKIP } from '@/lib/overview/operation.ts';
 import { listSuggestedReplies, sendSuggestedReply } from '@/lib/overview/suggested-replies.ts';
 import {
   describeApproveHint,
+  type FollowUp,
+  type FollowUpSupport,
   isFixingAction,
   isVerdictActionBlocked,
+  listFollowUpChoices,
+  resolveFollowUpFlags,
   resolveVerdictAction,
   resolveVerdictAnswer,
   resolveVerdictDraft,
@@ -51,7 +55,7 @@ export interface GateContext {
   comments: LineComment[];
   clearComments: () => void;
   verdicts: Readonly<Record<number, FindingVerdictKind>>;
-  thenApprove?: boolean;
+  followUp?: { chosen: FollowUp; support: FollowUpSupport };
   tab: TaskTab | null;
 }
 
@@ -345,10 +349,11 @@ function sendVerdicts(
   );
 }
 
-function resolveVerdictCommand(task: Task, gate: Gate, context: GateContext, thenApprove: boolean) {
+function resolveVerdictCommand(task: Task, gate: Gate, context: GateContext, followUp: FollowUp) {
   const commented = context.comments.length > 0;
   const draft = resolveVerdictDraft(task.findings, context.verdicts);
-  const action = resolveVerdictAction(task.findings, draft, thenApprove);
+  const { thenApprove, thenMerge } = resolveFollowUpFlags(followUp);
+  const action = resolveVerdictAction(task.findings, draft, thenApprove, thenMerge);
   const extras = resolveVerdictAnswer(task.findings, draft, context.comments);
   const hint = describeApproveHint(commented, action);
   return {
@@ -362,17 +367,34 @@ function resolveVerdictCommand(task: Task, gate: Gate, context: GateContext, the
   };
 }
 
-function resolveDecision(task: Task, gate: Gate, context: GateContext) {
-  if (task.findings.length === 0) {
+function listFollowUps(task: Task, context: GateContext): FollowUp[] {
+  if (!context.followUp) return [];
+  const draft = resolveVerdictDraft(task.findings, context.verdicts);
+  return listFollowUpChoices(task.findings, draft, context.followUp.support).map((choice) => choice.value);
+}
+
+function resolveChosenFollowUp(task: Task, context: GateContext): FollowUp {
+  const chosen = context.followUp?.chosen ?? 'none';
+  return listFollowUps(task, context).includes(chosen) ? chosen : 'none';
+}
+
+function resolveFollowUpCommand(task: Task, gate: Gate, context: GateContext, followUp: FollowUp) {
+  if (task.findings.length === 0 && followUp === 'none') {
     return {
-      label: 'Approve the changes',
-      hint: 'Opens the pull request',
-      ...(context.comments.length > 0 ? { disabled: 'Send or clear your comments first' } : {}),
-      run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'approveChanges')),
+      fixing: false,
+      command: {
+        label: 'Approve the changes',
+        hint: 'Opens the pull request',
+        ...(context.comments.length > 0 ? { disabled: 'Send or clear your comments first' } : {}),
+        run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'approveChanges')),
+      },
     };
   }
-  return resolveVerdictCommand(task, gate, context, context.thenApprove === true).command;
+  const { action, command } = resolveVerdictCommand(task, gate, context, followUp);
+  return { fixing: isFixingAction(action), command };
 }
+
+const FOLLOW_UP_ICON = { none: 'IconCheckmark1', approve: 'IconCheckmark1', merge: 'IconMerged' } as const;
 
 function createDecideCommand(task: Task, gate: Gate, context: GateContext): Command {
   return {
@@ -380,30 +402,31 @@ function createDecideCommand(task: Task, gate: Gate, context: GateContext): Comm
     id: `${resolveGateId(gate)}.approve`,
     icon: 'IconCheckmark1',
     keywords: ['review', 'accept', 'ship', 'pull request', 'lgtm', 'findings', 'fix'],
-    ...resolveDecision(task, gate, context),
+    ...resolveFollowUpCommand(task, gate, context, resolveChosenFollowUp(task, context)).command,
   };
 }
 
-function listFixChoiceCommands(task: Task, gate: Gate, context: GateContext): Command[] {
-  if (context.thenApprove === undefined || task.findings.length === 0) return [];
-  const { action, command } = resolveVerdictCommand(task, gate, context, !context.thenApprove);
-  if (!isFixingAction(action)) return [];
-  return [
-    {
-      kind: 'run',
-      id: `${resolveGateId(gate)}.fix_choice`,
-      icon: action.reply === 'fixFindingsAndApprove' ? 'IconCheckmark1' : 'IconPencil',
-      keywords: ['review', 'findings', 'fix', 'approve', 'accept', 'lgtm'],
-      ...command,
-    },
-  ];
+function listFollowUpCommands(task: Task, gate: Gate, context: GateContext): Command[] {
+  const chosen = resolveChosenFollowUp(task, context);
+  return listFollowUps(task, context)
+    .filter((followUp) => followUp !== chosen)
+    .map((followUp): Command => {
+      const { fixing, command } = resolveFollowUpCommand(task, gate, context, followUp);
+      return {
+        kind: 'run',
+        id: `${resolveGateId(gate)}.follow_up.${followUp}`,
+        icon: fixing && followUp === 'none' ? 'IconPencil' : FOLLOW_UP_ICON[followUp],
+        keywords: ['review', 'findings', 'fix', 'approve', 'accept', 'lgtm', 'merge'],
+        ...command,
+      };
+    });
 }
 
 function listReviewCommands(task: Task, gate: Gate, context: GateContext): Command[] {
   const id = resolveGateId(gate);
   const commands: Command[] = [
     createDecideCommand(task, gate, context),
-    ...listFixChoiceCommands(task, gate, context),
+    ...listFollowUpCommands(task, gate, context),
   ];
   if (context.tab !== 'review' && hasReview(task)) {
     commands.push({

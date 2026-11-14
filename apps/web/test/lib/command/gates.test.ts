@@ -150,14 +150,26 @@ describe('gate commands', () => {
     );
   });
 
-  function fixChoices(thenApprove?: boolean, verdicts: Record<number, 'fix' | 'dismiss'> = {}) {
+  const BOTH = { approveAfterFix: true, approveAndMerge: true };
+
+  function fixChoices(
+    thenApprove?: boolean,
+    verdicts: Record<number, 'fix' | 'dismiss'> = {},
+    thenMerge = false,
+    support = { approveAfterFix: true, approveAndMerge: false }
+  ) {
     const task = createTask({
       id: 't',
       stage: 'awaiting_review',
       findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
     });
     const gate = createGate({ id: 'g', taskId: 't', type: 'review' });
-    const context = { ...CONTEXT, verdicts, ...(thenApprove === undefined ? {} : { thenApprove }) };
+    const chosen = thenMerge ? 'merge' : thenApprove ? 'approve' : 'none';
+    const context = {
+      ...CONTEXT,
+      verdicts,
+      ...(thenApprove === undefined ? {} : { followUp: { chosen, support } as const }),
+    };
     return listOpenGateCommands(createShinsaState({ tasks: [task], gates: [gate] }), task, context);
   }
 
@@ -165,7 +177,7 @@ describe('gate commands', () => {
     const plain = fixChoices(false);
     expect(plain.slice(0, 2).map((command) => [command.id, command.label])).toEqual([
       ['task.t.gate.g.approve', 'Fix 1 finding'],
-      ['task.t.gate.g.fix_choice', 'Fix 1 finding and approve'],
+      ['task.t.gate.g.follow_up.approve', 'Fix 1 finding and approve'],
     ]);
     run(plain[1]);
     expect(spies.sent).toHaveBeenLastCalledWith(
@@ -187,9 +199,64 @@ describe('gate commands', () => {
   });
 
   it('offers no second fix when the engine cannot approve after a fix or nothing is kept to fix', () => {
-    expect(fixChoices().map((command) => command.id)).not.toContain('task.t.gate.g.fix_choice');
+    expect(fixChoices().map((command) => command.id)).not.toContain('task.t.gate.g.follow_up.approve');
     expect(fixChoices(false, { 0: 'dismiss' }).map((command) => command.id)).not.toContain(
-      'task.t.gate.g.fix_choice'
+      'task.t.gate.g.follow_up.approve'
+    );
+  });
+
+  it('offers approve and merge, and follows it when you picked it on the button', () => {
+    const offered = fixChoices(false, {}, false, BOTH);
+    expect(offered.slice(0, 3).map((command) => [command.id, command.label, command.icon])).toEqual([
+      ['task.t.gate.g.approve', 'Fix 1 finding', 'IconCheckmark1'],
+      ['task.t.gate.g.follow_up.approve', 'Fix 1 finding and approve', 'IconCheckmark1'],
+      ['task.t.gate.g.follow_up.merge', 'Fix 1 finding, approve and merge', 'IconMerged'],
+    ]);
+    const picked = fixChoices(true, {}, true, BOTH);
+    expect(picked.slice(0, 3).map((command) => [command.id, command.label, command.icon])).toEqual([
+      ['task.t.gate.g.approve', 'Fix 1 finding, approve and merge', 'IconCheckmark1'],
+      ['task.t.gate.g.follow_up.none', 'Fix 1 finding', 'IconPencil'],
+      ['task.t.gate.g.follow_up.approve', 'Fix 1 finding and approve', 'IconCheckmark1'],
+    ]);
+    run(picked[0]);
+    expect(spies.sent).toHaveBeenLastCalledWith(
+      {
+        type: 'gate.answer',
+        gateId: 'g',
+        decision: 'revise',
+        response: null,
+        verdicts: [{ index: 0, verdict: 'fix', note: null }],
+        thenApprove: true,
+        thenMerge: true,
+      },
+      expect.any(String)
+    );
+    const dismissed = fixChoices(true, { 0: 'dismiss' }, true, BOTH);
+    expect(dismissed.slice(0, 2).map((command) => [command.id, command.label])).toEqual([
+      ['task.t.gate.g.approve', 'Approve and merge'],
+      ['task.t.gate.g.follow_up.none', 'Approve changes'],
+    ]);
+  });
+
+  it('offers approve and merge beside Approve the changes when there are no findings', () => {
+    const task = createTask({ id: 't', stage: 'awaiting_review' });
+    const gate = createGate({ id: 'g', taskId: 't', type: 'review' });
+    const state = createShinsaState({ tasks: [task], gates: [gate] });
+    const support = { approveAfterFix: true, approveAndMerge: true };
+    const plain = listOpenGateCommands(state, task, { ...CONTEXT, followUp: { chosen: 'none', support } });
+    expect(plain.slice(0, 2).map((command) => [command.id, command.label])).toEqual([
+      ['task.t.gate.g.approve', 'Approve the changes'],
+      ['task.t.gate.g.follow_up.merge', 'Approve and merge'],
+    ]);
+    const picked = listOpenGateCommands(state, task, { ...CONTEXT, followUp: { chosen: 'merge', support } });
+    expect(picked.slice(0, 2).map((command) => [command.id, command.label])).toEqual([
+      ['task.t.gate.g.approve', 'Approve and merge'],
+      ['task.t.gate.g.follow_up.none', 'Approve the changes'],
+    ]);
+    run(picked[0]);
+    expect(spies.sent).toHaveBeenLastCalledWith(
+      { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null, thenMerge: true },
+      expect.any(String)
     );
   });
 

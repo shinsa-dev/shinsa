@@ -491,8 +491,9 @@ describe('on a task page', () => {
     await pressCommandK();
     expect(input().getAttribute('placeholder')).toBe('Act on this task, jump to another, or type a new one…');
     expect(headings()[0]).toBe('Decide on this task');
-    expect(optionNames().slice(0, 3)).toEqual([
+    expect(optionNames().slice(0, 4)).toEqual([
       'Approve the changesOpens the pull request',
+      'Approve and mergeOpens the pull request and merges it once CI is green, nothing conflicts and no comment is unread',
       'Review the changes',
       'Request changes',
     ]);

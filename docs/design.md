@@ -1459,7 +1459,8 @@ Only these, and they win over anything below:
       `review.approve_and_merge`, and when the task merges on its own (it has a merge step and is not a bundle
       follower), the menu gains a third choice, Fix 2 findings, approve and merge, and Approve changes becomes a split
       button too, Approve changes or Approve and merge ("Opens the pull request and merges it once CI is green, nothing
-      conflicts and no comment is unread"). While `mergeAhead` is on, the Now card says so in one `text-xs fg-3` line
+      conflicts and no comment is unread"). ⌘K's decision follows every pick the same way and lists each other
+      choice beside it (`listFollowUpCommands`, `lib/command/gates.ts`). While `mergeAhead` is on, the Now card says so in one `text-xs fg-3` line
       ("You chose to merge once ready…", or "…as soon as you tick the step before the merge") with a quiet Keep the
       merge gate link (`merge-ahead.ts`). The activity lists the comments a decision
       sent under it, each with its place (`activity-row.tsx`). An escalated
