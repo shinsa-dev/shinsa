@@ -44,7 +44,7 @@ export interface Round {
   work?: RoundWork | null;
 }
 
-export const ROUND_WORK_KEYS = [
+const ROUND_WORK_KEYS = [
   'plan',
   'planHistory',
   'planAnswers',
