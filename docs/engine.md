@@ -1602,7 +1602,7 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   tools. It is the task's one Agent session (the engine's first rule), and it keeps a task's notions: a plan, your
   answers, its chat.
   - **It plans first.** A new initiative's lead plans like any task (`purpose: plan`, `resolveLeadPlanningPrompt`,
-    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead): its `phases` are the
+    in a scratch folder, since no step needs a repository: `needsRepository` is false for a lead, and `resolveWorkspace` sends every lead run there even when the lead has a repository, as an adopted one does): its `phases` are the
     initiative's phases and its `split` the first tasks to file, each with the `phase` it belongs to (its number) and a
     request naming its repository. `validatePlanRules` lets a lead's plan split but refuses `files` and `initiative`.
     The split always opens the plan gate. Approving it files the parts (`startPlanSplit`, forked from the lead's chat,
