@@ -396,9 +396,10 @@ describe('Terminals services', () => {
     );
     const started = await runAsync(terminals.startService(service.id, main('repository')));
     expect(started.answering).toBe(false);
-    await Bun.sleep(40);
-    const [terminal] = (await runAsync(terminals.snapshot)).terminals;
-    expect(terminal?.answering).toBe(true);
+    await until(
+      'its port answers',
+      async () => (await runAsync(terminals.snapshot)).terminals[0]?.answering === true
+    );
     expect(new Set(probed)).toEqual(new Set([started.port ?? 0]));
     expect(probed).toHaveLength(4);
   });
@@ -408,33 +409,48 @@ describe('Terminals services', () => {
     const service = await runAsync(
       terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' })
     );
-    await runAsync(terminals.startService(service.id, main('repository')));
-    await Bun.sleep(150);
-    expect((await runAsync(terminals.snapshot)).terminals[0]?.answering).toBe(true);
+    const started = await runAsync(terminals.startService(service.id, main('repository')));
+    expect(started.answering).toBe(false);
+    await until(
+      'it gives up asking',
+      async () => (await runAsync(terminals.snapshot)).terminals[0]?.answering === true
+    );
   });
 
   it('stops asking once the service ends, and starts asking afresh when it runs again', async () => {
     let probes = 0;
+    let stray = 0;
+    let ended = false;
     const { terminals, fake } = await createTerminals({
-      pty: { isAnswering: () => Effect.sync(() => ++probes > 1_000) },
+      pty: {
+        isAnswering: () =>
+          Effect.sync(() => {
+            if (ended) stray++;
+            return ++probes > 1_000;
+          }),
+      },
     });
     const service = await runAsync(
       terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' })
     );
     await runAsync(terminals.startService(service.id, main('repository')));
+    await until('it is asked', () => probes > 0);
     fake.spawned[0]?.exit(1);
-    await Bun.sleep(20);
-    const asked = probes;
-    await Bun.sleep(20);
-    expect(probes).toBe(asked);
+    await until(
+      'it ends',
+      async () => (await runAsync(terminals.snapshot)).terminals[0]?.status === 'exited'
+    );
+    ended = true;
     expect((await runAsync(terminals.snapshot)).terminals[0]).toMatchObject({
       status: 'exited',
       answering: false,
     });
+    const asked = probes;
+    ended = false;
     const again = await runAsync(terminals.startService(service.id, main('repository')));
     expect(again).toMatchObject({ status: 'running', answering: false });
-    await Bun.sleep(20);
-    expect(probes).toBeGreaterThan(asked);
+    await until('it is asked afresh', () => probes > asked + 2);
+    expect(stray).toBe(0);
   });
 
   it('never asks a service without a preview whether its port answers', async () => {
@@ -444,7 +460,6 @@ describe('Terminals services', () => {
     });
     const service = await runAsync(terminals.addService('p1', SERVICE));
     const started = await runAsync(terminals.startService(service.id, main('repository')));
-    await Bun.sleep(20);
     expect('answering' in started).toBe(false);
     expect(probes).toBe(0);
   });

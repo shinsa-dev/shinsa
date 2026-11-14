@@ -1,10 +1,12 @@
 import { BunSocket } from '@effect/platform-bun';
-import { Context, Deferred, Effect, Exit, Layer, Schedule, Scope } from 'effect';
+import { Context, Deferred, Effect, Exit, FileSystem, Layer, Schedule, Scope } from 'effect';
 import { constNull } from 'effect/Function';
+import { isFolder } from '../../files/probe.ts';
 import { Shell } from '../../shell/service.ts';
 import {
   ANSWER_HOSTS,
   ANSWER_TIMEOUT,
+  FOLDER_GONE_MESSAGE,
   FOREGROUND_TIMEOUT,
   GROUP_POLL_SCHEDULE,
   HANG_UP_GRACE,
@@ -41,6 +43,7 @@ export class TerminalPty extends Context.Service<
     TerminalPty,
     Effect.gen(function* () {
       const shell = yield* Shell;
+      const files = yield* FileSystem.FileSystem;
       const context = yield* Effect.context<never>();
       const runFork = Effect.runForkWith(context);
 
@@ -83,7 +86,17 @@ export class TerminalPty extends Context.Service<
               }),
           }),
           (spawned) => hangUpGroup(spawned).pipe(Effect.ensuring(Deferred.done(ended, Exit.void)))
-        ).pipe(Scope.provide(scope));
+        ).pipe(
+          Scope.provide(scope),
+          Effect.catchTag('SpawnFailed', (failure) =>
+            isFolder(options.cwd).pipe(
+              Effect.provideService(FileSystem.FileSystem, files),
+              Effect.flatMap((present) =>
+                Effect.fail(present ? failure : new SpawnFailed({ message: FOLDER_GONE_MESSAGE }))
+              )
+            )
+          )
+        );
         const close = () => runFork(Scope.close(scope, Exit.void));
         const exited = runPromise(
           Effect.promise(() => child.exited).pipe(
