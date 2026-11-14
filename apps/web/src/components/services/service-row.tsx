@@ -5,6 +5,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { CHEVRON_REVEAL } from '@/components/layout/compact-section.tsx';
 import { LIST_ROW, LIST_ROW_LINES, LIST_ROW_META, LIST_ROW_TITLE } from '@/components/layout/list-row.tsx';
 import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
@@ -35,8 +36,6 @@ export interface ServiceHandlers {
   canShare?: (view: ServiceView) => boolean;
   sharing?: (view: ServiceView) => boolean;
 }
-
-const REVEAL = 'opacity-0 group-hover/disclosure:opacity-100';
 
 const RUN_REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
 
@@ -139,7 +138,7 @@ function ServiceRowTitle({ view, now, chevron }: { view: ServiceView; now: numbe
       >
         {state}
       </span>
-      {chevron && <DisclosureChevron className={REVEAL} />}
+      {chevron && <DisclosureChevron className={CHEVRON_REVEAL} />}
     </>
   );
 }

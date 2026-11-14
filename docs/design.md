@@ -2838,8 +2838,8 @@ Only these, and they win over anything below:
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
       Terminal page's toolbar have the same button. A service with runs in tasks folds
       them under it, closed by default, its chevron shown under the pointer, and keeps its fold in
-      the disclosure store (`resolveServiceRowId`, `services:service:<id>`) across openings and reloads, one fold for
-      the top bar's popover and a task's alike; expanded, the runs hang under it on a tree line, each with its own
+      the disclosure store (`resolveServiceRowId`, `services:service:<id>`) across openings and reloads. Only the top
+      bar's popover passes runs, so a task's Services popover never folds; expanded, the runs hang under it on a tree line, each with its own
       buttons. The project header keeps its chevron after its counts, as the queue's does (putting it after the play
       button, tried on 2026-11-14, pushed the play out of the rows' column), and its play button is `icon-xs` as the rows' are, so
       the header's play lines up with the rows' Start. Evidence's Preview group links the task's running previews too,
