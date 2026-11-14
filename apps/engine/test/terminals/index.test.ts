@@ -8,7 +8,7 @@ import {
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Duration, Effect, Layer } from 'effect';
+import { Duration, Effect, Layer, Option } from 'effect';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { TerminalPty } from '../../src/terminals/pty/service.ts';
 import {
@@ -139,7 +139,7 @@ describe('Terminals', () => {
     const again = (await createTerminals({ dataDir })).terminals;
     const restored = await runAsync(again.find(terminal.id));
     expect(restored.info).toMatchObject({ status: 'stopped', endedAt: 100 });
-    expect(await runAsync(restored.serializeScreen)).toContain('dev server on :3000');
+    expect(Option.getOrThrow(await runAsync(restored.serializeScreen))).toContain('dev server on :3000');
     expect((await runAsync(again.snapshot)).terminals).toHaveLength(1);
   });
 
@@ -419,38 +419,32 @@ describe('Terminals services', () => {
 
   it('stops asking once the service ends, and starts asking afresh when it runs again', async () => {
     let probes = 0;
-    let stray = 0;
-    let ended = false;
-    const { terminals, fake } = await createTerminals({
-      pty: {
-        isAnswering: () =>
-          Effect.sync(() => {
-            if (ended) stray++;
-            return ++probes > 1_000;
-          }),
-      },
+    const { terminals, fake, close } = await createTerminals({
+      pty: { isAnswering: () => Effect.sync(() => ++probes < 0) },
+      timings: { answerLimit: Duration.hours(1) },
     });
     const service = await runAsync(
       terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' })
     );
-    await runAsync(terminals.startService(service.id, main('repository')));
+    const started = await runAsync(terminals.startService(service.id, main('repository')));
+    expect(started).toMatchObject({ status: 'running', answering: false });
     await until('it is asked', () => probes > 0);
     fake.spawned[0]?.exit(1);
     await until(
       'it ends',
       async () => (await runAsync(terminals.snapshot)).terminals[0]?.status === 'exited'
     );
-    ended = true;
     expect((await runAsync(terminals.snapshot)).terminals[0]).toMatchObject({
       status: 'exited',
       answering: false,
     });
     const asked = probes;
-    ended = false;
+    await runAsync(Effect.sleep(Duration.millis(20)));
+    expect(probes).toBeLessThanOrEqual(asked + 1);
     const again = await runAsync(terminals.startService(service.id, main('repository')));
     expect(again).toMatchObject({ status: 'running', answering: false });
-    await until('it is asked afresh', () => probes > asked + 2);
-    expect(stray).toBe(0);
+    await until('it is asked afresh', () => probes > asked + 3);
+    await close();
   });
 
   it('never asks a service without a preview whether its port answers', async () => {

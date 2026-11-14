@@ -32,6 +32,7 @@ export interface TerminalsHarnessOptions {
   tasks?: ShinsaState['tasks'];
   idPrefix?: string;
   env?: Record<string, string>;
+  timings?: Partial<Context.Service.Shape<typeof TerminalTimings>>;
 }
 
 async function buildScoped<A, E>(layer: Layer.Layer<A, E>) {
@@ -81,6 +82,7 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
           sweep: Duration.hours(1),
           answer: Duration.millis(1),
           answerLimit: Duration.millis(50),
+          ...options.timings,
         }),
         Layer.succeed(Clock.Clock, createFixedClock(typeof now === 'function' ? now : () => now)),
         options.tasks

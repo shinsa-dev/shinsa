@@ -169,8 +169,9 @@ describe('services over HTTP', () => {
     };
     expect(started.terminal).toMatchObject({ serviceId: service.id, status: 'running', port: 4100 });
     await until('it printed', async () =>
-      (await runAsync((await runAsync(terminals.find(started.terminal.id))).serializeScreen)).includes(
-        'up-4100'
+      Option.exists(
+        await runAsync((await runAsync(terminals.find(started.terminal.id))).serializeScreen),
+        (screen) => screen.includes('up-4100')
       )
     );
     await post(`/api/services/${service.id}/stop`, {}, null);

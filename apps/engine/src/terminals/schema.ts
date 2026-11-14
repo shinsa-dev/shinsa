@@ -11,7 +11,7 @@ import {
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Context, Duration, Effect, Schedule, Schema } from 'effect';
+import { Context, Duration, Effect, type Option, Schedule, Schema } from 'effect';
 
 export class PortUnavailable extends Schema.TaggedError<PortUnavailable, { readonly brand: unique symbol }>()(
   'PortUnavailable',
@@ -152,7 +152,7 @@ export interface TerminalSession {
   resize(cols: number, rows: number): void;
   clear(): void;
   replaceColors(colors: TerminalColors): void;
-  readonly serializeScreen: Effect.Effect<string>;
+  readonly serializeScreen: Effect.Effect<Option.Option<string>>;
   readOutput(lines: number): Effect.Effect<string[]>;
   hangUp(): void;
   readonly stop: Effect.Effect<void>;
