@@ -1,6 +1,11 @@
 import { Option } from 'effect';
 import type { Gate, GateType, Task, TaskSuggestion } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
+import {
+  type AutopilotReply,
+  listAutopilotContextSections,
+  resolveAutopilotContextLines,
+} from './context/index.ts';
 import { describeAutopilotEstimate, listAutopilotExampleLines, selectAutopilotEstimate } from './examples.ts';
 import { listAutopilotFollowUpLines } from './follow-ups.ts';
 import { listAutopilotLessonLines } from './lessons.ts';
@@ -30,6 +35,7 @@ export const AUTOPILOT_JUDGE_SYSTEM = [
   'For `act` and `forward` on anything but a question or a failed step, leave `reply` empty.',
   'Answer only with a verdict the decision lists.',
   `Write \`reason\` as one plain sentence the developer reads later, at most ${AUTOPILOT_JUDGMENT_LIMITS.reason} characters.`,
+  'Weigh the task’s context: what changed, the walkthrough, the review and its findings, what the developer and the agent said, and how the developer decided their recent tasks in the same part of the app.',
   'Weigh what the developer taught you at earlier decisions like this one: do what they approved, bring what they changed.',
   'Weigh their personal model’s estimate and the earlier decisions most like this one: what they did there, and their words, is what they would do here.',
   'Weigh how they steer their tasks: the counts and their recent words are their habits.',
@@ -129,7 +135,8 @@ export function resolveAutopilotJudgePrompt(
   lessons: readonly string[] = [],
   history: AutopilotHistoryLines = NO_HISTORY,
   shadow = false,
-  followUps: readonly string[] = []
+  followUps: readonly string[] = [],
+  context: readonly string[] = []
 ) {
   const limit = AUTOPILOT_JUDGMENT_LIMITS.context;
   return [
@@ -145,6 +152,7 @@ export function resolveAutopilotJudgePrompt(
     `${gate.title}`,
     clip(gate.body, limit * 2),
     ...describeChoices(gate),
+    ...context,
     ...describeLessons(lessons),
     ...describeHistory(history),
     ...(followUps.length > 0 ? ['', ...followUps] : []),
@@ -174,7 +182,13 @@ function isAwaitingJudgment(gate: Gate, shadow: boolean) {
   return gate.autopilotJudging === true;
 }
 
-export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, now: number, shadow = false) {
+export function selectAutopilotJudgeRequest(
+  state: ShinsaState,
+  gateId: string,
+  now: number,
+  shadow = false,
+  replies: readonly AutopilotReply[] = []
+) {
   const gate = state.gates[gateId];
   const task = gate ? state.tasks[gate.taskId] : undefined;
   if (!gate || !task || gate.status !== 'open' || !isAwaitingJudgment(gate, shadow)) return Option.none();
@@ -197,7 +211,8 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
         lessons,
         history,
         shadow,
-        listAutopilotFollowUpLines(state, gate)
+        listAutopilotFollowUpLines(state, gate),
+        resolveAutopilotContextLines(listAutopilotContextSections(state, task, replies))
       ),
       verdicts: AUTOPILOT_GATE_VERDICTS[kind],
     };
