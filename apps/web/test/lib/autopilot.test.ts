@@ -16,6 +16,7 @@ import {
   AUTOPILOT_LEVEL_DESCRIPTION,
   AUTOPILOT_LEVEL_ITEMS,
   listAutopilotLevelItems,
+  listAutopilotAreaRows,
   listAutopilotReadinessRows,
   resolveAutopilotScoreView,
   CONTACT_PICKER_HINT,
@@ -43,6 +44,7 @@ import {
   resolveReviewRatingsView,
 } from '@/lib/autopilot.ts';
 import {
+  createAutopilotAreasProfile,
   createAutopilotKindsProfile,
   createAutopilotProfile,
   createGate,
@@ -469,6 +471,50 @@ describe('the Autopilot settings', () => {
     expect(listAutopilotReadinessRows({ autopilotProfile: behind })[4]?.detail).toBe(
       'It guessed you right on 90 of 100 failed steps, 5 points behind your usual answer. Everything needs 90% and 5 points ahead.'
     );
+  });
+
+  it('lists each area of the app with its score and whether Autopilot handles it alone', () => {
+    const profile = createAutopilotAreasProfile({
+      'apps/web/settings': { scored: 60, agreed: 57, base: 0.8 },
+      'packages/core/autopilot': { scored: 40, agreed: 32, base: 0.75 },
+      'apps/engine/git': { scored: 12, agreed: 11, base: 0.9 },
+      'apps/cloud/relay': { scored: 1, agreed: 1, base: 1 },
+      'docs/engine': { scored: 0, agreed: 0, base: 0 },
+    });
+    expect(
+      listAutopilotAreaRows({ autopilotProfile: profile }).map((row) => [
+        row.area,
+        row.percent,
+        row.status,
+        row.detail,
+      ])
+    ).toEqual([
+      [
+        'apps/web/settings',
+        '95%',
+        'alone',
+        'It guessed you right on 57 of 60 decisions in this area, 15 points ahead of your usual answer. At Everything, it handles this work alone.',
+      ],
+      [
+        'packages/core/autopilot',
+        '80%',
+        'waits',
+        'It guessed you right on 32 of 40 decisions in this area, 5 points ahead of your usual answer. Below 90%, or less than 5 points ahead, this work waits for you.',
+      ],
+      [
+        'apps/engine/git',
+        '91%',
+        'learning',
+        'It guessed you right on 11 of 12 decisions in this area. Until it has 30, each kind of decision decides on its own.',
+      ],
+      [
+        'apps/cloud/relay',
+        '100%',
+        'learning',
+        'It guessed you right on 1 of 1 decision in this area. Until it has 30, each kind of decision decides on its own.',
+      ],
+    ]);
+    expect(listAutopilotAreaRows({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE })).toEqual([]);
   });
 
   it('keeps Everything in use while the overall score suggests Most things', () => {

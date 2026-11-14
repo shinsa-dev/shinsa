@@ -2380,7 +2380,10 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   you approved the review yourself, how long the gate has waited, and where you are (`resolveAutopilotPresence`):
   inside your usual hours or not (Your hours, below), active when you were seen in the last 30 minutes
   (`AUTOPILOT_LIMITS.activeMinutes`; anything you do in Shinsa or on your Mac counts, `state.presence`), and how
-  long you have been away, and whether that kind of gate is ready for Everything (`ready`, below).
+  long you have been away, and whether that kind of gate is ready for Everything (`ready`, below), and the area of
+  the app it falls in when Autopilot does not know your answers there well enough yet (`heldArea`, below). Where you
+  are never holds an act: Autopilot acts for you at your machine as it does while you are away, and presence only
+  decides whether an urgent change may go to your team and when an urgent merge may take the higher ceiling.
 - **The hard limits** (`resolveAutopilotLimits`, a ceiling per level in `AUTOPILOT_CEILINGS`):
 
   | Level | Risk it acts on | Risk when urgent | Largest plan it approves |
@@ -2412,6 +2415,20 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   applies), give your OK on any task, retry a failed step or cancel the task, and set the review's findings. Below
   Everything nothing changes. Questions are not score-gated: Autopilot answers them at every level and a reply has
   no yes or no to score. What it never answers is in Who can change Shinsa, below.
+- **Everything, earned per area too** (`listAutopilotAreaReadiness`, `isAutopilotAreaHeld`, `AUTOPILOT_AREA_LIMITS`).
+  Every decision also counts toward its area of the app (`AutopilotProfile.areas`, the same tracks as `kinds`, keyed
+  by the work facts' `area`, below), so a kind that is ready overall can still hold the work where Autopilot keeps
+  getting you wrong. An area is known once 30 of its decisions are scored on that kind's track; a known area under
+  90% agreement or under 5 points over your usual answer there holds that kind's work for you at Everything
+  (`resolveAutopilotFacts` sets `heldArea`, `resolveAutopilotLevel` then reads `everything` as `most`), with the
+  area in the reason ("Autopilot does not know how you handle work in apps/web/settings well enough yet, so it waits
+  for you."), and the same holds review findings. An area still under 30 decisions holds nothing, so each kind of
+  decision decides on its own until the area has enough. Settings → Autopilot lists By kind of work once a decision
+  has an area: each area, how often Autopilot guessed you right there and how far ahead of your usual answer, and
+  Handles it alone, Waits for you or Still learning. Each row reads every track readiness uses (`combined`, and
+  `model` for findings), showing the one that holds the work when one does (`listAutopilotAreaReadiness`), so a row
+  never says Handles it alone while that area's findings wait for you. A profile from an older engine, with no
+  `areas`, lists none.
 - **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
   and asks for `autopilot.judge {taskId, gateId, shadow: false}`, a replay-safe effect on lane `task:<id>`: the engine builds the
   prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
@@ -2515,6 +2532,20 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   the tasks you file, priority changes and cancellations, `STEERING_KINDS`, read by every kind of point), then up to 3 of your recent notes,
   within 1,200 characters, the point's own counts first. The tallies are what Settings and the suggestion prompt
   read; the judge reads the model's estimate and your similar decisions instead (The model, below).
+- **The kind of work** (`autopilot/work/`, `resolveAutopilotWorkFacts`, `AutopilotWorkFacts` on
+  `AutopilotDecisionFacts.work`). Every decision records what kind of work it was, derived in core from what the task
+  already holds, so replaying the log gives the same facts: `area`, the part of the app most of the plan's files sit
+  in (`selectWorkArea`: a workspace folder and package such as `apps/web` or `packages/core`, then its first folder
+  that is not generic like `src` or `components`, tests, docs and changelog entries counting only when nothing else
+  changed); `surface`, `ui` when two thirds or more of the code files are components, pages, styles or markup,
+  `logic` when a third or less are, `mixed` between, `docs` when only docs changed; `novelty`, `new` or `tweak` by
+  which words the request, title and plan goal use more (feature, flow, redesign against fix, tweak, small, copy);
+  `size`, `small` (2 phases and 4 files at most), `medium` or `large` (5 phases or 12 files or more); and `terms`,
+  the request's words as a hashed text embedding (`listWorkTerms`: lower-cased words of 3 letters or more, stop
+  words out, plain endings folded so dialog and dialogs match, each hashed into 1,024 buckets, at most 32, from
+  the first 1,200 characters of the title and request). Each is null when the task does not say, such as before there is a plan, and every decision from before
+  them has `work: null` (the `work-facts` log migration). A hashed embedding rather than a neural one keeps it on the
+  machine and deterministic; a neural one comes only if it beats this one in the benchmark.
 - **The model** (`autopilot/model/`, `state.autopilotModel`). A small model trained on your own decisions, in core,
   folded on every `autopilot.decided` (`state/autopilot.ts`, `learnAutopilotDecisions`): no hosted model, no
   fine-tuning, nothing leaves your machine, and replaying the log rebuilds it exactly, since it is plain arithmetic
@@ -2523,7 +2554,10 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   Messages, edits, filed tasks, priority changes and cancellations train no head. `listAutopilotFeatures` turns a
   decision into features: the kind, risk, reviewer's confidence, shape and hour band one-hot, the plan's scope and
   the findings log-scaled, the flags (urgent, watchdog, active, in your hours, the plan you always approve), the project and repository hashed into 16 buckets, and a few crosses (kind × risk, kind × confidence,
-  risk × scope, watchdog × away). The wait and `touched` are kept on the decision but are not features: at your
+  risk × scope, watchdog × away), then the kind of work: the area hashed into 16 buckets, the surface, novelty and
+  size one-hot, the request's hashed terms, together weighted to one, and crosses of each with the kind (kind × area,
+  kind × surface, kind × novelty) and novelty × size and surface × novelty, so a small confirm dialog and a new
+  onboarding flow land far apart and the model learns which areas you iterate on. The wait and `touched` are kept on the decision but are not features: at your
   answer they say how long you took and whether Autopilot had brought it to you, which Autopilot cannot know when it
   judges a gate that just opened, so learning them would teach the model a difference it never sees. Each decision is one gradient step with L2 (`AUTOPILOT_MODEL_LIMITS`: rate 0.05,
   L2 0.001); the constant step makes recent decisions count most while every decision ever made stays in the
@@ -2539,7 +2573,8 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   from every decision they made: 93% that they approve this, from 41 similar decisions.", with "It is still
   learning, so weigh it lightly." while it is unsure), then up to 8 of your most similar past
   decisions of the same kind as worked examples (`listAutopilotNeighbours`, `AUTOPILOT_RETRIEVAL_LIMITS`: nearness
-  is 0.6 feature similarity, 0.25 words shared with the task title and 0.15 recency, within 2,400 characters), each
+  is 0.5 feature similarity, 0.15 words shared with the task title, 0.2 request terms shared (`facts.work.terms`)
+  and 0.15 recency, within 2,400 characters), each
   with its facts, what you did and your words, then how you steer your tasks. All of it sits at the tail of the user
   turn, so the system prompt never changes.
 - **Combining the two** (`resolveAutopilotCombinedVerdict`, `isAutopilotModelVeto`, `AUTOPILOT_COMBINE_LIMITS`). The
@@ -2579,7 +2614,8 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   the rule above makes from the call's guess and the estimate stored with it (`AutopilotDecision.estimate`), never
   from the fold's later `modelGuess`, which has newer weights; and `base`, always your usual answer for that head lately (`AutopilotProfile
   .rates`, the decayed share of yes, before this decision). The same four tracks are kept per kind
-  (`AutopilotProfile.kinds`, `AutopilotKindProfile`, each with its own `rate` for `base`), which is what Everything
+  (`AutopilotProfile.kinds`, `AutopilotKindProfile`, each with its own `rate` for `base`) and per area of the app
+  (`AutopilotProfile.areas`, the same shape, for decisions whose work facts name an area), which is what Everything
   reads. Each track also counts how often `base` was right on the
   same decisions (`baseWeight`), so its `margin` over your usual answer compares like with like, and a log loss
   (a flat verdict counts as 99% sure, `clamp`), for the benchmark. `resolveAutopilotScore` reads `combined`, what

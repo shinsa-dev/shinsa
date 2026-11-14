@@ -219,7 +219,10 @@ not chat text.
   kind of gate has earned it (100 of your decisions of that kind, 90% agreement and 5 points over your usual answer,
   each kind listed in By kind of decision): a ready kind may then approve any plan size, any risk the reviewer is
   highly confident in, your OK on any task, retry a failed step or cancel the task, and mark review findings fix or
-  dismiss, while a kind not ready acts as Most things. Secrets, sign-ins, setup, operations, results, post-merge
+  dismiss, while a kind not ready acts as Most things. Each decision also records the kind of work (its area of the
+  app, UI or logic, new feature or tweak, size and the request's words, hashed on your machine), which the model
+  learns from, and an area where it has 30 decisions but still misses the bar waits for you even when its kind is
+  ready, each area listed in By kind of work. It acts for you whether you are at your machine or away. Secrets, sign-ins, setup, operations, results, post-merge
   steps and failures from limits, accounts or your pause stay yours at every level. Everything it did is in Handled by Autopilot on Home and notifies
   until you mark it seen. Only an urgent, high-risk change, after you have been away an hour, goes to your team's
   Needs you, and to Slack channels and on-call teammates you choose, up to five; never while you are active. The

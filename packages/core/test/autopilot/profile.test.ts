@@ -13,8 +13,9 @@ import {
   type ReviewFinding,
   type ReviewRatings,
   recordAutopilotDecisions,
+  resolveAutopilotWorkFacts,
 } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, type Harness, PASSING, proposePlan } from '../harness.ts';
+import { buildAll, createHarness, createTask, type Harness, PASSING, PLAN, proposePlan } from '../harness.ts';
 
 const NO_CONTEXT = { projectId: null, risk: null };
 
@@ -109,6 +110,7 @@ describe('the decisions Autopilot learns from', () => {
       active: gate.autopilotOpened?.active ?? false,
       inHours: null,
       hour: tokyoHour,
+      work: expect.objectContaining({ area: null, surface: null, size: 'small' }),
     });
     expect(decisions(harness)[0]?.facts?.waitedMinutes).toBeGreaterThanOrEqual(90);
   });
@@ -165,6 +167,32 @@ describe('the decisions Autopilot learns from', () => {
     expect(second?.facts?.hour).toBe(Math.floor((harness.now % DAY_MS) / HOUR_MS));
     expect(message?.kind).toBe('message');
     expect(message?.facts?.waitedMinutes).toBeNull();
+  });
+
+  test('a plan decision records the kind of work the plan does', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    const taskId = createTask(harness, { request: 'Add a small confirm dialog before deleting a project.' });
+    proposePlan(harness, taskId, {
+      ...PLAN,
+      files: [
+        { path: 'apps/web/src/components/projects/delete-dialog.tsx', change: 'Add the dialog.' },
+        { path: 'apps/web/test/components/projects/delete-dialog.test.tsx', change: 'Test it.' },
+      ],
+    });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'approve',
+      response: null,
+    });
+    expect(decisions(harness)[0]?.facts?.work).toEqual(resolveAutopilotWorkFacts(harness.task(taskId)));
+    expect(decisions(harness)[0]?.facts?.work).toMatchObject({
+      area: 'apps/web/projects',
+      surface: 'ui',
+      novelty: 'tweak',
+      size: 'small',
+    });
   });
 
   test('each finding you decide is learned beside the review answer', () => {

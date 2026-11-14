@@ -10,6 +10,7 @@ import {
 import {
   AUTOPILOT_MODEL_LIMITS,
   AUTOPILOT_PROFILE_LIMITS,
+  type AutopilotWorkFacts,
   applyEvent,
   type AutopilotDecision,
   type AutopilotDecisionFacts,
@@ -17,6 +18,7 @@ import {
   createAutopilotModel,
   createState,
   learnAutopilotDecisions,
+  resolveAutopilotWorkFacts,
   selectAutopilotModelGuess,
   serializeState,
 } from '../../src/index.ts';
@@ -33,6 +35,7 @@ const FACTS: AutopilotDecisionFacts = {
   active: false,
   inHours: true,
   hour: 22,
+  work: null,
 };
 
 function decision(overrides: Partial<AutopilotDecision> = {}): AutopilotDecision {
@@ -65,7 +68,97 @@ function guess(model: AutopilotModel, overrides: Partial<AutopilotDecision> = {}
   return Option.getOrThrow(selectAutopilotModelGuess(model, decision(overrides)));
 }
 
+function work(title: string, overrides: Partial<AutopilotWorkFacts>): AutopilotWorkFacts {
+  return { ...resolveAutopilotWorkFacts({ title, request: '', plan: null }), ...overrides };
+}
+
+const SMALL_DIALOG = { area: 'apps/web/settings', surface: 'ui', novelty: 'tweak', size: 'small' } as const;
+
+const NEW_FLOW = { area: 'apps/web/onboarding', surface: 'ui', novelty: 'new', size: 'large' } as const;
+
+function withWork(facts: AutopilotWorkFacts | null): Partial<AutopilotDecision> {
+  return { facts: { ...FACTS, work: facts } };
+}
+
+describe('the kind of work the model learns', () => {
+  const dialogs = [
+    'Add a small confirm dialog to the delete button',
+    'Add a small dialog before archiving a project',
+    'Show a confirm dialog when leaving with unsaved edits',
+    'Add a small dialog to rename a task',
+  ];
+  const flows = [
+    'Build a new onboarding flow for first-time users',
+    'Build a new billing flow with plans and checkout',
+    'Design a new sharing flow for teams',
+    'Build a new import flow from other tools',
+  ];
+
+  function train(facts: (title: string, index: number) => AutopilotWorkFacts | null) {
+    const decisions = Array.from({ length: 40 }, (_, index) => {
+      const dialog = index % 2 === 0;
+      const titles = dialog ? dialogs : flows;
+      const title = titles[(index >> 1) % titles.length] ?? '';
+      return decision({
+        at: index,
+        gateId: `g${index}`,
+        answer: dialog ? 'approved' : 'revised',
+        ...withWork(facts(title, index)),
+      });
+    });
+    return learnAutopilotDecisions(undefined, decisions).model;
+  }
+
+  test('tells a small confirm dialog from a new onboarding flow it has not seen', () => {
+    const model = train((title, index) => work(title, index % 2 === 0 ? SMALL_DIALOG : NEW_FLOW));
+    const dialog = guess(
+      model,
+      withWork(work('Add a small confirm dialog for removing a member', SMALL_DIALOG))
+    );
+    const flow = guess(model, withWork(work('Build a new onboarding flow for invited members', NEW_FLOW)));
+    expect(dialog.p).toBeGreaterThan(0.6);
+    expect(flow.p).toBeLessThan(0.4);
+  });
+
+  test('tells them apart by the words of the request alone', () => {
+    const model = train((title) => work(title, {}));
+    const dialog = guess(model, withWork(work('Add a small confirm dialog for removing a member', {})));
+    const flow = guess(model, withWork(work('Build a new onboarding flow for invited members', {})));
+    expect(dialog.p).toBeGreaterThan(flow.p + 0.2);
+  });
+
+  test('cannot tell them apart when it never learned the kind of work', () => {
+    const model = train(() => null);
+    const dialog = guess(
+      model,
+      withWork(work('Add a small confirm dialog for removing a member', SMALL_DIALOG))
+    );
+    const flow = guess(model, withWork(work('Build a new onboarding flow for invited members', NEW_FLOW)));
+    expect(dialog.p).toBe(flow.p);
+  });
+});
+
 describe('the features of a decision', () => {
+  test('carry the kind of work, with the request terms weighted to one together', () => {
+    const facts = work('Add a small confirm dialog to the delete button', SMALL_DIALOG);
+    const without = listAutopilotFeatures(decision(withWork(null)));
+    const features = listAutopilotFeatures(decision(withWork(facts)));
+    const added = features.slice(without.length);
+    expect(features.every((feature) => feature.index < AUTOPILOT_FEATURE_COUNT)).toBe(true);
+    expect(new Set(features.map((feature) => feature.index)).size).toBe(features.length);
+    const terms = added.filter((feature) => feature.value < 1);
+    expect(terms).toHaveLength(facts.terms.length);
+    expect(terms.reduce((sum, feature) => sum + feature.value ** 2, 0)).toBeCloseTo(1);
+    expect(added.length - terms.length).toBe(9);
+  });
+
+  test('leave out the parts of the work nobody could tell', () => {
+    const facts: AutopilotWorkFacts = { area: null, surface: null, novelty: null, size: null, terms: [] };
+    expect(listAutopilotFeatures(decision(withWork(facts)))).toEqual(
+      listAutopilotFeatures(decision(withWork(null)))
+    );
+  });
+
   test('stay inside the layout and carry the facts the gate knew', () => {
     const features = listAutopilotFeatures(decision({ watchdog: true }));
     expect(features[0]).toEqual({ index: 0, value: 1 });

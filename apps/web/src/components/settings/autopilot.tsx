@@ -26,6 +26,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckMark } from '@/components/status/check-mark.tsx';
 import {
+  AUTOPILOT_AREA_STATUS,
   AUTO_MERGE_DESCRIPTION,
   AUTO_MERGE_ITEMS,
   AUTOPILOT_BLOCKS,
@@ -49,6 +50,7 @@ import {
   isAskWaiting,
   isSlackTestSent,
   listAutopilotLevelItems,
+  listAutopilotAreaRows,
   listAutopilotReadinessRows,
   listContactOptions,
   listSlackWorkspaceItems,
@@ -315,6 +317,26 @@ function ReadinessBlock() {
   );
 }
 
+function AreasBlock() {
+  const profile = useShinsaSelector((state) => state.autopilotProfile);
+  const rows = listAutopilotAreaRows({ autopilotProfile: profile ?? EMPTY_AUTOPILOT_PROFILE });
+  if (rows.length === 0) return null;
+  return (
+    <SettingsBlock
+      header={<BlockHeader icon={AUTOPILOT_BLOCKS.areas.icon} title={AUTOPILOT_BLOCKS.areas.title} />}
+    >
+      {rows.map((row) => (
+        <DescribedRow key={row.area} title={<Truncate>{row.area}</Truncate>} description={row.detail}>
+          <span className={cn(TOKEN_TEXT, 'flex items-center gap-1 pr-1.5')}>
+            {row.status === 'alone' && <CheckMark label={AUTOPILOT_AREA_STATUS.alone} />}
+            {AUTOPILOT_AREA_STATUS[row.status]} · {row.percent}
+          </span>
+        </DescribedRow>
+      ))}
+    </SettingsBlock>
+  );
+}
+
 export function AutopilotSettings({ settings }: { settings: Settings }) {
   const available = useEngineFeature('autopilot');
   const projects = useShinsaSelector((state) => state.projects);
@@ -438,6 +460,7 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
           />
           <ScoreBlock level={policy.level} onUse={(level) => updateAutopilot({ level })} />
           <ReadinessBlock />
+          <AreasBlock />
         </>
       )}
     </SettingsGroup>

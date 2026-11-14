@@ -68,5 +68,5 @@ export const AUTOPILOT_RETRIEVAL_LIMITS = {
   title: 80,
   halfLife: 50,
   shortestWord: 3,
-  weights: { features: 0.6, words: 0.25, recency: 0.15 },
+  weights: { features: 0.5, words: 0.15, terms: 0.2, recency: 0.15 },
 } as const;

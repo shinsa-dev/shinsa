@@ -126,6 +126,7 @@ function createSeedFacts(answer: AutopilotDecisionAnswer, index: number): Autopi
     active: index % 6 !== 0,
     inHours: index % 6 !== 0,
     hour: (9 + index) % 24,
+    work: null,
   };
 }
 
@@ -159,10 +160,30 @@ export function pushSeedAutopilotDecisions(push: (at: number, event: ShinsaEvent
   }
 }
 
+const SEED_REVIEW_AREAS = [
+  { until: 60, area: 'apps/web/settings', surface: 'ui', misses: 0 },
+  { until: 100, area: 'packages/core/autopilot', surface: 'logic', misses: 8 },
+  { until: 120, area: 'apps/engine/git', surface: 'logic', misses: 0 },
+] as const;
+
+function resolveSeedReviewArea(index: number) {
+  return SEED_REVIEW_AREAS.find((entry) => index < entry.until) ?? SEED_REVIEW_AREAS[0];
+}
+
+function isSeedReviewMiss(index: number) {
+  const { misses } = resolveSeedReviewArea(index);
+  return index % 40 === 7 || (misses > 0 && index % misses === 3);
+}
+
 function createSeedReviewDecision(index: number): AutopilotDecision {
   const answer: AutopilotDecisionAnswer = index % 5 === 0 ? 'revised' : 'approved';
   const agreeing: AutopilotVerdict = answer === 'approved' ? 'act' : 'forward';
-  const guess: AutopilotVerdict = index % 40 === 7 ? (agreeing === 'act' ? 'forward' : 'act') : agreeing;
+  const guess: AutopilotVerdict = isSeedReviewMiss(index)
+    ? agreeing === 'act'
+      ? 'forward'
+      : 'act'
+    : agreeing;
+  const { area, surface } = resolveSeedReviewArea(index);
   return {
     at: NOW - (8 * 24 - index * 1.5) * HOUR,
     taskId: 'seed-autopilot',
@@ -178,7 +199,10 @@ function createSeedReviewDecision(index: number): AutopilotDecision {
     guess,
     followUp: null,
     note: null,
-    facts: createSeedFacts(answer, index),
+    facts: {
+      ...createSeedFacts(answer, index),
+      work: { area, surface, novelty: index % 3 === 0 ? 'new' : 'tweak', size: 'small', terms: [] },
+    },
     estimate: { head: 'gate', p: guess === 'act' ? 0.9 : 0.15, confidence: 0.8, similar: 40 },
   };
 }

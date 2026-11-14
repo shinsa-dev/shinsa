@@ -35,6 +35,7 @@ const FACTS: AutopilotFacts = {
   escalatedReview: false,
   approvedByYou: false,
   ready: false,
+  heldArea: null,
   retried: 0,
   waitedMinutes: AUTOPILOT_LIMITS.awayMinutes,
   presence: AWAY,
@@ -199,6 +200,42 @@ describe('what Autopilot may do on its own', () => {
   });
 });
 
+describe('acting while you are at your machine', () => {
+  const HERE = { inHours: true, active: true, awayMinutes: 0 } as const;
+  const GATES = ['plan', 'question', 'review', 'merge', 'proposal', 'failure'] as const;
+  const EVERYTHING: Partial<AutopilotPolicy> = { level: 'everything', autoMerge: 'approved' };
+
+  test('never holds an act or a follow-up, at any gate or level', () => {
+    for (const gate of GATES) {
+      for (const level of ['ask_first', 'balanced', 'most', 'everything'] as const) {
+        const facts: AutopilotFacts = { ...FACTS, gate, urgent: false, risk: 'low', ready: true };
+        const policy = { ...ON, ...EVERYTHING, level };
+        const here = resolveAutopilotLimits({ ...facts, presence: HERE }, policy);
+        const away = resolveAutopilotLimits({ ...facts, presence: AWAY }, policy);
+        expect([here.act, here.revise]).toEqual([away.act, away.revise]);
+      }
+      expect(
+        resolveAutopilotLimits(
+          { ...FACTS, gate, urgent: false, risk: 'low', ready: true, presence: HERE },
+          {
+            ...ON,
+            ...EVERYTHING,
+          }
+        ).act.allowed
+      ).toBe(true);
+    }
+  });
+
+  test('holds only escalating to your team', () => {
+    expect(escalate({ presence: HERE })).toEqual({
+      allowed: false,
+      reason: 'You are active, so it stays with you.',
+      setting: false,
+    });
+    expect(escalate({ presence: AWAY }).allowed).toBe(true);
+  });
+});
+
 describe('when Autopilot may contact your team', () => {
   test('only for an urgent, high-risk change after you have been away an hour', () => {
     expect(escalate({})).toEqual({ allowed: true });
@@ -316,21 +353,25 @@ describe('the Everything level', () => {
 
   test('judges review findings only at Everything, under the Findings switch, once findings are ready', () => {
     const state = { autopilotProfile: EMPTY_AUTOPILOT_PROFILE };
-    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, enabled: false })).toMatchObject({
+    const harness = createHarness();
+    const task = harness.task(createTask(harness));
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, enabled: false }, task)).toMatchObject({
       reason: 'Autopilot is off.',
     });
-    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, gates: ['plans'] })).toMatchObject({
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, gates: ['plans'] }, task)).toMatchObject({
       reason: 'Autopilot does not judge review findings.',
     });
-    expect(resolveAutopilotFindingLimit(READY_FINDINGS, ON)).toMatchObject({
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, ON, task)).toMatchObject({
       reason: 'Below Everything, review findings wait for you.',
     });
-    expect(resolveAutopilotFindingLimit(state, { ...ON, ...EVERYTHING })).toEqual({
+    expect(resolveAutopilotFindingLimit(state, { ...ON, ...EVERYTHING }, task)).toEqual({
       allowed: false,
       reason: 'Autopilot does not know how you judge review findings well enough yet.',
       setting: false,
     });
-    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, ...EVERYTHING })).toEqual({ allowed: true });
+    expect(resolveAutopilotFindingLimit(READY_FINDINGS, { ...ON, ...EVERYTHING }, task)).toEqual({
+      allowed: true,
+    });
   });
 
   test('reads whether the gate’s kind is ready from your profile', () => {

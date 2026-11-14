@@ -11,6 +11,7 @@ import { SLACK_CHANNEL_NAMES } from './slack-channel-names.ts';
 import { SLACK_THREAD_UPDATES } from './slack-thread-updates.ts';
 import { STACK_LISTS } from './stack-lists.ts';
 import { TASK_AUTO_PROJECT } from './task-auto-project.ts';
+import { WORK_FACTS } from './work-facts.ts';
 
 export const LOG_MIGRATIONS: readonly LogMigration[] = [
   STACK_LISTS,
@@ -25,6 +26,7 @@ export const LOG_MIGRATIONS: readonly LogMigration[] = [
   REVIEW_RATINGS,
   DECISION_FACTS,
   FOLLOW_UPS,
+  WORK_FACTS,
 ];
 
 export function resolveLogVersion(migrations: readonly LogMigration[] = LOG_MIGRATIONS) {

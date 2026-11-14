@@ -26,6 +26,7 @@ const FACTS: AutopilotDecisionFacts = {
   active: true,
   inHours: true,
   hour: 10,
+  work: null,
 };
 
 function decision(overrides: Partial<AutopilotLearnedDecision> = {}): AutopilotLearnedDecision {
@@ -85,6 +86,21 @@ describe('the nearest earlier decisions', () => {
       (entry) => entry.note ?? ''
     );
     expect(found.map((entry) => entry.decision.gateId)).toEqual(['worded', 'recent']);
+  });
+
+  test('rank a decision whose request shares its terms first when the facts are the same', () => {
+    const terms = (values: number[]) => ({
+      facts: { ...FACTS, work: { area: null, surface: null, novelty: null, size: null, terms: values } },
+    });
+    const shared = decision({ gateId: 'shared', ...terms([3, 7, 11]) });
+    const recent = decision({ gateId: 'recent', ...terms([20, 21]) });
+    const found = listAutopilotNeighbours(
+      [shared, recent],
+      decision({ gateId: 'now', ...terms([3, 7, 12]) }),
+      '',
+      NO_TEXT
+    );
+    expect(found.map((entry) => entry.decision.gateId)).toEqual(['shared', 'recent']);
   });
 
   test('prefer the more recent of two equal decisions, and keep at most a few', () => {
