@@ -135,8 +135,10 @@ Only these, and they win over anything below:
      run did from its `purpose` (`resolveRunHeadline`): "Planning the work" / "Planned 3 phases", "Phase 2 of 3: …"
      (`phaseIndex`), a fix named by the first words of its instruction after the house rules ("Fixing the failing
      checks", "Making your changes"…), "Running the operation" / "Reported the outcome". Elsewhere (the now card, a message link, a
-     delegation) the role shows as `RoleMark`. No hairline and no model or time: runs are set apart by space
-     alone. When your message started the run, your bubble sits above its header, so you speak, then the agent
+     delegation) the role shows as `RoleMark`. An Agent's runs are set apart by space alone. Every other role
+     (Reviewer, Answerer, Investigator, Researcher) speaks on a rail: its work, reply, cards and errors sit
+     12px right of a 1px `border-border` hairline that drops from the centre of the role's icon slot
+     (`SpeakerRail` in `components/chat/run-section.tsx`), so a review never reads as the Agent's own turn. When your message started the run, your bubble sits above its header, so you speak, then the agent
      answers. A delegated agent never gets a header of its own: it is a card inside the turn of the agent that
      delegated it, with the same role mark (26). The chat renders the chat protocol (`docs/engine.md`), never a
      provider's tool names. A message you send after a run ended belongs to the run that answers it
@@ -160,7 +162,13 @@ Only these, and they win over anything below:
      "14 steps", and the
      final reply sits under it as the main content (the last interim text when a run has none).
      Hand-over cards (plan, phase, fix, review, question) and errors stay outside the fold; the
-     brief from Shinsa lives inside it. The last thing the agent wrote stays in the chat, outside the
+     brief from Shinsa lives inside it, and so do the turn's quiet notices (what it loaded, folded
+     turns, account switches and hand-offs, the proxy, fast mode, retries and background waits),
+     drawn there as their notice lines. A live turn keeps those notices in view above its live card.
+     Each hand-over card starts folded to its header: the chevron, its title and a short summary as
+     meta ("3 phases", "2 blocking, 1 should fix", "2 spots to review · 1 judgement call"), and a
+     click opens it (`CardToggle`); the state is kept per card (`useDisclosure`), so repeated cards
+     stay one line each. A question still waiting for you and a suggested watch still open start open. The last thing the agent wrote stays in the chat, outside the
      fold: in a turn with a hand-over (a plan, phase, fix, review, answer, diagnosis, report,
      outcome or new set of steps: core's `isHandOverTool`) the reply is the text written after the
      last hand-over, shown directly under the fold and above the card. When no text follows the

@@ -36,6 +36,20 @@ const NO_MESSAGES: HumanMessage[] = [];
 
 const NO_EVIDENCE: never[] = [];
 
+const SPEAKER_RAIL =
+  'ms-2.25 flex min-w-0 flex-col border-s border-border ps-3 [--chat-inset:0px] [&>:last-child]:mb-0 [&>:last-child]:pb-0';
+
+function SpeakerRail({ role, children }: { role: Run['role']; children: React.ReactNode }) {
+  if (role === 'agent') return children;
+  return (
+    <div className={cn('flex min-w-0 flex-col', CHAT_INSET)}>
+      <div data-speaker-rail={role} className={SPEAKER_RAIL}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function RunEvidenceScope({ runId, children }: { runId: string; children: React.ReactNode }) {
   const evidence = React.useContext(TaskEvidence).get(runId) ?? NO_EVIDENCE;
   return <RunEvidence.Provider value={evidence}>{children}</RunEvidence.Provider>;
@@ -238,14 +252,20 @@ export const RunSection = React.memo(function RunSectionView({
           </div>
         )}
         <RunLabel run={run} task={task} headline={headline} rerun={rerun} />
-        {turns.map((turn, index) => (
-          <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={waiting} lead={index > 0} />
-        ))}
-        {closing && (
-          <div className={closing.kind === 'error' ? LINE_ROW : PROSE_ROW}>
-            {closing.kind === 'error' ? <ErrorLine text={closing.text} /> : <AgentText text={closing.text} />}
-          </div>
-        )}
+        <SpeakerRail role={run.role}>
+          {turns.map((turn, index) => (
+            <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={waiting} lead={index > 0} />
+          ))}
+          {closing && (
+            <div className={closing.kind === 'error' ? LINE_ROW : PROSE_ROW}>
+              {closing.kind === 'error' ? (
+                <ErrorLine text={closing.text} />
+              ) : (
+                <AgentText text={closing.text} />
+              )}
+            </div>
+          )}
+        </SpeakerRail>
       </section>
     </RunEvidenceScope>
   );

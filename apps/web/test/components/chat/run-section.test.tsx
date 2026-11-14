@@ -201,4 +201,31 @@ describe('RunSection', () => {
     expect(await view.findByRole('button', { name: /^Loaded 1 MCP/ })).toBeTruthy();
     expect(view.queryByRole('button', { name: /^Worked for/ })).toBeNull();
   });
+
+  it('puts a reviewer’s run on a rail under its mark, and leaves the Agent’s without one', async () => {
+    const review = createRun({
+      id: 'run-review',
+      taskId: 'task-1',
+      role: 'reviewer',
+      startedAt: STARTED,
+      endedAt: NOW,
+      outcome: 'completed',
+    });
+    pushState(createShinsaState({ tasks: [task], runs: [run, review] }));
+    pushTranscript('run-review', [
+      createEntry({ type: 'agent', phase: 'final', text: 'No findings.' }, 'r1', STARTED + 1000),
+    ]);
+    pushTranscript('run-fix', [createEntry({ type: 'agent', phase: 'final', text: REPLY }, 'a1', STARTED)]);
+    const view = render(
+      <TooltipProvider>
+        <RunSection run={review} task={task} messages={[]} waiting={false} />
+        <RunSection run={run} task={task} messages={[]} waiting={false} />
+      </TooltipProvider>
+    );
+    const verdict = await view.findByText('No findings.');
+    expect(verdict.closest('[data-speaker-rail]')?.getAttribute('data-speaker-rail')).toBe('reviewer');
+    expect(view.getByText('Reviewer').closest('[data-speaker-rail]')).toBeNull();
+    expect((await view.findByText(REPLY)).closest('[data-speaker-rail]')).toBeNull();
+    expect(view.container.querySelectorAll('[data-speaker-rail]')).toHaveLength(1);
+  });
 });
