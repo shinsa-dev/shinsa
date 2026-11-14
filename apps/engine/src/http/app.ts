@@ -10,6 +10,7 @@ import { ShellLayer } from '../shell/layers.ts';
 import { EngineGateLive } from './gate/middleware.ts';
 import { Ingress } from './ingress/middleware.ts';
 import { AccountsHandlers } from './routes/accounts/handler.ts';
+import { AppUpdatesHandlers } from './routes/app-updates/handler.ts';
 import { BrowserHandlers } from './routes/browser/handler.ts';
 import { ChangelogHandlers } from './routes/changelog/handler.ts';
 import { CodeHandlers } from './routes/code/handler.ts';
@@ -46,6 +47,7 @@ export const ApiRoutes = HttpApiBuilder.layer(EngineApi).pipe(
     SecretsHandlers,
     ExtensionsHandlers,
     VersionsHandlers,
+    AppUpdatesHandlers,
     ChangelogHandlers,
     RemoteHandlers,
     TeamsHandlers,

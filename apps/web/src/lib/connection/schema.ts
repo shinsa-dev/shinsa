@@ -8,7 +8,7 @@ import type {
   TerminalsSnapshot,
   UpdateStreamLine,
 } from '@shinsa/core';
-import { Predicate, Schema } from 'effect';
+import { Duration, Predicate, Schema } from 'effect';
 
 export class WorktreeNotOpened extends Schema.TaggedError<
   WorktreeNotOpened,
@@ -133,3 +133,5 @@ export const SignInAnswer = Schema.Unknown.pipe(
 );
 
 export const CodeRead = Schema.Literals(['refs', 'paths', 'tree', 'blob', 'diff']);
+
+export const APP_UPDATES_POLL = Duration.seconds(3);

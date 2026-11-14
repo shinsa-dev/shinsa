@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveVersionOrder } from '@shinsa/core';
+import type { AppUpdateChannel } from '@shinsa/core/engine-api/schema';
 import { Option } from 'effect';
 import type { AppUpdater } from 'electron-updater';
 import type { ElectronHttpExecutor } from 'electron-updater/out/electronHttpExecutor.js';
 import { GenericProvider } from 'electron-updater/out/providers/GenericProvider.js';
 import { resolveDowngradeOffer, resolveUpdaterOptions } from '../../src/updates/channel.ts';
-import { UPDATE_FEED, type UpdateChannel } from '../../src/updates/schema.ts';
+import { UPDATE_FEED } from '../../src/updates/schema.ts';
 
 const ZIP_NAME = 'Shinsa-mac-arm64.zip';
 
@@ -26,7 +27,7 @@ function writeUpdateFile(version: string) {
   ].join('\n');
 }
 
-async function resolveFeedUpdate(channel: UpdateChannel, current: string, files: ChannelFiles) {
+async function resolveFeedUpdate(channel: AppUpdateChannel, current: string, files: ChannelFiles) {
   const requested: string[] = [];
   const executor = {
     request: async (request: { hostname: string; path: string }) => {
