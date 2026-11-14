@@ -46,6 +46,7 @@ import { listEditorCommands } from '@/lib/command/editor.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { holdLoaded, type Loaded, useTaskDiff } from '@/lib/connection/code.ts';
 import { copyText } from '@/lib/connection/commands.ts';
+import { openWorktree } from '@/lib/connection/worktree.ts';
 import {
   toggleViewedFile,
   useExplorerSide,
@@ -167,6 +168,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   }
 
   const copyPath = activePath ? () => void copyText(activePath) : null;
+  const openInEditor = resolveOpenInEditor(task, activePath, location.line);
   const canShowInFiles = modes.includes('files') && activePath !== null;
 
   React.useEffect(() => {
@@ -203,6 +205,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       applyMode,
       copyPath,
       showInFiles: canShowInFiles ? showInFiles : null,
+      openInEditor,
       preview,
       togglePreview,
       run: (key) => run[key](),
@@ -321,6 +324,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
             onPreview={togglePreview}
             onOpenPath={openLine}
             onShowInFiles={canShowInFiles ? showInFiles : null}
+            onOpenInEditor={openInEditor}
           />
         ) : (
           <div className='flex min-h-0 flex-1 flex-col'>
@@ -353,4 +357,9 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       />
     </div>
   );
+}
+
+function resolveOpenInEditor(task: Task, path: string | null, line: number | null) {
+  if (!path || !task.worktreePath) return null;
+  return () => void openWorktree(task.id, 'editor', path, line ?? undefined);
 }

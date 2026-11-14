@@ -134,6 +134,7 @@ function respond(url: URL) {
     });
   }
   if (name === 'file') return Response.json({ path: 'README.md', changed: true });
+  if (name === 'open') return Response.json({ ok: true });
   if (name === 'search') {
     const found =
       url.searchParams.get('q') === 'nowhere'
@@ -510,6 +511,22 @@ describe('search and quick open', () => {
     const tree = await screen.findByRole('tree', { name: 'Files' });
     const row = await within(tree).findByRole('treeitem', { name: 'docs/alpha.txt' });
     expect(row.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('opens the file in your editor at its line, only when the task has a checkout', async () => {
+    renderCode(nextTask({ worktreePath: '/w' }), '&file=docs%2Falpha.txt&diff=1&line=2');
+    await findLine('two');
+    await openFileOptions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Open in editor' }));
+    await waitFor(() => expect(writes).toContainEqual({ target: 'editor', path: 'docs/alpha.txt', line: 2 }));
+  });
+
+  it('leaves Open in editor out when the task has no checkout', async () => {
+    renderCode(nextTask(), '&file=docs%2Falpha.txt&diff=1');
+    await findLine('two');
+    await openFileOptions();
+    await screen.findByRole('menuitem', { name: 'Copy path' });
+    expect(screen.queryByRole('menuitem', { name: 'Open in editor' })).toBeNull();
   });
 
   it('switches to another commit from the ref picker', async () => {

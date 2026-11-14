@@ -2258,9 +2258,9 @@ Only these, and they win over anything below:
       Show the files, closed by picking a file, Escape or a click outside) and the editor on the right: the 36px
       `Toolbar` (the file's icon, its path and diff counts, the edit state, on a Markdown file the Preview / Source
       toggle, on a diff the layout toggle, then File options, the `OptionsTrigger` menu with Copy path and Show in
-      Files, which switches to Files and reveals the file in the tree, opening its folders and scrolling to it; ⌘K has
-      both), then the code. The toolbar has no Open in editor: Shinsa is where you read and edit the code
-      (the task's ⌘K and its menu still open the checkout in your editor). There are no editor
+      Files, which switches to Files and reveals the file in the tree, opening its folders and scrolling to it, and,
+      when the task has a checkout and the file exists there, Open in editor, which opens that file at the line in view
+      in your editor (`openWorktree`, the engine's `--goto`); ⌘K has all three), then the code. There are no editor
       tabs: one file is open at a time, and you switch from the file list, the review, a search result or ⌘P. The
       column's header is the mode `Choice` (Changes, Files; one mode shows as its plain label), the
       Go to file button (`IconPageSearch`, ⌘P in its hint; in every mode, so any file of the project

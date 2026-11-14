@@ -206,6 +206,7 @@ function PaneToolbar({
   onSplit,
   onPreview,
   onShowInFiles,
+  onOpenInEditor,
 }: {
   source: FileSource;
   split: boolean;
@@ -216,6 +217,7 @@ function PaneToolbar({
   onSplit: (() => void) | null;
   onPreview: () => void;
   onShowInFiles: (() => void) | null;
+  onOpenInEditor: (() => void) | null;
 }) {
   const path = source.file.path;
   return (
@@ -244,6 +246,11 @@ function PaneToolbar({
           {onShowInFiles && (
             <DropdownMenuItem icon='IconFolderOpen' onClick={onShowInFiles}>
               Show in Files
+            </DropdownMenuItem>
+          )}
+          {onOpenInEditor && source.headPath && (
+            <DropdownMenuItem icon='IconCodeLines' onClick={onOpenInEditor}>
+              Open in editor
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -313,6 +320,7 @@ export function EditorPane({
   onPreview,
   onOpenPath,
   onShowInFiles,
+  onOpenInEditor,
 }: {
   task: Task;
   refs: TaskRefs;
@@ -329,6 +337,7 @@ export function EditorPane({
   onPreview: () => void;
   onOpenPath: (path: string, line: number | null) => void;
   onShowInFiles: (() => void) | null;
+  onOpenInEditor: (() => void) | null;
 }) {
   const draft = useReviewDraft();
   const path = source.file.path;
@@ -431,6 +440,7 @@ export function EditorPane({
         onSplit={onSplit}
         onPreview={onPreview}
         onShowInFiles={onShowInFiles}
+        onOpenInEditor={onOpenInEditor}
       />
       {content.kind === 'text' && markdown.editing && notice && (
         <PaneNotice text={notice} readOnly={!editable} />

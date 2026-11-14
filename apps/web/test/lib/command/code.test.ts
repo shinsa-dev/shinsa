@@ -14,6 +14,7 @@ function context(overrides: Partial<CodeCommandContext> = {}): CodeCommandContex
     applyMode: mock(() => {}),
     copyPath: mock(() => {}),
     showInFiles: mock(() => {}),
+    openInEditor: mock(() => {}),
     preview: null,
     togglePreview: mock(() => {}),
     run: mock(() => {}),
@@ -42,6 +43,7 @@ describe('listCodeCommands', () => {
       ['Show diffs side by side', null, null],
       ['Copy path', null, null],
       ['Show in Files', null, null],
+      ['Open in editor', null, null],
     ]);
   });
 
@@ -61,6 +63,7 @@ describe('listCodeCommands', () => {
     expect(value.toggleSide).toHaveBeenCalledTimes(1);
     expect(value.copyPath).toHaveBeenCalledTimes(1);
     expect(value.showInFiles).toHaveBeenCalledTimes(1);
+    expect(value.openInEditor).toHaveBeenCalledTimes(1);
     expect(section.commands.find((command) => command.id.endsWith('.side'))?.label).toBe(
       'Move the file list to the left'
     );
@@ -89,7 +92,7 @@ describe('listCodeCommands', () => {
   it('leaves out what needs an open file', () => {
     expect(
       listCodeCommands(
-        context({ hasEditor: false, modes: ['files'], copyPath: null, showInFiles: null })
+        context({ hasEditor: false, modes: ['files'], copyPath: null, showInFiles: null, openInEditor: null })
       ).commands.map((command) => command.label)
     ).toEqual(['Files', 'Go to file…', 'Search in files', 'Move the file list to the right']);
   });

@@ -16,6 +16,7 @@ export interface CodeCommandContext {
   applyMode: (mode: CodeMode) => void;
   copyPath: (() => void) | null;
   showInFiles: (() => void) | null;
+  openInEditor: (() => void) | null;
   preview: boolean | null;
   togglePreview: () => void;
   run: (key: CodeKey) => void;
@@ -131,6 +132,16 @@ export function listCodeCommands(context: CodeCommandContext): CommandSection {
       icon: 'IconFolderOpen',
       keywords: ['reveal', 'tree', 'explorer', 'folder', 'locate'],
       run: context.showInFiles,
+    });
+  }
+  if (context.openInEditor) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.open-in-editor`,
+      label: 'Open in editor',
+      icon: 'IconCodeLines',
+      keywords: ['vs code', 'cursor', 'zed', 'external', 'editor', 'open'],
+      run: context.openInEditor,
     });
   }
   return { id, heading: 'Code', rank: RANK.context, commands: [...modes, ...keys] };
