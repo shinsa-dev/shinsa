@@ -526,7 +526,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     live run (delegated runs included) and every open gate but a Post-merge gate belongs to the current round; the task works on its active round's branch and through its
     round's pull request; a shipped round's pull request is open and a merged round's merged; a stacked round stacks on
     an earlier round's branch; a pull request open across rounds stays on one branch, and the stack never repeats the
-    task's own pull request;
+    task's own pull request; no task is done while one of its pull requests is open;
   - projects (`project-invariants.ts`, `assertHandleInvariants`): a triaged task has a handle, no two tasks share
     one, each parses back to itself with a valid key, and its key's counter is at least its number;
   - the task's agent (`agent-invariants.ts`, `assertOneSessionPerTask`): a top-level run is the task's Agent, a

@@ -1131,8 +1131,9 @@ folds in `state/shapes.ts`).
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
   of planning a fix. In a later round riding an earlier round's open pull request, Close (and Keep as it is, and a
   result's Close) ends that round only: `round.closed` archives it as `finished` with its result, makes the round it
-  rode on active again with its branch, steps and pull request, and `recheckPullRequest` brings back that pull
-  request's merge gate (`closeLaterRound`). Going on plans the change onto the open pull request as before. No path
+  rode on active again with its branch, steps, pull request and finished work (plan, phase hand-overs, report,
+  review and ratings, kept on the shipped round as `Round.work` when the later round started), and
+  `recheckPullRequest` brings back that pull request's merge gate (`closeLaterRound`). Going on plans the change onto the open pull request as before. No path
   settles a task as done while one of its pull requests is open.
 - **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message

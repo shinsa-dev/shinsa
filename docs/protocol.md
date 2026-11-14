@@ -434,6 +434,7 @@ export interface Round {
 | `branch`, `base` | the branch it pushes to; for a stacked round, the branch it stacks on |
 | `pullRequest` | the pull request its commits went to, with its `changes` (lines added and removed, files changed) once read; the Stats tab counts them for merged rounds |
 | `outcome` | what it kept when it ended: plan goal, phase titles, the work's headline, the result |
+| `work` | while `shipped`: the task's finished work for it (`ROUND_WORK_KEYS`: plan, phase hand-overs, report, review, ratings, checks, merge steps), put back on the task when a later round closes back to it (`round.closed`); cleared once merged |
 
 `Run.round`, `Gate.round`, `Evidence.round` and `Activity.round` name the round a step, a gate, a piece of evidence or an
 activity entry belongs to; they are set only from round 2 on, so a missing one is round 1.
@@ -1165,7 +1166,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `round.shipping_changed` | how a round ships changed; for an active round also its `branch`, `base` and `onto` |
 | `round.updated` | a waiting round asks for something else (`request`, `title`) |
 | `round.removed` | a waiting round was removed; the waiting rounds after it took the numbers one lower |
-| `round.closed` | a later round that found nothing to change ended without shipping (`number`): it is archived as finished with its result, and the round it rode on (`to`) is active again with its branch, steps and pull request, so that pull request's merge gate comes back |
+| `round.closed` | a later round that found nothing to change ended without shipping (`number`): it is archived as finished with its result, and the round it rode on (`to`) is active again with its branch, steps, pull request and the work kept on it (`Round.work`), so that pull request's merge gate comes back |
 | `round.pull_request_merged` | an earlier round's pull request merged outside Shinsa while a later round works: that round is merged, and the active round takes a new `branch` from the default branch for its own pull request |
 | `task.noted` | an agent kept a note |
 | `task.recovered` | the recovery count changed |

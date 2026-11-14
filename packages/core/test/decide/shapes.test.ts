@@ -1064,6 +1064,10 @@ describe('the agent composes the steps', () => {
     const harness = createHarness();
     const taskId = reachLaterDiagnosis(harness);
     const branch = harness.task(taskId).branch;
+    const shipped = resolveTaskRounds(harness.task(taskId))[0]?.work;
+    expect(shipped?.report).not.toBeNull();
+    expect(shipped?.plan).not.toBeNull();
+    expect(harness.task(taskId)).toMatchObject({ report: null, plan: null, summary: null });
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,
@@ -1081,7 +1085,16 @@ describe('the agent composes the steps', () => {
     });
     const rounds = resolveTaskRounds(closed);
     expect(rounds.map((round) => round.status)).toEqual(['active', 'finished']);
-    expect(rounds[0]).toMatchObject({ endedAt: null, pullRequest: { number: 42 } });
+    expect(rounds[0]).toMatchObject({ endedAt: null, pullRequest: { number: 42 }, work: null });
+    expect(closed).toMatchObject({
+      plan: shipped?.plan,
+      phaseReports: shipped?.phaseReports,
+      summary: shipped?.summary,
+      report: shipped?.report,
+      reviewRatings: shipped?.reviewRatings,
+      reviewSummary: shipped?.reviewSummary,
+      checkResults: shipped?.checkResults,
+    });
     expect(rounds[1]).toMatchObject({
       pipeline: ['investigate'],
       outcome: { result: 'The investigate result.' },
@@ -1104,6 +1117,7 @@ describe('the agent composes the steps', () => {
       'merged',
       'finished',
     ]);
+    expect(resolveTaskRounds(harness.task(taskId))[0]?.work ?? null).toBeNull();
   });
 
   test('going on from a later round that found nothing plans the change onto the open pull request', () => {

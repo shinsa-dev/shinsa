@@ -41,6 +41,35 @@ export interface Round {
   startedAt: number | null;
   endedAt: number | null;
   outcome: RoundOutcome | null;
+  work?: RoundWork | null;
+}
+
+export const ROUND_WORK_KEYS = [
+  'plan',
+  'planHistory',
+  'planAnswers',
+  'phases',
+  'phaseReports',
+  'summary',
+  'report',
+  'reviewSummary',
+  'reviewRatings',
+  'autopiloted',
+  'escalation',
+  'findings',
+  'reviewDisagreements',
+  'reviewedInput',
+  'checks',
+  'checkResults',
+  'coverage',
+  'mergeStepsDone',
+  'carriedMergeSteps',
+] as const satisfies readonly (keyof Task)[];
+
+export type RoundWork = Pick<Task, (typeof ROUND_WORK_KEYS)[number]>;
+
+export function resolveRoundWork(task: Task): RoundWork {
+  return Object.fromEntries(ROUND_WORK_KEYS.map((key) => [key, task[key]])) as RoundWork;
 }
 
 export const ROUND_SHIPPINGS: readonly RoundShipping[] = ['onto_pull_request', 'stacked'];
