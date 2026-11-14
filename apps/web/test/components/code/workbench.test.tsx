@@ -134,9 +134,14 @@ function respond(url: URL) {
     });
   }
   if (name === 'file') return Response.json({ path: 'README.md', changed: true });
+  if (name === 'open') return Response.json({ ok: true });
   if (name === 'search') {
+    const found =
+      url.searchParams.get('q') === 'nowhere'
+        ? []
+        : [{ path: 'docs/alpha.txt', line: 2, column: 1, text: 'two' }];
     const lines = [
-      { kind: 'matches', matches: [{ path: 'docs/alpha.txt', line: 2, column: 1, text: 'two' }] },
+      { kind: 'matches', matches: found },
       { kind: 'done', result: { ref, matches: [], truncated: false, timedOut: false } },
     ];
     return new Response(lines.map((line) => JSON.stringify(line)).join('\n'), {
@@ -189,6 +194,11 @@ async function findLine(text: string) {
     if (!line) throw new Error(`No line ${text}`);
     return line;
   });
+}
+
+async function openFileOptions() {
+  fireEvent.click(screen.getByRole('button', { name: 'File options' }));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
 describe('notes in the code', () => {
@@ -423,6 +433,17 @@ describe('search and quick open', () => {
     expect(params().get('diff')).toBe('1');
   });
 
+  it('invites a search before you type, and says what to loosen when nothing matches', async () => {
+    renderCode(nextTask(), '&mode=search');
+    expect(await screen.findByText('Search every file')).toBeDefined();
+    const input = await screen.findByRole('textbox', { name: 'Search in files' });
+    fireEvent.click(screen.getByRole('button', { name: 'Match case' }));
+    fireEvent.change(input, { target: { value: 'nowhere' } });
+    expect(await screen.findByText('No results', {}, { timeout: 2000 })).toBeDefined();
+    expect(screen.getByText('Try again with Match case turned off.')).toBeDefined();
+    expect(screen.queryByText('Search every file')).toBeNull();
+  });
+
   it('opens any file by name from ⌘P', async () => {
     renderCode(nextTask(), '&mode=files');
     await screen.findByRole('tree', { name: 'Files' });
@@ -440,6 +461,74 @@ describe('search and quick open', () => {
     await waitFor(() => expect(params().get('file')).toBe('README.md'));
   });
 
+  it('opens Go to file from the button in the file list, with the files opened last first', async () => {
+    const task = nextTask();
+    renderCode(task, '&mode=files&file=docs%2Fbeta.txt');
+    await findLine('guard');
+    navigate(`/tasks/${task.id}?tab=code&mode=files&file=docs%2Falpha.txt`);
+    await findLine('two');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Go to file' })[0] as HTMLElement);
+    await screen.findByPlaceholderText('Go to file');
+    const recent = await screen.findByRole('group', { name: 'Recently opened' });
+    expect(
+      within(recent)
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).toEqual(['beta.txtdocs']);
+    const rest = screen.getByRole('group', { name: 'Files' });
+    expect(
+      within(rest)
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).not.toContain('beta.txtdocs');
+  });
+
+  it('keeps the empty editor to its hint, with Go to file in the file list', async () => {
+    renderCode(nextTask(), '&mode=files');
+    await screen.findByText('Open a file');
+    const buttons = screen.getAllByRole('button', { name: 'Go to file' });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0] as HTMLElement);
+    expect(await screen.findByPlaceholderText('Go to file')).toBeDefined();
+  });
+
+  it('shows the open changed file in Files, revealing its folder, and copies its path', async () => {
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => void written.push(text) },
+    });
+    renderCode(nextTask(), '&file=docs%2Falpha.txt&diff=1');
+    await findLine('two');
+    expect(screen.queryByRole('button', { name: 'Copy path' })).toBeNull();
+    await openFileOptions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy path' }));
+    await waitFor(() => expect(written).toEqual(['docs/alpha.txt']));
+    await openFileOptions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Show in Files' }));
+    expect(params().get('mode')).toBe('files');
+    expect(params().get('file')).toBe('docs/alpha.txt');
+    const tree = await screen.findByRole('tree', { name: 'Files' });
+    const row = await within(tree).findByRole('treeitem', { name: 'docs/alpha.txt' });
+    expect(row.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('opens the file in your editor at its line, only when the task has a checkout', async () => {
+    renderCode(nextTask({ worktreePath: '/w' }), '&file=docs%2Falpha.txt&diff=1&line=2');
+    await findLine('two');
+    await openFileOptions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Open in editor' }));
+    await waitFor(() => expect(writes).toContainEqual({ target: 'editor', path: 'docs/alpha.txt', line: 2 }));
+  });
+
+  it('leaves Open in editor out when the task has no checkout', async () => {
+    renderCode(nextTask(), '&file=docs%2Falpha.txt&diff=1');
+    await findLine('two');
+    await openFileOptions();
+    await screen.findByRole('menuitem', { name: 'Copy path' });
+    expect(screen.queryByRole('menuitem', { name: 'Open in editor' })).toBeNull();
+  });
+
   it('switches to another commit from the ref picker', async () => {
     renderCode(nextTask(), '&mode=files');
     await screen.findByRole('tree', { name: 'Files' });
@@ -448,6 +537,10 @@ describe('search and quick open', () => {
 });
 
 describe('editing in place', () => {
+  beforeEach(() => {
+    localStorage.setItem('shinsa.code-preview-file', 'false');
+  });
+
   it('shows a diff side by side first, and unified once you pick it, remembered', async () => {
     renderCode(nextTask());
     fireEvent.click(await screen.findByRole('button', { name: 'Show unified' }));
@@ -473,10 +566,12 @@ describe('editing in place', () => {
     const view = EditorView.findFromDOM(line as HTMLElement);
     if (!view) throw new Error('No editor');
     act(() => view.dispatch({ changes: { from: 0, insert: 'Hello ' }, userEvent: 'input.type' }));
+    expect(screen.getByRole('status').textContent).toBe('Edited');
     await waitFor(
       () => expect(writes).toEqual([{ path: 'README.md', content: 'Hello # Sample\n', base: '# Sample\n' }]),
       { timeout: 5_000 }
     );
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Saved'));
     expect(screen.queryByText(/read-only/)).toBeNull();
   });
 
@@ -572,6 +667,93 @@ describe('editing in place', () => {
         'This is an earlier commit, so it is read-only. Pick Head of the branch to edit.'
       )
     ).toBeDefined();
+  });
+});
+
+describe('Markdown preview', () => {
+  it('shows a Markdown file rendered, and its source once you pick it, remembered', async () => {
+    renderCode(nextTask(), '&mode=files&file=README.md');
+    const preview = await screen.findByRole('article', { name: 'Preview of README.md' });
+    expect(within(preview).getByRole('heading', { level: 1 }).textContent).toBe('Sample');
+    expect(document.querySelector('.cm-editor')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show source' }));
+    await findLine('# Sample');
+    expect(screen.queryByRole('article', { name: 'Preview of README.md' })).toBeNull();
+    expect(localStorage.getItem('shinsa.code-preview-file')).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'Show preview' }));
+    expect(await screen.findByRole('article', { name: 'Preview of README.md' })).toBeDefined();
+  });
+
+  it('shows the new text when the file changes on disk while you read its preview', async () => {
+    const disk = { text: '# Sample\n' };
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost');
+      const name = url.pathname.split('/').at(-1);
+      if (name === 'refs') return Response.json({ ...REFS, working: true, dirty: true });
+      if (name === 'blob' && url.searchParams.get('ref') === 'working')
+        return Response.json({
+          ref: 'working',
+          path: 'README.md',
+          content: disk.text,
+          size: disk.text.length,
+          binary: false,
+          tooLarge: false,
+          missing: false,
+          image: null,
+        });
+      return respond(url);
+    }) as typeof fetch;
+    const task = nextTask({
+      worktreePath: '/w',
+      stage: 'awaiting_review',
+      editedPaths: ['README.md'],
+      updatedAt: 1,
+    });
+    const page = (current: Task) => (
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey={`gate-${task.id}`}>
+          <CodeTab task={current} modes={['changes', 'files']} />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+    navigate(`/tasks/${task.id}?tab=code&mode=files&file=README.md`);
+    const view = render(page(task));
+    const preview = await screen.findByRole('article', { name: 'Preview of README.md' });
+    await waitFor(() =>
+      expect(within(preview).getByRole('heading', { level: 1 }).textContent).toBe('Sample')
+    );
+    disk.text = '# Rewritten\n';
+    view.rerender(page({ ...task, updatedAt: 2 }));
+    await waitFor(
+      () =>
+        expect(
+          within(screen.getByRole('article', { name: 'Preview of README.md' })).getByRole('heading', {
+            level: 1,
+          }).textContent
+        ).toBe('Rewritten'),
+      { timeout: 5_000 }
+    );
+  });
+
+  it('offers no preview for a file that is not Markdown', async () => {
+    renderCode(nextTask(), '&mode=files&file=docs/beta.txt');
+    await findLine('guard');
+    expect(screen.queryByRole('button', { name: 'Show preview' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show source' })).toBeNull();
+  });
+
+  it('opens a file the preview links to in the Code tab, at its line', async () => {
+    HEAD_FILES['docs/guide.md'] = 'See [the alpha notes](alpha.txt#L2) and [the readme](../README.md).\n';
+    try {
+      renderCode(nextTask(), '&mode=files&file=docs/guide.md');
+      const preview = await screen.findByRole('article', { name: 'Preview of docs/guide.md' });
+      fireEvent.click(within(preview).getByRole('link', { name: 'the alpha notes' }));
+      await waitFor(() => expect(params().get('file')).toBe('docs/alpha.txt'));
+      expect(params().get('diff')).toBe('1');
+      expect(params().get('line')).toBe('2');
+    } finally {
+      delete HEAD_FILES['docs/guide.md'];
+    }
   });
 });
 

@@ -16,7 +16,6 @@ import {
   type RunRole,
   resolveAgentFastMode,
   resolveAgentProvider,
-  resolveAttentionLimit,
   resolveChosenModel,
   resolveDelegationLimit,
   resolveFastModeAvailability,
@@ -136,24 +135,6 @@ export function describeRoleSelects(entry: AgentRoleEntry): AgentSelectLabels {
 export const MIXED_VALUE = 'mixed';
 
 const MIXED_ITEM: SettingItem<string> = { value: MIXED_VALUE, label: 'Set per role', icon: 'IconLayersTwo' };
-
-const ATTENTION_LIMITS = [1, 2, 3, 5];
-
-function createAttentionItem(limit: number): SettingItem<string> {
-  return {
-    value: String(limit),
-    label: limit === 1 ? 'One at a time' : `${limit} at a time`,
-    icon: 'IconInboxEmpty',
-  };
-}
-
-export function listAttentionItems(settings: Settings): SettingItem<string>[] {
-  const current = resolveAttentionLimit(settings);
-  const limits = ATTENTION_LIMITS.includes(current)
-    ? ATTENTION_LIMITS
-    : [...ATTENTION_LIMITS, current].sort((a, b) => a - b);
-  return limits.map(createAttentionItem);
-}
 
 export const PLAN_ITEMS: SettingItem<PlanApproval>[] = [
   { value: 'when_asked', label: 'When you ask', icon: 'IconArrowRight' },
@@ -385,14 +366,6 @@ export function describeDailyLimitNote(settings: Settings, recent: number) {
   if (settings.dailyUsageLimit == null) return null;
   const used = `${Number(recent.toFixed(1))}%`;
   return `The last 24 hours used ${used} on Claude. Each provider counts its own usage: once it reaches the limit, a task’s next step waits and starts by itself when older usage drops out.`;
-}
-
-export function resolveAttentionValue(settings: Settings) {
-  return String(resolveAttentionLimit(settings));
-}
-
-export function resolvePlanValue(settings: Settings) {
-  return settings.approvePlans ?? 'when_asked';
 }
 
 export function resolveFixRoundValue(settings: Settings) {

@@ -450,7 +450,7 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    agent loop) and is told that it builds the plan itself, in the same session. A task created plan first
    (`planFirst`: `shinsa do --plan-first`) or kept in the backlog (Scheduling → The backlog, below)
    always waits at a plan gate; otherwise Settings → Agents →
-   Engine, Approve plans (`approvePlans`: `when_asked`, the default, `large` or `always`) decides: on Large plans a
+   Engine, Approve plans (`approvePlans`: `when_asked`, `large`, the default, or `always`) decides: on Large plans a
    large plan (more than 3 phases or 6 files, `PLAN_SIZE_LIMITS`) or a revised plan waits there, on Always every plan
    does (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once when it does
    not. The size is the plan's, never triage's guess from the request. A decision
@@ -2111,7 +2111,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 - **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
   doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
   of the current window, `countWindowChecks`, so a window that starts again backs off from the start), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
-  leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
+  leaves out comes from three settings (Settings → Automations → Watchdogs, `settings.change`): `watchdogHours` (72 by
   default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
   read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
 - **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
@@ -2330,7 +2330,7 @@ checks it ran.
 
 Autopilot is your delegate: at each point where a task would wait for you it decides, like a trusted colleague,
 whether to act for you, bring it to you, or, as a last resort, send it to your team. It is a pre-approval you give,
-never a power Shinsa takes: the policy is the human-only setting `autopilot` (Settings → Agents → Autopilot,
+never a power Shinsa takes: the policy is the human-only setting `autopilot` (Settings → Autopilot,
 `AutopilotPolicy` in `domain/settings.ts`), off by default, and every action it takes is recorded with its reason.
 Two layers decide: core's hard limits, which a model can never cross, and inside them a short model call that
 judges the case. The rules are core's (`autopilot/` for the facts, limits, prompt, lessons, your decision profile,
@@ -2639,7 +2639,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   let them answer decisions on your tasks; otherwise they review it read-only and reach you. The
   escalation clears when its merge gate is answered or withdrawn, or a new round starts. A task whose project is in
   no team escalates only in its own activity and Overview ("Sent to your team"), so while none of your projects is
-  in a team, Settings → Agents → Autopilot says "No project shared with a team" in Who it asks.
+  in a team, Settings → Autopilot says "No project shared with a team" in Who it asks.
 - **Escalating in Slack.** The team escalation always happens; each of `contacts` adds one Slack message to it, so
   a channel and a teammate, or several of each, are asked at once. Without a project shared with a team and with no
   contacts there is no one to ask, so the Your team row shows a warning while `escalate` is on (`isAskWaiting`). `escalate()` asks for one
@@ -2661,7 +2661,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   with each watchdog's state and the steps still to do after the merge, and to keep an eye on it too (or, with no
   watchdog, only to keep an eye on it). The reply's ts is kept with `slack.record_escalation_follow_up`
   (`slack.escalation_followed_up`), and every later watchdog event or ticked step edits it, as the merge message of a
-  thread is. The contacts are chosen in Settings → Agents → Autopilot, in the Who it asks block (Settings, below): your team in Shinsa
+  thread is. The contacts are chosen in Settings → Autopilot, in the Who it asks block (Settings, below): your team in Shinsa
   first, "Always on" or "No project shared with a team", then each Slack channel (its name, no #) and person (their Slack
   picture, `image` from `users.list`'s `image_72`, kept on the contact) with a button to remove it. Add from Slack
   opens one search over Channels and People (`listContactOptions`, the chosen ones ticked, the rest disabled at five,
@@ -2678,7 +2678,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **What it never does.** It never closes an operation, result, secret, failure, setup or Sign in gate, an
   escalated review, a plan held for you, or your OK on a task no watchdog filed, never ticks a step around the merge, never acts while the hard limits
   refuse whatever the model says, and never gets past GitHub: a merge GitHub refuses opens the usual failure gate.
-- **Settings** (Settings → Agents → Autopilot, `AutopilotSettings`, `lib/autopilot.ts`). The header has Turn on while
+- **Settings** (Settings → Autopilot, `AutopilotSettings`, `lib/autopilot.ts`). The header has Turn on while
   it is off, with one line on what it does, and the on and off choice once on. Acting for you: On its own (the
   level, each with one sentence on what it does alone) and one row per gate (Plans, Agent questions, Reviews,
   Suggested tasks, Watchdog tasks: Autopilot decides or Always ask me). Merging: Auto merge (Off, I merge; Low risk changes; Every change it
@@ -2824,7 +2824,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   run that would start past a limit does not start, and the task pauses with a failure gate (`cause: budget`)
   whose body names the limit it reached, not what the task spent ("This task reached its $5.00 cost limit, so the
   next step did not start.").
-  Settings → Agent usage → Limits, Usage limit per task (`taskUsageLimit`, a whole percentage) counts the task's
+  Settings → Usage → Limits, Usage limit per task (`taskUsageLimit`, a whole percentage) counts the task's
   share of the weekly window, as above ("Reached its usage limit"); it is what a subscription has. On an account
   still learning its rate it counts the early estimate (`TaskBudget.estimated`), and its gate adds "The share is an
   early estimate while Shinsa learns the account's rate."; a run with no estimate yet (no usable observation on its
@@ -2850,7 +2850,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   Both are a percentage of one account's weekly limit, like the task limit, any amount above zero, so a pool of
   accounts can allow more than 100 a day. Each provider counts only its own usage against them: a step on Claude
   is held by Claude's last 24 hours, a step on Codex by Codex's, since a percentage of one provider's weekly limit
-  means nothing on another. Settings → Agent usage → Limits, Daily usage limit counts every task; a
+  means nothing on another. Settings → Usage → Limits, Daily usage limit counts every task; a
   project's usage limit (its dialog, or `shinsa projects write --usage-limit`, 0 for off) counts only its tasks.
   An urgent task skips them, and its own limits, while Autopilot ignores usage limits (Process and structure →
   Autopilot).
@@ -2874,7 +2874,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   `HUMAN_ONLY_SETTINGS`, since it decides how much usage a check may spend): a run with `purpose: watch` skips
   `holdForBudget` and `holdForPace` (`isExemptWatchCheck` in `decide/costs.ts`), so a check starts on time at the task
   usage, cost, daily and project limits, and its usage still counts toward each of them for the steps that follow.
-  Settings → Agent usage → Limits, Watchdogs ("Ignore usage limits" or "Follow usage limits", and the same choice in
+  Settings → Usage → Limits, Watchdogs ("Ignore usage limits" or "Follow usage limits", and the same choice in
   ⌘K) changes it, shown only on an engine with `usage.watchdog_limits`; turning it on starts a check a pace hold
   held (`releasePaceHolds`) and retries one a budget gate held, over the limit or not (`releaseBudgetHolds`). An account out of usage still holds a check as it holds any run, and the tasks a
   watchdog files are ordinary tasks that follow every limit.
@@ -2916,7 +2916,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
     `HUMAN_ONLY_SETTINGS`, offered only on an engine with `usage.auto_pace_resets`): then an urgent or high build
     uses `resetPace`, and while a usable reset ends within 3 days a normal or low build uses `endingPace`, which counts
     only those ending resets, so none is left to end unused (`resolveAdmissionPace`). Normal and low builds never count
-    on a reset that ends later. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Agent usage → Auto pace
+    on a reset that ends later. Shinsa never uses one: the plan counts on you using it in Claude, and Settings → Usage → Auto pace
     says so under the provider's budget ("Urgent and high-priority builds may use up to 160%, counting on you using a
     reset in Claude", or "A usage reset ends in 2 days, so every build may use up to 130%, counting on you using it in Claude"). A build fits when its estimate does; one
     larger than the whole budget counts as the budget, so it starts once nothing else is using it.
@@ -2933,7 +2933,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
     `paceLimitsIgnored`, as for the other pace holds. Switching Auto pace off releases every admission hold. A build
     admitted still stops at the daily and project limits.
   - **On screen** a held task's status is "Waiting to build", its card "Builds tonight" (when you are here now and
-    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace has its own section in Settings → Agent usage, right above the Forecast
+    its time falls in your away hours) or "Builds after 3:40 AM", with Build now. Auto pace has its own section in Settings → Usage, right above the Forecast
     it follows (`AutoPaceSettings`): its switch, and while it is on, one row per provider with what is left for its
     builds in the next 24 hours, the reserve and how many builds wait (`selectPaceBudget`). Home's guide leaves waiting builds out of the
     running line and names them on a line of their own, soonest first, each with when it builds ("tonight", "after
@@ -2964,7 +2964,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
     (`source: 'override'`) until you clear it with null.
   - **Reading it.** `isActiveAt(hours, at)` (true with none: unknown counts as here) and
     `resolveNextActiveChange(hours, at)`, the next 15-minute step where you go from here to away or back, or none
-    when the week never changes. Settings → Agents → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) is laid
+    when the week never changes. Settings → Autopilot → Your hours (`ActiveHoursSettings`, `lib/active-hours.ts`) is laid
     out like the Forecast card: a header with your hours a week, a line on whether you are usually active now and
     until when (on your hours' time zone), a week timeline (a row per weekday from Monday on a 24-hour track, your
     usual hours filled, Now marked on today, a legend), where they come from, or that it is still learning; it
@@ -2994,7 +2994,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   run dry at the pace of the last 24 hours, shown only to compare. An account out of usage only until a shorter
   limit resets (its 5-hour window) keeps its weekly budget; only one spent until its weekly reset counts as empty.
   The account picker follows the same order when it switches: past the switch threshold, the account whose weekly
-  limit resets soonest takes over (Accounts and usage limits, below). Settings → Agent usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
+  limit resets soonest takes over (Accounts and usage limits, below). Settings → Usage → Forecast draws one block per provider (`components/settings/forecast.tsx`,
   `lib/accounts/forecast.ts`): every Claude account together, and each other provider's own login alone, each with
   its pace, a lane per account across the week (blue while the account has usage at the timeline's pace, grey once
   it runs out, a small gap before each reset, each limit window its own bar, and an orange band wherever every account is out at once: `outages`), drawn at a
@@ -3302,7 +3302,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   the channels the bot is in, in the workspaces linked to this machine, a private one only when a person linked
   to this machine is a member of it (`Slack.channels`, `GET /__remote/slack/channels`). It refuses with what
   to do: remote access off (`SLACK_NOT_CONNECTED`), no channel at all, which is Slack not linked or @Shinsa
-  invited nowhere ("Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa
+  invited nowhere ("Connect Slack in Settings → Cloud → Slack if it is not connected yet, invite @Shinsa
   to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
   is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--no-slack-updates` or
   `--slack-updates=false` on the command line, whose boolean flags take no separate value), which
@@ -4232,7 +4232,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Pausing and removing**: `shinsa remote disable` closes the relay socket, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
-- **Settings → General → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
+- **Settings → Cloud → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Not connected when it is on and its relay socket is not open, Reconnecting, Paused,
   Removed) with Turn on, Cancel, Pause, Resume and Remove, the
@@ -4352,7 +4352,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   no longer spins. Opening the link again on a device that already asked picks up that one request with its key and
   name instead of asking again, and on a device already added says so with Open Shinsa, unless the account no longer has that machine (a member removed), when it asks again with a new key. A device that left while it waited shows Waiting for an answer
   in the dashboard and in Settings → Machines until the machine accepts it, which opens it there, or declines it,
-  which forgets its key. Settings → General → Machines lists every machine in rows like
+  which forgets its key. Settings → Cloud → Machines lists every machine in rows like
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
@@ -4390,7 +4390,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   `usage.pace_limits` for `dailyUsageLimit` and `Project.usageLimit`, `usage.watchdog_limits` for
   `watchdogsIgnoreUsageLimits`, `usage.auto_pace` for `autoPace`, `usage.auto_pace_resets` for `autoPaceResets`, `focus.projects` for `focus.change`'s `projectIds`
   and `except`, `autopilot` for the `autopilot` setting and `autopilot-slack` for its Slack `contacts`,
-  `GET /api/slack/directory` and `POST /api/slack/test`, today; Settings → Teams, Settings → Agents → Autopilot,
+  `GET /api/slack/directory` and `POST /api/slack/test`, today; Settings → Teams, Settings → Autopilot,
   the review's Fix and approve choice and
   What's new show only on an engine that has them, and the Focus menu stays a single choice on an engine without
   `focus.projects`). `ENGINE_PROTOCOL` is the hard floor: a machine whose protocol differs from the page's is left out of the
@@ -4542,7 +4542,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   ends every open link at once, and that link never works again: sharing the task again makes a new link with a new
   id and key.
 - **How long it is shared.** `TaskShare.limit` is `until_done` (the default), `hour`, `day`, `week` or `none` (until you
-  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → General → Sharing, human-only,
+  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → Cloud → Sharing, human-only,
   so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
   cancelled) with `until_done` stops sharing in the same decision (`syncShares`, `task.unshared` with `reason: 'done'`);
   a time limit is ended by `ShareClock` (`apps/engine/src/remote/share-clock/service.ts`, a clock on `makeEngineClock`) with `share.expire`
@@ -4565,7 +4565,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   `resolveShareScopes` adds it and puts the list in order). The presets are scope lists in `SHARE_PRESET_SCOPES`
   (`share/presets.ts`, from `ACCESS_PRESETS`): Status is identity, description and progress; Standard (the default)
   every scope but messages; Full access every scope. `task.share` takes `preset` (a name; the `sharePreset` setting,
-  Settings → General → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
+  Settings → Cloud → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
   A preset's name is never kept: a share's label is worked out from its list (`resolveShareScopesPreset`, through
   `resolvePreset`), Status, Standard, Full access, or Custom for any other list.
 - **Custom in Share task.** Share as lists Status, Standard, Full access and Custom, then Hand off. A preset shows
@@ -4688,7 +4688,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   ("Remote access on the machine that shares this task was turned off."). A machine that is offline, asleep or
   paused shows nothing new: the page says the machine is offline and opens the channel again on its own (1, 2, 5,
   then every 10 seconds), keeping what it already showed.
-- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → General to share this
+- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → Cloud to share this
   task…" (`SHARE_NOT_PAIRED`) and `share.fail` keeps it on `TaskShare.failure` for Share task to show with Try again
   (`task.share` again asks for a link); it opens no failure gate, since nothing in the task waits on it. Once the
   machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
@@ -5137,7 +5137,7 @@ hand it to them, under Teams → Teammates act on team tasks.
   `task.handed_off` (`TaskHandoff`: `at`, `url` null, `guest` null) and queues `handoff.link`; again on a failed link it
   asks for the link once more, and otherwise does nothing.
 - **The link** (`apps/engine/src/remote/handoffs/service.ts`, `Remote.createHandoff`). Remote access must be on (else the link
-  fails at once with "Turn on remote access in Settings → General to hand off this task…", kept on
+  fails at once with "Turn on remote access in Settings → Cloud to hand off this task…", kept on
   `TaskHandoff.failure` for Share task's Try again). The engine asks app.shinsa.dev for a hand-off token
   (`POST /__remote/machine/handoffs`, `apps/cloud/CLAUDE.md` → Guests), makes a secret, keeps both with the task's id in
   `remote.json` (`handoffs`), and records the URL with `handoff.record`. It is the enroll link's fragment with a
@@ -5427,7 +5427,7 @@ engine ──its watched channels, on every change──►
          app.shinsa.dev /__remote/slack/watches
 ```
 
-- **Connecting** (Settings → General → Slack, `components/settings/slack.tsx`): with remote access on, Connect
+- **Connecting** (Settings → Cloud → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
   with GitHub there if you are not, then with Slack (OAuth v2, `oauth.v2.access`), which asks for your own
   read-only user scopes `channels:history`, `groups:history`, `channels:read` and `groups:read` (`SLACK_USER_SCOPES`)
@@ -6761,7 +6761,7 @@ Claude to Codex and back alike (The agent loop, below).
 
 ### Versions and updates
 
-Settings → Agents → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
+Settings → General → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
 (`apps/engine/src/versions/`, after Kanna's `provider-auth.ts`, its latest-version check at 539-586 and its install at
 592-668, and `claude-executable.ts:13-16`, 59-65). A newer Claude Code or Codex brings new features, and the Agent
 SDK is built against one Claude Code (`claudeCodeVersion`; SDK 0.3.N pairs with Claude Code 2.1.N), so the program
@@ -6850,7 +6850,7 @@ update (`apps/web/src/lib/changelog.ts`, `components/changelog/dialog.tsx`).
   (`resolveWhatsNew`: released versions above the seen one, up to the engine's). Its hint names the version you
   last saw. It never opens a dialog by itself.
 - **The dialog** lists those releases, each a card with its version and date and its entries under New, Improved
-  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → Updates → Changelog, records the
+  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → General → Updates → Changelog, records the
   engine's version as seen, so the button goes away. From ⌘K or Settings it lists every release.
 
 ## MCP servers, plugins and skills
@@ -7116,7 +7116,7 @@ you: Settings → Browser ─────────┤
   and a guest or a teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page
   first, to use the repository's own test users where it has them, never to launch a browser of their own to sign in,
   and for a local dev server to ask with the exact address of the run they screenshot and keep that run.
-- **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
+- **Settings → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
   started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
   never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
   button that signs the browser out of that one site (`sites/remove {site}`: every cookie on the site set to expire
@@ -7263,7 +7263,7 @@ the build, fix and operate runs and the investigator are not, and each resumes t
 **Executable discovery** (`executable.ts`). Runs use the user's `claude`, never the SDK's bundled copy:
 `CLAUDE_EXECUTABLE` (with `~` expanded) wins and is trusted as is; otherwise `claude` on the `PATH`, whose
 `--version` is read once per binary and again only when the file changes. A `claude` older than the SDK's
-`claudeCodeVersion` is refused with "Update it from Settings → Agents, or run `claude update`" (the Update there
+`claudeCodeVersion` is refused with "Update it from Settings → General, or run `claude update`" (the Update there
 is Versions and updates, below); an unreadable version is let through. Finding the binary (`locateClaude`, and
 `locateCodex` for Codex) is `locateProgram` in `providers/versions.ts`, which the updates read too.
 
@@ -7318,7 +7318,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   session reports for `run.meter` (cached input as cache reads, written cache as cache writes, the rest as input,
   priced by `CodexMeter`; Cost, above) and the last request's tokens and the model's window for the `context` notice.
   The prompt cache of a Codex thread lasts 5 minutes after its last request, 30 for GPT-5.6 and later
-  (`resolveCacheLifetimeMs`), which idle compaction reads. Compaction follows Settings → General → Context, Compaction: with
+  (`resolveCacheLifetimeMs`), which idle compaction reads. Compaction follows Settings → Agents → Context, Compaction: with
   Off the thread gets `model_auto_compact_token_limit` set past any window, so Codex never summarises and a full
   context fails the turn as `context_window_full` (a fresh session with the handoff, as for Claude); with any other
   choice Codex summarises on its own at its limit, since eunoe sits in front of the Anthropic API only. An idle
@@ -7328,7 +7328,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 - **Executable discovery** (`executable.ts`): `CODEX_EXECUTABLE` (with `~` expanded), else `codex` on the `PATH`; its
   `--version` (`codex-cli 0.153.4`) is read once per binary and again when the file changes. Older than
   `CODEX_MINIMUM_VERSION` (0.153.0, the version this adapter was built and checked against: `turn/steer`,
-  `outputSchema` and thread `config` overrides) is refused with "Update it from Settings → Agents, or run `codex
+  `outputSchema` and thread `config` overrides) is refused with "Update it from Settings → General, or run `codex
   update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
@@ -7409,7 +7409,7 @@ bucket that result wrote (`resolveCacheExpiry` reads `cache_creation.ephemeral_1
 the lifetime is unknown). When the Agent, an answerer, investigator or
 researcher finishes near its context limit (at least 80% of its window, `COMPACTION_NEAR_LIMIT`, from the
 context usage Claude reports at the end of the turn), `IdleCompaction` (`agents/compaction/service.ts`)
-sends `/compact` to that session 2 minutes before the cache expires (Settings → General → Context, Compact idle
+sends `/compact` to that session 2 minutes before the cache expires (Settings → Agents → Context, Compact idle
 sessions: never, the default, or 1 to 30 minutes before), so the next step resumes a small context instead of
 re-reading a cold large one. It exists only where the provider summarises itself (`hasNativeCompaction`,
 `resolveIdleCompaction(settings, providers)`): for Claude only with provider compaction, since `/compact` is
@@ -7425,7 +7425,7 @@ for it, so its `claude` never outlives the server.
 
 **Compaction and fast mode.** Shinsa does not use a provider's own summary by default: eunoe's core
 (`@chroxify/eunoe`, a library, served inside the engine between Claude Code and the Anthropic API) folds and
-compacts instead. Settings → General → Context, Management ("Context management" in ⌘K; `settings.compaction`, a `settings.change`
+compacts instead. Settings → Agents → Context, Management ("Context management" in ⌘K; `settings.compaction`, a `settings.change`
 event because replay must reproduce it):
 
 | Setting | What happens |
@@ -7645,7 +7645,7 @@ the run and else from a fresh usage read, so auto-resume works for Codex as for 
 sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or "an API key" is signed in, exit 1
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
-Agent usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
+Usage shows it under the Claude accounts with the sign-in command, and so does setup's Claude step; setup's
 tools check no longer lists codex. **Which providers Shinsa uses** is `config.json`'s `providerLogins`
 (`{ codex: 'added' | 'removed' }`, decoded leniently): with no entry a provider shows only while it is signed in, and
 the first time it is seen signed in it is recorded as `added`, so a lapsed sign-in keeps its row and its Sign in gate;
@@ -7768,7 +7768,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   and `resetGrants`, the usage resets Claude gives an account, read from `grants` under `cedar_ember` (each with its resets left and total, the windows it clears, whether it is usable now and when it
   ends, and `givesBackWeekly` from `gives_back_weekly` with `weeklyShare`, the percent of the weekly limit the
   scoped limits used, summed from `weekly_scoped_shares[].used_percent_of_weekly`, only on a grant that gives back;
-  a spent grant or one without an id is dropped). Settings → Agent usage shows extra usage On or Off, the
+  a spent grant or one without an id is dropped). Settings → Usage shows extra usage On or Off, the
   credit only from one whole unit of its currency, and one Usage resets row whose value counts the resets left of each
   kind ("Weekly 2 · Fable 1", `listUsageNotes`: Weekly clears `seven_day`, Fable only the Fable limit, any other by its
   label); hovering a kind lists each of its grants (what it clears, as "Clears full weekly" or "Clears Fable weekly",
@@ -7852,7 +7852,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   next attempt leases afresh. When no account qualifies, the run ends with the failure, its account, and for a usage
   limit the earliest reset of the pool (or of the bound account).
 - **A run's failure shows on its account at once.** The mark a rejection makes (spent until the reset, or signed out)
-  is pushed in the same moment as the accounts snapshot on every socket, so Settings → Agent usage, the usage menu and
+  is pushed in the same moment as the accounts snapshot on every socket, so Settings → Usage, the usage menu and
   every account picker read "Out of usage until 3:40 PM" or "Needs sign-in" within a second, with no refresh; a
   sign-in that works again (the login flow, or a renewed login) clears it the same way. Codex, which has one login and
   no accounts to rotate, is marked too: a sign-out sets its `providers` entry to `signed_out` with the reason until the
@@ -7889,7 +7889,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   not the first one's receipt (core ignores a resume for a wait that is no longer armed); restart needs nothing, the
   clock reads the state. The resume starts the step again on the same session with the original brief and "Your
   previous turn stopped because the usage limit was reached. The limit has reset. Continue where you left off and
-  finish the step with the hand-over tool." A wait without auto-resume (Settings → Agent usage → Limits, After a usage
+  finish the step with the hand-over tool." A wait without auto-resume (Settings → Usage → Limits, After a usage
   limit, with `settings.snoozeLimited` on) opens a failure gate at the reset instead; with both off the limit opens
   the failure gate at once. A usage limit never fails a task on its own: a reset that is unknown or already past
   waits 15 minutes (`ESTIMATED_RESET_MS`), and a resumed step that hits a window no later than the one it waited for
@@ -8652,8 +8652,8 @@ have reached.
   came from, the projects as you changed them in words, and the help task), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
-- **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
-  opening `/onboarding`) starts a new run. When setup was done before, the run is a revisit (`revisit: true`): every
+- **Run setup again** (`{ type: 'restart' }`; the app no longer offers it, so only a direct call to
+  `/api/onboarding/flow` sends it) starts a new run. When setup was done before, the run is a revisit (`revisit: true`): every
   step is reached and shows the current settings `chosen`, so you can open any of them, and the web offers Close
   setup.
 

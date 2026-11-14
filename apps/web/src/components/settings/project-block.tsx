@@ -12,7 +12,10 @@ import { HintButton } from '@/components/controls/hint-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
+import { BASELINE_TITLE } from '@/lib/baseline.ts';
 import type { CoverageDetectionMap } from '@/lib/connection/coverage.ts';
+import { COVERAGE_TITLE } from '@/lib/coverage.ts';
+import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   describeProjectKey,
   describeProjectRemoval,
@@ -26,9 +29,10 @@ import {
 } from '@/lib/projects.ts';
 import { describeWatchSource, removeWatchSource, WATCH_SOURCE_HINT } from '@/lib/tasks/watchdogs.ts';
 import { selectSourceSuggestion } from '@/lib/watch-suggestions.ts';
+import { WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { BaselineSelect } from './baseline-select.tsx';
 import { CoverageSelect } from './coverage-select.tsx';
-import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty } from './group.tsx';
+import { PathRow, SETTING_ROW, SETTINGS_SHELF, SettingRow, SettingsBlock, SettingsEmpty } from './group.tsx';
 import { ProjectDialog } from './project-dialog.tsx';
 import { AddMenu, type ProjectDialogValue, ProjectMenu } from './project-menu.tsx';
 import { WorkspaceSelect } from './workspace-select.tsx';
@@ -41,7 +45,6 @@ function RepoRow({ repo, action }: { repo: Repo; action?: React.ReactNode }) {
       title={repo.name}
       path={repo.path}
       action={action}
-      dense={!!action}
     />
   );
 }
@@ -122,11 +125,52 @@ function RepoSettings({
   detected: CoverageDetectionMap | null;
 }) {
   return (
-    <>
-      <BaselineSelect repo={repo} onChange={actions.changeBaseline} />
-      <CoverageSelect repo={repo} detected={detected} onChange={actions.changeCoverage} />
-      <WorkspaceSelect repo={repo} onChange={actions.changeWorkspace} />
-    </>
+    <div className={cn(SETTINGS_SHELF, 'border-t border-border')}>
+      <SettingRow title={BASELINE_TITLE}>
+        <BaselineSelect repo={repo} onChange={actions.changeBaseline} />
+      </SettingRow>
+      <SettingRow title={COVERAGE_TITLE}>
+        <CoverageSelect repo={repo} detected={detected} onChange={actions.changeCoverage} />
+      </SettingRow>
+      <SettingRow title={WORKSPACE_TITLE}>
+        <WorkspaceSelect repo={repo} onChange={actions.changeWorkspace} />
+      </SettingRow>
+    </div>
+  );
+}
+
+function ManagedRepoRow({
+  repo,
+  actions,
+  detected,
+  remove,
+}: {
+  repo: Repo;
+  actions: ProjectActions;
+  detected: CoverageDetectionMap | null;
+  remove?: React.ReactNode;
+}) {
+  const { open, toggle } = useDisclosure(createDisclosureId('settings', 'projects', 'repo', repo.id), false);
+  const label = open ? `Hide the settings of ${repo.name}` : `Show the settings of ${repo.name}`;
+  return (
+    <div className='flex flex-col'>
+      <RepoRow
+        repo={repo}
+        action={
+          <>
+            <HintButton
+              size='icon-sm'
+              icon='IconSettingsGear4'
+              label={label}
+              aria-expanded={open}
+              onClick={toggle}
+            />
+            {remove}
+          </>
+        }
+      />
+      {open && <RepoSettings repo={repo} actions={actions} detected={detected} />}
+    </div>
   );
 }
 
@@ -139,7 +183,7 @@ export function LooseRepoRow({
   actions: ProjectActions;
   detected: CoverageDetectionMap | null;
 }) {
-  return <RepoRow repo={repo} action={<RepoSettings repo={repo} actions={actions} detected={detected} />} />;
+  return <ManagedRepoRow repo={repo} actions={actions} detected={detected} />;
 }
 
 function ProjectDialogs({
@@ -256,19 +300,18 @@ export function ProjectBlock({
     >
       {empty && <SettingsEmpty>{NO_PLACES}</SettingsEmpty>}
       {repos.map((repo) => (
-        <RepoRow
+        <ManagedRepoRow
           key={repo.id}
           repo={repo}
-          action={
-            <>
-              <RepoSettings repo={repo} actions={actions} detected={detected} />
-              <HintButton
-                size='icon-sm'
-                icon='IconCrossSmall'
-                label={`Remove ${repo.name} from the project`}
-                onClick={() => void actions.removeRepo(repo)}
-              />
-            </>
+          actions={actions}
+          detected={detected}
+          remove={
+            <HintButton
+              size='icon-sm'
+              icon='IconCrossSmall'
+              label={`Remove ${repo.name} from the project`}
+              onClick={() => void actions.removeRepo(repo)}
+            />
           }
         />
       ))}

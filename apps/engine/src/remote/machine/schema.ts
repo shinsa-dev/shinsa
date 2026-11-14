@@ -20,7 +20,7 @@ export const SECRET_BYTES = 32;
 export const MAX_REQUESTS = 20;
 
 export const HANDOFF_NOT_ENABLED =
-  'Turn on remote access in Settings → General to hand off this task. Its link works once this machine is reachable.';
+  'Turn on remote access in Settings → Cloud to hand off this task. Its link works once this machine is reachable.';
 
 export const HANDOFF_UNAVAILABLE = 'This machine cannot hand off tasks right now. Try again in a moment.';
 

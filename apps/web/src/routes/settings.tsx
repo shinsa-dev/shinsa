@@ -7,15 +7,15 @@ import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { AccountSettings } from '@/components/settings/accounts.tsx';
 import { ActiveHoursSettings } from '@/components/settings/active-hours.tsx';
-import { AgentSettings, useAutomaticModel } from '@/components/settings/agents.tsx';
+import { AgentSettings, useAutomaticModel, WatchdogSettings } from '@/components/settings/agents.tsx';
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
-import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
+import { AutopilotSettings } from '@/components/settings/autopilot.tsx';
 import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
-import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
+import { FolderSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
-import { IntegrationSettings } from '@/components/settings/integrations.tsx';
+import { IntegrationSettings, IntegrationsSearch } from '@/components/settings/integrations.tsx';
 import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
@@ -84,9 +84,29 @@ function TabSections({
       return (
         <>
           <AppearanceSettings />
-          <AttentionSettings settings={state.settings} />
           <NotificationSettings />
+          <UpdateSettings />
+          <VersionSettings />
+        </>
+      );
+    case 'agents':
+      return (
+        <>
+          <AgentSettings settings={state.settings} automatic={automatic} />
           <ContextSettings settings={state.settings} />
+          <MemorySettings state={state} />
+        </>
+      );
+    case 'autopilot':
+      return (
+        <>
+          <AutopilotSettings settings={state.settings} />
+          <ActiveHoursSettings state={state} />
+        </>
+      );
+    case 'cloud':
+      return (
+        <>
           {isRemoteBuild() ? (
             <MachinesSettings state={state} />
           ) : (
@@ -97,25 +117,9 @@ function TabSections({
           )}
           <SharingSettings settings={state.settings} />
           <SlackSettings />
-          <UpdateSettings />
-          <SetupSettings />
         </>
       );
-    case 'statistics':
-      return <StatisticsSettings state={state} />;
-    case 'agents':
-      return (
-        <>
-          <AgentSettings
-            settings={state.settings}
-            automatic={automatic}
-            afterAutopilot={<ActiveHoursSettings state={state} />}
-          />
-          <MemorySettings state={state} />
-          <VersionSettings />
-        </>
-      );
-    case 'accounts':
+    case 'usage':
       return (
         <>
           <AccountSettings settings={state.settings} />
@@ -128,19 +132,27 @@ function TabSections({
           />
         </>
       );
+    case 'statistics':
+      return <StatisticsSettings state={state} />;
     case 'projects':
       return (
         <>
           <FolderSettings />
           <WorktreeSettings />
           <ProjectSettings state={state} />
-          <BrowserSettings state={state} />
         </>
       );
+    case 'browser':
+      return <BrowserSettings state={state} />;
     case 'integrations':
       return <IntegrationSettings state={state} />;
     case 'automations':
-      return <ScheduleSettings state={state} />;
+      return (
+        <>
+          <WatchdogSettings settings={state.settings} />
+          <ScheduleSettings state={state} />
+        </>
+      );
   }
 }
 
@@ -176,27 +188,30 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const openTab = (next: SettingsTabId) => updateSearchParams({ tab: resolveSettingsTabParam(next) });
 
   return (
-    <PageScroll viewportRef={scroller}>
-      <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-12')}>
-        <div className='flex flex-col gap-3'>
-          <div className='relative'>
-            <PageHeading title={current.label} />
-            {tab === 'statistics' && (
-              <div className='absolute top-1/2 right-0 -translate-y-1/2'>
-                <StatisticsRange />
-              </div>
-            )}
-          </div>
-          <Choice<SettingsTabId>
-            label='Settings sections'
-            scrolls
-            items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
-            value={tab}
-            onValueChange={openTab}
-          />
+    <div className='flex min-h-0 flex-1 flex-col'>
+      <header className={cn(PAGE_COLUMN, PAGE_TOP, 'flex shrink-0 flex-col gap-3 pb-3')}>
+        <div className='relative'>
+          <PageHeading title={current.label} />
+          {tab === 'statistics' && (
+            <div className='absolute top-1/2 right-0 -translate-y-1/2'>
+              <StatisticsRange />
+            </div>
+          )}
         </div>
-        <TabSections state={state} tab={tab} automatic={automatic} />
-      </div>
-    </PageScroll>
+        <Choice<SettingsTabId>
+          label='Settings sections'
+          scrolls
+          items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
+          value={tab}
+          onValueChange={openTab}
+        />
+        {tab === 'integrations' && <IntegrationsSearch />}
+      </header>
+      <PageScroll viewportRef={scroller}>
+        <div className={cn(PAGE_COLUMN, 'flex flex-col gap-6 pt-3 pb-12')}>
+          <TabSections state={state} tab={tab} automatic={automatic} />
+        </div>
+      </PageScroll>
+    </div>
   );
 }

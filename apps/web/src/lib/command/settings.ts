@@ -11,8 +11,11 @@ import {
   resolveRepoWorkspace,
   type Settings,
   type UsageRate,
+  resolvePlanApproval,
 } from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import { AUTO_PACE_LABEL } from '@/lib/accounts/auto-pace.ts';
+import { FORECAST_TITLE } from '@/lib/accounts/forecast.ts';
 import {
   listSwitchItems,
   needsSnoozeSetting,
@@ -27,9 +30,10 @@ import {
   WATCHDOG_LIMITS_ITEMS,
   WATCHDOG_LIMITS_TITLE,
 } from '@/lib/accounts/limits.ts';
+import { ACTIVE_HOURS_LABEL } from '@/lib/active-hours.ts';
+import { AUTOPILOT_TITLE } from '@/lib/autopilot.ts';
 import { BROWSER_SECTION } from '@/lib/browser.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
-import { restartOnboarding } from '@/lib/connection/onboarding.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { applyDesktopChannel, type UpdateChannel } from '@/lib/desktop.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
@@ -63,7 +67,6 @@ import {
   FIX_ROUND_ITEMS,
   FOLDERS_TITLE,
   listAgentModelItems,
-  listAttentionItems,
   listBudgetItems,
   listCompactionItems,
   listDelegationLimitItems,
@@ -84,7 +87,6 @@ import {
   resolveAgentModelPatch,
   resolveAgentModelValue,
   resolveAgentSpeedPatch,
-  resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
   resolveDailyLimitValue,
@@ -94,7 +96,6 @@ import {
   resolveGroupModelPatch,
   resolveGroupSpeed,
   resolveGroupSpeedPatch,
-  resolvePlanValue,
   resolveSectionId,
   resolveSpeedAvailability,
   resolveSpeedValue,
@@ -105,14 +106,16 @@ import {
   updateSettings,
   WORKTREES_TITLE,
   DAILY_LIMIT_TITLE,
+  WATCHDOG_SETTINGS_TITLE,
 } from '@/lib/settings.ts';
+import { SHARING_SECTION } from '@/lib/share/dialog.ts';
+import { TEAMS_SECTION } from '@/lib/teams/settings.ts';
 import { parseUpdateChannel, UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate, stripRouteBase } from '@/router.ts';
 
 const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] = [
-  { title: 'Attention', icon: 'IconInboxEmpty', keywords: ['decisions', 'queue'] },
   { title: 'Notifications', icon: 'IconBell', keywords: ['sound', 'chime', 'alert', 'badge'] },
   {
     title: MODELS_TITLE,
@@ -142,6 +145,25 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     keywords: ['compaction', 'compact', 'eunoe', 'fold', 'idle sessions', 'context window'],
   },
   { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'delegations', 'merge'] },
+  {
+    title: WATCHDOG_SETTINGS_TITLE,
+    icon: 'IconEyeSparkle',
+    keywords: ['watch', 'after merge', 'monitor', 'production', 'errors'],
+  },
+  {
+    title: AUTOPILOT_TITLE,
+    icon: 'IconRocket',
+    keywords: ['auto', 'gates', 'auto merge', 'escalate', 'decide for me'],
+  },
+  {
+    title: ACTIVE_HOURS_LABEL.title,
+    icon: 'IconCalenderSparkle',
+    keywords: ['active hours', 'schedule', 'away', 'working hours'],
+  },
+  { title: TEAMS_SECTION, icon: 'IconUserDuo', keywords: ['team', 'members', 'invite', 'people'] },
+  { title: SHARING_SECTION, icon: 'IconShareOs', keywords: ['share', 'link', 'public', 'redact'] },
+  { title: AUTO_PACE_LABEL.title, icon: 'IconSpeedMiddle', keywords: ['pace', 'spread usage', 'throttle'] },
+  { title: FORECAST_TITLE, icon: 'IconChart3', keywords: ['forecast', 'projection', 'week', 'usage ahead'] },
   {
     title: 'Memory',
     icon: 'IconLightbulbGlow',
@@ -218,8 +240,7 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     icon: 'IconGlobe',
     keywords: ['browser', 'chrome', 'sign in', 'cookies', 'session', 'dia', 'playwright'],
   },
-  { title: 'Appearance', icon: 'IconSun', keywords: ['theme', 'layout', 'dark', 'light'] },
-  { title: 'Setup', icon: 'IconArrowRotateClockwise', keywords: ['onboarding', 'setup steps'] },
+  { title: 'Appearance', icon: 'IconSun', keywords: ['theme', 'dark', 'light', 'file list'] },
 ];
 
 const SAVED = 'Saved.';
@@ -289,15 +310,8 @@ function listJumpCommands(): Command[] {
     }));
 }
 
-function listAttentionChoices(settings: Settings, notifications: NotificationPreferences): Command[] {
+function listNotificationChoices(notifications: NotificationPreferences): Command[] {
   return [
-    settingChoice(
-      'attention',
-      'Decisions up now',
-      listAttentionItems(settings),
-      resolveAttentionValue(settings),
-      (value) => patchSettings({ attentionLimit: Number(value) })
-    ),
     settingChoice(
       'sound',
       'Play a sound',
@@ -324,7 +338,7 @@ function listAttentionChoices(settings: Settings, notifications: NotificationPre
 
 function listWorkflowChoices(settings: Settings): Command[] {
   const choices = [
-    settingChoice('plans', 'Approve plans', PLAN_ITEMS, resolvePlanValue(settings), (value) =>
+    settingChoice('plans', 'Approve plans', PLAN_ITEMS, resolvePlanApproval(settings), (value) =>
       patchSettings({ approvePlans: value as PlanApproval })
     ),
     settingChoice(
@@ -533,7 +547,7 @@ export function listSettingsSections(
       heading: 'Change a setting',
       rank: RANK.context + 1,
       commands: [
-        ...listAttentionChoices(settings, notifications),
+        ...listNotificationChoices(notifications),
         ...listWorkflowChoices(settings),
         ...listGroupChoices(settings, providers, snapshot, automatic),
         ...listRoleChoices(settings, providers, snapshot, automatic),
@@ -543,21 +557,6 @@ export function listSettingsSections(
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),
         ...listChannelChoices(updateChannel),
-      ],
-    },
-    {
-      id: 'settings.setup',
-      heading: 'Setup',
-      rank: RANK.context + 2,
-      commands: [
-        {
-          kind: 'run',
-          id: 'settings.setup.restart',
-          label: 'Run setup again',
-          icon: 'IconArrowRotateClockwise',
-          keywords: ['onboarding', 'setup steps', 'folders', 'start over'],
-          run: () => void restartOnboarding(),
-        },
       ],
     },
   ];

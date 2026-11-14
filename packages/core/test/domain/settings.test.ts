@@ -10,6 +10,7 @@ import {
   resolveAccountSwitchAt,
   resolveAgentFastMode,
   resolveAttentionLimit,
+  resolvePlanApproval,
   resolveAutoPace,
   resolveAutoPaceResets,
   resolveAutopilotPolicy,
@@ -37,6 +38,12 @@ describe('settings', () => {
     expect(resolveAttentionLimit({ ...createSettings(), attentionLimit: 0 })).toBe(1);
     expect(resolveAttentionLimit({ ...createSettings(), attentionLimit: undefined })).toBe(1);
     expect(resolveAttentionLimit({ ...createSettings(), attentionLimit: 3 })).toBe(3);
+  });
+
+  test('plans stop at the gate when large, unless set otherwise', () => {
+    expect(resolvePlanApproval({ ...createSettings(), approvePlans: undefined })).toBe('large');
+    expect(resolvePlanApproval({ ...createSettings(), approvePlans: 'when_asked' })).toBe('when_asked');
+    expect(resolvePlanApproval({ ...createSettings(), approvePlans: 'always' })).toBe('always');
   });
 });
 

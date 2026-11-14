@@ -25,7 +25,7 @@ export const resolveExecutable = Effect.fn('CodexExecutable.resolve')(function* 
     const outdated: CodexExecutable = {
       ok: false,
       reason: 'outdated',
-      message: `Codex ${version} is older than Shinsa needs (${minimumVersion} or newer). Update it from Settings → Agents, or run \`codex update\`.`,
+      message: `Codex ${version} is older than Shinsa needs (${minimumVersion} or newer). Update it from Settings → General, or run \`codex update\`.`,
       version,
     };
     return outdated;

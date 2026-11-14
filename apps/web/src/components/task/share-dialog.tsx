@@ -228,7 +228,7 @@ function ShareActions({
       <Button
         onClick={() => {
           closeShareDialog();
-          navigate(resolveSettingsPath('general', 'Remote access'));
+          navigate(resolveSettingsPath('cloud', 'Remote access'));
         }}
       >
         Open Settings

@@ -11,8 +11,8 @@ themes, from sample data. Everything that reaches the engine or app.shinsa.dev i
 
 ```
 src/
-├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and a
-│                        `?layout=` override before the first paint
+├── main.tsx             Mounts Root (in the remote build, RemoteRoot around it); applies the stored theme and the layout
+│                        (Cards, or Sidebar for one load with `?layout=sidebar`) before the first paint
 ├── remote-sw.ts         The remote build's service worker (/sw.js, scope /): hands the page's /api/ requests to the page,
 │                        and a notification's click to the dashboard tab (or a new one) to open the task
 ├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
@@ -78,13 +78,13 @@ src/
 │                        new task, recently finished and recent conversations), tasks, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
-│                        accounts.tsx is the Agent usage tab's Accounts card, forecast.tsx its Forecast, with usage.tsx's windows and Limits, providers.tsx's
+│                        accounts.tsx is the Usage tab's Accounts card, forecast.tsx its Forecast, with usage.tsx's windows and Limits, providers.tsx's
 │                        Codex block and usage-account.tsx, the one block every provider's account renders in;
-│                        integrations.tsx reads the extensions for the search, slack.tsx (General, right under
-│                        Remote access, and below Machines on app.shinsa.dev: the status, Connect Slack, each
+│                        integrations.tsx reads the extensions for the search, pinned while the lists scroll, slack.tsx (Cloud, after
+│                        Sharing, on the machine and on app.shinsa.dev: the status, Connect Slack, each
 │                        linked workspace, and Disconnect on the machine only), context-optimizer.tsx,
 │                        mcp-servers.tsx (with mcp-server-row.tsx, mcp-server-menu.tsx and server-dialog.tsx),
-│                        versions.tsx the Agents tab's Versions group;
+│                        versions.tsx the General tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
 │                        onboarding (shell, header: Set up Shinsa over the path, path: the steps as the task page's path of gates, section: the heading, body and footer every step shares, the step and its footer, the option list, defaults: the three pick-one lists, projects: the suggested projects to keep, rename or trim, access: a folder macOS keeps private, accounts: Sign in with Claude and the accounts, checks: each check with Install and its terminal in the card, help: Ask an agent for help and its reply with Run in terminal),
@@ -139,7 +139,7 @@ src/
 │                        change; null turns it off), use-delayed (useDelayed: true once a wait has
 │                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
 │                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
-│                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
+│                        (useUsageRecheck: re-reads account usage while Settings → Usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── share/           Sharing a task: dialog.ts (Share task's state, its five views, how long a task is shared, share,
     │                    Stop sharing and its confirmation, the banner's words),
@@ -364,14 +364,14 @@ src/
         reads and filed tasks), secrets.ts,
         onboarding.ts, onboarding-projects.ts (the projects step's drafts, what it sends and its labels), baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
         checks, saving them), image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start, priority and, with two machines or more, machine: Automatic's choice, the router's answer from POST /api/placement, each machine's load),
-        slack.ts (Settings → General → Slack: the status words, a link's line, the linked page's points, result and
+        slack.ts (Settings → Cloud → Slack: the status words, a link's line, the linked page's points, result and
         reasons; connection/slack.ts reads /api/slack, again when the window comes back, and
         disconnects), remote-access.ts (Settings → Remote access: the status words, a device's last use and who added it, the copy of
         the invite link's dialog and its QR code as an image, an access request and the short toast accepting it shows; connection/remote-access.ts reads it from the
         socket's `remote` push, which the connection keeps (`selectRemote`), and changes /api/remote),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the
-        server form and its checks), versions.ts (Settings → Agents → Versions: rows, statuses and the update labels)
+        server form and its checks), versions.ts (Settings → General → Versions: rows, statuses and the update labels)
 ```
 
 `test/` follows `src/`: nearly every `lib/` and `hooks/` module has its test at the same path (a few are covered
@@ -424,9 +424,8 @@ print the whole document.
   command from the help task's reply, to `POST /api/onboarding/install`; the engine decides what runs. Finishing
   opens the welcome task the flow names (`welcome`), or Home on a run started again. Until `GET /api/onboarding` says setup is complete,
   every route replaces itself with `/onboarding`, and `/onboarding` has no way out: its own shell, no Home button
-  and no ⌘K. `/onboarding` goes Home when the run it loads is finished. Run setup again (Settings → Setup, ⌘K) is
-  `restartOnboarding`: it starts a new run on the server first, so the page opens on its first step; there is no
-  URL flag. No folder path is written into the web.
+  and no ⌘K. `/onboarding` goes Home when the run it loads is finished. Nothing in the app starts setup again once it is
+  complete. No folder path is written into the web.
 - **URL state is the view state.** The task tab (`?tab=review|code|chat`), the Review tab's place (`?spot=`), the Code
   tab's whole workbench (`lib/code/location.ts`: `?mode=changes|files|search`, `file`, `diff`, `line`, `end`, `ref`,
   `spot`, `q`,

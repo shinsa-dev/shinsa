@@ -277,6 +277,8 @@ export function resolveAutoPaceResets(settings: Settings) {
   return settings.autoPaceResets ?? false;
 }
 
+const DEFAULT_PLAN_APPROVAL: PlanApproval = 'large';
+
 const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
@@ -284,7 +286,7 @@ const DEFAULT_SETTINGS: Settings = {
   delegationLimit: null,
   mergeMethod: 'squash',
   attentionLimit: DEFAULT_ATTENTION_LIMIT,
-  approvePlans: 'when_asked',
+  approvePlans: DEFAULT_PLAN_APPROVAL,
   agentModels: {},
   agentProviders: {},
   agentFastModes: {},
@@ -314,6 +316,10 @@ const DEFAULT_SETTINGS: Settings = {
 
 export function createSettings(): Settings {
   return structuredClone(DEFAULT_SETTINGS);
+}
+
+export function resolvePlanApproval(settings: Settings): PlanApproval {
+  return settings.approvePlans ?? DEFAULT_PLAN_APPROVAL;
 }
 
 export function resolveAttentionLimit(settings: Settings) {
