@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Effect } from 'effect';
 import { CHANNELS } from '../../src/bridge/schema.ts';
+import { StatusTray } from '../../src/tray/service.ts';
 import { Updater } from '../../src/updates/service.ts';
 import type { SenderFrame } from '../../src/window/schema.ts';
 import {
@@ -84,6 +85,26 @@ describe('the page bridge', () => {
     expect(world.notices).toEqual([
       { title: 'Needs you', body: 'Review LOC-4', tag: 'LOC-4', path: '/tasks/LOC-4' },
     ]);
+  });
+
+  it('puts the page’s count on the menu bar item while it views a machine on Shinsa Cloud', async () => {
+    const world = createWorld({
+      files: new Map([
+        [PREFS, JSON.stringify({ engineSource: { kind: 'cloud', machine: { id: 'm1', name: 'Studio' } } })],
+      ]),
+    });
+    await runDesktop(
+      world,
+      Effect.gen(function* () {
+        const tray = yield* StatusTray;
+        yield* flush;
+        yield* tray.update({ version: null, working: 0, updating: false }, null);
+        yield* send(world, CHANNELS.badge, 3, { ...APP, url: 'https://app.shinsa.dev/' });
+        yield* flush;
+      })
+    );
+    expect(world.shell).toEqual(['badge 3']);
+    expect(world.tray.at(-1)?.title).toBe('3');
   });
 
   it('ignores a frame, another window and a message it does not know', async () => {

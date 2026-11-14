@@ -1,4 +1,5 @@
 import { EngineApi } from '@shinsa/core/engine-api';
+import { RemoteApi } from '@shinsa/core/remote/api';
 import { Context, Effect, Layer, Option, Schema } from 'effect';
 import { HttpClient, HttpClientRequest } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
@@ -7,8 +8,7 @@ import { DesktopHost } from '../host/service.ts';
 import { EngineSource } from '../source/service.ts';
 import { TrayQueue } from '../tray/schema.ts';
 import {
-  CLOUD_SESSION_PATH,
-  CloudSessionAnswer,
+  CLOUD_HEALTH,
   EngineUnreachable,
   HEALTH_TIMEOUT,
   HealthAnswer,
@@ -43,8 +43,8 @@ export class EngineServer extends Context.Service<
       );
       const server = yield* HttpApiClient.group(EngineApi, { group: 'server', httpClient });
       const decodeHealth = Schema.decodeUnknownEffect(HealthAnswer);
-      const decodeCloudSession = Schema.decodeUnknownEffect(CloudSessionAnswer);
-      const cloudSession = Effect.flatMap(httpClient.get(CLOUD_SESSION_PATH), (response) => response.json);
+      const cloud = yield* HttpApiClient.group(RemoteApi, { group: 'session', httpClient });
+      const readCloudHealth = () => Effect.succeed(CLOUD_HEALTH);
       const decodeQueue = Schema.decodeUnknownEffect(TrayQueue);
       const reach = <A, E, B>(
         request: Effect.Effect<A, E>,
@@ -63,7 +63,7 @@ export class EngineServer extends Context.Service<
       return EngineServer.of({
         origin,
         requestHealth: (source.started.kind === 'cloud'
-          ? reach(cloudSession, decodeCloudSession)
+          ? reach(cloud.read(), readCloudHealth)
           : reach(server.health(), decodeHealth)
         ).pipe(Effect.withSpan('EngineServer.requestHealth')),
         requestQueue: reach(server.queue(), decodeQueue).pipe(Effect.withSpan('EngineServer.requestQueue')),

@@ -127,7 +127,8 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   `WATCH_SCHEDULE`, `UPDATE_CHECK_SCHEDULE`, `AWAY_POLL_SCHEDULE`). One `ManagedRuntime` runs the app: the engine services are built
   first, so the first health check goes out before Electron is ready, the native window, tray and IPC layers wait
   for `app.whenReady()`, and `will-quit` disposes the runtime, which closes every listener, the watch and the update
-  schedule. The engine keeps running. The main bundle imports from `@shinsa/core` only the engine API and the app's identity.
+  schedule. The engine keeps running. The main bundle imports from `@shinsa/core` only the engine API, the app's identity and, for viewer mode, the remote
+  API's `session` group (`RemoteApi`) with the `REMOTE_*` constants it needs.
 - **Electron's guards run synchronously.** `close`, `will-navigate`, the window-open handler, `before-quit` and the
   page's start request ask for an answer on the spot, so `main/` runs their guards with `Effect.runSync`. A guard only
   reads `Ref`s and decides; anything that waits (a file write, IPC, the shell) is forked with `later` or happens on an
@@ -177,14 +178,14 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   shows only the pinned machine (`resolveMachineScope`, `apps/web/src/lib/remote/viewer-mode.ts`), so the Dock badge
   and notifications count only its tasks, or a chooser of your machines while none is pinned; its add-device page
   takes a pasted invite link instead of a QR code. The menu bar item shows "Showing <machine> on Shinsa Cloud" and
-  the count, no task list.
+  the count the page puts on the Dock (`StatusTray.showCount`, from the bridge's `updateBadge`), no task list.
 - **The first launch asks.** Until `engineSource` is saved, a Mac with no Shinsa data folder (or the dev app) opens
   on the welcome page instead of registering the engine (`isWelcomeNeeded`, `Connection`'s `welcome`): an intro drawn
   with Glimm (`glimm`, WebGL sweeps; `src/welcome-page/index.ts`, bundled and inlined with the logo's paths into
   `dist/welcome.html` by `scripts/build.ts`, since its CSP loads no file), then On this Mac or On another machine,
   links to `shinsa://engine/choose-local` and `choose-cloud` that `AppWindow` takes as engine actions. The first
   `EngineSource.use` saves the choice, even This Mac, and lets `Connection` go on; On another machine relaunches on
-  Shinsa Cloud. A Mac that already has `~/.config/shinsa/data` keeps This Mac and never sees it. To see it again in
+  Shinsa Cloud without letting it go on, so nothing touches the local engine while the app quits. A Mac that already has `~/.config/shinsa/data` keeps This Mac and never sees it. To see it again in
   the dev app, remove `engineSource` from `~/Library/Application Support/Shinsa Dev/prefs.json`.
 - **Signing in to Shinsa Cloud** happens in your browser, never in the window: the page's Sign in calls `signIn`,
   and `CloudSignIn` opens `/__remote/sign-in?client=native&redirect=shinsa://signed-in` with a PKCE challenge (the
@@ -282,4 +283,21 @@ SHINSA_APP_ID=studio.overclock.shinsa.test SHINSA_HOME=/tmp/shinsa-e2e "$T/Conte
 
 Then quit it and see the engine still answer on 5199, `kill -9` the engine and see it back, take the port and see the
 status page, and `launchctl bootout gui/$(id -u)/studio.overclock.shinsa.test.engine` when done.
+
+## Trying viewer mode
+
+The sandbox stands in for Shinsa Cloud with its machines (Studio, Laptop, Kai's), and a seeded engine stands in for
+This Mac. Start both, each on a port of its own, then open the dev app on them:
+
+```sh
+bun run sandbox                                   # from the repository root; Shinsa Cloud on PORT (5195)
+bun run seed                                      # prints the command that serves ~/.shinsa-seed; run it on 5180
+cd apps/desktop
+SHINSA_URL=http://127.0.0.1:5180 SHINSA_CLOUD_URL=http://127.0.0.1:5195 bun run dev
+```
+
+Remove `engineSource` from `~/Library/Application Support/Shinsa Dev/prefs.json` first to see the welcome page, or set
+it to `{ "kind": "cloud", "machine": null }` to open on the machine chooser. Choose Studio, add the app with its
+invite link from the sandbox's start page, and check the Dock badge and the menu bar item count only Studio's tasks;
+Shinsa → Engine → This Mac relaunches on the seeded engine. Put back the prefs you had when done.
 

@@ -33,8 +33,11 @@ export class EngineSource extends Context.Service<
         if (step === 'none' && !first) return step;
         yield* Ref.set(current, next);
         yield* prefs.write({ engineSource: next });
+        if (step === 'relaunch') {
+          yield* shell.relaunch;
+          return step;
+        }
         yield* Deferred.succeed(choice, undefined);
-        if (step === 'relaunch') yield* shell.relaunch;
         if (step === 'reload') yield* PubSub.publish(changes, next);
         return step;
       });

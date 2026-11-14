@@ -543,10 +543,10 @@ function makeDesktopLayer(world: DesktopWorld) {
     PageBridge,
     AwayWatch,
     AppMenu.layer,
-    StatusTray.layer,
     EngineSupervisor.layer,
     CommandLine.layer
   ).pipe(
+    Layer.provideMerge(StatusTray.layer),
     Layer.provideMerge(CloudSignIn.layer),
     Layer.provideMerge(Updater.layer),
     Layer.provideMerge(Notifications.layer),

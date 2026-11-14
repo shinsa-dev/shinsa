@@ -10,7 +10,10 @@ import type { TrayClick, TrayQueue } from './schema.ts';
 
 export class StatusTray extends Context.Service<
   StatusTray,
-  { update(health: ServerHealth | null, queue: TrayQueue | null): Effect.Effect<void> }
+  {
+    update(health: ServerHealth | null, queue: TrayQueue | null): Effect.Effect<void>;
+    showCount(text: string): Effect.Effect<void>;
+  }
 >()('shinsa/desktop/tray/StatusTray') {
   static readonly layer = Layer.effect(
     StatusTray,
@@ -21,6 +24,7 @@ export class StatusTray extends Context.Service<
       const source = yield* EngineSource;
       const scope = yield* Effect.scope;
       const shown = yield* Ref.make('');
+      const pageCount = yield* Ref.make('');
       const last = yield* Ref.make<{ health: ServerHealth | null; queue: TrayQueue | null }>({
         health: null,
         queue: null,
@@ -33,10 +37,18 @@ export class StatusTray extends Context.Service<
         const current = yield* source.current;
         const items = listTrayItems(health, queue, current);
         const tasks = health ? queue : null;
-        const title = resolveTrayTitle(tasks);
+        const title =
+          current.kind === 'cloud' ? (health ? yield* Ref.get(pageCount) : '') : resolveTrayTitle(tasks);
         const key = JSON.stringify({ items, title });
         if ((yield* Ref.getAndSet(shown, key)) === key) return;
         yield* native.show({ title, tooltip: describeTrayStatus(health, tasks, current), items });
+      });
+      const redraw = Effect.flatMap(Ref.get(last), (shownState) =>
+        update(shownState.health, shownState.queue)
+      );
+      const showCount = Effect.fn('StatusTray.showCount')(function* (text: string) {
+        yield* Ref.set(pageCount, text);
+        yield* redraw;
       });
       const answer = Effect.fn('StatusTray.answer')(function* (click: TrayClick) {
         if (click.kind === 'task') {
@@ -54,14 +66,12 @@ export class StatusTray extends Context.Service<
       });
       yield* update(null, null);
       yield* Effect.forkIn(
-        Stream.runForEach(source.changes, () =>
-          Effect.flatMap(Ref.get(last), (shownState) => update(shownState.health, shownState.queue))
-        ),
+        Stream.runForEach(source.changes, () => redraw),
         scope,
         { startImmediately: true }
       );
       yield* Effect.forkIn(Stream.runForEach(native.clicks, answer), scope, { startImmediately: true });
-      return StatusTray.of({ update });
+      return StatusTray.of({ update, showCount });
     })
   );
 }

@@ -62,7 +62,8 @@ const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, Co
   Layer.provideMerge(ElectronLayer)
 );
 
-const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AwayWatch, AppMenu.layer, StatusTray.layer).pipe(
+const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, AwayWatch, AppMenu.layer).pipe(
+  Layer.provideMerge(StatusTray.layer),
   Layer.provideMerge(CloudSignIn.layer),
   Layer.provideMerge(Updater.layer),
   Layer.provideMerge(Notifications.layer),

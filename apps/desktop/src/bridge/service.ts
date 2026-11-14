@@ -10,6 +10,7 @@ import { PageChannel } from '../page-channel/service.ts';
 import { DesktopShell } from '../shell/service.ts';
 import { LOCAL_SOURCE, type SourceSetting } from '../source/schema.ts';
 import { EngineSource } from '../source/service.ts';
+import { StatusTray } from '../tray/service.ts';
 import { Updater } from '../updates/service.ts';
 import { resolveDesktopUpdate } from '../updates/state.ts';
 import { AppWindow } from '../window/service.ts';
@@ -25,6 +26,7 @@ export const PageBridge = Layer.effectDiscard(
     const shell = yield* DesktopShell;
     const source = yield* EngineSource;
     const signIn = yield* CloudSignIn;
+    const tray = yield* StatusTray;
     const scope = yield* Effect.scope;
     const inBackground = (effect: Effect.Effect<void>) => Effect.asVoid(Effect.forkIn(effect, scope));
     const useSource = Effect.fn('PageBridge.useSource')(function* (next: SourceSetting) {
@@ -45,8 +47,11 @@ export const PageBridge = Layer.effectDiscard(
           return yield* inBackground(updater.applyChannel(request.payload));
         case CHANNELS.downgrade:
           return yield* inBackground(updater.answerDowngrade(request.payload));
-        case CHANNELS.badge:
-          return yield* shell.setBadge(resolveBadgeText(request.payload));
+        case CHANNELS.badge: {
+          const text = resolveBadgeText(request.payload);
+          yield* shell.setBadge(text);
+          return yield* tray.showCount(text);
+        }
         case CHANNELS.notify:
           return yield* notifications.show(request.payload);
         case CHANNELS.notificationSettings:

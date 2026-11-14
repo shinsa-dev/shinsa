@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Effect, Fiber, Option, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
-import { CloudSessionAnswer, HealthAnswer } from '../../src/server/schema.ts';
+import { HealthAnswer } from '../../src/server/schema.ts';
 import { EngineServer } from '../../src/server/service.ts';
 import { describeServer } from '../../src/server/url.ts';
 import { answerJson, createWorld, type HttpAnswer, runDesktop, USER_DATA } from '../support/desktop.ts';
@@ -179,14 +179,17 @@ describe('Shinsa Cloud’s health', () => {
         EngineServer.use((server) => Effect.option(server.requestHealth))
       ).then(Option.getOrNull);
     };
-    expect(await ask(answerJson({ user: { login: 'me' } }))).toEqual({
+    expect(await ask(answerJson({ user: null }))).toEqual({
       version: null,
       working: 0,
       updating: false,
     });
+    expect(await ask(answerJson({ user: { id: 'u1', login: 'me', name: null, avatarUrl: null } }))).toEqual({
+      version: null,
+      working: 0,
+      updating: false,
+    });
+    expect(await ask(answerJson({ user: { login: 'me' } }))).toBeNull();
     expect(await ask(answerJson(['not a session']))).toBeNull();
-    expect(() =>
-      Schema.encodeSync(CloudSessionAnswer)({ version: null, working: 0, updating: false })
-    ).toThrow('never writes one');
   });
 });

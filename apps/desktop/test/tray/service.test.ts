@@ -84,4 +84,32 @@ describe('the menu bar item', () => {
     expect(world.window.slice(-2)).toEqual(['show', 'reload']);
     expect(world.shell).toEqual(['relaunch']);
   });
+
+  it('shows the page’s count on Shinsa Cloud, and none while it does not answer', async () => {
+    const world = createWorld();
+    world.files.set(
+      `${USER_DATA}/prefs.json`,
+      JSON.stringify({ engineSource: { kind: 'cloud', machine: { id: 'm1', name: 'Studio' } } })
+    );
+    await run(world, (tray) =>
+      Effect.gen(function* () {
+        yield* tray.showCount('3');
+        yield* tray.update(HEALTH, null);
+        yield* tray.showCount('4');
+        yield* tray.update(null, null);
+      })
+    );
+    expect(world.tray.map((view) => view.title)).toEqual(['', '3', '4', '']);
+  });
+
+  it('keeps the engine’s own count on This Mac', async () => {
+    const world = createWorld();
+    await run(world, (tray) =>
+      Effect.gen(function* () {
+        yield* tray.showCount('9');
+        yield* tray.update(HEALTH, QUEUE);
+      })
+    );
+    expect(world.tray.map((view) => view.title)).toEqual(['', '1']);
+  });
 });

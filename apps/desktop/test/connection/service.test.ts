@@ -290,6 +290,8 @@ describe('the first launch', () => {
     const world = createEngine({ value: false }, { files: new Map() });
     await connect(world, request('choose-cloud'));
     expect(world.shell).toContain('relaunch');
+    expect(world.launchctl).toEqual([]);
+    expect(world.window).toEqual(['welcome']);
     expect(JSON.parse(world.files.get(`${USER_DATA}/prefs.json`) ?? '{}')).toEqual({
       engineSource: { kind: 'cloud', machine: null },
     });
