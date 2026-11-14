@@ -174,7 +174,6 @@ export function closeLaterRound(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const earlier = selectEarlierOpenRound(task);
   if (Option.isNone(earlier)) return false;
-  decider.withdrawGates(taskId, (gate) => gate.type === 'proposal' || gate.type === 'result');
   decider.emit({
     type: 'round.closed',
     taskId,
