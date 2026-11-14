@@ -47,7 +47,7 @@ describe('the Autopilot judge', () => {
     expect(calls[0]?.schema).toEqual(
       expect.objectContaining({
         properties: expect.objectContaining({
-          verdict: { type: 'string', enum: ['act', 'forward', 'cancel'] },
+          verdict: { type: 'string', enum: ['act', 'revise', 'forward', 'cancel'] },
         }),
       })
     );

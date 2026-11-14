@@ -181,6 +181,7 @@ export const UserCommand = Schema.Union([
   Command('task.prioritize', { taskId: TaskId, priority: Choice(TASK_PRIORITIES) }),
   Command('task.wait_on', { taskId: TaskId, waitsOn: List(TaskId) }),
   Command('task.stack_on_tasks', { taskId: TaskId, stacksOn: List(TaskId) }),
+  Command('task.move_to_repository', { taskId: TaskId, repoId: RepoId }),
   Command('task.move_to_backlog', { taskId: TaskId }),
   Command('task.remove_from_backlog', { taskId: TaskId }),
   Command('task.snooze', { taskId: TaskId }),

@@ -1,6 +1,7 @@
 import { Option } from 'effect';
 import type { Gate } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { isAutopilotFollowUp } from './follow-ups.ts';
 import { selectJudgedGateKind } from './prompt.ts';
 import {
   AUTOPILOT_DONE_LIMIT,
@@ -33,6 +34,7 @@ export function listAutopilotDone(state: ShinsaState): AutopilotDone[] {
       action: resolveDoneAction(gate, kind),
       title: gate.title,
       reason: gate.autopilotAnswer ?? '',
+      followUp: isAutopilotFollowUp(gate) ? gate.response : null,
       at: gate.answeredAt ?? gate.openedAt,
     });
   }

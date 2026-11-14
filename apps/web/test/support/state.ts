@@ -177,6 +177,7 @@ export function createAutopilotProfile(parts: {
     watchdog: false,
     touched: false,
     guess,
+    followUp: null,
     note: null,
     facts: null,
     estimate: guess === null ? null : modelGuess,

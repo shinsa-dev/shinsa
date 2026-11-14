@@ -15,6 +15,7 @@ import {
   registerRepo,
   refreshWorktree,
   shipAndMerge,
+  INITIATIVE_PLAN,
   SPLIT_PLAN,
 } from '../harness.ts';
 
@@ -486,7 +487,7 @@ describe('a plan that makes its split an initiative', () => {
   test('approving it makes this task and its parts an initiative with a lead forked from it', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    proposePlan(harness, taskId, { ...SPLIT_PLAN, initiative: true });
+    proposePlan(harness, taskId, INITIATIVE_PLAN);
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,
@@ -500,7 +501,7 @@ describe('a plan that makes its split an initiative', () => {
     const parts = Object.values(harness.state.tasks).filter(
       (task) => task.forkOf === taskId && task.id !== lead.id
     );
-    expect(parts).toHaveLength(SPLIT_PLAN.split?.length ?? 0);
+    expect(parts).toHaveLength(INITIATIVE_PLAN.split?.length ?? 0);
     expect(parts.every((task) => task.initiativeId === initiativeId)).toBe(true);
   });
 
@@ -509,7 +510,7 @@ describe('a plan that makes its split an initiative', () => {
     const { initiativeId } = createInitiative(harness);
     const taskId = createTask(harness);
     harness.send({ type: 'task.join_initiative', taskId, initiativeId, phaseId: null });
-    proposePlan(harness, taskId, { ...SPLIT_PLAN, initiative: true });
+    proposePlan(harness, taskId, INITIATIVE_PLAN);
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,

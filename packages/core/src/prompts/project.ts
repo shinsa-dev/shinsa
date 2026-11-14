@@ -17,7 +17,7 @@ function describeCrossRepositoryWork() {
     '- Set the order. `after_this` when the other part uses what this task adds, so it starts once this task is finished. `this_task_waits` when this task needs the other part merged first; it is refused while you plan, so file that part in your first phase.',
     '- Never hand the human a step to commit, push or open a pull request in another repository: that part is a task of its own, and its order holds the merge.',
     '- Say so in your plan and hand-over, and link the task for the human.',
-    'When all of the work is in another repository of the project and nothing changes in this one, move the task there with `move_to_repository` while you plan: it keeps this task, its conversation and its handle. File a task with `create_task` only for work beside this one.',
+    'When all of the work is in another repository, of this project or another one, and nothing changes in this one, move the task there with `move_to_repository` before any work: while you plan, answer, investigate or research. It keeps this task and its conversation, and in another project it takes that project’s next handle. File a task with `create_task` only for work beside this one.',
   ].join('\n');
 }
 

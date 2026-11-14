@@ -376,7 +376,7 @@ function finishInquiry(
     requestYourOk(decider, taskId, runId, proposal, recommend ?? 'go_on');
     return;
   }
-  if (pipeline.includes('plan') && recommend === 'close') {
+  if (pipeline.includes('plan') && recommend === 'close' && !hasOpenPullRequest(task)) {
     reshapeTask(decider, taskId, [step, 'your_ok', ...pipeline.slice(1)], 'agent', NOTHING_TO_CHANGE);
     requestYourOk(decider, taskId, runId, null, 'close');
     return;

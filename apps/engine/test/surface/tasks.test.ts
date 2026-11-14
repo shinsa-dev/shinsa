@@ -418,6 +418,11 @@ describe('the task commands', () => {
       'It is no longer in a bundle.',
     ],
     [
+      ['tasks', 'move', 'fix', '--repo', 'app'],
+      { type: 'task.move_to_repository', taskId: 'task-123', repoId: 'repo-1' },
+      'Moving it. The same step starts again in that repository.',
+    ],
+    [
       ['tasks', 'move-to-backlog', 'fix'],
       { type: 'task.move_to_backlog', taskId: 'task-123' },
       'Moved to the backlog.',

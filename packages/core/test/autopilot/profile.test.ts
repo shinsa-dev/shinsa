@@ -56,6 +56,7 @@ function decision(overrides: Partial<AutopilotDecision>): AutopilotDecision {
     watchdog: false,
     touched: false,
     guess: null,
+    followUp: null,
     note: null,
     facts: null,
     estimate: null,

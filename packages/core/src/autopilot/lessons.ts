@@ -1,5 +1,6 @@
 import type { Gate, GateDecision, Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { isAutopilotFollowUp } from './follow-ups.ts';
 import { resolveAutopilotFacts } from './limits.ts';
 import {
   AUTOPILOT_LESSON_LIMITS,
@@ -62,6 +63,28 @@ const FORWARDED_TEXT: Record<AutopilotGateKind, string> = {
   failure: 'You brought a failed step to them',
 };
 
+const REVISED_TEXT: Record<AutopilotGateKind, string> = {
+  plan: 'You sent the agent a follow-up on a plan for them',
+  question: 'You sent the agent a follow-up on a question for them',
+  review: 'You sent the agent a follow-up on a review for them',
+  merge: 'You sent the agent a follow-up on a merge for them',
+  proposal: 'You sent the agent a follow-up on a proposal for them',
+  failure: 'You sent the agent a follow-up on a failed step for them',
+};
+
+const REVISED_ANSWER_TEXT: Record<AutopilotLessonAnswer, string> = {
+  approved: 'they approved what came of it',
+  revised: 'they asked for more changes',
+  rejected: 'they rejected the task',
+  replied: 'they replied later',
+};
+
+const LESSON_TEXT: Record<AutopilotLessonKind, Record<AutopilotGateKind, string>> = {
+  acted: ACTED_TEXT,
+  revised: REVISED_TEXT,
+  forwarded: FORWARDED_TEXT,
+};
+
 const ACTED_ANSWER_TEXT: Record<AutopilotLessonAnswer, string> = {
   approved: 'they went along with it',
   revised: 'they asked for changes later',
@@ -74,6 +97,12 @@ const FORWARDED_ANSWER_TEXT: Record<AutopilotLessonAnswer, string> = {
   revised: 'they asked for changes',
   rejected: 'they rejected it',
   replied: 'they answered',
+};
+
+const LESSON_ANSWER_TEXT: Record<AutopilotLessonKind, Record<AutopilotLessonAnswer, string>> = {
+  acted: ACTED_ANSWER_TEXT,
+  revised: REVISED_ANSWER_TEXT,
+  forwarded: FORWARDED_ANSWER_TEXT,
 };
 
 function isGateKind(type: Gate['type']): type is AutopilotGateKind {
@@ -104,6 +133,7 @@ function resolveLessonFacts(
 }
 
 function isCorrection(lesson: AutopilotLesson) {
+  if (lesson.kind === 'revised') return lesson.answer === 'rejected';
   return lesson.kind === 'acted' && (lesson.answer === 'revised' || lesson.answer === 'rejected');
 }
 
@@ -115,6 +145,7 @@ interface LessonDraft {
 
 function isJudgedBy(gate: Gate, answered: Gate, decision: GateDecision) {
   if (decision === 'approve') return true;
+  if (isAutopilotFollowUp(gate) && gate.type === answered.type) return true;
   return CORRECTS[answered.type]?.has(gate.type) === true;
 }
 
@@ -130,7 +161,11 @@ function listActedGates(state: ShinsaState, answered: Gate, decision: GateDecisi
         isGateKind(gate.type) &&
         isJudgedBy(gate, answered, decision)
     )
-    .map((gate) => ({ gate, kind: 'acted' as const, reason: gate.autopilotAnswer ?? '' }));
+    .map((gate) => ({
+      gate,
+      kind: isAutopilotFollowUp(gate) ? ('revised' as const) : ('acted' as const),
+      reason: gate.autopilotAnswer ?? '',
+    }));
 }
 
 function listForwardedGate(answered: Gate): LessonDraft[] {
@@ -207,8 +242,8 @@ function describeFacts(facts: AutopilotLessonFacts) {
 }
 
 export function describeAutopilotLesson(lesson: AutopilotLesson) {
-  const did = lesson.kind === 'acted' ? ACTED_TEXT[lesson.gate] : FORWARDED_TEXT[lesson.gate];
-  const answer = (lesson.kind === 'acted' ? ACTED_ANSWER_TEXT : FORWARDED_ANSWER_TEXT)[lesson.answer];
+  const did = LESSON_TEXT[lesson.kind][lesson.gate];
+  const answer = LESSON_ANSWER_TEXT[lesson.kind][lesson.answer];
   const note = lesson.note ? `: “${lesson.note}”` : '';
   return `${did}${describeFacts(lesson.facts)}; ${answer}${note}.`;
 }

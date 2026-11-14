@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
+  canLeaveStack,
   isBundleFollower,
   isBundleMember,
   listBundleBlockers,
@@ -327,7 +328,7 @@ describe('stacking a task on another', () => {
     reachShipping(harness, shipping);
     refusals.push([
       () => stackOn(harness, shipping, [other]),
-      'This task has started building, so its bundle can no longer change.',
+      'This task has started building, so it can no longer stack on more tasks. You can still take it out of its bundle.',
     ]);
     for (const [refused, message] of refusals) expect(refused).toThrow(message);
     expect(() => stackOn(harness, child, [parent])).not.toThrow();
@@ -335,6 +336,80 @@ describe('stacking a task on another', () => {
     expect(() => stackOn(harness, elsewhere, [parent, other])).toThrow(
       'The tasks of a bundle work in one repository.'
     );
+  });
+});
+
+describe('taking a started task out of its bundle', () => {
+  test('a task that has started building leaves its bundle and waits for the task it left to merge', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
+    reachReady(harness, parent);
+    readyWorktree(harness, child);
+    proposePlan(harness, child);
+    expect(harness.task(child).stage).toBe('building');
+    expect(harness.task(child).stackBases).toHaveLength(1);
+    expect(canLeaveStack(harness.task(child))).toBe(true);
+    stackOn(harness, child, []);
+    expect(canLeaveStack(harness.task(child))).toBe(false);
+    expect(harness.task(child).stacksOn).toEqual([]);
+    expect(harness.task(child).stackBases).toEqual([]);
+    expect(harness.task(child).waitsOn).toEqual([parent]);
+    expect(harness.task(child).stage).toBe('building');
+    expect(harness.task(parent).bundleReady).toBeNull();
+    recordClean(harness, parent);
+    expect(harness.openGate(parent).type).toBe('merge');
+    expect(() => stackOn(harness, child, [parent])).toThrow(
+      'This task has started building, so it can no longer stack on more tasks.'
+    );
+  });
+
+  test('a started task stacked on two tasks can leave one of them, but cannot swap one for another', () => {
+    const harness = createHarness();
+    const first = createTask(harness, { request: 'First' });
+    const second = createTask(harness, { request: 'Second' });
+    const other = createTask(harness, { request: 'Other' });
+    const child = createTask(harness, { request: 'Child', stacksOn: [first, second] });
+    reachReady(harness, first);
+    reachReady(harness, second);
+    readyWorktree(harness, child);
+    proposePlan(harness, child);
+    expect(harness.task(child).stage).toBe('building');
+    expect(() => stackOn(harness, child, [first, other])).toThrow(
+      'This task has started building, so it can no longer stack on more tasks.'
+    );
+    stackOn(harness, child, [first]);
+    expect(harness.task(child).stacksOn).toEqual([first]);
+    expect(harness.task(child).waitsOn).toEqual([second]);
+  });
+
+  test('a shipped task that leaves its bundle has its pull request watched again, onto the default branch', () => {
+    const harness = createHarness();
+    const { middle, top } = createBundle(harness);
+    const watches = harness.effectsOf('pull_request.watch').length;
+    stackOn(harness, top, []);
+    expect(harness.task(top).stackBases).toEqual([]);
+    expect(harness.task(top).waitsOn).toEqual([middle]);
+    expect(resolveRoundBase(harness.task(top))).toEqual(Option.none());
+    expect(
+      harness
+        .effectsOf('pull_request.watch')
+        .slice(watches)
+        .map((effect) => effect.taskId)
+    ).toContain(top);
+  });
+
+  test('a cancelled task it leaves is not waited on', () => {
+    const harness = createHarness();
+    const parent = createTask(harness, { request: 'Parent' });
+    const child = createTask(harness, { request: 'Child', stacksOn: [parent] });
+    reachReady(harness, parent);
+    readyWorktree(harness, child);
+    proposePlan(harness, child);
+    harness.send({ type: 'task.cancel', taskId: parent });
+    stackOn(harness, child, []);
+    expect(harness.task(child).stacksOn).toEqual([]);
+    expect(harness.task(child).waitsOn).toEqual([]);
   });
 });
 
@@ -641,6 +716,34 @@ describe('a bundle on its way to the merge', () => {
     stackOn(harness, question, [parent]);
     expect(harness.task(question).waitsOn).toEqual([]);
     expect(harness.task(question).stacksOn).toEqual([parent]);
+  });
+
+  test('a follow-up on a merged task keeps it out of the bundle it left', () => {
+    const harness = createHarness();
+    const merged = createTask(harness, { request: 'Merged' });
+    const busy = createTask(harness, { request: 'Busy' });
+    const above = createTask(harness, { request: 'Above', stacksOn: [merged], waitsOn: [busy] });
+    reachReady(harness, merged, 1);
+    recordMerged(harness, merged, 1);
+    const waiter = createTask(harness, { request: 'Waiter', waitsOn: [merged] });
+    const child = createTask(harness, { request: 'Child', stacksOn: [above, waiter] });
+    expect(harness.task(above).stageReason).toBe('waiting for “Busy” to finish');
+    harness.send({ type: 'task.message', taskId: merged, text: 'Why this approach?' });
+    expect(harness.task(merged)).toMatchObject({ stage: 'answering', bundleReady: null });
+    expect(harness.task(above).stageReason).toBe('waiting for “Busy” to finish');
+    expect(listPendingDependencies(harness.state, harness.task(above)).map((task) => task.id)).toEqual([
+      busy,
+    ]);
+    expect(isBundleMember(harness.state, harness.task(waiter), merged)).toBe(false);
+    expect(isBundleMember(harness.state, harness.task(merged), waiter)).toBe(false);
+    expect(resolveBundleMembers(harness.state, harness.task(merged)).map((task) => task.id)).toEqual([
+      merged,
+    ]);
+    expect(resolveBundleMembers(harness.state, harness.task(child)).map((task) => task.id)).toEqual([
+      above,
+      waiter,
+      child,
+    ]);
   });
 
   test('a loose task is in no bundle', () => {

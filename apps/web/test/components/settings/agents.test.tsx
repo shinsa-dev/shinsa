@@ -31,6 +31,7 @@ import {
   createAutopilotProfile,
   createProject,
   createShinsaState,
+  NOW,
 } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
@@ -342,6 +343,8 @@ describe('Settings → Agents → Autopilot', () => {
     expect(screen.queryByText('What it learned')).toBeNull();
     expect(screen.getByText(AUTOPILOT_SCORE_ROWS.margin)).toBeTruthy();
     expect(screen.getByText(/^\d+ points ahead$/)).toBeTruthy();
+    expect(screen.queryByText(AUTOPILOT_SCORE_ROWS.topics)).toBeNull();
+    expect(screen.queryByText(AUTOPILOT_SCORE_ROWS.followUps)).toBeNull();
     expect(listSentCommands()).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
     expect(listSentCommands()).toEqual([
@@ -382,6 +385,30 @@ describe('Settings → Agents → Autopilot', () => {
     expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.level }).textContent).toBe('Everything');
     expect(screen.getByText(AUTOPILOT_LEVEL_DESCRIPTION.everything)).toBeTruthy();
     expect(screen.queryByLabelText('Ready for Everything')).toBeNull();
+  });
+
+  it('shows the topics you raise and how often its follow-ups matched yours', async () => {
+    spyOnEngine();
+    pushState(
+      createShinsaState({
+        patch: {
+          autopilotProfile: {
+            ...createAutopilotProfile({ agreed: 46, disagreed: 4 }),
+            topics: [
+              { topic: 'security', total: 5, recent: 3, at: NOW },
+              { topic: 'data_loss', total: 2, recent: 2, at: NOW },
+            ],
+            followUps: { scored: 4, matched: 3 },
+          },
+        },
+      })
+    );
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(AUTOPILOT_SCORE_ROWS.topics)).toBeTruthy();
+    expect(screen.getByText('Security, data loss')).toBeTruthy();
+    expect(screen.getByText(AUTOPILOT_SCORE_ROWS.followUps)).toBeTruthy();
+    expect(screen.getByText('75%')).toBeTruthy();
   });
 
   it('says the suggested level is in use once you already chose it', async () => {

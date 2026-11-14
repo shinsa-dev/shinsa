@@ -132,9 +132,25 @@ export function useRoute() {
   return scoped ?? live;
 }
 
+const followedTasks = new Map<string, string>();
+
+export function selectRouteTask(state: ShinsaState, reference: string) {
+  const direct = selectTaskByReference(state, reference);
+  if (direct) {
+    followedTasks.set(reference, direct.id);
+    return direct;
+  }
+  const followed = followedTasks.get(reference);
+  return (followed ? state.tasks[followed] : undefined) ?? null;
+}
+
+export function resetFollowedTasks() {
+  followedTasks.clear();
+}
+
 export function resolveRouteTaskId(state: ShinsaState | null, route: Route) {
   if (route.name !== 'task' || !state) return null;
-  return selectTaskByReference(state, route.reference)?.id ?? null;
+  return selectRouteTask(state, route.reference)?.id ?? null;
 }
 
 export function useRouteTaskId(state: ShinsaState | null) {

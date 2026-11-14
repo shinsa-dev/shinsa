@@ -8,8 +8,8 @@ import {
   isAgentQuestion,
   isDelegatedRun,
   isDependencyComplete,
+  isLaterRound,
   isSettingUpWorkspace,
-  isTaskComplete,
   isTaskSettled,
   parseTaskHandle,
   type Run,
@@ -105,6 +105,56 @@ export function listStackChildren(state: Pick<ShinsaState, 'tasks'>, taskId: str
   );
 }
 
+export type MoveActor = 'agent' | 'you';
+
+export type MoveRefusal = 'work_started' | 'result_handed_over' | 'task_stacked' | 'task_moving';
+
+const FILE_INSTEAD = 'File the work there as a new task instead.';
+
+export const MOVE_REFUSAL_TEXT: Record<MoveRefusal, string> = {
+  work_started: `Work on this task has already started, so it stays where it is. ${FILE_INSTEAD}`,
+  result_handed_over: `This task has already handed over its result, so it stays where it is. ${FILE_INSTEAD}`,
+  task_stacked: `This task is part of a bundle in its repository, so it stays there. ${FILE_INSTEAD}`,
+  task_moving: 'This task is already moving to another repository.',
+};
+
+const WORK_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
+  'building',
+  'checking',
+  'reviewing',
+  'fixing',
+  'awaiting_review',
+  'shipping',
+  'awaiting_merge',
+  'operating',
+  'awaiting_operation',
+  'watching',
+]);
+
+function hasStartedWork(task: Task) {
+  return (
+    task.phaseReports.length > 0 ||
+    task.pullRequest !== null ||
+    isLaterRound(task) ||
+    (task.editedPaths ?? []).length > 0 ||
+    WORK_STAGES.has(task.stage)
+  );
+}
+
+export function resolveMoveRefusal(
+  state: Pick<ShinsaState, 'tasks'>,
+  task: Task,
+  actor: MoveActor
+): Option.Option<MoveRefusal> {
+  if (task.movingTo) return Option.some('task_moving');
+  if (hasStartedWork(task)) return Option.some('work_started');
+  if (actor === 'you' && task.result) return Option.some('result_handed_over');
+  if ((task.stacksOn?.length ?? 0) > 0 || listStackChildren(state, task.id).length > 0) {
+    return Option.some('task_stacked');
+  }
+  return Option.none();
+}
+
 const STACKABLE_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'triage',
   'waiting_on_tasks',
@@ -114,6 +164,10 @@ const STACKABLE_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
 
 export function canChangeStack(task: Task) {
   return !isTaskSettled(task) && STACKABLE_STAGES.has(task.stage);
+}
+
+export function canLeaveStack(task: Task) {
+  return !isTaskSettled(task) && (task.stacksOn?.length ?? 0) > 0;
 }
 
 export function selectStackRefusal(
@@ -157,7 +211,7 @@ function isReadyToStackOn(state: ShinsaState, task: Task) {
 }
 
 function isInBundle(task: Task) {
-  return !isTaskComplete(task) && task.stage !== 'cancelled';
+  return !isDependencyComplete(task) && task.stage !== 'cancelled';
 }
 
 interface StackEdges {
@@ -218,7 +272,8 @@ function collectBundle(state: Pick<ShinsaState, 'tasks'>, task: Task, edges: Sta
   const pending = [task];
   for (let member = pending.pop(); member !== undefined; member = pending.pop()) {
     const parents = listStackParents(state, member).filter(edges.parent);
-    for (const next of [...parents, ...(children.get(member.id) ?? [])]) {
+    const below = edges.parent(member) ? (children.get(member.id) ?? []) : [];
+    for (const next of [...parents, ...below]) {
       if (members.has(next.id)) continue;
       members.set(next.id, next);
       pending.push(next);
@@ -263,7 +318,7 @@ export function resolveBundle(state: Pick<ShinsaState, 'tasks'>, task: Task) {
 }
 
 function isStackPending(state: ShinsaState, parent: Task) {
-  return !isTaskComplete(parent) && !isReadyToStackOn(state, parent);
+  return !isDependencyComplete(parent) && !isReadyToStackOn(state, parent);
 }
 
 export function listPendingStackParents(state: ShinsaState, task: Task) {

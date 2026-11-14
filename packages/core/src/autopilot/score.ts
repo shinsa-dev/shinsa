@@ -1,5 +1,5 @@
 import type { ShinsaState } from '../state/project.ts';
-import { AUTOPILOT_POSITIVE_ANSWERS, type AutopilotModelGuess } from './model/schema.ts';
+import type { AutopilotModelGuess } from './model/schema.ts';
 import {
   AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_READINESS_KINDS,
@@ -9,6 +9,8 @@ import {
   AUTOPILOT_TRACKS,
   type AutopilotAgreement,
   type AutopilotDecisionAnswer,
+  type AutopilotFollowUpMatch,
+  type AutopilotFollowUpScore,
   type AutopilotKindReadiness,
   type AutopilotProfile,
   type AutopilotReadiness,
@@ -22,9 +24,15 @@ import {
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
 
+const AGREEING_VERDICTS: Partial<Record<AutopilotDecisionAnswer, readonly AutopilotVerdict[]>> = {
+  approved: ['act'],
+  replied: ['act'],
+  revised: ['revise', 'forward'],
+  rejected: ['forward', 'cancel'],
+};
+
 export function isAutopilotAgreement(guess: AutopilotVerdict, answer: AutopilotDecisionAnswer) {
-  if (guess === 'cancel') return answer === 'rejected';
-  return (guess === 'act') === AUTOPILOT_POSITIVE_ANSWERS.gate.includes(answer);
+  return AGREEING_VERDICTS[answer]?.includes(guess) ?? false;
 }
 
 export function resolveAutopilotCombinedVerdict(
@@ -32,13 +40,20 @@ export function resolveAutopilotCombinedVerdict(
   guess: AutopilotModelGuess | null
 ): AutopilotVerdict {
   if (call === 'cancel') return isAutopilotCancelVeto(guess) ? 'forward' : 'cancel';
-  if (call !== 'act') return 'forward';
+  if (call !== 'act') return call;
   return isAutopilotModelVeto(guess) ? 'forward' : 'act';
 }
 
 export function isAutopilotCancelVeto(guess: AutopilotModelGuess | null): guess is AutopilotModelGuess {
   if (!guess || guess.confidence < AUTOPILOT_COMBINE_LIMITS.confidence) return false;
   return guess.p >= AUTOPILOT_COMBINE_LIMITS.veto;
+}
+
+export function resolveAutopilotFollowUpScore(
+  match: AutopilotFollowUpMatch | undefined
+): AutopilotFollowUpScore {
+  const { scored, matched } = match ?? EMPTY_AUTOPILOT_PROFILE.followUps;
+  return { scored, matched, share: scored === 0 ? null : matched / scored };
 }
 
 export function isAutopilotModelVeto(guess: AutopilotModelGuess | null) {
@@ -92,6 +107,7 @@ export function resolveAutopilotScore(state: Pick<ShinsaState, 'autopilotProfile
     ready,
     suggested: ready ? 'most' : 'balanced',
     tracks,
+    followUps: resolveAutopilotFollowUpScore(profile.followUps),
   };
 }
 

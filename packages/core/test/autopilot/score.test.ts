@@ -15,8 +15,11 @@ import {
   resolveAutopilotBaseRate,
   resolveAutopilotCombinedVerdict,
   resolveAutopilotLoss,
+  resolveAutopilotFollowUpScore,
   resolveAutopilotReadiness,
   resolveAutopilotScore,
+  EMPTY_AUTOPILOT_PROFILE,
+  type AutopilotProfile,
 } from '../../src/index.ts';
 
 const SURE: AutopilotModelGuess = { head: 'gate', p: 0.95, confidence: 0.8, similar: 40 };
@@ -39,6 +42,7 @@ function decision(
     watchdog: false,
     touched: true,
     guess,
+    followUp: null,
     note: null,
     facts: null,
     estimate: null,
@@ -73,6 +77,39 @@ describe('agreeing with you', () => {
     expect(isAutopilotAgreement('cancel', 'approved')).toBe(false);
     expect(isAutopilotAgreement('cancel', 'rejected')).toBe(true);
   });
+
+  test('a follow-up agrees when you ask for a change, never when you approve or reject', () => {
+    expect(isAutopilotAgreement('revise', 'revised')).toBe(true);
+    expect(isAutopilotAgreement('revise', 'approved')).toBe(false);
+    expect(isAutopilotAgreement('revise', 'rejected')).toBe(false);
+    expect(isAutopilotAgreement('revise', 'replied')).toBe(false);
+  });
+});
+
+describe('how often its follow-ups raise your topic', () => {
+  test('counts a follow-up guess only when you revised with a topic, and matches it on a shared topic', () => {
+    const revised = { ...decision('revise', 'revised'), note: 'What about auth on the new endpoint?' };
+    const profile = recordAutopilotDecisions(undefined, [
+      { ...revised, followUp: 'How does this check the token?' },
+      { ...revised, followUp: 'Are the tests updated?' },
+      { ...revised, followUp: null },
+      { ...revised, followUp: 'Does it check the token?', note: 'Smaller, please.' },
+      { ...revised, followUp: 'Is auth handled?', answer: 'approved' },
+      { ...revised, guess: 'forward', followUp: 'Is auth handled?' },
+    ]);
+    expect(profile.followUps).toEqual({ scored: 2, matched: 1 });
+    expect(resolveAutopilotScore({ autopilotProfile: profile }).followUps).toEqual({
+      scored: 2,
+      matched: 1,
+      share: 0.5,
+    });
+  });
+
+  test('has no share before it is scored, and reads a profile from an older engine', () => {
+    expect(resolveAutopilotScore({ autopilotProfile: EMPTY_AUTOPILOT_PROFILE }).followUps.share).toBeNull();
+    const older = { ...EMPTY_AUTOPILOT_PROFILE, followUps: undefined } as unknown as AutopilotProfile;
+    expect(resolveAutopilotFollowUpScore(older.followUps)).toEqual({ scored: 0, matched: 0, share: null });
+  });
 });
 
 describe('combining the model with the model call', () => {
@@ -89,6 +126,11 @@ describe('combining the model with the model call', () => {
     expect(resolveAutopilotCombinedVerdict('cancel', null)).toBe('cancel');
     expect(resolveAutopilotCombinedVerdict('cancel', SURE)).toBe('forward');
     expect(resolveAutopilotCombinedVerdict('cancel', { ...SURE, confidence: 0.3 })).toBe('cancel');
+  });
+
+  test('keeps a follow-up as it is, whatever the model says', () => {
+    expect(resolveAutopilotCombinedVerdict('revise', SURE)).toBe('revise');
+    expect(resolveAutopilotCombinedVerdict('revise', DOUBTFUL)).toBe('revise');
   });
 });
 

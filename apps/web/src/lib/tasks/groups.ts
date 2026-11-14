@@ -8,10 +8,14 @@ import {
   isDependencyOf,
   isHeldInBacklog,
   isPausingGate,
+  isRetryArmed,
   isTaskSettled,
+  isWatchCheck,
   isWatchHome,
   listBundleBlockers,
+  listOpenGates,
   listWaitsOn,
+  resolveShownStage,
   type ShinsaState,
   selectLeadGate,
   listStackParents,
@@ -118,10 +122,23 @@ export function isHeldByTasks(state: ShinsaState, task: Task) {
   return !task.snoozed && listWaitsOn(state, task).length > 0;
 }
 
+export function isMergeInFlight(state: ShinsaState, task: Task) {
+  return (
+    task.stage === 'awaiting_merge' &&
+    !task.bundleReady &&
+    !isRetryArmed(task) &&
+    listOpenGates(state, task.id).length === 0
+  );
+}
+
+function isAtRest(task: Task) {
+  return isTaskSettled(task) || isWatchCheck(task);
+}
+
 function selectGroupAnchor(state: ShinsaState, task: Task, seen: ReadonlySet<string>) {
   return (
     listWaitsOn(state, task)
-      .filter((parent) => !seen.has(parent.id) && !isTaskSettled(parent))
+      .filter((parent) => !seen.has(parent.id) && !isAtRest(parent))
       .sort(compareTasks)[0] ?? null
   );
 }
@@ -130,13 +147,15 @@ function resolveGroupWithin(state: ShinsaState, task: Task, seen: ReadonlySet<st
   if (task.duplicate) return 'duplicate';
   if (task.stage === 'cancelled') return 'cancelled';
   if (isTaskSettled(task)) return 'done';
-  if (task.snoozed) return 'snoozed';
   const gate = Option.getOrNull(selectLeadGate(state, task));
+  if (!gate && isWatchCheck(task)) return 'done';
+  if (task.snoozed) return 'snoozed';
   if (gate && isHeldInBacklog(state, gate)) return 'backlog';
   if (gate) return resolveGateGroup(gate);
   const next = new Set(seen).add(task.id);
   const root = isWaitingForBundle(state, task) ? selectBundleRoot(state, task) : null;
   if (root && !next.has(root.id)) return resolveGroupWithin(state, root, next);
+  if (isMergeInFlight(state, task)) return 'done';
   const anchor = selectGroupAnchor(state, task, next);
   if (anchor) return resolveGroupWithin(state, anchor, next);
   return task.backlog ? 'backlog' : 'working';
@@ -168,7 +187,7 @@ export function describeBundleWait(state: ShinsaState, task: Task) {
 function listChainParents(state: ShinsaState, task: Task) {
   const parents = listWaitsOn(state, task);
   const below = listStackParents(state, task).filter(
-    (parent) => !isTaskSettled(parent) && !parents.includes(parent)
+    (parent) => !isAtRest(parent) && !parents.includes(parent)
   );
   return [...parents, ...below];
 }
@@ -232,7 +251,7 @@ export function orderChains(
 
 export function listOpenTaskChoices(state: ShinsaState, task: Task | null) {
   return Object.values(state.tasks)
-    .filter((candidate) => !isTaskSettled(candidate) && !isWatchHome(candidate))
+    .filter((candidate) => !isAtRest(candidate) && !isWatchHome(candidate))
     .filter((candidate) => !task || !isDependencyOf(state, task.id, candidate.id))
     .sort(compareTasks);
 }
@@ -297,7 +316,10 @@ export function listTaskGroupSections(
 }
 
 export function describeTaskCounts(tasks: readonly Task[]) {
-  const open = tasks.filter((task) => !isTaskSettled(task)).length;
-  const done = tasks.filter((task) => task.stage === 'merged' || task.stage === 'done').length;
+  const open = tasks.filter((task) => !isAtRest(task)).length;
+  const done = tasks.filter((task) => {
+    const stage = resolveShownStage(task);
+    return stage === 'merged' || stage === 'done';
+  }).length;
   return `${open} open · ${done} done`;
 }

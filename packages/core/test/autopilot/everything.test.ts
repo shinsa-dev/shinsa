@@ -284,10 +284,10 @@ describe('Autopilot at a review at Everything', () => {
   test('keeps a high risk change for you while reviews are not ready', () => {
     const harness = everything(['plan']);
     const taskId = reachReview(harness, []);
-    expect(reviewGate(harness, taskId)).toMatchObject({
-      status: 'open',
-      autopilotHeld: 'The risk is high, above what Autopilot does on its own.',
-    });
+    const reason = 'The risk is high, above what Autopilot does on its own.';
+    expect(reviewGate(harness, taskId)).toMatchObject({ status: 'open', autopilotFollowUpOnly: reason });
+    judge(harness, taskId, 'act', 'Clear.');
+    expect(reviewGate(harness, taskId)).toMatchObject({ status: 'open', autopilotHeld: reason });
   });
 
   test('dismisses the open findings when your model says you would', () => {

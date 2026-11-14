@@ -25,8 +25,10 @@ function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
     const did = event.decision === 'reject' ? 'Cancelled' : 'Retried';
     return `${did} for you by Autopilot: ${gate.title}`;
   }
-  if (event.autopilot && event.decision === 'revise')
-    return `Asked for changes for you by Autopilot: ${gate.title}`;
+  if (event.autopilot && event.decision === 'revise') {
+    const did = event.verdicts?.length ? 'Asked for changes' : 'Followed up';
+    return `${did} for you by Autopilot: ${gate.title}`;
+  }
   if (event.autopilot && gate.type === 'merge')
     return `Approved the merge for you by Autopilot: ${gate.title}`;
   if (event.autopilot && isAgentQuestion(gate)) return `Answered for you by Autopilot: ${gate.title}`;
@@ -34,6 +36,12 @@ function describeAnswer(gate: Gate, event: EventOf<'gate.answered'>) {
   if (event.ahead) return `Approved after the fix, as you asked: ${gate.title}`;
   if (event.thenApprove) return `Asked for changes and to approve after the fix: ${gate.title}`;
   return describeDecision(event.decision, gate.title);
+}
+
+function describeAnswerDetail(event: EventOf<'gate.answered'>) {
+  if (!event.autopilot) return event.response;
+  if (event.decision !== 'revise' || !event.response) return event.autopilot;
+  return `${event.autopilot} It asked: “${event.response}”`;
 }
 
 function applyGateOpened(state: ShinsaState, event: EventOf<'gate.opened'>) {
@@ -90,7 +98,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
     actor: event.autopilot ? 'shinsa' : 'you',
     kind: 'decision',
     text: describeAnswer(gate, event),
-    detail: event.autopilot ?? event.response,
+    detail: describeAnswerDetail(event),
     ...(event.comments ? { comments: event.comments } : {}),
   });
 }

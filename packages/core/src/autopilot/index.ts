@@ -22,9 +22,16 @@ export {
   isAutopilotModelVeto,
   resolveAutopilotCombinedVerdict,
   resolveAutopilotLoss,
+  resolveAutopilotFollowUpScore,
   resolveAutopilotReadiness,
   resolveAutopilotScore,
 } from './score.ts';
+export {
+  AUTOPILOT_TOPIC_LABEL,
+  listAutopilotTopicLines,
+  listAutopilotTopics,
+  listNoteTopics,
+} from './topics.ts';
 export {
   AUTOPILOT_MODEL_HEADS,
   AUTOPILOT_MODEL_LIMITS,
@@ -66,6 +73,12 @@ export {
   AUTOPILOT_READINESS_TRACK,
   AUTOPILOT_TRACKS,
   AUTOPILOT_BENCHMARK_SCOPES,
+  AUTOPILOT_TOPICS,
+  AUTOPILOT_TOPIC_LIMITS,
+  type AutopilotFollowUpMatch,
+  type AutopilotFollowUpScore,
+  type AutopilotTopic,
+  type AutopilotTopicTally,
   type AutopilotBenchmark,
   type AutopilotBenchmarkKind,
   type AutopilotBenchmarkRow,
