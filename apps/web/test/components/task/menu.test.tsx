@@ -97,8 +97,8 @@ describe('Stack on another task in the task menu', () => {
     );
   });
 
-  it('takes the task out of its bundle', async () => {
-    const task = createTask({ id: 't', stage: 'triage', stacksOn: ['p'] });
+  it('takes the task out of its bundle, even once it builds', async () => {
+    const task = createTask({ id: 't', stage: 'building', stacksOn: ['p'] });
     const state = createShinsaState({ tasks: [task, createTask({ id: 'p', title: 'Add the schema' })] });
     pushState(state);
     render(

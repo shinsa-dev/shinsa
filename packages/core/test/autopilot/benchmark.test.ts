@@ -32,6 +32,7 @@ function learned(
     watchdog: false,
     touched: true,
     guess,
+    followUp: null,
     note: null,
     facts: null,
     estimate: guess === null ? null : modelGuess,
@@ -86,7 +87,22 @@ describe('the Autopilot benchmark', () => {
     expect(rowOf(benchmark, 'total', 'all', 'base')?.agreed).toBe(live.tracks.base.agreed);
   });
 
+  test('counts how often a follow-up it guessed raised the topic you wrote about', () => {
+    const revised = { ...learned('review', 'revised', 'revise', SURE), note: 'Add a migration.' };
+    const benchmark = resolveAutopilotBenchmark([
+      ...HISTORY,
+      { ...revised, followUp: 'Does the migration run first?' },
+      { ...revised, followUp: 'Is auth handled?' },
+    ]);
+    expect(benchmark.followUps).toEqual({ scored: 2, matched: 1 });
+  });
+
   test('has no rows for an empty history', () => {
-    expect(resolveAutopilotBenchmark([])).toEqual({ decisions: 0, judged: 0, rows: [] });
+    expect(resolveAutopilotBenchmark([])).toEqual({
+      decisions: 0,
+      judged: 0,
+      rows: [],
+      followUps: { scored: 0, matched: 0 },
+    });
   });
 });

@@ -249,7 +249,7 @@ Only these, and they win over anything below:
 8. **One queue, two sizes.** `components/queue/queue.tsx` is the only list of tasks by what they
    need: Needs you (every open decision in focus, in `resolveQueue` order, which `docs/engine.md` →
    Scheduling owns: priority, then what it unblocks, then the kind of decision, then age), In progress,
-   and Waiting on another task (in chain order, collapsed). In In progress, Waiting and Snoozed, two or more tasks of
+   and Waiting on another task (in chain order, collapsed). In every section, two or more tasks of
    one initiative or one bundle sit under a small `ListRow` (`size='sm'`, 24px): the group's icon (the initiative's
    target, the bundle's layers) centred in the 20px slot the task tiles use, its name in medium `text-fg-3` and
    "‹n› tasks here · ‹progress›" in `text-fg-2` after it (`QueueGroupRows`). It hovers and highlights like a task row
@@ -259,7 +259,7 @@ Only these, and they win over anything below:
    them. The hover highlight holds on the last row while the pointer crosses a gap, an indent or a guide line
    (`HoverHighlight`'s `holdOverGaps`, on Home's sections and the compact queue only), so it slides from row to
    row; a section header is marked `data-highlight-release`, so pointing at it lets the highlight go back to the
-   task on screen. Once an initiative's lead task is done, its tasks are plain rows again. Needs you is never grouped, so a task at a gate always has its own row. Every section holds only the focus project's
+   task on screen. Once an initiative's lead task is done, its tasks are plain rows again. In Needs you each decision keeps its own row inside the group, the group takes the place of its first decision and its rows keep Needs you's order, and the lead's own decision (a question, a pause) is the group's first row instead of a row of its own. Every section holds only the focus project's
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from All tasks' groups (`lib/tasks/groups.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
@@ -3149,7 +3149,8 @@ Only these, and they win over anything below:
     `lib/tasks/fork.ts`; `docs/engine.md` → Watchdogs, Forking a task).
     - **Watching is a status.** A merged task with a watchdog still watching or waiting for a source reads Watching
       (`IconRadar`, blue) wherever its status shows, and its Now card says "Merged. Its watchdogs keep watching the
-      change." A check running is the stage Checking a watchdog.
+      change." A check running changes nothing in the lists: the task stays in Done with its Watching status, never
+      In progress, and keeps its place (`resolveShownStage`).
     - **The Watchdogs panel** sits under the Now card on the Overview (`Panel`, `IconRadar`, its own `persistId`): how
       many still watch and how long is left, then one row per watchdog in two lines. The first has its title, its
       status in its tone and, quiet right after it at the same size, where it stands ("18 h left · 5 checks", "3
@@ -3220,7 +3221,7 @@ Only these, and they win over anything below:
     Cancelled, closed at first. There is no phase track and no Decisions panel: approved plans and the members'
     judgement calls are entries of the lead's Activity, among its own. Home and the queue are for tasks: they list an
     initiative's members where any task sits (Needs you, In progress, Waiting) and never its lead, which you reach from a
-    member's initiative fact or ⌘K. The composer has no kind of task to pick. A member's Overview facts name its initiative and phase and open the lead task, and its menus
+    member's initiative fact or ⌘K; only a decision of the lead's own shows, first under the initiative's row in Needs you. The composer has no kind of task to pick. A member's Overview facts name its initiative and phase and open the lead task, and its menus
     carry Add to an initiative, Phase, Take out of the initiative and Make an initiative from this task; the lead's
     menu carries Edit the initiative and Share with a team (a submenu of your teams, each ticked while shared). Once a
     teammate's task is in the initiative the card uses All tasks' team table (`TEAM_TASK_LIST_COLUMNS`, with Repository

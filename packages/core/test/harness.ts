@@ -209,6 +209,12 @@ export const SPLIT_PLAN: PlanDocument = {
   ],
 };
 
+export const INITIATIVE_PLAN: PlanDocument = {
+  ...SPLIT_PLAN,
+  initiative: true,
+  split: (SPLIT_PLAN.split ?? []).filter((part) => part.order !== 'stacks_on'),
+};
+
 export const IMPACT =
   'Touches the 1,240 accounts without a plan; the dry run lists them. Undo by clearing the column.';
 
