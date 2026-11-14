@@ -118,15 +118,36 @@ export const MOVE_REFUSAL_TEXT: Record<MoveRefusal, string> = {
   task_moving: 'This task is already moving to another repository.',
 };
 
+const WORK_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
+  'building',
+  'checking',
+  'reviewing',
+  'fixing',
+  'awaiting_review',
+  'shipping',
+  'awaiting_merge',
+  'operating',
+  'awaiting_operation',
+  'watching',
+]);
+
+function hasStartedWork(task: Task) {
+  return (
+    task.phaseReports.length > 0 ||
+    task.pullRequest !== null ||
+    isLaterRound(task) ||
+    (task.editedPaths ?? []).length > 0 ||
+    WORK_STAGES.has(task.stage)
+  );
+}
+
 export function resolveMoveRefusal(
   state: Pick<ShinsaState, 'tasks'>,
   task: Task,
   actor: MoveActor
 ): Option.Option<MoveRefusal> {
   if (task.movingTo) return Option.some('task_moving');
-  if (task.phaseReports.length > 0 || task.pullRequest !== null || isLaterRound(task)) {
-    return Option.some('work_started');
-  }
+  if (hasStartedWork(task)) return Option.some('work_started');
   if (actor === 'you' && task.result) return Option.some('result_handed_over');
   if ((task.stacksOn?.length ?? 0) > 0 || listStackChildren(state, task.id).length > 0) {
     return Option.some('task_stacked');

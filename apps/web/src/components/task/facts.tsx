@@ -287,6 +287,7 @@ function StatusFact({ state, task }: { state: ShinsaState; task: Task }) {
 function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
   const readOnly = useReadOnly();
   const canMove = useEngineCommand('task.move_to_repository', task.id);
+  const teammate = useMachine(task.id)?.teammate ?? null;
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
   if (!repo) return null;
   return (
@@ -299,7 +300,7 @@ function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
       }
     >
       <RepoDetails state={state} repo={repo} />
-      {!readOnly && canMove && isTaskMovable(state, task) && (
+      {!readOnly && !teammate && canMove && isTaskMovable(state, task) && (
         <InfoAction label={MOVE_TITLE} onClick={() => openMoveDialog(task.id)} />
       )}
     </FactPopover>

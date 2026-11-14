@@ -361,6 +361,26 @@ describe('core refuses your move', () => {
     );
   });
 
+  test('once a phase is being built, before it reports', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    proposePlan(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('building');
+    expect(harness.task(taskId).phaseReports).toEqual([]);
+    expect(refusalOf(() => moveByYou(harness, taskId, superwall))).toBe(
+      'Work on this task has already started, so it stays where it is. File the work there as a new task instead.'
+    );
+    expect(refusalOf(() => move(harness, taskId, superwall))).not.toBeNull();
+  });
+
+  test('once you edited a file in its worktree', () => {
+    const { harness, superwall, taskId } = createMoveTask();
+    harness.send({ type: 'task.record_edit', taskId, path: 'src/a.ts', changed: true });
+    expect(harness.task(taskId).editedPaths).toEqual(['src/a.ts']);
+    expect(refusalOf(() => moveByYou(harness, taskId, superwall))).toBe(
+      'Work on this task has already started, so it stays where it is. File the work there as a new task instead.'
+    );
+  });
+
   test('to the repository it already works in', () => {
     const { harness, pwn, taskId } = createMoveTask();
     expect(refusalOf(() => moveByYou(harness, taskId, pwn))).toBe(

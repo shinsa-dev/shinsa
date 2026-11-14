@@ -222,7 +222,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   move_to_repository: {
     name: 'move_to_repository',
     description:
-      'Move this task to another repository, in any project, while you plan, answer, investigate or research, when all of its work is there and nothing changes here. The task keeps its title, branch name and this conversation; in another project it joins that project and takes its next handle. Its worktree here is removed, one is made in that repository and the same step starts again there. Use `create_task` instead for work beside this one. Refused once a phase has reported, a pull request exists, an earlier round has shipped or the task is part of a bundle. After the call, stop.',
+      'Move this task to another repository, in any project, while you plan, answer, investigate or research, when all of its work is there and nothing changes here. The task keeps its title, branch name and this conversation; in another project it joins that project and takes its next handle. Its worktree here is removed, one is made in that repository and the same step starts again there. Use `create_task` instead for work beside this one. Refused once building has started, a phase has reported, a pull request exists, an earlier round has shipped or the task is part of a bundle. After the call, stop.',
     inputSchema: {
       type: 'object',
       properties: {

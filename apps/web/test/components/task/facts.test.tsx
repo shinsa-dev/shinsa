@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { Task, TriageDecisions } from '@shinsa/core';
+import { DEFAULT_TEAM_SCOPES, type Task, type TriageDecisions } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskFacts } from '@/components/task/facts.tsx';
@@ -133,8 +133,25 @@ describe('the repository fact', () => {
     ],
   });
 
-  async function openRepoCard(shown: Task, readOnly = false) {
+  const KAI_MACHINE = {
+    id: 'kai',
+    name: 'Kai’s MacBook',
+    current: false,
+    teammate: {
+      owner: { id: 'u2', login: 'kai', name: 'Kai', avatarUrl: null },
+      viewerId: 'u1',
+      scopes: DEFAULT_TEAM_SCOPES,
+    },
+  };
+
+  afterEach(() => replaceConnection(null));
+
+  async function openRepoCard(shown: Task, readOnly = false, teammate = false) {
     pushState(state);
+    if (teammate) {
+      const local = connection;
+      replaceConnection({ ...local, selectMachine: () => KAI_MACHINE });
+    }
     const facts = (
       <TooltipProvider>
         <TaskFacts state={state} task={shown} />
@@ -167,6 +184,11 @@ describe('the repository fact', () => {
 
   it('hides it on a read-only page', async () => {
     const card = await openRepoCard(task, true);
+    expect(card.textContent).not.toContain('Move to another repository');
+  });
+
+  it('hides it on a teammate’s task, as the task menu does', async () => {
+    const card = await openRepoCard(task, false, true);
     expect(card.textContent).not.toContain('Move to another repository');
   });
 });

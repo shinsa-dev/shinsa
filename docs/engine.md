@@ -797,8 +797,9 @@ them in the order they need:
   (the repository fact and the task menu) or `shinsa tasks move <task> --repo <name>` (`task.move_to_repository`),
   which also cancels the running agent and withdraws the open gates. Core (`decide/moves.ts`,
   `resolveMoveRefusal` in `state/queries.ts`, which the web also reads to offer the action) refuses it for the
-  repository the task works in (`same_repository`), a task already moving (`task_moving`), once a phase reported, a
-  pull request exists or an earlier round shipped (`work_started`), for a task in a bundle (`task_stacked`) and, for
+  repository the task works in (`same_repository`), a task already moving (`task_moving`), once building or an
+  operation started, a phase reported, a file was edited, a pull request exists or an earlier round shipped
+  (`work_started`, so nothing in the old worktree is lost), for a task in a bundle (`task_stacked`) and, for
   your move, once the task handed over its result (`result_handed_over`), or for a settled task (`task_settled`);
   the work-related refusals say to file a new task. The move takes two events, because removing a worktree reads the
   task's repository:
