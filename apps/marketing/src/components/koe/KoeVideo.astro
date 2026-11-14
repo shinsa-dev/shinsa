@@ -28,6 +28,7 @@ const lightName = `${name}-light`;
     poster={`/koe/${name}.webp`}
     aria-label={label}
     data-koe-video
+    data-koe-compact={compact ? '' : undefined}
     data-poster-light={`/koe/${lightName}.webp`}
     data-poster-dark={`/koe/${name}.webp`}
     muted
@@ -90,6 +91,10 @@ const lightName = `${name}-light`;
     sync();
   }
 
+  function showControls(video: HTMLVideoElement) {
+    if (!video.hasAttribute('data-koe-compact')) video.setAttribute('controls', '');
+  }
+
   const videos = [...document.querySelectorAll<HTMLVideoElement>('[data-koe-video]')];
   const shares = new Map<HTMLVideoElement, number>();
 
@@ -113,7 +118,7 @@ const lightName = `${name}-light`;
       if (video === focused) {
         if (video.paused) {
           video.currentTime = 0;
-          void video.play().catch(() => video.setAttribute('controls', ''));
+          void video.play().catch(() => showControls(video));
         }
       } else if (!video.paused) video.pause();
     }
@@ -127,11 +132,11 @@ const lightName = `${name}-light`;
       const playing = !video.paused;
       video.poster = (light.matches ? video.dataset.posterLight : video.dataset.posterDark) ?? video.poster;
       video.load();
-      if (playing) void video.play().catch(() => video.setAttribute('controls', ''));
+      if (playing) void video.play().catch(() => showControls(video));
     }
   });
 
-  if (reduced.matches) for (const video of videos) video.setAttribute('controls', '');
+  if (reduced.matches) for (const video of videos) showControls(video);
   else {
     const observer = new IntersectionObserver(
       (entries) => {
