@@ -177,6 +177,7 @@ describe('the judge request', () => {
     const gate = harness.openGate(taskId);
     const guess = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now, true));
     expect(guess?.prompt).toEndWith(AUTOPILOT_SHADOW_NOTE);
+    expect(AUTOPILOT_SHADOW_NOTE).toContain('`cancel` if they cancel the task after a failed step');
     expect(Option.isNone(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now))).toBe(true);
     const guessed = { ...harness.state, gates: { [gate.id]: { ...gate, autopilotGuess: 'act' as const } } };
     expect(Option.isNone(selectAutopilotJudgeRequest(guessed, gate.id, harness.now, true))).toBe(true);

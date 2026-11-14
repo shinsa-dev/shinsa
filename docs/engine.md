@@ -2496,7 +2496,8 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review,
   merge, your OK or judged failure gate to you (`AUTOPILOT_SCORED_KINDS`; a failure is asked as it opens,
   `syncAutopilotFailures`), it judges it anyway, once per gate, in the background
-  (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
+  (`autopilot.judge` with `shadow: true`, the prompt told it will not act and to guess `act`, `cancel` for a failure you would cancel, or `forward`,
+  `AUTOPILOT_SHADOW_NOTE`); the answer is
   stored on the gate (`autopilot.guessed {verdict, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotEstimate`) and
   acts on nothing. `estimate` is the model's estimate at that moment, the same one a live judgment reads for its
   veto, so the combined track scores exactly what Autopilot did or would have done. A gate it judged and then

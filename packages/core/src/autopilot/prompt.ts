@@ -105,7 +105,7 @@ function describeShadow(shadow: boolean) {
 }
 
 export const AUTOPILOT_SHADOW_NOTE =
-  'Autopilot will not act here: this point is the developer’s. Guess what they will do: `act` if they approve it as it is or retry a failed step, `forward` if they change, reject or cancel it.';
+  'Autopilot will not act here: this point is the developer’s. Guess what they will do: `act` if they approve it as it is or retry a failed step, `cancel` if they cancel the task after a failed step, `forward` if they change or reject it.';
 
 export function resolveAutopilotJudgePrompt(
   task: Task,
