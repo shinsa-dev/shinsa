@@ -15,11 +15,14 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ProjectMenuTrigger, ProjectRadioItems } from '@/components/focus/menu.tsx';
+import { CARDS_FRAME } from '@/components/layout/page/column.ts';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
-import { SAFE_AREA_BOTTOM } from '@/components/layout/sidebar/compact-bar.tsx';
+import { PHONE_QUERY, SAFE_AREA_BOTTOM } from '@/components/layout/sidebar/compact-bar.tsx';
+import { CARD } from '@/components/layout/surface/card.ts';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ServiceActionButton, ServiceRunButtons } from '@/components/services/service-row.tsx';
@@ -50,6 +53,7 @@ import {
   resolveTerminalTransport,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
+import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { useTerminalFilter, writeTerminalFilter } from '@/lib/preferences/terminal.ts';
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
@@ -287,7 +291,6 @@ function ProjectTerminals({
         <span className='shrink-0'>
           <ProjectPicker state={state} project={project} />
         </span>
-        <TerminalFilterMenu filter={filter} counts={counts} />
         {terminals.length > 0 && (
           <TerminalTabs
             terminals={terminals}
@@ -318,6 +321,7 @@ function ProjectTerminals({
             />
           </Hint>
         )}
+        <TerminalFilterMenu filter={filter} counts={counts} />
       </Toolbar>
       {active ? (
         <TerminalBody
@@ -457,7 +461,27 @@ function ActiveServiceButtons({ view }: { view: ServiceView }) {
   );
 }
 
+function TerminalFrame({ children }: { children: React.ReactNode }) {
+  const layout = useLayoutPreference();
+  const phone = useMediaQuery(PHONE_QUERY);
+  const framed = layout === 'cards' && !phone;
+  if (!framed) return <div className='flex min-h-0 flex-1 flex-col'>{children}</div>;
+  return (
+    <div className={cn(CARDS_FRAME, 'flex min-h-0 flex-1 flex-col pt-2 pb-4')}>
+      <div className={cn(CARD, 'flex min-h-0 flex-1 flex-col overflow-hidden')}>{children}</div>
+    </div>
+  );
+}
+
 export function TerminalPage({ state }: { state: ShinsaState }) {
+  return (
+    <TerminalFrame>
+      <TerminalPageContent state={state} />
+    </TerminalFrame>
+  );
+}
+
+function TerminalPageContent({ state }: { state: ShinsaState }) {
   const snapshot = useTerminals();
   const search = useSearchString();
   React.useEffect(() => rememberTerminalPath(`/terminal${search}`), [search]);

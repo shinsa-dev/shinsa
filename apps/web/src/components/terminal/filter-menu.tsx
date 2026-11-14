@@ -24,7 +24,7 @@ export function TerminalFilterMenu({
           <Button
             variant='secondary'
             size='sm'
-            className='shrink-0'
+            className='ms-auto shrink-0'
             aria-label={`Show: ${resolveFilterLabel(filter)}`}
             icon={{ name: 'IconChevronDownMedium', position: 'inline-end' }}
           >
@@ -32,7 +32,7 @@ export function TerminalFilterMenu({
           </Button>
         }
       />
-      <DropdownMenuContent align='start' className='min-w-52'>
+      <DropdownMenuContent align='end' className='min-w-52'>
         <DropdownMenuRadioGroup
           value={filter}
           onValueChange={(value) => writeTerminalFilter(value as TerminalFilter)}
@@ -40,7 +40,7 @@ export function TerminalFilterMenu({
           {TERMINAL_FILTERS.map((entry) => (
             <DropdownMenuRadioItem key={entry.value} value={entry.value} closeOnClick>
               <Icon name={entry.icon} />
-              <span className='flex-1'>{entry.label}</span>
+              <span>{entry.label}</span>
               <span className='text-fg-2 tabular-nums'>{counts[entry.value]}</span>
             </DropdownMenuRadioItem>
           ))}
