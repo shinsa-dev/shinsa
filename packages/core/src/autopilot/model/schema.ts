@@ -9,6 +9,7 @@ export const AUTOPILOT_HEAD_OF_KIND: Partial<Record<AutopilotDecisionKind, Autop
   review: 'gate',
   merge: 'gate',
   proposal: 'gate',
+  failure: 'gate',
   finding: 'finding',
   suggestion: 'suggestion',
 };

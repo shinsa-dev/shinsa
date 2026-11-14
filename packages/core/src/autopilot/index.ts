@@ -18,9 +18,11 @@ export {
 export {
   isAutopilotAgreement,
   resolveAutopilotBaseRate,
+  isAutopilotKindReady,
   isAutopilotModelVeto,
   resolveAutopilotCombinedVerdict,
   resolveAutopilotLoss,
+  resolveAutopilotReadiness,
   resolveAutopilotScore,
 } from './score.ts';
 export {
@@ -35,6 +37,7 @@ export {
   selectAutopilotModelGuess,
 } from './model/index.ts';
 export {
+  isAutopilotJudgedFailure,
   isUrgentTask,
   isWatchdogTask,
   resolveAutopilotFacts,
@@ -51,6 +54,9 @@ export {
   AUTOPILOT_SCORE_LIMITS,
   AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_SCORED_KINDS,
+  AUTOPILOT_READINESS_KINDS,
+  AUTOPILOT_READINESS_LIMITS,
+  AUTOPILOT_READINESS_TRACK,
   AUTOPILOT_TRACKS,
   AUTOPILOT_BENCHMARK_SCOPES,
   type AutopilotBenchmark,
@@ -59,6 +65,10 @@ export {
   type AutopilotBenchmarkScope,
   type AutopilotAgreement,
   type AutopilotRate,
+  type AutopilotKindProfile,
+  type AutopilotKindReadiness,
+  type AutopilotReadiness,
+  type AutopilotReadinessKind,
   type AutopilotScore,
   type AutopilotTrack,
   type AutopilotTrackScore,

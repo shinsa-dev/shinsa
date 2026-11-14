@@ -53,9 +53,9 @@ export function resolveShareEnd(limit: ShareLimit, now: number): Option.Option<n
   return span === undefined ? Option.none() : Option.some(now + span);
 }
 
-export type AutopilotLevel = 'ask_first' | 'balanced' | 'most';
+export type AutopilotLevel = 'ask_first' | 'balanced' | 'most' | 'everything';
 
-export const AUTOPILOT_LEVELS: readonly AutopilotLevel[] = ['ask_first', 'balanced', 'most'];
+export const AUTOPILOT_LEVELS: readonly AutopilotLevel[] = ['ask_first', 'balanced', 'most', 'everything'];
 
 export type AutopilotGate = 'plans' | 'questions' | 'reviews' | 'suggestions' | 'watchdogTasks';
 

@@ -71,6 +71,8 @@ export const AUTOPILOT_LEVEL_DESCRIPTION: Record<AutopilotLevel, string> = {
   ask_first: 'Autopilot acts alone only on small, low-risk work and brings you everything else.',
   balanced: 'Autopilot acts alone on clear, low-risk work, and on medium risk when it is urgent.',
   most: 'Autopilot acts alone on most work, and on urgent work of any risk once you are away.',
+  everything:
+    'Autopilot handles every kind of decision whose score is high enough, and the rest as Most things.',
 };
 
 export const AUTOPILOT_GATE_ROWS: { gate: AutopilotGate; title: string; description: string }[] = [
@@ -160,6 +162,7 @@ const LEVEL_LABEL: Record<AutopilotLevel, string> = {
   ask_first: 'Ask me first',
   balanced: 'Balanced',
   most: 'Most things',
+  everything: 'Everything',
 };
 
 export interface AutopilotScoreView {

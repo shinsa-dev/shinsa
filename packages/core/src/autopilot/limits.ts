@@ -7,6 +7,7 @@ import type { ReviewRating } from '../report/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
   AUTOPILOT_CEILINGS,
+  AUTOPILOT_JUDGED_FAILURE_CAUSES,
   AUTOPILOT_LIMITS,
   type AutopilotFacts,
   type AutopilotGateKind,
@@ -38,6 +39,11 @@ function refuseBySetting(reason: string): AutopilotLimit {
 
 export function isWatchdogTask(task: Task) {
   return task.createdBy?.kind === 'watchdog';
+}
+
+export function isAutopilotJudgedFailure(gate: Gate) {
+  if (gate.type !== 'failure') return false;
+  return gate.cause === undefined || AUTOPILOT_JUDGED_FAILURE_CAUSES.includes(gate.cause);
 }
 
 export function isUrgentTask(task: Task) {
