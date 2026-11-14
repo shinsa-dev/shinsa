@@ -37,12 +37,14 @@ import {
   prefetchPair,
   schedulePrefetch,
 } from '@/lib/code/prefetch.ts';
+import { recordRecentFile, resolveQuickOpenRecent, useRecentFiles } from '@/lib/code/recent.ts';
 import { resolveViewRef } from '@/lib/code/refs.ts';
 import { resolveFileSource } from '@/lib/code/source.ts';
 import { listCodeCommands } from '@/lib/command/code.ts';
 import { listEditorCommands } from '@/lib/command/editor.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { holdLoaded, type Loaded, useTaskDiff } from '@/lib/connection/code.ts';
+import { copyText } from '@/lib/connection/commands.ts';
 import {
   toggleViewedFile,
   useExplorerSide,
@@ -73,6 +75,8 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const [hideViewed, toggleHideViewed] = useHideViewed();
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [reveal, setReveal] = React.useState(0);
+  const recentFiles = useRecentFiles(task.id);
   const searchInput = React.useRef<HTMLInputElement>(null);
   const editor = React.useRef<EditorHandle>(null);
   const session = React.useRef<EditorSessionHolder['current']>(null);
@@ -143,6 +147,20 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     open({ kind: changed.has(path) ? 'diff' : 'file', path }, { line });
   }
 
+  const activePath = location.active?.path ?? null;
+  React.useEffect(() => {
+    if (activePath) recordRecentFile(task.id, activePath);
+  }, [task.id, activePath]);
+
+  function showInFiles() {
+    if (location.mode !== 'files') apply(resolveModePatch('files', modes));
+    setReveal((current) => current + 1);
+    if (narrow) setSheetOpen(true);
+  }
+
+  const copyPath = activePath ? () => void copyText(activePath) : null;
+  const canShowInFiles = modes.includes('files') && activePath !== null;
+
   React.useEffect(() => {
     if (location.active || hasFileInAddress() || (reviewing && !diffValue)) return;
     const file = location.mode === 'changes' ? diffValue?.files[0] : undefined;
@@ -175,6 +193,8 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       side,
       hasEditor: active !== null,
       applyMode,
+      copyPath,
+      showInFiles: canShowInFiles ? showInFiles : null,
       run: (key) => run[key](),
       toggleSplit,
       toggleHideViewed,
@@ -199,10 +219,14 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     modes,
     location,
     diff,
+    reveal,
+    quickOpenKey: describeCodeKey('quick-open', mac),
+    searchKey: describeCodeKey('search', mac),
     commentCounts,
     viewed,
     searchInput,
     onMode: applyMode,
+    onQuickOpen: run['quick-open'],
     onRef: (ref) => apply({ ref: ref === refs.head ? null : ref }),
     onChange: (path) => open({ kind: 'diff', path }),
     onFile: (path) => open({ kind: 'file', path }),
@@ -216,15 +240,26 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   };
 
   const explorerButton = narrow ? (
-    <Hint label='Show the files'>
-      <Button
-        variant='secondary'
-        size='icon-sm'
-        icon='IconSidebar'
-        aria-label='Show the files'
-        onClick={() => setSheetOpen(true)}
-      />
-    </Hint>
+    <>
+      <Hint label='Show the files'>
+        <Button
+          variant='secondary'
+          size='icon-sm'
+          icon='IconSidebar'
+          aria-label='Show the files'
+          onClick={() => setSheetOpen(true)}
+        />
+      </Hint>
+      <Hint label='Go to file' shortcut={describeCodeKey('quick-open', mac)}>
+        <Button
+          variant='secondary'
+          size='icon-sm'
+          icon='IconFileText'
+          aria-label='Go to file'
+          onClick={run['quick-open']}
+        />
+      </Hint>
+    </>
   ) : null;
 
   return (
@@ -272,18 +307,25 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
             handle={editor}
             session={session}
             toolbar={explorerButton}
+            onShowInFiles={canShowInFiles ? showInFiles : null}
           />
         ) : (
           <div className='flex min-h-0 flex-1 flex-col'>
             {explorerButton && (
-              <div className='flex h-9 items-center border-b border-border px-2'>{explorerButton}</div>
+              <div className='flex h-9 items-center gap-1.5 border-b border-border px-2'>
+                {explorerButton}
+              </div>
             )}
             <EmptyState
               size='sm'
               icon='IconFiles'
               title='Open a file'
-              description={`Pick one in the list, or press ${describeCodeKey('quick-open', mac)} to open any file by name.`}
-            />
+              description={`Pick one in the list, or press ${describeCodeKey('quick-open', mac)} to open any file of the project by name.`}
+            >
+              <Button variant='secondary' size='sm' icon='IconFileText' onClick={run['quick-open']}>
+                Go to file
+              </Button>
+            </EmptyState>
           </div>
         )}
         <CommentsBar task={task} />
@@ -292,7 +334,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
         task={task}
         gitRef={gitRef}
         open={quickOpen}
-        recent={location.active ? [location.active.path] : []}
+        recent={resolveQuickOpenRecent(recentFiles, activePath)}
         onOpenChange={setQuickOpen}
         onPick={(path) => {
           setQuickOpen(false);

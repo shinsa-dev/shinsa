@@ -26,15 +26,25 @@ export function useCopyText(text: string) {
   return { copied, copy };
 }
 
-export function CopyButton({ text, className }: { text: string; className?: string }) {
+export function CopyButton({
+  text,
+  label = 'Copy',
+  size = 'icon-xs',
+  className,
+}: {
+  text: string;
+  label?: string;
+  size?: 'icon-xs' | 'icon-sm';
+  className?: string;
+}) {
   const { copied, copy } = useCopyText(text);
 
   return (
-    <Hint label={copied ? 'Copied' : 'Copy'}>
+    <Hint label={copied ? 'Copied' : label}>
       <Button
         variant='secondary'
-        size='icon-xs'
-        aria-label={copied ? 'Copied' : 'Copy'}
+        size={size}
+        aria-label={copied ? 'Copied' : label}
         onClick={copy}
         className={className}
       >

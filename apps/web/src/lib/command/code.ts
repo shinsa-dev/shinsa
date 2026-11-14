@@ -14,6 +14,8 @@ export interface CodeCommandContext {
   side: ExplorerSide;
   hasEditor: boolean;
   applyMode: (mode: CodeMode) => void;
+  copyPath: (() => void) | null;
+  showInFiles: (() => void) | null;
   run: (key: CodeKey) => void;
   toggleSplit: () => void;
   toggleHideViewed: () => void;
@@ -98,6 +100,26 @@ export function listCodeCommands(context: CodeCommandContext): CommandSection {
         run: context.toggleSplit,
       }
     );
+  }
+  if (context.copyPath) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.copy-path`,
+      label: 'Copy path',
+      icon: 'IconClipboard2',
+      keywords: ['copy', 'path', 'file', 'name'],
+      run: context.copyPath,
+    });
+  }
+  if (context.showInFiles) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.show-in-files`,
+      label: 'Show in Files',
+      icon: 'IconFolderOpen',
+      keywords: ['reveal', 'tree', 'explorer', 'folder', 'locate'],
+      run: context.showInFiles,
+    });
   }
   return { id, heading: 'Code', rank: RANK.context, commands: [...modes, ...keys] };
 }

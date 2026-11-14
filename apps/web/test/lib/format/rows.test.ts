@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { isSameRange, resolveRowWindow } from '@/lib/format/rows.ts';
+import { isSameRange, resolveRevealScroll, resolveRowWindow } from '@/lib/format/rows.ts';
 
 describe('resolveRowWindow', () => {
   it('covers the rows in view with some to spare, in whole chunks', () => {
@@ -13,5 +13,15 @@ describe('resolveRowWindow', () => {
   it('tells two windows apart', () => {
     expect(isSameRange({ start: 0, end: 8 }, { start: 0, end: 8 })).toBe(true);
     expect(isSameRange({ start: 0, end: 8 }, { start: 8, end: 16 })).toBe(false);
+  });
+});
+
+describe('resolveRevealScroll', () => {
+  it('leaves a row in view where it is and centres one out of view', () => {
+    expect(resolveRevealScroll(40, 20, { scrollTop: 0, clientHeight: 200 })).toBeNull();
+    expect(resolveRevealScroll(500, 20, { scrollTop: 0, clientHeight: 200 })).toBe(410);
+    expect(resolveRevealScroll(10, 20, { scrollTop: 300, clientHeight: 200 })).toBe(0);
+    expect(resolveRevealScroll(190, 20, { scrollTop: 0, clientHeight: 200 })).toBe(100);
+    expect(resolveRevealScroll(0, 20, { scrollTop: 0, clientHeight: 10 })).toBe(0);
   });
 });

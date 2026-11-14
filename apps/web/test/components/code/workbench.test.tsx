@@ -440,6 +440,54 @@ describe('search and quick open', () => {
     await waitFor(() => expect(params().get('file')).toBe('README.md'));
   });
 
+  it('opens Go to file from the button in the file list, with the files opened last first', async () => {
+    const task = nextTask();
+    renderCode(task, '&mode=files&file=docs%2Fbeta.txt');
+    await findLine('guard');
+    navigate(`/tasks/${task.id}?tab=code&mode=files&file=docs%2Falpha.txt`);
+    await findLine('two');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Go to file' })[0] as HTMLElement);
+    await screen.findByPlaceholderText('Go to file');
+    const recent = await screen.findByRole('group', { name: 'Recently opened' });
+    expect(
+      within(recent)
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).toEqual(['beta.txtdocs']);
+    const rest = screen.getByRole('group', { name: 'Files' });
+    expect(
+      within(rest)
+        .getAllByRole('option')
+        .map((option) => option.textContent)
+    ).not.toContain('beta.txtdocs');
+  });
+
+  it('offers Go to file in the empty editor', async () => {
+    renderCode(nextTask(), '&mode=files');
+    await screen.findByText('Open a file');
+    const buttons = screen.getAllByRole('button', { name: 'Go to file' });
+    fireEvent.click(buttons.at(-1) as HTMLElement);
+    expect(await screen.findByPlaceholderText('Go to file')).toBeDefined();
+  });
+
+  it('shows the open changed file in Files, revealing its folder, and copies its path', async () => {
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (text: string) => void written.push(text) },
+    });
+    renderCode(nextTask(), '&file=docs%2Falpha.txt&diff=1');
+    await findLine('two');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy path' }));
+    await waitFor(() => expect(written).toEqual(['docs/alpha.txt']));
+    fireEvent.click(screen.getByRole('button', { name: 'Show in Files' }));
+    expect(params().get('mode')).toBe('files');
+    expect(params().get('file')).toBe('docs/alpha.txt');
+    const tree = await screen.findByRole('tree', { name: 'Files' });
+    const row = await within(tree).findByRole('treeitem', { name: 'docs/alpha.txt' });
+    expect(row.getAttribute('aria-selected')).toBe('true');
+  });
+
   it('switches to another commit from the ref picker', async () => {
     renderCode(nextTask(), '&mode=files');
     await screen.findByRole('tree', { name: 'Files' });

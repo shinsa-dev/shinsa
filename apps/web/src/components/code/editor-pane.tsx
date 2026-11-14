@@ -12,6 +12,7 @@ import type {
   EditorSessionHolder,
 } from '@/components/code/editor/code-editor.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
+import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { HintButton } from '@/components/controls/hint-button.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
@@ -188,6 +189,7 @@ function PaneToolbar({
   saving,
   toolbar,
   onSplit,
+  onShowInFiles,
 }: {
   source: FileSource;
   split: boolean;
@@ -195,6 +197,7 @@ function PaneToolbar({
   saving: boolean;
   toolbar: React.ReactNode;
   onSplit: (() => void) | null;
+  onShowInFiles: (() => void) | null;
 }) {
   const path = source.file.path;
   return (
@@ -213,6 +216,10 @@ function PaneToolbar({
       <span className='flex-1' />
       {saving && <span className='shrink-0 text-2xs text-fg-2'>Saving…</span>}
       {showLayout && onSplit && <LayoutToggle split={split} onToggle={onSplit} />}
+      <CopyButton text={path} label='Copy path' size='icon-sm' />
+      {onShowInFiles && (
+        <HintButton label='Show in Files' size='icon-sm' icon='IconFolderOpen' onClick={onShowInFiles} />
+      )}
     </Toolbar>
   );
 }
@@ -238,6 +245,7 @@ export function EditorPane({
   handle,
   session,
   toolbar,
+  onShowInFiles,
 }: {
   task: Task;
   refs: TaskRefs;
@@ -250,6 +258,7 @@ export function EditorPane({
   handle: React.RefObject<EditorHandle | null>;
   session?: EditorSessionHolder;
   toolbar: React.ReactNode;
+  onShowInFiles: (() => void) | null;
 }) {
   const draft = useReviewDraft();
   const path = source.file.path;
@@ -341,6 +350,7 @@ export function EditorPane({
         saving={saver.state.saving}
         toolbar={toolbar}
         onSplit={onSplit}
+        onShowInFiles={onShowInFiles}
       />
       {content.kind === 'text' && notice && !guard && <PaneNotice text={notice} readOnly={!editable} />}
       {guard && (

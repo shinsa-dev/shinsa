@@ -12,6 +12,8 @@ function context(overrides: Partial<CodeCommandContext> = {}): CodeCommandContex
     side: 'left',
     hasEditor: true,
     applyMode: mock(() => {}),
+    copyPath: mock(() => {}),
+    showInFiles: mock(() => {}),
     run: mock(() => {}),
     toggleSplit: mock(() => {}),
     toggleHideViewed: mock(() => {}),
@@ -36,6 +38,8 @@ describe('listCodeCommands', () => {
       ['Find in this file', '⌘F', null],
       ['Go to line', '⌘G', null],
       ['Show diffs side by side', null, null],
+      ['Copy path', null, null],
+      ['Show in Files', null, null],
     ]);
   });
 
@@ -53,6 +57,8 @@ describe('listCodeCommands', () => {
     expect(value.toggleSplit).toHaveBeenCalledTimes(1);
     expect(value.toggleHideViewed).toHaveBeenCalledTimes(1);
     expect(value.toggleSide).toHaveBeenCalledTimes(1);
+    expect(value.copyPath).toHaveBeenCalledTimes(1);
+    expect(value.showInFiles).toHaveBeenCalledTimes(1);
     expect(section.commands.find((command) => command.id.endsWith('.side'))?.label).toBe(
       'Move the file list to the left'
     );
@@ -60,15 +66,17 @@ describe('listCodeCommands', () => {
       label: 'Show viewed files',
       icon: 'IconEyeSlash',
     });
-    expect(section.commands.at(-1)?.label).toBe('Show diffs unified');
+    expect(section.commands.find((command) => command.id.endsWith('.split'))?.label).toBe(
+      'Show diffs unified'
+    );
     expect(section.commands.find((command) => command.label === 'Go to file…')?.trailing).toBe('Ctrl+P');
   });
 
   it('leaves out what needs an open file', () => {
     expect(
-      listCodeCommands(context({ hasEditor: false, modes: ['files'] })).commands.map(
-        (command) => command.label
-      )
+      listCodeCommands(
+        context({ hasEditor: false, modes: ['files'], copyPath: null, showInFiles: null })
+      ).commands.map((command) => command.label)
     ).toEqual(['Files', 'Go to file…', 'Search in files', 'Move the file list to the right']);
   });
 });
