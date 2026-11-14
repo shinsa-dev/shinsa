@@ -37,6 +37,7 @@ import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import { describeMentionText } from '@/lib/remote/users.ts';
 import type { TeamEntry } from '@/lib/tasks/groups.ts';
+import { resolveTaskRowModel } from '@/lib/tasks/row-model.ts';
 import {
   listFullMachineIds,
   listHeldTaskIds,
@@ -149,7 +150,8 @@ function OfflineMark({ heldAt }: { heldAt: number }) {
 export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }: { team: TeamEntry }) {
   const { entry, state, heldAt } = team;
   const { task } = entry;
-  const repo = task.repoId ? state.repos[task.repoId] : undefined;
+  const model = resolveTaskRowModel(state, task);
+  const { repo } = model;
   const machine = useMachine(task.id);
   const openTeamTask = () => navigate(resolveTeamRowPath(entry, machine));
   return (
@@ -175,15 +177,15 @@ export const TeamTaskListRow = React.memo(function TeamTaskListRowItem({ team }:
         <Truncate className='text-fg-4'>{task.title}</Truncate>
       </span>
       <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
-        {repo && <RepoMark state={state} repo={repo} />}
+        {repo && <RepoMark repo={repo} project={model.project} />}
         <Truncate>{repo?.name ?? 'No repository'}</Truncate>
       </span>
       <span className='flex min-w-0 max-md:hidden'>
         <TeammateOwnerMark entry={entry} />
       </span>
       <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
-        <KindMark state={state} task={task} />
-        <RowStatus state={state} task={task} />
+        <KindMark task={task} tone={model.status.tone} />
+        <RowStatus model={model} />
         {heldAt !== null && <OfflineMark heldAt={heldAt} />}
       </span>
       <span className='max-md:hidden'>

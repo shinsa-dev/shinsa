@@ -1093,6 +1093,10 @@ Only these, and they win over anything below:
     a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
+    The list scrolls inside its card, one window over every group that draws the rows in view before the frame
+    paints (`docs/performance.md` → All tasks); once it is scrolled past one screen, an `outline` `sm` Back to top
+    button (`IconArrowUp`) floats at the card's bottom centre, like the chat's Jump to latest, and scrolls the list
+    back to its first row.
     Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
     first. Every open section is drawn as a tree that handles every shape
     (`orderChains`, parents from `waitsOn` and `stacksOn`): each task appears once. Its depth is its longest path from

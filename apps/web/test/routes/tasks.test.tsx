@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock, spyOn } from 'bun:test';
 import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import * as shapes from '@/lib/tasks/shapes.ts';
 import { TasksPage } from '@/routes/tasks.tsx';
 import { createGate, createProject, createShinsaState, createTask } from '../support/state.ts';
 
@@ -97,6 +98,68 @@ describe('the task groups', () => {
     expect(screen.getByText('Rename the settings page')).toBeTruthy();
     act(() => fireEvent.click(screen.getByRole('button', { name: /^Done/ })));
     expect(screen.queryByText('Rename the settings page')).toBeNull();
+  });
+
+  it('renders only the rows in view across every group, under sticky headers', () => {
+    const many = createShinsaState({
+      tasks: [
+        ...Array.from({ length: 200 }, (_, index) =>
+          createTask({ id: `work-${index}`, title: `Working task ${index}`, stage: 'building' })
+        ),
+        ...Array.from({ length: 200 }, (_, index) =>
+          createTask({ id: `done-${index}`, title: `Finished task ${index}`, stage: 'merged' })
+        ),
+      ],
+    });
+    renderPage(many);
+    const shown = rows().length;
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(100);
+    act(() => fireEvent.click(screen.getByRole('button', { name: /^Done/ })));
+    expect(screen.getByText('Finished task 0')).toBeTruthy();
+    expect(rows().length).toBeLessThan(200);
+    const header = screen.getByRole('button', { name: /^In progress/ });
+    expect(header.className).toContain('sticky');
+  });
+
+  it('redraws only the row whose task a push changed', () => {
+    const drawn = spyOn(shapes, 'describeTaskSteps');
+    const view = renderPage();
+    const before = drawn.mock.calls.length;
+    expect(before).toBeGreaterThanOrEqual(rows().length);
+    const review = TASKS.tasks.review as Task;
+    const pushed = {
+      ...TASKS,
+      tasks: { ...TASKS.tasks, review: { ...review, title: 'Review the logout fix' } },
+    };
+    view.rerender(
+      <TooltipProvider>
+        <TasksPage state={pushed} />
+      </TooltipProvider>
+    );
+    expect(screen.getByText('Review the logout fix')).toBeTruthy();
+    expect(drawn.mock.calls.slice(before).map(([task]) => task.id)).toEqual(['review']);
+    drawn.mockRestore();
+  });
+
+  it('offers Back to top once the list is scrolled down, and scrolls back up', () => {
+    renderPage();
+    expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
+    const scroller = rowFor('Land the billing change').closest('.overflow-y-auto') as HTMLElement;
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 400 });
+    const scrolled = mock((_options?: ScrollToOptions) => {});
+    scroller.scrollTo = scrolled as typeof scroller.scrollTo;
+    act(() => {
+      scroller.scrollTop = 900;
+      fireEvent.scroll(scroller);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Back to top' }));
+    expect(scrolled.mock.calls).toEqual([[{ top: 0, behavior: 'smooth' }]]);
+    act(() => {
+      scroller.scrollTop = 0;
+      fireEvent.scroll(scroller);
+    });
+    expect(screen.queryByRole('button', { name: 'Back to top' })).toBeNull();
   });
 
   it('opens a task from its row', () => {
