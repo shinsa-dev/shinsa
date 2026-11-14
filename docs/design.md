@@ -873,12 +873,16 @@ Only these, and they win over anything below:
     - **Typing** ranks each word once, in `lib/command/menu.ts`, and cmdk only draws what it is given
       (`shouldFilter={false}`): no row appears and then moves. Each word scores against a row's fields
       (`lib/command/search/score.ts`): the whole text 1, its prefix 0.9, a word's prefix 0.8, a substring
-      0.6, then, on a label, a title, a handle or a branch only, a fuzzy match from the start of a word
-      (0.2 to 0.5, more for word starts and runs of letters, less for gaps: "fdv" finds Fix decide
-      invariant violations, "loc287" finds LOC-287). A field counts at its weight (a label, a title and a
+      0.6, each 0.05 more when the match ends where a word ends (so "287" puts LOC-287 above LOC-2879),
+      then, on a label, a title, a handle or a branch only, a fuzzy match from the start of a word
+      (0.2 to 0.5, more for word starts and runs of letters, less for gaps, never into a word it did not
+      enter at its start: "fdv" finds Fix decide invariant violations). A handle also counts without its
+      dash ("loc287" is LOC-287 exactly). A field counts at its weight (a label, a title and a
       handle 1, a branch 0.8, hints, keywords, the repository and the status 0.7, a task's summary 0.6,
       the first 200 characters of its request 0.5), every word must match, and a row scores the mean of
-      its words. The letters a word matched show in the row's label in the full text colour. Groups are
+      its words. A row scoring under half the best row's score is left out (`RELEVANCE_SHARE`), so a
+      strong match is never buried under scattered ones, and weak matches show only when nothing matches
+      well. The letters a word matched show in the row's label in the full text colour. Groups are
       ordered by their best match. Choices flatten into their options ("urgent", "dark", "cards") and a
       choice page narrows to the options that match, the queue's decisions match across tasks ("merge"
       finds Merge #4531 on whichever task it is), and New task and Jump to a task stay in Tasks only when

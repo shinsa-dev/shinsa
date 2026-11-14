@@ -29,8 +29,11 @@ describe('selectWordMatch', () => {
   it('ranks a whole text over a prefix over a word prefix over a substring over a fuzzy match', () => {
     expect(scoreOf('Merge', 'merge')).toBe(1);
     expect(scoreOf('Merge #42', 'mer')).toBe(0.9);
-    expect(scoreOf('Open the pull request', 'pull')).toBe(0.8);
-    expect(scoreOf('Open the pull request', 'ull')).toBe(0.6);
+    expect(scoreOf('Merge #42', 'merge')).toBe(0.95);
+    expect(scoreOf('Open the pull request', 'pul')).toBe(0.8);
+    expect(scoreOf('Open the pull request', 'pull')).toBe(0.85);
+    expect(scoreOf('Open the pull request', 'ul')).toBe(0.6);
+    expect(scoreOf('Open the pull request', 'ull')).toBe(0.65);
     const fuzzy = scoreOf('Open the pull request', 'opr');
     expect(fuzzy).toBeGreaterThan(0.2);
     expect(fuzzy).toBeLessThanOrEqual(0.5);
@@ -53,8 +56,25 @@ describe('selectWordMatch', () => {
 
   it('finds a handle typed without its dash, and its number alone', () => {
     expect(scoreOf('LOC-287', 'loc287')).toBeGreaterThan(0.2);
-    expect(scoreOf('LOC-287', '287')).toBe(0.8);
-    expect(scoreOf('LOC287', '287')).toBe(0.8);
+    expect(scoreOf('LOC-287', '287')).toBe(0.85);
+    expect(scoreOf('LOC287', '287')).toBe(0.85);
+  });
+
+  it('ranks a match that ends on a word above one that runs into a longer word', () => {
+    expect(scoreOf('LOC-287', '287')).toBeGreaterThan(scoreOf('LOC-2879', '287'));
+    expect(scoreOf('feat/branch-42', 'branch-42')).toBeGreaterThan(scoreOf('feat/branch-429', 'branch-42'));
+    expect(scoreOf('login page', 'login')).toBeGreaterThan(scoreOf('logins', 'login'));
+    expect(scoreOf('the login', 'ogi')).toBe(0.6);
+  });
+
+  it('lets an abbreviation of several words take letters from inside each word it entered', () => {
+    expect(scoreOf('Fix decide invariant violations', 'fxdcd')).toBeGreaterThan(0.2);
+    expect(scoreOf('Fix decide invariant violations', 'fxinv')).toBeGreaterThan(0.2);
+  });
+
+  it('never jumps into the middle of a word it did not enter at its start', () => {
+    expect(scoreOf('Fix the login', 'fxog')).toBe(0);
+    expect(scoreOf('feat/a login z page', 'fogp')).toBe(0);
   });
 
   it('drops a fuzzy match whose letters mostly land inside words', () => {
@@ -78,9 +98,9 @@ describe('selectWordMatch', () => {
   });
 
   it('splits words on paths, dots, colons, hashes and dashes', () => {
-    expect(scoreOf('feat/login-page', 'login')).toBe(0.8);
-    expect(scoreOf('Merge #42', '42')).toBe(0.8);
-    expect(scoreOf('feat/login-page', 'page')).toBe(0.8);
+    expect(scoreOf('feat/login-page', 'login')).toBe(0.85);
+    expect(scoreOf('Merge #42', '42')).toBe(0.85);
+    expect(scoreOf('feat/login-page', 'page')).toBe(0.85);
   });
 });
 
@@ -92,12 +112,12 @@ describe('scoreFields', () => {
   it('weighs each field and keeps its best match for each word', () => {
     const fields = [createSearchField('Approve the plan', 1, true), createSearchField('lgtm', 0.7, false)];
     expect(scoreFields(fields, ['lgtm'])).toBeCloseTo(0.7);
-    expect(scoreFields(fields, ['approve'])).toBe(0.9);
+    expect(scoreFields(fields, ['approve'])).toBe(0.95);
   });
 
   it('averages several words and drops a row when any word misses', () => {
     const fields = [createSearchField('Open the pull request', 1, true)];
-    expect(scoreFields(fields, ['open', 'pull'])).toBeCloseTo(0.85);
+    expect(scoreFields(fields, ['open', 'pull'])).toBeCloseTo(0.9);
     expect(scoreFields(fields, ['open', 'zebra'])).toBe(0);
   });
 });
@@ -109,7 +129,7 @@ describe('listKeywordFields and scoreKeywords', () => {
       ['Approve the changes', 1, true],
       ['ship it', KEYWORD_WEIGHT, false],
     ]);
-    expect(scoreKeywords(['Approve the changes', 'ship it'], 'ship')).toBeCloseTo(0.63);
+    expect(scoreKeywords(['Approve the changes', 'ship it'], 'ship')).toBeCloseTo(0.665);
     expect(scoreKeywords(['Approve the changes'], 'apc')).toBeGreaterThan(0);
     expect(scoreKeywords(['Home', 'shipping it'], 'shp')).toBe(0);
     expect(scoreKeywords([], 'home')).toBe(0);

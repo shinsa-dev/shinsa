@@ -93,6 +93,8 @@ const JUMP_MATCHES_SHOWN = 100;
 
 export const SECTION_MATCHES_SHOWN = 20;
 
+export const RELEVANCE_SHARE = 0.5;
+
 const TASK_INDEXES = new WeakMap<ShinsaState, TaskEntry[]>();
 
 const TASK_FIELDS = new WeakMap<Task, { repoName: string; fields: SearchField[] }>();
@@ -146,6 +148,7 @@ function listStoredTaskFields(state: ShinsaState, task: Task) {
   const fields = [
     createSearchField(task.title, LABEL_WEIGHT, true),
     createSearchField(task.handle ?? '', LABEL_WEIGHT, true),
+    createSearchField((task.handle ?? '').replaceAll('-', ''), LABEL_WEIGHT, false),
     createSearchField(task.branch ?? '', BRANCH_WEIGHT, true),
     createSearchField(repoName, KEYWORD_WEIGHT, false),
     createSearchField(task.summary ?? '', SUMMARY_WEIGHT, false),
@@ -307,29 +310,31 @@ function listRanked<T>(items: T[], score: (item: T) => number) {
     .sort((a, b) => b.score - a.score);
 }
 
-function listCommandMatches(commands: Command[], query: string) {
+function listCommandMatches(commands: Command[], query: string, floor = 0) {
   if (query === '') return commands;
   const words = parseQueryWords(query);
   return listRanked(commands, (command) => scoreCommand(command, words))
+    .filter((match) => match.score >= floor)
     .slice(0, SECTION_MATCHES_SHOWN)
     .map((match) => match.item);
 }
 
-export function listChoiceMatches(command: ChoiceCommand, query: string) {
+export function listChoiceMatches(command: ChoiceCommand, query: string, floor = 0) {
   if (query === '') return { options: command.options, score: 1 };
   const words = parseQueryWords(query);
   const ranked = listRanked(command.options, (option) =>
     scoreFields(listKeywordFields(listOptionKeywords(command, option)), words)
-  );
+  ).filter((match) => match.score >= floor);
   const enabled = ranked.find((match) => !isDisabled(match.item));
   return { options: ranked.map((match) => match.item), score: enabled?.score ?? 0 };
 }
 
-export function listSectionBlocks(sections: CommandSection[], query: string): MenuBlock[] {
+export function listSectionBlocks(sections: CommandSection[], query: string, floor = 0): MenuBlock[] {
   return sections.flatMap((section) => {
     const commands = listCommandMatches(
       section.commands.filter((command) => isCommandShown(command, query !== '')),
-      query
+      query,
+      floor
     );
     if (commands.length === 0) return [];
     return [{ kind: 'section', key: section.id, score: scoreCommands(query, commands), section, commands }];
@@ -340,7 +345,7 @@ function countMenuTasks(state: ShinsaState) {
   return Object.values(state.tasks).filter((task) => !isWatchHome(task)).length;
 }
 
-function resolveTasksBlock(menu: RootMenu, listed: ReadonlySet<string>): MenuBlock {
+function resolveTasksBlock(menu: RootMenu, matches: TaskMatch[], floor: number): MenuBlock {
   const total = countMenuTasks(menu.state);
   if (menu.query === '') {
     return {
@@ -353,30 +358,28 @@ function resolveTasksBlock(menu: RootMenu, listed: ReadonlySet<string>): MenuBlo
       total,
     };
   }
-  const matches = listTaskMatches(resolveTaskIndex(menu.state), menu.query).filter(
-    (match) => !listed.has(match.task.id)
-  );
+  const shown = matches.filter((match) => match.score >= floor);
   const scores: Record<TaskAction, number> = {
     new: scoreCommands(menu.query, [NEW_TASK_COMMAND]),
     jump: scoreKeywords(JUMP_KEYWORDS, menu.query),
   };
   const actions = (['new', 'jump'] as const).filter((action) => scores[action] > 0);
   const bestAction = Math.max(scores.new, scores.jump);
-  const bestTask = matches[0]?.score ?? 0;
+  const bestTask = shown[0]?.score ?? 0;
   return {
     kind: 'tasks',
     key: 'tasks',
     score: Math.max(bestAction, bestTask),
-    tasks: matches.slice(0, TASK_MATCHES_SHOWN).map((match) => match.task),
+    tasks: shown.slice(0, TASK_MATCHES_SHOWN).map((match) => match.task),
     actions,
     actionsFirst: bestAction >= bestTask,
     total,
   };
 }
 
-function listTypedBlocks(sections: CommandSection[], query: string): MenuBlock[] {
+function listTypedBlocks(sections: CommandSection[], query: string, floor: number): MenuBlock[] {
   const choices = listChoiceCommands(sections).flatMap((command): MenuBlock[] => {
-    const matches = listChoiceMatches(command, query);
+    const matches = listChoiceMatches(command, query, floor);
     if (matches.options.length === 0) return [];
     return [{ kind: 'choice', key: command.id, score: matches.score, command, options: matches.options }];
   });
@@ -386,9 +389,9 @@ function listTypedBlocks(sections: CommandSection[], query: string): MenuBlock[]
   return [...choices, ...search, { kind: 'new-task', key: 'new-task', score: 0 }];
 }
 
-function listLeadingBlocks(menu: RootMenu, listed: ReadonlySet<string>): MenuBlock[] {
+function listLeadingBlocks(menu: RootMenu, listed: ReadonlySet<string>, floor: number): MenuBlock[] {
   const recent = listRecentTasks(menu.state, menu.recent, menu.currentTaskId, listed, menu.now);
-  const decisions = menu.query === '' ? [] : listCommandMatches(menu.decisions, menu.query);
+  const decisions = menu.query === '' ? [] : listCommandMatches(menu.decisions, menu.query, floor);
   const blocks: MenuBlock[] = [];
   if (menu.query === '' && recent.length > 0)
     blocks.push({ kind: 'recent', key: 'recent', score: 1, tasks: recent });
@@ -403,20 +406,45 @@ function listLeadingBlocks(menu: RootMenu, listed: ReadonlySet<string>): MenuBlo
   return blocks;
 }
 
+function resolveRelevanceFloor(menu: RootMenu, matches: TaskMatch[]) {
+  if (menu.query === '') return 0;
+  const shown = menu.sections.flatMap((section) =>
+    section.commands.filter((command) => isCommandShown(command, true))
+  );
+  const choices = listChoiceCommands(menu.sections).map(
+    (command) => listChoiceMatches(command, menu.query).score
+  );
+  const best = Math.max(
+    scoreCommands(menu.query, [...shown, ...menu.decisions]),
+    matches[0]?.score ?? 0,
+    ...choices
+  );
+  return best * RELEVANCE_SHARE;
+}
+
 export function listRootBlocks(menu: RootMenu) {
   const listed = listListedTaskIds(menu.registered);
+  const matches =
+    menu.query === ''
+      ? []
+      : listTaskMatches(resolveTaskIndex(menu.state), menu.query).filter(
+          (match) => !listed.has(match.task.id)
+        );
+  const floor = resolveRelevanceFloor(menu, matches);
   const blocks = [
     ...listSectionBlocks(
       menu.sections.filter((section) => section.rank < RANK.global),
-      menu.query
+      menu.query,
+      floor
     ),
-    ...listLeadingBlocks(menu, listed),
-    resolveTasksBlock(menu, listed),
+    ...listLeadingBlocks(menu, listed, floor),
+    resolveTasksBlock(menu, matches, floor),
     ...listSectionBlocks(
       menu.sections.filter((section) => section.rank >= RANK.global),
-      menu.query
+      menu.query,
+      floor
     ),
-    ...(menu.query === '' ? [] : listTypedBlocks(menu.sections, menu.query)),
+    ...(menu.query === '' ? [] : listTypedBlocks(menu.sections, menu.query, floor)),
   ];
   return arrangeByScore(blocks, menu.query !== '');
 }

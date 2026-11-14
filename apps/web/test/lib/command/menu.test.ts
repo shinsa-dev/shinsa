@@ -100,6 +100,7 @@ describe('keywords', () => {
     expect(listTaskFields(state, task).map((field) => [field.text, field.weight, field.fuzzy])).toEqual([
       ['Fix login', 1, true],
       ['SW-142', 1, true],
+      ['SW142', 1, false],
       ['fix/login', 0.8, true],
       ['web', 0.7, false],
       ['Sends people back to where they were.', 0.6, false],
@@ -170,6 +171,20 @@ describe('listTaskMatches', () => {
     expect(listTaskMatches(resolveTaskIndex(state), 'nothing')).toEqual([]);
   });
 
+  it('ranks the task whose handle is the one typed above longer handles that start with it', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'longer', title: 'Later work', handle: 'LOC-2879', updatedAt: 2 }),
+        createTask({ id: 'exact', title: 'Earlier work', handle: 'LOC-287', updatedAt: 1 }),
+      ],
+    });
+    const ids = (query: string) =>
+      listTaskMatches(resolveTaskIndex(state), query).map((match) => match.task.id);
+    expect(ids('loc287')).toEqual(['exact', 'longer']);
+    expect(ids('287')).toEqual(['exact', 'longer']);
+    expect(ids('LOC-287')).toEqual(['exact', 'longer']);
+  });
+
   it('finds a task by the letters of its title, its handle, its branch or its summary', () => {
     const state = createShinsaState({
       tasks: [
@@ -194,6 +209,7 @@ describe('listTaskMatches', () => {
     expect(ids('loc287')).toEqual(['decide']);
     expect(ids('287')).toEqual(['decide']);
     expect(ids('dfs')).toEqual(['font']);
+    expect(ids('loc-287')).toEqual(['decide']);
     expect(ids('resend')).toEqual(['summary']);
   });
 });
@@ -523,7 +539,7 @@ describe('listSectionBlocks', () => {
 
   it('scores a section by its best command', () => {
     const [task] = listSectionBlocks(sections, 'cancel');
-    expect(task?.score).toBe(0.9);
+    expect(task?.score).toBe(0.95);
   });
 
   it('shows the best twenty matches of a long section', () => {
@@ -604,6 +620,37 @@ describe('listRootBlocks', () => {
       total: 2,
     });
     expect(blocks.find((block) => block.kind === 'choice')).toMatchObject({ options: [{ value: 'dark' }] });
+  });
+
+  it('leaves out matches far weaker than the best one, and keeps weak ones when nothing matches well', () => {
+    const scattered: CommandSection = {
+      id: 'skills',
+      heading: 'Integrations',
+      rank: RANK.global,
+      commands: [runCommand('skills.off', { label: 'Turn off the routing-middleware skill' })],
+    };
+    const goTo: CommandSection = {
+      id: 'go',
+      heading: 'Go to',
+      rank: RANK.global,
+      commands: [runCommand('go.terminal', { label: 'Terminal' })],
+    };
+    const typed = (query: string, extra: CommandSection[]) =>
+      keys(
+        listRootBlocks({
+          state,
+          sections: extra,
+          registered: [],
+          decisions: [],
+          recent: [],
+          currentTaskId: null,
+          query,
+          now: NOW,
+        })
+      );
+    expect(typed('term', [goTo, scattered])).toContain('go');
+    expect(typed('term', [goTo, scattered])).not.toContain('skills');
+    expect(typed('term', [scattered])).toContain('skills');
   });
 
   it('keeps only the decisions that match', () => {

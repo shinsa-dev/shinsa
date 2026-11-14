@@ -7,11 +7,11 @@ export const KEYWORD_WEIGHT = 0.7;
 
 const EXACT_SCORE = 1;
 
-const PREFIX_SCORE = 0.9;
-
-const WORD_PREFIX_SCORE = 0.8;
-
-const SUBSTRING_SCORE = 0.6;
+const SPAN_SCORES = {
+  prefix: { partial: 0.9, whole: 0.95 },
+  wordPrefix: { partial: 0.8, whole: 0.85 },
+  substring: { partial: 0.6, whole: 0.65 },
+};
 
 const FUZZY_FLOOR = 0.2;
 
@@ -67,9 +67,15 @@ function listRanges(positions: number[]): MatchRange[] {
   return ranges;
 }
 
+function hasSeparator(lowered: string, from: number, to: number) {
+  for (let at = from; at < to; at += 1) if (SEPARATORS.has(lowered[at] as string)) return true;
+  return false;
+}
+
 function walkFrom(lowered: string, word: string, start: number) {
   const positions = [start];
   let points = WORD_START_POINTS;
+  let words = 1;
   let loose = 0;
   for (let at = 1; at < word.length; at += 1) {
     const char = word[at] as string;
@@ -85,14 +91,17 @@ function walkFrom(lowered: string, word: string, start: number) {
     }
     if (next === -1) return Option.none();
     if (next === previous + 1) points += RUN_POINTS;
-    else if (isWordStart(lowered, next)) points += WORD_START_POINTS;
+    else if (isWordStart(lowered, next)) {
+      points += WORD_START_POINTS;
+      words += 1;
+    } else if (hasSeparator(lowered, previous + 1, next)) return Option.none();
     else {
       points += LOOSE_POINTS;
       loose += 1;
     }
     positions.push(next);
   }
-  if (loose * 2 > word.length) return Option.none();
+  if (words === 1 && loose * 2 > word.length) return Option.none();
   const span = (positions.at(-1) as number) - start + 1;
   const quality = (points / word.length) * (word.length / span) ** 0.25;
   return Option.some({
@@ -115,15 +124,24 @@ function selectFuzzyMatch(lowered: string, word: string): Option.Option<TextMatc
   return best;
 }
 
+function endsWord(lowered: string, end: number) {
+  return end === lowered.length || SEPARATORS.has(lowered[end] as string);
+}
+
+function scoreSpan(lowered: string, start: number, length: number, kind: keyof typeof SPAN_SCORES) {
+  const scores = SPAN_SCORES[kind];
+  const score = endsWord(lowered, start + length) ? scores.whole : scores.partial;
+  return Option.some({ score, ranges: rangeOf(start, length) });
+}
+
 export function selectWordMatch(field: SearchField, word: string): Option.Option<TextMatch> {
   const { lowered } = field;
   if (lowered === word) return Option.some({ score: EXACT_SCORE, ranges: rangeOf(0, word.length) });
-  if (lowered.startsWith(word)) return Option.some({ score: PREFIX_SCORE, ranges: rangeOf(0, word.length) });
+  if (lowered.startsWith(word)) return scoreSpan(lowered, 0, word.length, 'prefix');
   const wordPrefix = findWordPrefix(lowered, word);
-  if (wordPrefix !== -1)
-    return Option.some({ score: WORD_PREFIX_SCORE, ranges: rangeOf(wordPrefix, word.length) });
+  if (wordPrefix !== -1) return scoreSpan(lowered, wordPrefix, word.length, 'wordPrefix');
   const inside = lowered.indexOf(word);
-  if (inside !== -1) return Option.some({ score: SUBSTRING_SCORE, ranges: rangeOf(inside, word.length) });
+  if (inside !== -1) return scoreSpan(lowered, inside, word.length, 'substring');
   if (!field.fuzzy || word.length < 2) return Option.none();
   return selectFuzzyMatch(lowered, word);
 }
