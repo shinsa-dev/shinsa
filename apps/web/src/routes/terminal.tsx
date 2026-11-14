@@ -25,6 +25,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { ServiceActionButton, ServiceRunButtons } from '@/components/services/service-row.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
+import { TerminalFilterMenu } from '@/components/terminal/filter-menu.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
 import { TerminalFindBar, TerminalPane, useTerminalView } from '@/components/terminal/terminal-pane.tsx';
@@ -49,6 +50,7 @@ import {
   resolveTerminalTransport,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
+import { useTerminalFilter, writeTerminalFilter } from '@/lib/preferences/terminal.ts';
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { describeFindKey } from '@/lib/terminal/keys.ts';
@@ -61,8 +63,11 @@ import {
   resolveActiveService,
 } from '@/lib/terminal/services.ts';
 import {
+  countTerminalsByFilter,
+  describeFilterEmpty,
   describeTerminalClose,
   groupTerminalPlaces,
+  listShownTerminals,
   listProjectTerminals,
   rememberTerminalPath,
   resolveActiveTerminal,
@@ -71,6 +76,8 @@ import {
   resolveTerminalAfterClose,
   resolveTerminalPath,
   resolveTerminalProject,
+  showsServices,
+  type TerminalFilter,
 } from '@/lib/terminal/tabs.ts';
 import {
   resolveTerminalView,
@@ -180,10 +187,14 @@ function ProjectTerminals({
   snapshot: TerminalsSnapshot;
 }) {
   const mac = React.useMemo(() => isMacPlatform(navigator.platform), []);
-  const terminals = listProjectTerminals(snapshot, project.id);
+  const filter = useTerminalFilter();
+  const requested = useSearchParam('terminal');
+  const projectTerminals = listProjectTerminals(snapshot, project.id);
+  const terminals = listShownTerminals(projectTerminals, filter, requested);
+  const counts = countTerminalsByFilter(projectTerminals);
   const services = listProjectServices(snapshot, project.id, Date.now());
   const runs = listProjectServiceRuns(snapshot, project.id, Date.now());
-  const active = resolveActiveTerminal(terminals, useSearchParam('terminal'));
+  const active = resolveActiveTerminal(terminals, requested);
   const activeService = resolveActiveService(runs, active);
   const stopped = listStoppedServices(services);
   const views = useKeptViews(snapshot, active, mac);
@@ -276,6 +287,7 @@ function ProjectTerminals({
         <span className='shrink-0'>
           <ProjectPicker state={state} project={project} />
         </span>
+        <TerminalFilterMenu filter={filter} counts={counts} />
         {terminals.length > 0 && (
           <TerminalTabs
             terminals={terminals}
@@ -292,7 +304,9 @@ function ProjectTerminals({
         )}
         <NewTerminalButton groups={groups} fallback={fallback} onOpen={open} />
         {activeService && <ActiveServiceButtons view={activeService} />}
-        {!activeService && stopped.length > 0 && <StartAllButton project={project} />}
+        {!activeService && showsServices(filter) && stopped.length > 0 && (
+          <StartAllButton project={project} />
+        )}
         {activeView && (
           <Hint label='Find in the scrollback' shortcut={describeFindKey(mac)}>
             <Button
@@ -313,13 +327,20 @@ function ProjectTerminals({
           onClose={() => close(active)}
         />
       ) : (
-        <EmptyState
-          icon='IconConsole'
-          title={`No terminals in ${project.name}`}
-          description='A terminal keeps running when you close Shinsa.'
-        >
-          <NewTerminalButton groups={groups} fallback={fallback} label='Open a terminal' wide onOpen={open} />
-        </EmptyState>
+        <FilterEmpty
+          filter={filter}
+          project={project}
+          hidden={counts.all}
+          open={
+            <NewTerminalButton
+              groups={groups}
+              fallback={fallback}
+              label='Open a terminal'
+              wide
+              onOpen={open}
+            />
+          }
+        />
       )}
       {closing.value && (
         <ConfirmDialog
@@ -333,6 +354,32 @@ function ProjectTerminals({
         />
       )}
     </div>
+  );
+}
+
+function FilterEmpty({
+  filter,
+  project,
+  hidden,
+  open,
+}: {
+  filter: TerminalFilter;
+  project: Project;
+  hidden: number;
+  open: React.ReactNode;
+}) {
+  const words = describeFilterEmpty(filter, project.name);
+  return (
+    <EmptyState icon='IconConsole' title={words.title} description={words.description}>
+      <span className='flex items-center gap-2'>
+        {filter !== 'tasks' && filter !== 'services' && open}
+        {filter !== 'all' && hidden > 0 && (
+          <Button variant='secondary' size='sm' onClick={() => writeTerminalFilter('all')}>
+            Show all terminals
+          </Button>
+        )}
+      </span>
+    </EmptyState>
   );
 }
 

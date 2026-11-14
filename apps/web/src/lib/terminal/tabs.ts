@@ -73,6 +73,73 @@ export function listProjectTerminals(snapshot: TerminalsSnapshot | null, project
   return snapshot.terminals.filter((terminal) => terminal.projectId === projectId);
 }
 
+export type TerminalFilter = 'yours' | 'tasks' | 'services' | 'all';
+
+type TerminalKind = Exclude<TerminalFilter, 'all'>;
+
+export const TERMINAL_FILTERS: { value: TerminalFilter; label: string; icon: IconName }[] = [
+  { value: 'yours', label: 'Your terminals', icon: 'IconUser' },
+  { value: 'tasks', label: 'Task terminals', icon: 'IconBranch' },
+  { value: 'services', label: 'Services', icon: 'IconServer' },
+  { value: 'all', label: 'All terminals', icon: 'IconConsole' },
+];
+
+function resolveTerminalKind(terminal: TerminalInfo): TerminalKind {
+  if (terminal.serviceId) return 'services';
+  return terminal.taskId ? 'tasks' : 'yours';
+}
+
+function isShownBy(terminal: TerminalInfo, filter: TerminalFilter) {
+  return filter === 'all' || resolveTerminalKind(terminal) === filter;
+}
+
+export function listShownTerminals(
+  terminals: TerminalInfo[],
+  filter: TerminalFilter,
+  requested: string | null
+) {
+  return terminals.filter((terminal) => terminal.id === requested || isShownBy(terminal, filter));
+}
+
+export function countTerminalsByFilter(terminals: TerminalInfo[]): Record<TerminalFilter, number> {
+  const counts: Record<TerminalFilter, number> = { yours: 0, tasks: 0, services: 0, all: terminals.length };
+  for (const terminal of terminals) counts[resolveTerminalKind(terminal)] += 1;
+  return counts;
+}
+
+export function resolveFilterLabel(filter: TerminalFilter) {
+  return TERMINAL_FILTERS.find((entry) => entry.value === filter)?.label ?? filter;
+}
+
+export function describeFilterEmpty(filter: TerminalFilter, projectName: string) {
+  switch (filter) {
+    case 'yours':
+      return {
+        title: `No terminals of yours in ${projectName}`,
+        description: 'Terminals you open here show up first. A terminal keeps running when you close Shinsa.',
+      };
+    case 'tasks':
+      return {
+        title: `No task terminals in ${projectName}`,
+        description: 'Open a terminal from a task to work in its worktree.',
+      };
+    case 'services':
+      return {
+        title: `No services running in ${projectName}`,
+        description: 'A service’s output shows here while it runs.',
+      };
+    case 'all':
+      return {
+        title: `No terminals in ${projectName}`,
+        description: 'A terminal keeps running when you close Shinsa.',
+      };
+  }
+}
+
+export function showsServices(filter: TerminalFilter) {
+  return filter === 'services' || filter === 'all';
+}
+
 export function resolveActiveTerminal(terminals: TerminalInfo[], requested: string | null) {
   return terminals.find((terminal) => terminal.id === requested) ?? terminals[0] ?? null;
 }
