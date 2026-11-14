@@ -190,7 +190,7 @@ Squirrel.Mac pulls it from electron-updater's local proxy, unpacks and verifies 
 Updates and the page's bridge (`DesktopUpdate`, core's `AppUpdate`) show each state, and Restart appears only at `ready`.
 From another device the same updater runs through the engine: `UpdateLink` reports its state to
 `/api/app-updates/report` and runs what Settings → General → Updates in a browser asked for (`docs/engine.md` →
-Updating Shinsa for Mac from another device). A check asked from there runs quietly, so no dialog opens.
+Updating Shinsa for Mac from another device). A check or a channel switch asked from there runs quietly, so no dialog opens: the go-back offer waits in Updates for that device to answer.
 `quitAndInstall()` closes every window before `before-quit`, so `Updater` marks the window quitting before it calls it and on the built-in
 updater's `before-quit-for-update`; without it the close would hide the window, cancel the quit and leave ShipIt
 refusing to replace a running app (`App Still Running Error`). If the app still runs `INSTALL_TIMEOUT` (15 s)

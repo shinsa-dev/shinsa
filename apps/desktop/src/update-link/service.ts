@@ -24,7 +24,7 @@ export const UpdateLink = Layer.effectDiscard(
         case 'install':
           return yield* updater.install;
         case 'channel':
-          return yield* updater.applyChannel(request.channel);
+          return yield* updater.applyChannel(request.channel, false);
         case 'downgrade':
           return yield* updater.answerDowngrade(request.accept);
       }

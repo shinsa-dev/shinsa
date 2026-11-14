@@ -6734,8 +6734,9 @@ device updates a machine through that machine's engine (`apps/engine/src/app-upd
 - **The link.** The app's `UpdateLink` (`apps/desktop/src/update-link/`) posts its updater's state to
   `POST /api/app-updates/report` (local-only: `AppUpdateReport`, the app's version, protocol, channel and `AppUpdate`)
   at launch, on every change and every 5 s, and the answer carries the requests waiting for it
-  (`AppUpdateReportAnswer`), which it runs on `Updater` as Settings on the Mac would: check (quietly, so no dialog
-  opens on a Mac nobody is at), install, switch channel, stay or go back.
+  (`AppUpdateReportAnswer`), which it runs on `Updater` as Settings on the Mac would: check, install, switch channel, stay or go back.
+  A check and a channel switch from there run quietly (`applyChannel(channel, false)`), so no dialog opens on a Mac
+  nobody is at: the go-back offer waits as the `downgrade` status for that device to answer.
 - **The engine keeps it in memory** (`AppUpdates`): the last report and when it came, the queued requests (one per
   kind, the latest wins) and the install under way. It is machine state, not the event log, so a restart forgets it
   and the next report fills it again. A report older than 15 s (`APP_REPORT_FRESH`) means the app is not running.

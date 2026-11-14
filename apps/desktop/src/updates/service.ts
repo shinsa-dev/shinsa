@@ -46,7 +46,7 @@ export class Updater extends Context.Service<
     readonly changes: Stream.Stream<UpdateSnapshot>;
     readonly start: Effect.Effect<void>;
     check(manual: boolean): Effect.Effect<void>;
-    applyChannel(channel: AppUpdateChannel): Effect.Effect<void>;
+    applyChannel(channel: AppUpdateChannel, asks?: boolean): Effect.Effect<void>;
     answerDowngrade(accept: boolean): Effect.Effect<void>;
     readonly install: Effect.Effect<void>;
   }
@@ -193,14 +193,17 @@ export class Updater extends Context.Service<
         yield* files.remove(staged.directory);
         yield* set({ status: 'idle' });
       });
-      const applyChannel = Effect.fn('Updater.applyChannel')(function* (channel: AppUpdateChannel) {
+      const applyChannel = Effect.fn('Updater.applyChannel')(function* (
+        channel: AppUpdateChannel,
+        asks = true
+      ) {
         if (channel === (yield* readChannel)) return;
         yield* SubscriptionRef.update(snapshot, (current) => ({ ...current, channel }));
         yield* prefs.write({ updateChannel: channel, keptVersion: null });
         if (!supported) return;
         yield* configure(false);
         if (needsDiscard(yield* readState, channel)) yield* discard;
-        yield* Ref.set(ask, true);
+        yield* Ref.set(ask, asks);
         yield* check(false);
       });
       const timeOutInstall = Effect.gen(function* () {

@@ -126,6 +126,22 @@ describe('the update link', () => {
     expect(world.dialogs).toEqual([]);
   });
 
+  it('offers the way back without a dialog when another device switches the channel', async () => {
+    const world = createWorld({
+      version: '1.3.0-beta.1',
+      onCheck: () => ({ events: [{ _tag: 'NotAvailable', version: '1.2.0' }] }),
+    });
+    world.files.set(PREFS, JSON.stringify({ updateChannel: 'beta' }));
+    world.answer = answerOnce({ kind: 'channel', channel: 'stable' });
+    const state = await run(
+      world,
+      (updater) => Effect.map(updater.snapshot, (snapshot) => snapshot.state),
+      true
+    );
+    expect(state).toEqual({ status: 'downgrade', version: '1.2.0' });
+    expect(world.dialogs).toEqual([]);
+  });
+
   it('installs a ready update when another device asks', async () => {
     let ready = false;
     const world = createWorld({
