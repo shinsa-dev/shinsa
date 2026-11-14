@@ -20,7 +20,10 @@ export function MatchedLabel({ text, query }: { text: string; query: string }) {
     <Truncate className='min-w-0' tooltip={text}>
       {listParts(text, query).map((part) =>
         part.hit ? (
-          <mark key={part.key} className='bg-transparent font-semibold text-fg-4'>
+          <mark
+            key={part.key}
+            className='bg-transparent font-semibold text-fg-4 in-data-[variant=destructive]:text-red-4'
+          >
             {part.text}
           </mark>
         ) : (
