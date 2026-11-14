@@ -15,7 +15,7 @@ import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
-import { IntegrationSettings } from '@/components/settings/integrations.tsx';
+import { IntegrationSettings, IntegrationsSearch } from '@/components/settings/integrations.tsx';
 import { MachinesSettings } from '@/components/settings/machines.tsx';
 import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
@@ -205,8 +205,9 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
           value={tab}
           onValueChange={openTab}
         />
+        {tab === 'integrations' && <IntegrationsSearch />}
       </header>
-      <PageScroll viewportRef={scroller} fade={tab === 'integrations' ? 'end' : true}>
+      <PageScroll viewportRef={scroller}>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-6 pt-3 pb-12')}>
           <TabSections state={state} tab={tab} automatic={automatic} />
         </div>

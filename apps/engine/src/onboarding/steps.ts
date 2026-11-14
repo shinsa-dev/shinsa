@@ -9,6 +9,7 @@ import {
   parseChoiceValue,
   resolveDisplayPath,
   resolveModelLabel,
+  resolvePlanApproval,
   type Settings,
   serializeChoiceValue,
 } from '@shinsa/core';
@@ -200,7 +201,7 @@ function listMergeChoices(context: StepReadContext, answered: boolean) {
 }
 
 function listPlanChoices(context: StepReadContext, answered: boolean) {
-  const picked = answered ? (context.settings.approvePlans ?? 'large') : RECOMMENDED_PLANS;
+  const picked = answered ? resolvePlanApproval(context.settings) : RECOMMENDED_PLANS;
   return PLAN_OPTIONS.map((option) =>
     createChoice(
       'plans',

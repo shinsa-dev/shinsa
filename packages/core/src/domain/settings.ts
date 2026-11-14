@@ -305,6 +305,10 @@ export function createSettings(): Settings {
   return structuredClone(DEFAULT_SETTINGS);
 }
 
+export function resolvePlanApproval(settings: Settings): PlanApproval {
+  return settings.approvePlans ?? DEFAULT_SETTINGS.approvePlans ?? 'large';
+}
+
 export function resolveAttentionLimit(settings: Settings) {
   return Math.max(1, settings.attentionLimit ?? DEFAULT_ATTENTION_LIMIT);
 }

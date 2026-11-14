@@ -79,7 +79,7 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
 ```
 
 - **Plan approval decides the plan gate.** Settings → Agents → Engine, Approve plans has three choices. When
-  you ask, the default: building starts as soon as the plan is written. Large plans: a plan with more than 3
+  you ask: building starts as soon as the plan is written. Large plans, the default: a plan with more than 3
   phases or 6 files stops at the plan gate, judged from the plan itself rather than from the request, and so
   does any plan the agent revised. Always: every plan stops there. A task you ask for plan first
   (`shinsa do --plan-first`) always stops there, and so does a task

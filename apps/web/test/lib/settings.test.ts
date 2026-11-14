@@ -53,7 +53,6 @@ import {
   resolveGroupSpeed,
   resolveGroupSpeedPatch,
   resolveHashSectionId,
-  resolvePlanValue,
   resolveRootAdded,
   resolveRootRemoved,
   resolveRootToggled,
@@ -148,11 +147,6 @@ describe('setting choices', () => {
 });
 
 describe('setting values', () => {
-  it('reads which plans need approval, large plans by default', () => {
-    expect(resolvePlanValue(settings({ approvePlans: 'when_asked' }))).toBe('when_asked');
-    expect(resolvePlanValue(settings({ approvePlans: 'always' }))).toBe('always');
-    expect(resolvePlanValue(settings({ approvePlans: undefined }))).toBe('large');
-  });
 
   it('round-trips the fix round limit, with no limit as until clean', () => {
     expect(resolveFixRoundValue(settings({ maxFixRounds: null }))).toBe('endless');

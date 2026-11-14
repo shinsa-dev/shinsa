@@ -25,6 +25,23 @@ import { McpServersGroup } from './mcp-servers.tsx';
 import { PluginsGroup } from './plugins.tsx';
 import { SkillsGroup } from './skills.tsx';
 
+export function IntegrationsSearch() {
+  const { snapshot } = useExtensions();
+  const query = useSearchParam(SEARCH_PARAM) ?? '';
+  if (!snapshot) return null;
+  return (
+    <Input
+      type='search'
+      value={query}
+      onChange={(event) =>
+        updateSearchParams({ [SEARCH_PARAM]: event.target.value || null }, { replace: true })
+      }
+      placeholder={EXTENSION_LABEL.search}
+      aria-label={EXTENSION_LABEL.search}
+    />
+  );
+}
+
 export function IntegrationSettings({ state }: { state: ShinsaState }) {
   const { snapshot, failure } = useExtensions();
   const adding = useSearchParam(ADD_SERVER_PARAM) === ADD_SERVER_VALUE;
@@ -45,20 +62,6 @@ export function IntegrationSettings({ state }: { state: ShinsaState }) {
   const { searching } = matches;
   return (
     <>
-      <div
-        data-slot='integrations-search'
-        className='sticky top-0 z-40 -mx-2 -mt-3 -mb-3 bg-background px-2 py-3 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent'
-      >
-        <Input
-          type='search'
-          value={query}
-          onChange={(event) =>
-            updateSearchParams({ [SEARCH_PARAM]: event.target.value || null }, { replace: true })
-          }
-          placeholder={EXTENSION_LABEL.search}
-          aria-label={EXTENSION_LABEL.search}
-        />
-      </div>
       {searching && isEmptyMatch(matches) && (
         <p className='px-1 text-xs text-fg-2'>{EXTENSION_LABEL.nothingMatches}</p>
       )}

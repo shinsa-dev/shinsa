@@ -11,6 +11,7 @@ import {
   resolveRepoWorkspace,
   type Settings,
   type UsageRate,
+  resolvePlanApproval,
 } from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { AUTO_PACE_LABEL } from '@/lib/accounts/auto-pace.ts';
@@ -95,7 +96,6 @@ import {
   resolveGroupModelPatch,
   resolveGroupSpeed,
   resolveGroupSpeedPatch,
-  resolvePlanValue,
   resolveSectionId,
   resolveSpeedAvailability,
   resolveSpeedValue,
@@ -338,7 +338,7 @@ function listNotificationChoices(notifications: NotificationPreferences): Comman
 
 function listWorkflowChoices(settings: Settings): Command[] {
   const choices = [
-    settingChoice('plans', 'Approve plans', PLAN_ITEMS, resolvePlanValue(settings), (value) =>
+    settingChoice('plans', 'Approve plans', PLAN_ITEMS, resolvePlanApproval(settings), (value) =>
       patchSettings({ approvePlans: value as PlanApproval })
     ),
     settingChoice(

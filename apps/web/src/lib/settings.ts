@@ -368,10 +368,6 @@ export function describeDailyLimitNote(settings: Settings, recent: number) {
   return `The last 24 hours used ${used} on Claude. Each provider counts its own usage: once it reaches the limit, a task’s next step waits and starts by itself when older usage drops out.`;
 }
 
-export function resolvePlanValue(settings: Settings) {
-  return settings.approvePlans ?? 'large';
-}
-
 export function resolveFixRoundValue(settings: Settings) {
   return settings.maxFixRounds === null ? 'endless' : String(settings.maxFixRounds);
 }

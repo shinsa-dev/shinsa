@@ -934,8 +934,8 @@ Only these, and they win over anything below:
       Slack; on the hosted page Machines, Teams and Sharing), Usage (Accounts, Auto pace, Forecast, Limits),
       Statistics (Shipping, Token usage), Projects (Repository folders, then Worktrees and Projects: triage looks
       for repositories in those folders, so they come first), Browser, Integrations (Context optimizer, MCPs,
-      Plugins, Skills; 29, its search pinned at the top while the lists scroll under it) and Automations
-      (Schedules, Watchdogs). A project's repository row is its name and path: what always runs before review,
+      Plugins, Skills; 29, its search pinned in the header under the tab bar, so the lists fade under it through
+      the page's own `scroll-fade` mask) and Automations (Watchdogs, Schedules). A project's repository row is its name and path: what always runs before review,
       its test coverage and where agents work fold under its gear button, closed by default. Each is
       its own pane, not a scroll position: the main use is a floating, tablet-sized window, where one long page
       meant scrolling past everything to reach anything, and a scroll-spy table of contents would have kept that

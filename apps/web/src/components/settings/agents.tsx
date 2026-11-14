@@ -1,4 +1,9 @@
-import type { AccountsSnapshot, AgentProviderInfo, Settings } from '@shinsa/core';
+import {
+  type AccountsSnapshot,
+  type AgentProviderInfo,
+  resolvePlanApproval,
+  type Settings,
+} from '@shinsa/core';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
@@ -39,7 +44,6 @@ import {
   resolveGroupModelPatch,
   resolveGroupSpeed,
   resolveGroupSpeedPatch,
-  resolvePlanValue,
   resolveSpeedAvailability,
   resolveSpeedValue,
   resolveWatchdogSettingValue,
@@ -251,7 +255,7 @@ export function AgentSettings({ settings, automatic }: { settings: Settings; aut
           <SelectField
             label='Approve plans'
             items={PLAN_ITEMS}
-            value={resolvePlanValue(settings)}
+            value={resolvePlanApproval(settings)}
             onValueChange={(approvePlans) => void updateSettings({ approvePlans })}
           />
         </SettingRow>

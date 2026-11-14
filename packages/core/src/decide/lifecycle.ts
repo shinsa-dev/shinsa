@@ -10,6 +10,7 @@ import {
   PLAN_SIZE_LIMITS,
   type PlanGateReason,
   type ReviewEscalation,
+  resolvePlanApproval,
   resolveTaskPipeline,
   resolveWatchdogDefaults,
   type Task,
@@ -131,7 +132,7 @@ function isLargePlan(task: Task) {
 }
 
 export function needsPlanApproval(decider: Decider, task: Task) {
-  const mode = decider.state.settings.approvePlans ?? 'when_asked';
+  const mode = resolvePlanApproval(decider.state.settings);
   if (mode === 'always') return true;
   const passes = (reason: PlanGateReason) => PLAN_GATE_TEST[reason](task);
   if (PLAN_GATE_RULE.always.some(passes)) return true;

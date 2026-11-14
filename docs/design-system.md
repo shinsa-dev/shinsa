@@ -5833,7 +5833,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Do** name a setting so its options explain it ("Merge with" with Squash, Merge commit and Rebase). **Don't** add a grey sentence under a setting row.
 
-**Example.** Settings → Projects: one block per project, 6px apart: the colour dot, the name, the key as a mono `Badge`, then a `secondary` `xs` Add and the `•••`; the shelf lists each repository and folder as a path row with ghost `sm` selects.
+**Example.** Settings → Projects: one block per project, 6px apart: the colour dot, the name, the key as a mono `Badge`, then a `secondary` `xs` Add and the `•••`; the shelf lists each repository and folder as a path row with only its name and path; a repository's checks, coverage and workspace fold under its gear button, closed by default.
 
 #### Tables and divided lists
 
@@ -6969,7 +6969,7 @@ Example: "Agent · 3 runs", under it "↳ Builder · Add the guard · Finished".
 - A row may still show data under or beside its name (a reset time, a summary, a path in `text-2xs fg-2`).
 - Selects show human display names from the first paint, never raw ids or aliases.
 - Settings is split into tabs, each its own pane, not one long scroll with a table of contents (the main use is a floating tablet-sized window). Links to a section open its tab and scroll to it.
-- Path rows: a 14px icon 8px from the name, the path after it in `text-2xs fg-2`, then ghost `sm` selects and a remove ×.
+- Path rows: a 14px icon 8px from the name, the path after it in `text-2xs fg-2`, then a gear button that opens the row's ghost `sm` selects below it, closed by default, and a remove ×.
 
 Example: Settings → Agents → Engine: "Merge with" with a select, each option's hint in its tooltip.
 
