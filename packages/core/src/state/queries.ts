@@ -115,6 +115,10 @@ export function canChangeStack(task: Task) {
   return !isTaskSettled(task) && STACKABLE_STAGES.has(task.stage);
 }
 
+export function canLeaveStack(task: Task) {
+  return !isTaskSettled(task) && (task.stacksOn?.length ?? 0) > 0;
+}
+
 export function selectStackRefusal(
   state: ShinsaState,
   task: Task | null,

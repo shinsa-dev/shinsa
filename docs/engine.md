@@ -1420,9 +1420,9 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   it stacks on, ties broken oldest first (`sortParentsFirst`). `task.stack_on_tasks` refuses, for each task in the
   list, a task stacking on itself (`stack_self`), on a cancelled (`dependency_cancelled`) or finished task
   (`stack_parent_settled`), on one that opens no pull request (`stack_no_pull_request`), on one in another repository
-  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). The bundle can change only
-  until the stacked task builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
-  planning run and plans again once released (Taking a task out, below).
+  than the task or the other parents (`stack_repository`) and a cycle (`dependency_cycle`). A task can stack on more
+  tasks only until it builds (`stack_started`: triage, waiting, planning or at the plan gate); moving it cancels the
+  planning run and plans again once released. Taking it out works at any time (Taking a task out, below).
 - **Ready instead of merged.** Every task of a bundle is ready (`Task.bundleReady`, `task.bundle_ready`, with the head
   it is ready at) when the watch finds its pull request clean, where the merge gate would open, and keeps watching: a
   read that is not clean on the same head, or a new head, takes ready away and starts the usual fix (CI, comments,
@@ -1512,8 +1512,11 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   work until the task builds. A task still waiting starts at once from what it still stacks on, or the default branch.
   A task already planning on the branches below loses those bases, its planning run is cancelled, and
   `worktree.create` resets its worktree before it plans again; a task below with nothing stacked on it any more goes
-  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so the bundle no
-  longer changes; cancel the task or let the bundle merge.
+  back to its own merge gate. Once the stacked task builds, its commits sit on the branches below, so it can no longer
+  stack on more tasks, but it can still leave (`leaveStartedStack`): each task it leaves becomes a wait (`waitsOn`, a
+  cancelled one is dropped), its bases go, and an open pull request is watched again and retargeted onto the default
+  branch, so it merges on its own once the tasks it left have merged. Until then its pull request shows their commits
+  too. This is how a stacked initiative becomes tasks that merge on their own.
 - **Stack or wait.** Neither is the default; the agent picks by what the later task needs (the `create_task`
   description says so). Stack when the later task builds directly on these tasks' code in the same repository and
   ships with them: the next piece of one feature, a schema then its API and its screen in parallel then the screen
