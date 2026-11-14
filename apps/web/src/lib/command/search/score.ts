@@ -94,8 +94,8 @@ function walkFrom(lowered: string, word: string, start: number) {
     else if (isWordStart(lowered, next)) {
       points += WORD_START_POINTS;
       words += 1;
-    } else if (hasSeparator(lowered, previous + 1, next)) return Option.none();
-    else {
+    } else {
+      if (hasSeparator(lowered, previous + 1, next)) return Option.none();
       points += LOOSE_POINTS;
       loose += 1;
     }
