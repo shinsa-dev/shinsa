@@ -129,6 +129,16 @@ export {
   type AutopilotVerdict,
 } from './schema.ts';
 export {
+  AUTOPILOT_CONTEXT_LIMITS,
+  AUTOPILOT_CONTEXT_SECTIONS,
+  type AutopilotContextSection,
+  type AutopilotContextSectionName,
+  type AutopilotReply,
+  listAutopilotContextSections,
+  resolveAutopilotAreas,
+  resolveAutopilotContextLines,
+} from './context/index.ts';
+export {
   AUTOPILOT_JUDGE_SYSTEM,
   AUTOPILOT_SHADOW_NOTE,
   AUTOPILOT_SUGGESTION_SYSTEM,

@@ -5,6 +5,7 @@ import type { ChatEvent, ShinsaState } from '@shinsa/core';
 import { Effect, Layer } from 'effect';
 import { resolveTaskReading } from '../../src/agents/reading/task.ts';
 import { Transcripts } from '../../src/agents/transcripts/service.ts';
+import { createAutopilotReplyReader } from '../../src/autopilot/judge.ts';
 import { EngineConfig } from '../../src/config/service.ts';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
@@ -127,5 +128,16 @@ describe('reading a task for an agent', () => {
       '- agent: Planned it.',
       '- agent: Built it.',
     ]);
+  });
+
+  test('Autopilot reads only the task agent’s final replies, with when each came', async () => {
+    const { engine, transcripts, taskId, runId } = await startPlanning();
+    const state = structuredClone(engine.state);
+    state.runs['run-review'] = createRun({ id: 'run-review', taskId, role: 'reviewer' });
+    await transcripts.record(runId, { type: 'agent', phase: 'interim', text: 'Looking around.' });
+    await transcripts.record(runId, { type: 'agent', phase: 'final', text: 'Planned it.' });
+    await transcripts.record('run-review', { type: 'agent', phase: 'final', text: 'Reviewed it.' });
+    const replies = Effect.runSync(createAutopilotReplyReader(transcripts.service)(state, taskId));
+    expect(replies).toEqual([{ at: expect.any(Number), text: 'Planned it.' }]);
   });
 });

@@ -51,6 +51,7 @@ export function createTask(overrides: Partial<Task> = {}): Task {
     summary: null,
     reviewSummary: null,
     findings: [],
+    activity: [],
     origin: null,
     planFirst: false,
     auto: { shape: false, start: false, priority: false, project: false },

@@ -79,7 +79,9 @@ export class EffectHandlers extends Context.Service<
         attempt: EffectAttempt
       ) {
         const now = yield* Clock.currentTimeMillis;
-        const selected = selectAutopilotJudgeRequest(yield* world.state, effect.gateId, now, effect.shadow);
+        const state = yield* world.state;
+        const replies = yield* world.readAutopilotReplies(state, effect.taskId);
+        const selected = selectAutopilotJudgeRequest(state, effect.gateId, now, effect.shadow, replies);
         if (Option.isNone(selected)) return;
         const request = selected.value;
         const answer = yield* world.judgeAutopilot(request.system, request.prompt);

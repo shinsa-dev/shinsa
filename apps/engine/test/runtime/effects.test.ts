@@ -593,6 +593,48 @@ describe('judging a gate for Autopilot', () => {
     expect(commandIds).toEqual([`${context.key}:autopilot.judgment`]);
   });
 
+  test('reads the task’s agent replies into the prompt and keeps the system prompt fixed across gates', async () => {
+    const asked: { system: string; prompt: string }[] = [];
+    const read: string[] = [];
+    const { runner } = setup(
+      (state) => {
+        withJudgingGate()(state);
+        state.gates['g-question'] = { ...JUDGING, id: 'g-question', type: 'question', body: 'Which one?' };
+      },
+      {
+        readAutopilotReplies: (_state, taskId) =>
+          Effect.sync(() => {
+            read.push(taskId);
+            return [
+              { at: 2, text: 'Moved the scroll into the tab bar.' },
+              { at: 1, text: 'Found the scroll handler.' },
+            ];
+          }),
+        judgeAutopilot: (system, prompt) =>
+          Effect.sync(() => {
+            asked.push({ system, prompt });
+            return { verdict: 'forward', reason: 'Unsure.', reply: null };
+          }),
+      }
+    );
+    await runner.apply(
+      { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-plan', shadow: false },
+      createContext()
+    );
+    await runner.apply(
+      { kind: 'autopilot.judge', taskId: 'task-1', gateId: 'g-question', shadow: false },
+      createContext()
+    );
+    expect(read).toEqual(['task-1', 'task-1']);
+    expect(asked[0]?.prompt).toContain(
+      'The agent’s latest replies, oldest first:\n- Found the scroll handler.\n- Moved the scroll into the tab bar.'
+    );
+    expect(asked[1]?.prompt).toContain('- Moved the scroll into the tab bar.');
+    expect(asked[0]?.prompt).not.toBe(asked[1]?.prompt);
+    expect(asked[1]?.system).toBe(asked[0]?.system ?? '');
+    expect(asked[0]?.system).not.toContain('scroll');
+  });
+
   test('brings the gate to you when no model answers, and does nothing for a gate it no longer judges', async () => {
     const silent = setup(withJudgingGate());
     await silent.runner.apply(

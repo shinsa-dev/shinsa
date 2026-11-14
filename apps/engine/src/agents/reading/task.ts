@@ -1,21 +1,22 @@
-import { type ChatEntryOf, type ShinsaState, serializeTaskDetail } from '@shinsa/core';
+import { type ChatEntryOf, type RunRole, type ShinsaState, serializeTaskDetail } from '@shinsa/core';
 import { Effect } from 'effect';
 import type { Transcripts } from '../transcripts/service.ts';
-import { REPLIES_SHOWN, REPLY_LIMIT } from './schema.ts';
+import { REPLIES_SHOWN, REPLY_LIMIT, type TaskReply } from './schema.ts';
 
-const listReplies = Effect.fn('TaskReading.listReplies')(function* (
+export const listTaskReplies = Effect.fn('TaskReading.listReplies')(function* (
   state: ShinsaState,
   transcripts: Transcripts['Service'],
-  taskId: string
+  taskId: string,
+  roles?: readonly RunRole[]
 ) {
   const runs = Object.values(state.runs)
-    .filter((run) => run.taskId === taskId && !run.delegation)
+    .filter((run) => run.taskId === taskId && !run.delegation && (!roles || roles.includes(run.role)))
     .sort((a, b) => a.startedAt - b.startedAt);
   const replies = yield* Effect.forEach(runs, (run) =>
     Effect.map(transcripts.listEntries(run.id), (entries) =>
       entries
         .filter((entry): entry is ChatEntryOf<'agent'> => entry.type === 'agent' && entry.phase === 'final')
-        .map((entry) => ({ role: run.role, text: entry.text }))
+        .map((entry): TaskReply => ({ at: entry.at, role: run.role, text: entry.text }))
     )
   );
   return replies.flat().slice(-REPLIES_SHOWN);
@@ -28,7 +29,7 @@ export const resolveTaskReading = Effect.fn('TaskReading.resolve')(function* (
 ) {
   const detail = serializeTaskDetail(state, taskId);
   if (!state.tasks[taskId]) return detail;
-  const replies = yield* listReplies(state, transcripts, taskId);
+  const replies = yield* listTaskReplies(state, transcripts, taskId);
   if (replies.length === 0) return detail;
   return [
     detail,
