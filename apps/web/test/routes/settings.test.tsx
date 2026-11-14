@@ -98,6 +98,14 @@ describe('Settings tabs', () => {
     );
   });
 
+  it('keeps the heading and the tab bar outside the scroll area, so only the sections scroll', async () => {
+    const { container } = await renderSettings();
+    const viewport = container.querySelector('[data-slot="scroll-area-viewport"]');
+    expect(viewport?.contains(screen.getByText('Appearance'))).toBe(true);
+    expect(viewport?.contains(screen.getByRole('heading', { level: 1 }))).toBe(false);
+    expect(viewport?.contains(screen.getByRole('tablist', { name: 'Settings sections' }))).toBe(false);
+  });
+
   it('opens the tab of a linked section and scrolls to it once the accounts are in', async () => {
     const scroll = mock((_options?: ScrollIntoViewOptions) => {});
     HTMLElement.prototype.scrollIntoView = scroll;

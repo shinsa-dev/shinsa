@@ -190,27 +190,29 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const openTab = (next: SettingsTabId) => updateSearchParams({ tab: resolveSettingsTabParam(next) });
 
   return (
-    <PageScroll viewportRef={scroller}>
-      <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-12')}>
-        <div className='flex flex-col gap-3'>
-          <div className='relative'>
-            <PageHeading title={current.label} />
-            {tab === 'statistics' && (
-              <div className='absolute top-1/2 right-0 -translate-y-1/2'>
-                <StatisticsRange />
-              </div>
-            )}
-          </div>
-          <Choice<SettingsTabId>
-            label='Settings sections'
-            scrolls
-            items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
-            value={tab}
-            onValueChange={openTab}
-          />
+    <div className='flex min-h-0 flex-1 flex-col'>
+      <header className={cn(PAGE_COLUMN, PAGE_TOP, 'flex shrink-0 flex-col gap-3 pb-3')}>
+        <div className='relative'>
+          <PageHeading title={current.label} />
+          {tab === 'statistics' && (
+            <div className='absolute top-1/2 right-0 -translate-y-1/2'>
+              <StatisticsRange />
+            </div>
+          )}
         </div>
-        <TabSections state={state} tab={tab} automatic={automatic} />
-      </div>
-    </PageScroll>
+        <Choice<SettingsTabId>
+          label='Settings sections'
+          scrolls
+          items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
+          value={tab}
+          onValueChange={openTab}
+        />
+      </header>
+      <PageScroll viewportRef={scroller}>
+        <div className={cn(PAGE_COLUMN, 'flex flex-col gap-6 pt-3 pb-12')}>
+          <TabSections state={state} tab={tab} automatic={automatic} />
+        </div>
+      </PageScroll>
+    </div>
   );
 }
