@@ -20,7 +20,7 @@ export function resolveCloudOrigin(env: Env) {
   return selectOrigin(env[CLOUD_URL_VARIABLE]) ?? REMOTE_APP_ORIGIN;
 }
 
-export function isSameSource(current: SourceSetting, next: SourceSetting) {
+function isSameSource(current: SourceSetting, next: SourceSetting) {
   if (current.kind === 'local' || next.kind === 'local') return current.kind === next.kind;
   return current.machine?.id === next.machine?.id && current.machine?.name === next.machine?.name;
 }

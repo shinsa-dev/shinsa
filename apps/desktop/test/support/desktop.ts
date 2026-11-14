@@ -118,7 +118,7 @@ const HOME = '/Users/me';
 
 export const USER_DATA = '/Users/me/Library/Application Support/Shinsa';
 
-export const ENGINE_DATA = '/Users/me/.config/shinsa/data';
+const ENGINE_DATA = '/Users/me/.config/shinsa/data';
 
 export const LOGS = '/Users/me/Library/Logs/Shinsa';
 
