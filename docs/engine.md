@@ -2415,8 +2415,9 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
   and asks for `autopilot.judge {taskId, gateId, shadow: false}`, a replay-safe effect on lane `task:<id>`: the engine builds the
   prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
-  task's request, plan goal or question, the facts, the last 8 lessons of that kind of gate and your decision profile
-  for it, below, in the user prompt)
+  task's request, plan goal or question, the facts, the task's context, the last 8 lessons of that kind of gate and
+  your decision profile for it, below, in the user prompt; the engine reads the agent's latest replies from its
+  transcripts for it, `createAutopilotReplyReader`)
   and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
   'revise' | 'forward' | 'cancel', reason, reply}`; the user turn lists the verdicts the gate takes
   (`AUTOPILOT_GATE_VERDICTS`: `revise` on a plan, review or merge only, Follow-ups below; `cancel` only on a
@@ -2542,6 +2543,21 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   is 0.6 feature similarity, 0.25 words shared with the task title and 0.15 recency, within 2,400 characters), each
   with its facts, what you did and your words, then how you steer your tasks. All of it sits at the tail of the user
   turn, so the system prompt never changes.
+- **The task's context** (`autopilot/context/`, `listAutopilotContextSections`, `resolveAutopilotContextLines`,
+  `AUTOPILOT_CONTEXT_LIMITS`). After the gate's own text the judge reads the whole task in six sections, most
+  important first: the review (its summary, ratings and up to 8 findings by severity, each with how you marked it),
+  what changed (the pull request's files and lines added and removed, or before one the files from the phase
+  reports, else the plan's), the walkthrough (its approach and up to 4 risks), your last 4 messages to the agent
+  (none sent on your behalf), the agent's last 3 final replies (read from its transcripts by the engine, since core
+  holds no transcript; the reviewer's words reach it through the review, and delegated agents talk to the agent,
+  not to you), and up to 3 of your recent tasks in the same repository and the same part of the app, each with your
+  last 4 answers there and your latest note. The part of the app is a path's top two folders
+  (`resolveAutopilotAreas`), `.md` files left out, since nearly every task touches `docs/`. Each section has a cap
+  (the review 1,500 characters, what changed, the walkthrough and the replies 1,200, your messages 1,000, the area
+  900; a line at most 300, a list at most 20 files), and the whole context a budget of 6,000: when the sections
+  still run over, whole sections are cut from the last up and the prompt ends "Left out to fit: …". The system
+  prompt gains one fixed sentence telling the judge to weigh that context, so it stays identical for every gate and
+  task, and its prefix stays cached (Caching, above).
 - **Combining the two** (`resolveAutopilotCombinedVerdict`, `isAutopilotModelVeto`, `AUTOPILOT_COMBINE_LIMITS`). The
   hard limits run first, as always. Then Autopilot acts only when the model call says act and the model does not
   veto it: a veto is a confident model (confidence at least 0.5, about 10 similar decisions and 20 of its head)
