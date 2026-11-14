@@ -35,6 +35,7 @@ const FACTS: AutopilotFacts = {
   escalatedReview: false,
   approvedByYou: false,
   ready: false,
+  retried: 0,
   waitedMinutes: AUTOPILOT_LIMITS.awayMinutes,
   presence: AWAY,
 };
@@ -302,6 +303,11 @@ describe('the Everything level', () => {
     });
     expect(act({ gate: 'failure' }, EVERYTHING)).toMatchObject({ allowed: false });
     expect(act({ gate: 'failure', ready: true }, EVERYTHING)).toEqual({ allowed: true });
+    expect(act({ gate: 'failure', ready: true, retried: 1 }, EVERYTHING)).toEqual({
+      allowed: false,
+      reason: 'Autopilot already retried this task once and it failed again.',
+      setting: false,
+    });
     expect(act({ gate: 'failure', ready: true }, { ...EVERYTHING, gates: ['plans'] })).toMatchObject({
       allowed: false,
       setting: true,

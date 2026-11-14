@@ -12,7 +12,6 @@ import {
 import type { AutopilotModelGuess } from '../autopilot/model/schema.ts';
 import { selectJudgedGateKind } from '../autopilot/prompt.ts';
 import {
-  AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_GATE_VERDICTS,
   AUTOPILOT_JUDGMENT_LIMITS,
   AUTOPILOT_LIMITS,
@@ -22,7 +21,7 @@ import {
   type AutopilotLimit,
   type AutopilotVerdict,
 } from '../autopilot/schema.ts';
-import { isAutopilotModelVeto } from '../autopilot/score.ts';
+import { isAutopilotCancelVeto, isAutopilotModelVeto } from '../autopilot/score.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   type AutopilotDue,
@@ -258,11 +257,6 @@ function describeCancelVeto(guess: AutopilotModelGuess) {
   return `From ${similar} decisions like this one, Autopilot puts the chance you would retry it at ${share}%, so it does not cancel the task and it waits for you.`;
 }
 
-function isCancelVeto(guess: AutopilotModelGuess | null): guess is AutopilotModelGuess {
-  if (!guess || guess.confidence < AUTOPILOT_COMBINE_LIMITS.confidence) return false;
-  return guess.p >= AUTOPILOT_COMBINE_LIMITS.veto;
-}
-
 function resolveVerdict(kind: AutopilotGateKind, verdict: AutopilotVerdict): AutopilotVerdict {
   return AUTOPILOT_GATE_VERDICTS[kind].includes(verdict) ? verdict : 'forward';
 }
@@ -272,7 +266,7 @@ const CANCEL_REASON = 'Autopilot judged you would drop this task after the failu
 function cancelForYou(decider: Decider, gate: Gate, kind: AutopilotGateKind, reason: string) {
   const estimate = selectGateEstimate(decider, gate, kind);
   recordGuess(decider, gate, kind, 'cancel', estimate);
-  if (isCancelVeto(estimate)) {
+  if (isAutopilotCancelVeto(estimate)) {
     forward(decider, gate.id, { reason: describeCancelVeto(estimate), teaches: true, guesses: true });
     return;
   }

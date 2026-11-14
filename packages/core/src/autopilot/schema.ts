@@ -52,6 +52,7 @@ export interface AutopilotFacts {
   escalatedReview: boolean;
   approvedByYou: boolean;
   ready: boolean;
+  retried: number;
   waitedMinutes: number;
   presence: AutopilotPresence;
 }
@@ -79,6 +80,7 @@ export const AUTOPILOT_CEILINGS: Record<AutopilotLevel, AutopilotCeiling> = {
 export const AUTOPILOT_LIMITS = {
   activeMinutes: 30,
   awayMinutes: 60,
+  retriesPerRound: 1,
 } as const;
 
 export const AUTOPILOT_VERDICTS = ['act', 'forward', 'cancel'] as const;

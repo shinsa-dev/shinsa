@@ -2398,11 +2398,18 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   what to answer"), a review approved as "Fix and approve" does (`approveReviewAhead`), a merge started
   (`gate.answered` `ahead`, then the usual merge), your OK given, a failed step retried (`approve`, or `reply` with
   the judge's guidance for the agent) or, on `cancel`, the task cancelled (`reject`), unless a confident model puts
-  the chance you would retry at 50% or more, which brings it to you instead. At Everything, with `findings` on and
-  findings ready, approving a review also sets a verdict on each open finding from the local model
-  (`selectAutopilotFindingCall`, `autopilot/findings.ts`: `fix` when it puts the chance you fix them at 50% or more,
-  `dismiss` below, only with confidence at least 0.5): `fix` asks for changes on the review (`revise`, with the
-  verdicts) instead of approving it, `dismiss` approves it with them; the reason says which and why. Every action is `gate.answered` with `autopilot: <reason>`
+  the chance you would retry at 50% or more, which brings it to you instead. Autopilot retries a task's failed step
+  at most once a round (`AUTOPILOT_LIMITS.retriesPerRound`, counted from the round's failure gates it answered,
+  `AutopilotFacts.retried`): your own answer to a failure gate clears the automatic retries, so a second retry for
+  you would start them over and could loop, and the next failure of that round waits for you ("Autopilot already
+  retried this task once and it failed again."). At Everything, with `findings` on and
+  findings ready, approving a review also sets a verdict on each open finding from the local model, each judged on
+  its own (`selectAutopilotFindingCall`, `autopilot/findings.ts`: a probe per finding with that finding's severity
+  as its counts, `fix` when it puts the chance you fix it at 50% or more, `dismiss` below, and no verdicts at all
+  unless every finding has confidence at least 0.5): any `fix` asks for changes on the review (`revise`, with the
+  verdicts) instead of approving it, all `dismiss` approves it with them; the reason says which and why. A finding
+  you mark is learned with its own severity (`DecisionDraft.finding`), not the review's counts, so the model can
+  tell your findings apart. Every action is `gate.answered` with `autopilot: <reason>`
   (the reason clipped to 240 characters, the reply to 2,000), shown in the activity as done for you by Autopilot
   with the reason as its detail. A forward keeps why on the gate (`autopilot.forwarded`, `Gate.autopilotHeld`) and
   waits for you as always. While a task is a review candidate, `reactToFindings` sends the review's `should_fix`
@@ -2454,7 +2461,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   folded on every `autopilot.decided` (`state/autopilot.ts`, `learnAutopilotDecisions`): no hosted model, no
   fine-tuning, nothing leaves your machine, and replaying the log rebuilds it exactly, since it is plain arithmetic
   in a fixed order. It is an online logistic regression with three heads (`AUTOPILOT_HEAD_OF_KIND`): `gate` (plan,
-  review, merge and your OK; approved is yes), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
+  review, merge, your OK and failed steps; approved is yes, and so is a retry with your guidance, `replied`), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
   Messages, edits, filed tasks, priority changes and cancellations train no head. `listAutopilotFeatures` turns a
   decision into features: the kind, risk, reviewer's confidence, shape and hour band one-hot, the plan's scope and
   the findings log-scaled, the flags (urgent, watchdog, active, in your hours, the plan you always approve), the project and repository hashed into 16 buckets, and a few crosses (kind × risk, kind × confidence,
@@ -2496,9 +2503,11 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
-  (`AutopilotDecision.guess`). Agreement is binary: approving (or retrying a failed step) agrees with `act`,
-  anything else (changing, rejecting, cancelling) with `forward` or `cancel`; questions are not scored, since a
-  reply has no yes or no. A failure gate counts as a decision only when Autopilot could judge it.
+  (`AutopilotDecision.guess`). Agreement is binary on yes against no: approving, or retrying a failed step with
+  or without guidance, agrees with `act`, anything else (changing, rejecting, cancelling) with `forward`; `cancel`
+  agrees only with your cancel (`isAutopilotAgreement`), so the readiness of failures measures its cancels too, and
+  the combined verdict keeps a `cancel` unless a confident model vetoes it (`isAutopilotCancelVeto`); questions are
+  not scored, since a reply has no yes or no. A failure gate counts as a decision only when Autopilot could judge it.
 - **Four tracks** (`AutopilotProfile.tracks`, `AUTOPILOT_TRACKS`). Each decision is scored against four guessers,
   each a running agreement in which an older decision counts half as much after 50 newer ones
   (`AUTOPILOT_SCORE_LIMITS.halfLife`): `model`, the local model's guess (`p` of at least 0.5 is a yes), on every

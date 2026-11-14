@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { Option } from 'effect';
+import { createAutopilotDecision, listGateDecisionDrafts } from '../../src/autopilot/profile.ts';
 import {
   type AutopilotAgreement,
   type AutopilotModel,
@@ -9,6 +11,7 @@ import {
   type AutopilotVerdict,
   createAutopilotModel,
   describeAutopilotFindingCall,
+  learnAutopilotDecisions,
   EMPTY_AUTOPILOT_PROFILE,
   listAutopilotDone,
   type ReviewFinding,
@@ -119,6 +122,13 @@ const HIGH_HIGH: ReviewRatings = { confidence: 'high', risk: 'high' };
 
 const OPTIONAL: ReviewFinding = { severity: 'optional', file: 'b.ts', line: 7, message: 'Rename it.' };
 
+const SHOULD_FIX: ReviewFinding = {
+  severity: 'should_fix',
+  file: 'a.ts',
+  line: 3,
+  message: 'Handle the error.',
+};
+
 function reachReview(harness: Harness, findings: ReviewFinding[], ratings = HIGH_HIGH) {
   const taskId = createTask(harness);
   buildAll(harness, taskId);
@@ -182,6 +192,26 @@ describe('Autopilot at a failed step', () => {
       'Retried for you by Autopilot: Could not set up the worktree'
     );
     expect(listAutopilotDone(harness.state)[0]).toMatchObject({ gate: 'failure', action: 'retried' });
+  });
+
+  test('retries a task once per round, then brings the next failure to you', () => {
+    const harness = everything(['failure']);
+    const taskId = failTask(harness);
+    judge(harness, taskId, 'act', 'A full disk clears on its own.');
+    expect(harness.task(taskId).autoRetry).toBeNull();
+    breakTask(harness, taskId);
+    fireRetry(harness, taskId);
+    spendRetries(harness, taskId);
+    breakTask(harness, taskId);
+    const gates = Object.values(harness.state.gates).filter(
+      (gate) => gate.taskId === taskId && gate.type === 'failure'
+    );
+    expect(gates).toHaveLength(2);
+    expect(gates[1]).toMatchObject({
+      status: 'open',
+      autopilotHeld: 'Autopilot already retried this task once and it failed again.',
+    });
+    expect(gates[1]?.autopilotJudging).not.toBe(true);
   });
 
   test('retries without guidance when it wrote none', () => {
@@ -270,7 +300,7 @@ describe('Autopilot at a review at Everything', () => {
       decision: 'approve',
       verdicts: [{ index: 0, verdict: 'dismiss', note: null }],
       autopilotAnswer:
-        'Clear. Autopilot dismissed the finding: from 1000 findings like these, it puts the chance you fix them at 20%.',
+        'Clear. Autopilot dismissed the finding: from 1000 findings like it, it puts the chance you fix it at 20%.',
     });
     expect(harness.task(taskId).findings[0]?.verdict).toBe('dismiss');
     expect(harness.task(taskId).autopiloted).toBeTruthy();
@@ -331,16 +361,89 @@ describe('the findings call', () => {
     });
   });
 
+  test('judges each finding on its own, from your verdicts on findings like it', () => {
+    const harness = everything(['finding']);
+    const taskId = createTask(harness);
+    const gate = { ...Object.values(harness.state.gates)[0], taskId, type: 'review' } as never;
+    const task = { ...harness.task(taskId), findings: [SHOULD_FIX, OPTIONAL] };
+    const drafts = listGateDecisionDrafts(task, {
+      gate,
+      decision: 'revise',
+      response: null,
+      verdicts: [
+        { index: 0, verdict: 'fix', note: null },
+        { index: 1, verdict: 'dismiss', note: null },
+      ],
+    }).filter((draft) => draft.kind === 'finding');
+    const decisions = Array.from({ length: 200 }, (_, at) =>
+      drafts.map((draft) => createAutopilotDecision(harness.state, draft, harness.now + at))
+    ).flat();
+    harness.state.autopilotModel = learnAutopilotDecisions(undefined, decisions).model;
+    harness.state.tasks[taskId] = task;
+    const call = Option.getOrThrow(selectAutopilotFindingCall(harness.state, task, gate, harness.now));
+    expect(call.verdict).toBe('fix');
+    expect(call.verdicts).toEqual([
+      { index: 0, verdict: 'fix', note: null },
+      { index: 1, verdict: 'dismiss', note: null },
+    ]);
+    expect(describeAutopilotFindingCall(call)).toStartWith(
+      'Autopilot sent 1 of the findings back to fix and dismissed 1: from your verdicts on findings like each'
+    );
+  });
+
+  test('leaves every finding to you when it is unsure of any one of them', () => {
+    const harness = everything(['finding']);
+    harness.state.autopilotModel = knownModel('finding', 'finding', 0.2);
+    const taskId = createTask(harness);
+    const gate = { ...Object.values(harness.state.gates)[0], taskId } as never;
+    harness.state.tasks[taskId] = {
+      ...harness.task(taskId),
+      projectId: null,
+      findings: [OPTIONAL],
+    };
+    expect(selectAutopilotFindingCall(harness.state, harness.task(taskId), gate, harness.now)).toMatchObject({
+      _tag: 'Some',
+    });
+    harness.state.autopilotModel = createAutopilotModel();
+    expect(selectAutopilotFindingCall(harness.state, harness.task(taskId), gate, harness.now)).toMatchObject({
+      _tag: 'None',
+    });
+  });
+
   test('says how many findings it sent back and why', () => {
     const guess = { head: 'finding' as const, p: 0.9, confidence: 0.9, similar: 12 };
+    const low = { ...guess, p: 0.1 };
     expect(
       describeAutopilotFindingCall({
         verdict: 'fix',
         verdicts: [{ index: 0, verdict: 'fix', note: null }],
-        guess,
+        guesses: [guess],
       })
     ).toBe(
-      'Autopilot sent the finding back to fix: from 12 findings like these, it puts the chance you fix them at 90%.'
+      'Autopilot sent the finding back to fix: from 12 findings like it, it puts the chance you fix it at 90%.'
     );
+    expect(
+      describeAutopilotFindingCall({
+        verdict: 'dismiss',
+        verdicts: [
+          { index: 0, verdict: 'dismiss', note: null },
+          { index: 1, verdict: 'dismiss', note: null },
+          { index: 2, verdict: 'dismiss', note: null },
+        ],
+        guesses: [low, low, { ...low, p: 0.2 }],
+      })
+    ).toBe(
+      'Autopilot dismissed the 3 findings: from your verdicts on findings like each, it puts the chance you fix them at 10%, 10% and 20%.'
+    );
+    expect(
+      describeAutopilotFindingCall({
+        verdict: 'fix',
+        verdicts: [
+          { index: 0, verdict: 'fix', note: null },
+          { index: 1, verdict: 'fix', note: null },
+        ],
+        guesses: [guess, guess],
+      })
+    ).toStartWith('Autopilot sent the 2 findings back to fix:');
   });
 });

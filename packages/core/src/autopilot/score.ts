@@ -1,5 +1,5 @@
 import type { ShinsaState } from '../state/project.ts';
-import type { AutopilotModelGuess } from './model/schema.ts';
+import { AUTOPILOT_POSITIVE_ANSWERS, type AutopilotModelGuess } from './model/schema.ts';
 import {
   AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_READINESS_KINDS,
@@ -23,15 +23,22 @@ import {
 } from './schema.ts';
 
 export function isAutopilotAgreement(guess: AutopilotVerdict, answer: AutopilotDecisionAnswer) {
-  return (guess === 'act') === (answer === 'approved');
+  if (guess === 'cancel') return answer === 'rejected';
+  return (guess === 'act') === AUTOPILOT_POSITIVE_ANSWERS.gate.includes(answer);
 }
 
 export function resolveAutopilotCombinedVerdict(
   call: AutopilotVerdict,
   guess: AutopilotModelGuess | null
 ): AutopilotVerdict {
+  if (call === 'cancel') return isAutopilotCancelVeto(guess) ? 'forward' : 'cancel';
   if (call !== 'act') return 'forward';
   return isAutopilotModelVeto(guess) ? 'forward' : 'act';
+}
+
+export function isAutopilotCancelVeto(guess: AutopilotModelGuess | null): guess is AutopilotModelGuess {
+  if (!guess || guess.confidence < AUTOPILOT_COMBINE_LIMITS.confidence) return false;
+  return guess.p >= AUTOPILOT_COMBINE_LIMITS.veto;
 }
 
 export function isAutopilotModelVeto(guess: AutopilotModelGuess | null) {

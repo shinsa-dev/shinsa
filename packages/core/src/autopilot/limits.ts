@@ -1,5 +1,5 @@
 import { Option } from 'effect';
-import { type Gate, HOUR_MS, MINUTE_MS, hasStep } from '../domain/index.ts';
+import { type Gate, HOUR_MS, MINUTE_MS, hasStep, isOfCurrentRound } from '../domain/index.ts';
 import { type AutopilotGate, type AutopilotLevel, type AutopilotPolicy } from '../domain/settings.ts';
 import type { Task, TaskSuggestion } from '../domain/types.ts';
 import { isActiveAt, resolveActiveHours, resolveLocalSlot } from '../presence/hours.ts';
@@ -98,6 +98,16 @@ export function isHeldPlan(task: Task) {
   );
 }
 
+function isAutopilotRetry(gate: Gate) {
+  return gate.type === 'failure' && gate.autopilotAnswer !== undefined && gate.decision !== 'reject';
+}
+
+function countAutopilotRetries(state: ShinsaState, task: Task) {
+  return Object.values(state.gates).filter(
+    (gate) => gate.taskId === task.id && isAutopilotRetry(gate) && isOfCurrentRound(task, gate)
+  ).length;
+}
+
 function isReadinessKind(kind: AutopilotGateKind): kind is AutopilotGateKind & AutopilotReadinessKind {
   return (AUTOPILOT_READINESS_KINDS as readonly string[]).includes(kind);
 }
@@ -121,6 +131,7 @@ export function resolveAutopilotFacts(
     escalatedReview: false,
     approvedByYou: !task.autopiloted,
     ready: isReadinessKind(gate) && isAutopilotKindReady(state, gate),
+    retried: gate === 'failure' ? countAutopilotRetries(state, task) : 0,
     waitedMinutes: Math.max(0, Math.floor((now - openedAt) / MINUTE_MS)),
     presence: resolveAutopilotPresence(state, now),
   };
@@ -182,8 +193,11 @@ function limitProposal(facts: AutopilotFacts, level: AutopilotLevel): AutopilotL
   return ALLOWED;
 }
 
-function limitFailure(level: AutopilotLevel): AutopilotLimit {
+function limitFailure(facts: AutopilotFacts, level: AutopilotLevel): AutopilotLimit {
   if (level !== 'everything') return refuseBySetting('Below Everything, failed steps wait for you.');
+  if (facts.retried >= AUTOPILOT_LIMITS.retriesPerRound) {
+    return refuse('Autopilot already retried this task once and it failed again.');
+  }
   return ALLOWED;
 }
 
@@ -225,7 +239,7 @@ function limitAct(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimi
     case 'proposal':
       return limitProposal(facts, level);
     case 'failure':
-      return limitFailure(level);
+      return limitFailure(facts, level);
   }
 }
 

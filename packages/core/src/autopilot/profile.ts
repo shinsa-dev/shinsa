@@ -64,6 +64,7 @@ export interface DecisionDraft {
   kind: AutopilotDecisionKind;
   answer: AutopilotDecisionAnswer;
   note: string | null;
+  finding?: ReviewFinding;
 }
 
 export interface GateDecisionInput {
@@ -90,13 +91,17 @@ export function listGateDecisionDrafts(task: Task, input: GateDecisionInput): De
     answer: ANSWER[input.decision],
     note: input.response,
   };
-  const findings = (input.verdicts ?? []).map((verdict): DecisionDraft => ({
-    task,
-    gate: input.gate,
-    kind: 'finding',
-    answer: VERDICT_ANSWER[verdict.verdict],
-    note: verdict.note,
-  }));
+  const findings = (input.verdicts ?? []).map((verdict): DecisionDraft => {
+    const finding = task.findings[verdict.index];
+    return {
+      task,
+      gate: input.gate,
+      kind: 'finding',
+      answer: VERDICT_ANSWER[verdict.verdict],
+      note: verdict.note,
+      ...(finding ? { finding } : {}),
+    };
+  });
   return [answered, ...findings];
 }
 
@@ -133,7 +138,7 @@ function resolveDecisionFacts(state: ShinsaState, draft: DecisionDraft, at: numb
     shape: resolveTaskShape(task),
     repoId: task.repoId,
     revisions: Math.max(0, (task.plan?.version ?? 1) - 1),
-    findings: countFindings(task.findings),
+    findings: countFindings(draft.finding ? [draft.finding] : task.findings),
     heldPlan: isHeldPlan(task),
     waitedMinutes: gate ? Math.max(0, Math.floor((at - gate.openedAt) / MINUTE_MS)) : null,
     ...opened,

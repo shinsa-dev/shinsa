@@ -64,8 +64,14 @@ describe('agreeing with you', () => {
     expect(isAutopilotAgreement('forward', 'revised')).toBe(true);
     expect(isAutopilotAgreement('forward', 'rejected')).toBe(true);
     expect(isAutopilotAgreement('act', 'revised')).toBe(false);
-    expect(isAutopilotAgreement('act', 'replied')).toBe(false);
-    expect(isAutopilotAgreement('forward', 'replied')).toBe(true);
+  });
+
+  test('a retry with your guidance agrees with a retry, and only your cancel agrees with a cancel', () => {
+    expect(isAutopilotAgreement('act', 'replied')).toBe(true);
+    expect(isAutopilotAgreement('forward', 'replied')).toBe(false);
+    expect(isAutopilotAgreement('cancel', 'replied')).toBe(false);
+    expect(isAutopilotAgreement('cancel', 'approved')).toBe(false);
+    expect(isAutopilotAgreement('cancel', 'rejected')).toBe(true);
   });
 });
 
@@ -76,6 +82,13 @@ describe('combining the model with the model call', () => {
     expect(resolveAutopilotCombinedVerdict('act', DOUBTFUL)).toBe('forward');
     expect(resolveAutopilotCombinedVerdict('act', { ...DOUBTFUL, confidence: 0.3 })).toBe('act');
     expect(resolveAutopilotCombinedVerdict('act', null)).toBe('act');
+  });
+
+  test('keeps a cancel, unless a sure model says you would retry', () => {
+    expect(resolveAutopilotCombinedVerdict('cancel', DOUBTFUL)).toBe('cancel');
+    expect(resolveAutopilotCombinedVerdict('cancel', null)).toBe('cancel');
+    expect(resolveAutopilotCombinedVerdict('cancel', SURE)).toBe('forward');
+    expect(resolveAutopilotCombinedVerdict('cancel', { ...SURE, confidence: 0.3 })).toBe('cancel');
   });
 });
 
