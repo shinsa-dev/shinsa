@@ -27,7 +27,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createAutopilotProfile, createProject, createShinsaState } from '../../support/state.ts';
+import { createAutopilotProfile, createProject, createShinsaState, NOW } from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -334,11 +334,37 @@ describe('Settings → Autopilot', () => {
     expect(screen.queryByText('What it learned')).toBeNull();
     expect(screen.getByText(AUTOPILOT_SCORE_ROWS.margin)).toBeTruthy();
     expect(screen.getByText(/^\d+ points ahead$/)).toBeTruthy();
+    expect(screen.queryByText(AUTOPILOT_SCORE_ROWS.topics)).toBeNull();
+    expect(screen.queryByText(AUTOPILOT_SCORE_ROWS.followUps)).toBeNull();
     expect(listSentCommands()).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Use Most things' }));
     expect(listSentCommands()).toEqual([
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
     ]);
+  });
+
+  it('shows the topics you raise and how often its follow-ups matched yours', async () => {
+    spyOnEngine();
+    pushState(
+      createShinsaState({
+        patch: {
+          autopilotProfile: {
+            ...createAutopilotProfile({ agreed: 46, disagreed: 4 }),
+            topics: [
+              { topic: 'security', total: 5, recent: 3, at: NOW },
+              { topic: 'data_loss', total: 2, recent: 2, at: NOW },
+            ],
+            followUps: { scored: 4, matched: 3 },
+          },
+        },
+      })
+    );
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(AUTOPILOT_SCORE_ROWS.topics)).toBeTruthy();
+    expect(screen.getByText('Security, data loss')).toBeTruthy();
+    expect(screen.getByText(AUTOPILOT_SCORE_ROWS.followUps)).toBeTruthy();
+    expect(screen.getByText('75%')).toBeTruthy();
   });
 
   it('says the suggested level is in use once you already chose it', async () => {

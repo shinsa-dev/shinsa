@@ -599,6 +599,21 @@ Every task agent's tool: `tasks_unstack`. Sends `task.stack_on_tasks`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa tasks move
+
+Move a task to another repository, in any project, before it has done any work: its agent stops, its worktree is removed and the same step starts again there.
+
+```
+shinsa tasks move <task> --repo <text> [--json]
+```
+
+Every task agent's tool: `tasks_move`. Sends `task.move_to_repository`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `--repo` | text, required | The repository to move it to (name or id). |
+
 #### shinsa tasks move-to-backlog
 
 Keep a task in the backlog: its plan waits there until you start building it.

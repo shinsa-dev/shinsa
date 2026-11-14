@@ -22,7 +22,7 @@ src/
 │                        React's Activity and renders Home, All tasks and Settings ahead at idle
 │                        (lib/kept-views.ts, docs/design.md 35); starts the connection unless the route is /ui
 ├── router.ts            The pushState router: parseRoute, navigate, replaceRoute, updateSearchParams,
-│                        useRoute, useSearchParam, resolveTaskPath (the only place a task URL is built);
+│                        useRoute, useSearchParam, resolveTaskPath (the only place a task URL is built), selectRouteTask (a task address keeps its task after the task takes a new handle);
 │                        RouteScope renders a subtree at a fixed route (the site's demos); the build's base path
 │                        (from BASE_URL; both builds use `/` today) is taken off the address and put on every path
 │                        it pushes and every in-app link (stripRouteBase, withRouteBase)
@@ -62,7 +62,7 @@ src/
 │                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
 │                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares; the task's composer on
 │                        Overview, Review and Chat is one draft per task, lib/chat/task-drafts.ts), review draft, the
-│                        handle, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
+│                        handle, move-dialog.tsx: Move to another repository's picker, bundle.tsx: BundleFact, the toolbar's Bundle item and its popover of the bundle's
 │                        tasks, and BundleMark, its count beside a queue row's name, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, retry (an armed automatic retry: its reason, countdown, Retry now and Stop retrying), setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
@@ -325,7 +325,7 @@ src/
     │                    task groups and chains, bundles (bundles.ts: a bundle's rows and their states, the Stack on another task
     │                    choices core accepts, the now card's wait and note; groups.ts lists a ready task with its root),
     │                    next action, the now line,
-    │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
+    │                    references, tabs, facts, dependencies, task actions, moving a task (move.ts: the repositories Move to another repository offers, its own project's first, and isTaskMovable, core's resolveMoveRefusal for you), gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
     │                    queued messages, when they send (describeQueue, describeRoundRelease: after you merge or
     │                    approve when the round waits for you, from core's resolveRoundRelease), Send now (round.send)

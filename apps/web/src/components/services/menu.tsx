@@ -5,12 +5,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import {
-  COMPACT_POPOVER,
-  COMPACT_POPOVER_INSET,
-  CompactSection,
-  CompactSections,
-} from '@/components/layout/compact-section.tsx';
+import { COMPACT_POPOVER, CompactSection, CompactSections } from '@/components/layout/compact-section.tsx';
 import { NAV_ICON_NUDGE } from '@/components/layout/nav-button.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import {
@@ -25,7 +20,6 @@ import {
   ServiceActionButton,
   type ServiceHandlers,
   ServiceRow,
-  TaskRunRow,
 } from '@/components/services/service-row.tsx';
 import { useServiceActions } from '@/components/services/use-service-actions.ts';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
@@ -98,6 +92,7 @@ function ServiceGroupSection({
           <ServiceActionButton
             label={describeStartAll(group.project)}
             icon='IconPlay'
+            size='icon-xs'
             onClick={() => handlers.startAll(group.project)}
           />
         )
@@ -114,25 +109,14 @@ function ServiceGroupSection({
             onEdit={() => manage.onEdit(view.service.id)}
           />
         ) : (
-          <React.Fragment key={view.service.id}>
-            <ServiceRow
-              view={view}
-              project={group.project}
-              now={now}
-              handlers={handlers}
-              hasRuns={(group.runs?.[view.service.id]?.length ?? 0) > 0}
-            />
-            {group.runs?.[view.service.id]?.map((run, index, runs) => (
-              <TaskRunRow
-                key={run.view.terminal?.id ?? run.view.taskId}
-                run={run}
-                last={index === runs.length - 1}
-                project={group.project}
-                now={now}
-                handlers={handlers}
-              />
-            ))}
-          </React.Fragment>
+          <ServiceRow
+            key={view.service.id}
+            view={view}
+            project={group.project}
+            now={now}
+            handlers={handlers}
+            runs={group.runs?.[view.service.id]}
+          />
         )
       )}
     </CompactSection>
@@ -433,9 +417,7 @@ function ServicesPanelContent({
         </div>
       ) : (
         <div className='min-h-0 overflow-y-auto'>
-          <CompactSections
-            className={cn(COMPACT_POPOVER_INSET, 'pb-0.5 has-[>section:only-of-type[data-folded]]:pb-1.5')}
-          >
+          <CompactSections className='pb-0.5 has-[>section:only-of-type[data-folded]]:pb-1.5'>
             {groups.map((group) => (
               <ServiceGroupSection
                 key={group.project.id}

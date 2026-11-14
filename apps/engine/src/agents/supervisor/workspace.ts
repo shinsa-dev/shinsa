@@ -1,6 +1,7 @@
 import {
   type DelegatedRun,
   isDelegatedRun,
+  isLeadTask,
   type Repo,
   type Run,
   type ShinsaState,
@@ -33,7 +34,7 @@ export function resolveWorkspace(
   run: Run,
   task: Task
 ): Workspace | null {
-  if (task.repoId === null) {
+  if (task.repoId === null || isLeadTask(task)) {
     return { cwd: resolveScratchPath(config.dataDir, task.id), repo: null, defaultBranch: SCRATCH_BRANCH };
   }
   const repo = state.repos[task.repoId];
