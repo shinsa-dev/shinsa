@@ -1126,7 +1126,9 @@ folds in `state/shapes.ts`).
   notifications and the Home guide agree, Close
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
-  of planning a fix.
+  of planning a fix, except while an earlier round's pull request is still open: that round ships through the pull
+  request, so it plans its change onto it with no your OK (a veto there would settle the task and leave the pull
+  request without a merge gate).
 - **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
   that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The
@@ -1482,7 +1484,9 @@ bundle with `create_task`'s `stack_on_this` (never with `this_task_waits` or `af
   fixed like any other); when the lead merges, the next task in order leads. A task below cancelled pauses each task
   stacked on it, started or not, with a failure gate, "“‹parent›” was cancelled"; Retry keeps it stacked on the
   others, or takes it out of the bundle and bases it on the default branch when that was its only parent, and Stack on
-  another task… points it elsewhere while it has not started.
+  another task… points it elsewhere while it has not started. A task whose round merged stays out of its bundle while
+  it answers a follow-up: it counts as finished once its pull request merged (`isDependencyComplete`), whatever its
+  stage, so the tasks stacked on it are not held again for it to be ready to merge.
 - **Where it shows.** The task toolbar's Bundle item ("Bundle 2/3", the ready tasks of all of them) opens a popover
   that draws the bundle as the task list's tree (`orderChains`): each task under the task it stacks on, indented with
   the same arrow, with its state (Waiting, Working, Ready, Merging, Merged), its pull request and This task

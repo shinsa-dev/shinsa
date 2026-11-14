@@ -1022,6 +1022,35 @@ describe('the agent composes the steps', () => {
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
   });
 
+  test('a later find-and-fix round that finds nothing, onto an open pull request, plans without your OK', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    linkSession(harness, taskId, 'agent-session');
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Why is the export slow?',
+      kind: 'new_round',
+      title: 'Why the export is slow',
+      shape: 'fix',
+    });
+    reachShipping(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ number: 42 }) });
+    expect(resolveTaskRounds(harness.task(taskId)).map((round) => round.status)).toEqual([
+      'shipped',
+      'active',
+    ]);
+    passSetup(harness, taskId);
+    deliver(harness, taskId, 'investigate', null, 'close');
+    const task = harness.task(taskId);
+    expect(task.pipeline).toEqual([...SHAPE_PIPELINES.fix]);
+    expect(task.proposal ?? null).toBeNull();
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual([]);
+    expect(task.pullRequest).toMatchObject({ number: 42, state: 'open' });
+    passSetup(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
+  });
+
   test('an answer can lead to an operation, and approving plans it without asking for another proposal', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

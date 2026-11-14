@@ -643,6 +643,34 @@ describe('a bundle on its way to the merge', () => {
     expect(harness.task(question).stacksOn).toEqual([parent]);
   });
 
+  test('a follow-up on a merged task keeps it out of the bundle it left', () => {
+    const harness = createHarness();
+    const merged = createTask(harness, { request: 'Merged' });
+    const busy = createTask(harness, { request: 'Busy' });
+    const above = createTask(harness, { request: 'Above', stacksOn: [merged], waitsOn: [busy] });
+    reachReady(harness, merged, 1);
+    recordMerged(harness, merged, 1);
+    const waiter = createTask(harness, { request: 'Waiter', waitsOn: [merged] });
+    const child = createTask(harness, { request: 'Child', stacksOn: [above, waiter] });
+    expect(harness.task(above).stageReason).toBe('waiting for “Busy” to finish');
+    harness.send({ type: 'task.message', taskId: merged, text: 'Why this approach?' });
+    expect(harness.task(merged)).toMatchObject({ stage: 'answering', bundleReady: null });
+    expect(harness.task(above).stageReason).toBe('waiting for “Busy” to finish');
+    expect(listPendingDependencies(harness.state, harness.task(above)).map((task) => task.id)).toEqual([
+      busy,
+    ]);
+    expect(isBundleMember(harness.state, harness.task(waiter), merged)).toBe(false);
+    expect(isBundleMember(harness.state, harness.task(merged), waiter)).toBe(false);
+    expect(resolveBundleMembers(harness.state, harness.task(merged)).map((task) => task.id)).toEqual([
+      merged,
+    ]);
+    expect(resolveBundleMembers(harness.state, harness.task(child)).map((task) => task.id)).toEqual([
+      above,
+      waiter,
+      child,
+    ]);
+  });
+
   test('a loose task is in no bundle', () => {
     const harness = createHarness();
     const loose = createTask(harness, { request: 'Loose' });

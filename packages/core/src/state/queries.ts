@@ -9,7 +9,6 @@ import {
   isDelegatedRun,
   isDependencyComplete,
   isSettingUpWorkspace,
-  isTaskComplete,
   isTaskSettled,
   parseTaskHandle,
   type Run,
@@ -157,7 +156,7 @@ function isReadyToStackOn(state: ShinsaState, task: Task) {
 }
 
 function isInBundle(task: Task) {
-  return !isTaskComplete(task) && task.stage !== 'cancelled';
+  return !isDependencyComplete(task) && task.stage !== 'cancelled';
 }
 
 interface StackEdges {
@@ -218,7 +217,8 @@ function collectBundle(state: Pick<ShinsaState, 'tasks'>, task: Task, edges: Sta
   const pending = [task];
   for (let member = pending.pop(); member !== undefined; member = pending.pop()) {
     const parents = listStackParents(state, member).filter(edges.parent);
-    for (const next of [...parents, ...(children.get(member.id) ?? [])]) {
+    const below = edges.parent(member) ? (children.get(member.id) ?? []) : [];
+    for (const next of [...parents, ...below]) {
       if (members.has(next.id)) continue;
       members.set(next.id, next);
       pending.push(next);
@@ -263,7 +263,7 @@ export function resolveBundle(state: Pick<ShinsaState, 'tasks'>, task: Task) {
 }
 
 function isStackPending(state: ShinsaState, parent: Task) {
-  return !isTaskComplete(parent) && !isReadyToStackOn(state, parent);
+  return !isDependencyComplete(parent) && !isReadyToStackOn(state, parent);
 }
 
 export function listPendingStackParents(state: ShinsaState, task: Task) {
