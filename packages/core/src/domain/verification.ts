@@ -208,6 +208,11 @@ export function validatePlanRules(steps: readonly PipelineStep[], document: Plan
       '`files` is for a change, and a lead changes no files: its tasks plan their own. Leave it empty.'
     );
   }
+  if ((document.initiative || steps.includes('lead')) && split.some((part) => part.order === 'stacks_on')) {
+    errors.push(
+      "An initiative's tasks each merge on their own, so none stacks as a bundle: give each part `parallel`, or `waits_on` when it needs another part merged first."
+    );
+  }
   if (document.initiative && split.length === 0) {
     errors.push(
       '`initiative` makes this task and its split parts an initiative: give the parts in `split`, or leave it out.'
