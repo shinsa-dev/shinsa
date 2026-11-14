@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, replayEventLog } from '../../src/index.ts';
+import { createState, replayEventLog, serializeState } from '../../src/index.ts';
 import {
+  ENGINE_STATE_FIELDS,
   createDraft,
   removeEntry,
   STATE_FIELDS,
@@ -12,7 +13,18 @@ import { createHarness, createTask, registerRepo, decideOrThrow } from '../harne
 
 describe('state drafts', () => {
   test('name every part of the state, so a patch carries every change', () => {
-    expect(new Set(Object.keys(createState()))).toEqual(new Set(['seq', ...STATE_RECORDS, ...STATE_FIELDS]));
+    expect(new Set(Object.keys(createState()))).toEqual(
+      new Set(['seq', ...STATE_RECORDS, ...STATE_FIELDS, ...ENGINE_STATE_FIELDS])
+    );
+  });
+
+  test('keep the engine-only fields out of every patch and out of the page', () => {
+    const state = createState();
+    const wire = serializeState(state);
+    for (const key of ENGINE_STATE_FIELDS) {
+      expect((STATE_FIELDS as readonly string[]).includes(key)).toBe(false);
+      expect(Object.hasOwn(wire, key)).toBe(false);
+    }
   });
 
   test('copy a record the first time it is written and leave the state they came from alone', () => {

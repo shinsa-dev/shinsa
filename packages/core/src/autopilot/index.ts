@@ -1,13 +1,39 @@
+export { resolveAutopilotBenchmark } from './benchmark.ts';
 export { isAutopilotDoneSeeable, listAutopilotDone } from './done.ts';
+export {
+  createAutopilotProbe,
+  describeAutopilotEstimate,
+  listAutopilotExampleLines,
+  selectAutopilotEstimate,
+} from './examples.ts';
 export { describeAutopilotLesson, listAutopilotLessons, resolveLessonLimit } from './lessons.ts';
 export {
   type AutopilotProfileContext,
+  type AutopilotScoredDecision,
   listAutopilotKindLines,
-  listAutopilotProfileLines,
+  listAutopilotSteeringLines,
   listAutopilotTallies,
   recordAutopilotDecisions,
 } from './profile.ts';
-export { isAutopilotAgreement, resolveAutopilotScore } from './score.ts';
+export {
+  isAutopilotAgreement,
+  resolveAutopilotBaseRate,
+  isAutopilotModelVeto,
+  resolveAutopilotCombinedVerdict,
+  resolveAutopilotLoss,
+  resolveAutopilotScore,
+} from './score.ts';
+export {
+  AUTOPILOT_MODEL_HEADS,
+  AUTOPILOT_MODEL_LIMITS,
+  type AutopilotLearnedDecision,
+  type AutopilotModel,
+  type AutopilotModelGuess,
+  type AutopilotModelHead,
+  createAutopilotModel,
+  learnAutopilotDecisions,
+  selectAutopilotModelGuess,
+} from './model/index.ts';
 export {
   isUrgentTask,
   isWatchdogTask,
@@ -23,10 +49,23 @@ export {
   AUTOPILOT_PROFILE_LIMITS,
   EMPTY_AUTOPILOT_PROFILE,
   AUTOPILOT_SCORE_LIMITS,
+  AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_SCORED_KINDS,
+  AUTOPILOT_TRACKS,
+  AUTOPILOT_BENCHMARK_SCOPES,
+  type AutopilotBenchmark,
+  type AutopilotBenchmarkKind,
+  type AutopilotBenchmarkRow,
+  type AutopilotBenchmarkScope,
+  type AutopilotAgreement,
+  type AutopilotRate,
   type AutopilotScore,
+  type AutopilotTrack,
+  type AutopilotTrackScore,
   type AutopilotScoredKind,
   type AutopilotDecision,
+  type AutopilotDecisionFacts,
+  type AutopilotFindingCounts,
   type AutopilotDecisionAnswer,
   type AutopilotDecisionKind,
   type AutopilotProfile,

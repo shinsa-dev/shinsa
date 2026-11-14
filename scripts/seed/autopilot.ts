@@ -1,6 +1,7 @@
 import type {
   AutopilotDecision,
   AutopilotDecisionAnswer,
+  AutopilotDecisionFacts,
   AutopilotDecisionKind,
   AutopilotLesson,
   AutopilotVerdict,
@@ -83,6 +84,35 @@ function resolveSeedGuess(kind: AutopilotDecisionKind, answer: AutopilotDecision
   return agreeing === 'act' ? 'forward' : 'act';
 }
 
+const SEED_MODEL_DOUBTS: Readonly<Record<number, number>> = { 41: 0.35, 48: 0.4 };
+
+function createSeedEstimate(kind: AutopilotDecisionKind, answer: AutopilotDecisionAnswer, index: number) {
+  const guess = resolveSeedGuess(kind, answer, index);
+  if (guess === null) return null;
+  return {
+    head: 'gate' as const,
+    p: SEED_MODEL_DOUBTS[index] ?? (guess === 'act' ? 0.82 : 0.3),
+    confidence: index >= 30 ? 0.7 : 0.2,
+    similar: Math.min(index, 40),
+  };
+}
+
+function createSeedFacts(answer: AutopilotDecisionAnswer, index: number): AutopilotDecisionFacts {
+  const pushedBack = answer === 'revised' || answer === 'rejected';
+  return {
+    confidence: pushedBack ? 'medium' : 'high',
+    shape: 'change',
+    repoId: `repo-${SEED_DECISION_PROJECTS[index % SEED_DECISION_PROJECTS.length] ?? 'none'}`,
+    revisions: pushedBack ? 1 : 0,
+    findings: { blocking: pushedBack ? 1 : 0, shouldFix: index % 4 === 0 ? 1 : 0, optional: index % 3 },
+    heldPlan: false,
+    waitedMinutes: 5 + ((index * 7) % 240),
+    active: index % 6 !== 0,
+    inHours: index % 6 !== 0,
+    hour: (9 + index) % 24,
+  };
+}
+
 function createSeedDecision(index: number): AutopilotDecision {
   const kind = SEED_DECISION_KINDS[index % SEED_DECISION_KINDS.length] ?? 'review';
   const answer = resolveSeedAnswer(kind, index);
@@ -100,6 +130,8 @@ function createSeedDecision(index: number): AutopilotDecision {
     touched: index % 4 === 0,
     guess: resolveSeedGuess(kind, answer, index),
     note: SEED_NOTES[index] ?? null,
+    facts: createSeedFacts(answer, index),
+    estimate: createSeedEstimate(kind, answer, index),
   };
 }
 

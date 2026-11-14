@@ -62,7 +62,7 @@ export type WireRun = Omit<Run, 'prompt' | 'rolePrompt' | 'told'> & { fixFocus?:
 
 export type WireTask = Task & { summarized?: true };
 
-export type WireState = Omit<ShinsaState, 'runs' | 'tasks'> & {
+export type WireState = Omit<ShinsaState, 'runs' | 'tasks' | 'autopilotModel' | 'autopilotHistory'> & {
   tasks: Record<string, WireTask>;
   runs: Record<string, WireRun>;
 };

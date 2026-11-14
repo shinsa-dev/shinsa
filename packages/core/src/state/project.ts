@@ -1,4 +1,6 @@
 import { Result, Option } from 'effect';
+import { createAutopilotModel } from '../autopilot/model/learn.ts';
+import type { AutopilotLearnedDecision, AutopilotModel } from '../autopilot/model/schema.ts';
 import { type AutopilotLesson, type AutopilotProfile, EMPTY_AUTOPILOT_PROFILE } from '../autopilot/schema.ts';
 import type { StoredBriefing } from '../briefing/types.ts';
 import {
@@ -135,6 +137,8 @@ export interface ShinsaState {
   timeZone: string | null;
   autopilotLessons: AutopilotLesson[];
   autopilotProfile: AutopilotProfile;
+  autopilotModel?: AutopilotModel;
+  autopilotHistory?: AutopilotLearnedDecision[];
   teammateTasks?: Readonly<Record<string, true>>;
   teammateRepos?: Readonly<Record<string, true>>;
 }
@@ -172,6 +176,8 @@ export function createState(): ShinsaState {
     timeZone: null,
     autopilotLessons: [],
     autopilotProfile: EMPTY_AUTOPILOT_PROFILE,
+    autopilotModel: createAutopilotModel(),
+    autopilotHistory: [],
   };
 }
 

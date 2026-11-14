@@ -128,7 +128,13 @@ export function createAutopilotProfile(parts: {
   unscored?: number;
   tallies?: Pick<AutopilotTally, 'kind' | 'total'>[];
 }): AutopilotProfile {
-  const decision = (answer: AutopilotDecision['answer'], guess: AutopilotDecision['guess']) => ({
+  const sure = { head: 'gate' as const, p: 0.95, confidence: 0.8, similar: 40 };
+  const doubtful = { ...sure, p: 0.2 };
+  const decision = (
+    answer: AutopilotDecision['answer'],
+    guess: AutopilotDecision['guess'],
+    modelGuess = guess === 'forward' ? doubtful : sure
+  ) => ({
     at: NOW,
     taskId: 'task-1',
     gateId: null,
@@ -142,10 +148,15 @@ export function createAutopilotProfile(parts: {
     touched: false,
     guess,
     note: null,
+    facts: null,
+    estimate: guess === null ? null : modelGuess,
+    modelGuess,
   });
   const decisions = [
     ...Array.from({ length: parts.disagreed }, () => decision('revised', 'act')),
-    ...Array.from({ length: parts.agreed }, () => decision('approved', 'act')),
+    ...Array.from({ length: parts.agreed }, (_, index) =>
+      index % 3 === 0 ? decision('revised', 'forward') : decision('approved', 'act')
+    ),
     ...Array.from({ length: parts.unscored ?? 0 }, () => decision('approved', null)),
   ];
   return {

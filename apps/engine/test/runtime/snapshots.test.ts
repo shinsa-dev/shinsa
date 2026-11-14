@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { applyStatePatch, resolveStatePatch, type ShinsaState } from '@shinsa/core';
+import { applyStatePatch, resolveStatePatch, serializeState, type ShinsaState } from '@shinsa/core';
 import { Option } from 'effect';
 import { Engine } from '../helpers/engine.ts';
 import { openEventLog } from '../helpers/event-log.ts';
@@ -138,7 +138,7 @@ describe('state changes', () => {
   test('each listener hears the state before and what changed, which patches the old state into the new', async () => {
     const path = join(createTempDir(), 'shinsa.sqlite');
     const { engine, log } = openEngine(path, {});
-    let client = JSON.parse(JSON.stringify(engine.state)) as ShinsaState;
+    let client = JSON.parse(JSON.stringify(serializeState(engine.state))) as ShinsaState;
     const kept = engine.state;
     engine.subscribe((state, change) => {
       const patch = JSON.parse(JSON.stringify(resolveStatePatch(change.previous, state, change.changes)));
@@ -147,7 +147,8 @@ describe('state changes', () => {
     await engine.dispatch({ type: 'project.write', project: { name: 'Superwall', color: 'blue' } });
     await engine.dispatch({ type: 'task.create', request: 'Fix the tab scroll', repoId: null });
     await engine.dispatch({ type: 'focus.change', projectId: null, until: 7 });
-    expect(client).toEqual(JSON.parse(JSON.stringify(engine.state)));
+    expect(client).toEqual(JSON.parse(JSON.stringify(serializeState(engine.state))));
+    expect(client.autopilotHistory).toBeUndefined();
     expect(kept.seq).toBe(0);
     expect(Object.keys(kept.tasks)).toEqual([]);
     log.close();
