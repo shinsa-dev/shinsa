@@ -1,5 +1,6 @@
 import {
   AUTOPILOT_SCORE_LIMITS,
+  AUTOPILOT_TOPIC_LABEL,
   type AutopilotContact,
   type AutopilotContactKind,
   type AutopilotDone,
@@ -11,6 +12,7 @@ import {
   HOUR_MS,
   isSameAutopilotContact,
   listAutopilotDone,
+  listAutopilotTopics,
   MAX_AUTOPILOT_CONTACTS,
   type MergeBlock,
   MINUTE_MS,
@@ -154,6 +156,8 @@ export const AUTOPILOT_SCORE_ROWS = {
   score: 'Autopilot score',
   margin: 'Against your usual answer',
   suggested: 'Suggested level',
+  topics: 'What you ask about',
+  followUps: 'Its follow-ups',
 } as const;
 
 const LEVEL_LABEL: Record<AutopilotLevel, string> = {
@@ -166,6 +170,30 @@ export interface AutopilotScoreView {
   score: { detail: string; value: number; percent: string };
   margin: { detail: string; points: string } | null;
   suggested: { level: AutopilotLevel; detail: string; apply: string | null };
+  topics: { detail: string; value: string } | null;
+  followUps: { detail: string; percent: string } | null;
+}
+
+const SHOWN_TOPICS = 3;
+
+function resolveTopicsView(state: Pick<ShinsaState, 'autopilotProfile'>) {
+  const topics = listAutopilotTopics(state.autopilotProfile).slice(0, SHOWN_TOPICS);
+  if (topics.length === 0) return null;
+  const value = topics.map((tally) => AUTOPILOT_TOPIC_LABEL[tally.topic]).join(', ');
+  return {
+    detail:
+      'What you raise most when you ask for changes or reply. Autopilot raises the same when it follows up for you.',
+    value: capitalize(value),
+  };
+}
+
+function resolveFollowUpsView(score: AutopilotScore) {
+  const { scored, matched, share } = score.followUps;
+  if (share === null) return null;
+  return {
+    detail: `When you asked for changes after it would have followed up, it raised the same topic as you on ${matched} of ${scored}.`,
+    percent: `${Math.round(share * 100)}%`,
+  };
 }
 
 function describeScore(score: AutopilotScore) {
@@ -215,6 +243,8 @@ export function resolveAutopilotScoreView(
       detail: describeSuggested(score),
       apply: score.suggested === level ? null : `Use ${LEVEL_LABEL[score.suggested]}`,
     },
+    topics: resolveTopicsView(state),
+    followUps: resolveFollowUpsView(score),
   };
 }
 
@@ -593,6 +623,19 @@ const DONE_FOR_YOU_TEXT: Record<AutopilotGateKind, string> = {
   proposal: 'Autopilot gave your OK on a watchdog task’s fix.',
 };
 
+const FOLLOW_UP_TEXT: Record<AutopilotGateKind, string> = {
+  plan: 'Autopilot asked for changes to the plan for you',
+  question: 'Autopilot followed up on an agent’s question for you',
+  review: 'Autopilot asked for changes to the review for you',
+  merge: 'Autopilot asked for changes before the merge for you',
+  proposal: 'Autopilot followed up on a watchdog task’s fix for you',
+};
+
+const FOLLOW_UP_GLYPH = { icon: 'IconBubbleText', tone: 'amber' } as const satisfies {
+  icon: IconName;
+  tone: Tone;
+};
+
 const DONE_FOR_YOU_GLYPH: Record<AutopilotGateKind, { icon: IconName; tone: Tone }> = {
   plan: { icon: 'IconChecklist', tone: 'purple' },
   question: { icon: 'IconBubbleCheck', tone: 'blue' },
@@ -613,6 +656,7 @@ export interface DoneForYouRow {
 }
 
 function describeDoneForYou(done: AutopilotDone, task: Task | undefined) {
+  if (done.followUp !== null) return `${FOLLOW_UP_TEXT[done.gate]}: “${done.followUp.trim()}”`;
   if (done.gate === 'merge' && task?.stage === 'merged') return 'Autopilot merged it for you.';
   return DONE_FOR_YOU_TEXT[done.gate];
 }
@@ -627,7 +671,7 @@ export function listDoneForYouRows(state: ShinsaState): DoneForYouRow[] {
       summary: describeDoneForYou(done, task),
       reason: done.reason,
       at: done.at,
-      ...DONE_FOR_YOU_GLYPH[done.gate],
+      ...(done.followUp === null ? DONE_FOR_YOU_GLYPH[done.gate] : FOLLOW_UP_GLYPH),
     };
   });
 }

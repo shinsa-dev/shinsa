@@ -65,8 +65,23 @@ const SEED_DISAGREEMENTS = new Set([9, 26, 41, 58]);
 
 const SEED_NOTES: Readonly<Record<number, string>> = {
   9: 'Keep the old route until the mobile app ships.',
+  18: 'Wait until the backfill has finished.',
+  23: 'Check the token before you read the body.',
   26: 'Split the migration into its own task.',
+  36: 'Add a test for the expired session.',
   41: 'Too broad for one pull request.',
+  47: 'Keep the old event names so older clients stay compatible.',
+  58: 'How does this handle auth on the new endpoint?',
+  63: 'Retry on a timeout instead of failing the export.',
+  72: 'What stops two runs from writing the same row at the same time?',
+  79: 'Make sure the migration can run twice without losing data.',
+  81: 'Who can see the token in the logs? It should never leak.',
+};
+
+const SEED_FOLLOW_UPS: Readonly<Record<number, string>> = {
+  18: 'Did every check pass on the final commit?',
+  26: 'Is the migration safe to run twice?',
+  58: 'Does the new endpoint check the auth token before it reads the body?',
 };
 
 function resolveSeedAnswer(kind: AutopilotDecisionKind, index: number): AutopilotDecisionAnswer {
@@ -79,6 +94,7 @@ function resolveSeedAnswer(kind: AutopilotDecisionKind, index: number): Autopilo
 
 function resolveSeedGuess(kind: AutopilotDecisionKind, answer: AutopilotDecisionAnswer, index: number) {
   if (kind !== 'plan' && kind !== 'review' && kind !== 'merge') return null;
+  if (SEED_FOLLOW_UPS[index]) return 'revise';
   const agreeing: AutopilotVerdict = answer === 'approved' ? 'act' : 'forward';
   if (!SEED_DISAGREEMENTS.has(index)) return agreeing;
   return agreeing === 'act' ? 'forward' : 'act';
@@ -129,7 +145,7 @@ function createSeedDecision(index: number): AutopilotDecision {
     watchdog: index % 11 === 0,
     touched: index % 4 === 0,
     guess: resolveSeedGuess(kind, answer, index),
-    followUp: null,
+    followUp: SEED_FOLLOW_UPS[index] ?? null,
     note: SEED_NOTES[index] ?? null,
     facts: createSeedFacts(answer, index),
     estimate: createSeedEstimate(kind, answer, index),
@@ -150,6 +166,7 @@ interface SeedHandled {
   hoursAgo: number;
   reason: string;
   response: string | null;
+  followUp?: true;
 }
 
 const SEED_HANDLED: readonly SeedHandled[] = [
@@ -177,7 +194,21 @@ const SEED_HANDLED: readonly SeedHandled[] = [
     reason: 'You kept old names in your last three answers like this.',
     response: 'Keep the old event names, and add the new ones beside them.',
   },
+  {
+    taskId: 'task-paywall-euro-prices',
+    type: 'plan',
+    title: 'Approve the plan for “Show paywall prices in the visitor’s currency”',
+    hoursAgo: 2.2,
+    reason: 'The plan caches prices per visitor and does not say how a cached price is cleared.',
+    response: 'How does the cache handle a visitor whose currency changes between visits?',
+    followUp: true,
+  },
 ];
+
+function resolveSeedHandledDecision(handled: SeedHandled) {
+  if (handled.followUp) return 'revise';
+  return handled.type === 'question' ? 'reply' : 'approve';
+}
 
 export function pushSeedAutopilotHandled(push: (at: number, event: ShinsaEventInput) => void) {
   for (const handled of SEED_HANDLED) {
@@ -202,7 +233,7 @@ export function pushSeedAutopilotHandled(push: (at: number, event: ShinsaEventIn
     push(at + MINUTE, {
       type: 'gate.answered',
       gateId,
-      decision: handled.type === 'question' ? 'reply' : 'approve',
+      decision: resolveSeedHandledDecision(handled),
       response: handled.response,
       autopilot: handled.reason,
     });
