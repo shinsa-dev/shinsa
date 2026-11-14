@@ -2822,21 +2822,23 @@ Only these, and they win over anything below:
       a folded section `data-folded`), so a project folded on its own sits as far from the footer's hairline as from the
       popover's top (12px each); with it open the last row ends 8px above the hairline (`pb-0.5`), as far as every row
       sits from the popover's sides. A row
-      (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
+      (`ServiceRow`) is one line, folded by default: a `DisclosureHeader` with the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
       `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
-      mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
-      1") and the command in mono. Pressing the row opens its terminal once it has one. The row's actions sit at its
-      end, `icon-sm`: Start (`IconPlay`) is always there on a service that does not run; Restart
-      (`IconArrowRotateClockwise`) and Stop (`IconStop`) show on a running one while the row is under the pointer (the
-      shared highlight's `data-hovered`), 1px apart (`gap-px`), as the same pair is on the Terminal page's toolbar and
-      as adjacent ghost buttons in an `InputGroup` addon are: each hover wash is its own edge, so the pair reads as one
-      set (measured: 1px between Restart and Stop, each 24px). A running row whose service has a preview URL ends
-      with Open (`ServicePreviewButton`, `icon-sm`, `IconArrowUpRight`, after Stop, 1px apart): always shown, not only
-      under the pointer, since the link is what you came for; its tooltip "Open ‹name›" ("Open ‹name› for ‹task›" on a
+      mark that never reads as a checkbox), the name and the state beside it in its tone ("Running for 12m", "Failed
+      with code 1"), its chevron shown under the pointer. Each service keeps its fold in the disclosure store
+      (`resolveServiceRowId`, `services:service:<id>`), across openings and reloads, and one fold serves the top bar's
+      popover and a task's Services popover alike. The line ends with its buttons, `icon-sm`, 1px apart (`gap-px`):
+      Terminal (`IconConsole`, "Open the terminal of ‹name›", `describeServiceTerminal`) once the service has a
+      terminal, so it opens in one press without expanding the row; then Start (`IconPlay`) on a service that does not
+      run, or Open (`ServicePreviewButton`, `IconArrowUpRight`) on a running one with a preview URL, always on the line
+      since the link is what you came for; its tooltip "Open ‹name›" ("Open ‹name› for ‹task›" on a
       task's run, `describeServicePreview`) with the URL as its detail. It opens the run's own URL, with that run's
       port, in a new window (`openServicePreview`; `ServiceView.url`, only while it starts or runs,
       `selectServicePreview`). A task's run in the popover, a task's Services popover (its Services fact) and the
-      Terminal page's toolbar have the same button. Evidence's Preview group links the task's running previews too,
+      Terminal page's toolbar have the same button. Pressing the line expands it: a second line under the name with the
+      command in mono and, on a running service, Restart (`IconArrowRotateClockwise`) and Stop (`IconStop`), then Share
+      on a task's run with a preview, and under it the service's runs in tasks on a tree line, each with its own
+      buttons. Evidence's Preview group links the task's running previews too,
       after the ones the agent attached, as a link row each (`TaskPreviewLinks`: `IconArrowUpRight`, the service's
       name, its URL; `listTaskPreviews`), there only while the run is active and left out when the agent attached a
       link to the same server already (`listUnattachedPreviews`, by origin, since the agent's carries the screen's
@@ -2932,8 +2934,8 @@ Only these, and they win over anything below:
       washed while open like a fact's. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
       ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
       `ServiceRow` per service for this task, the list inset 6px on every side (`p-1.5`) so the first tile sits 12px
-      from the popover's side and 12px from the header's hairline: its state is the task's run's, Start starts it in
-      the worktree, and the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
+      from the popover's side and 12px from the header's hairline, folded the same way: its state is the task's run's,
+      Start starts it in the worktree, and its Terminal button opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
