@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { isLaterRound, type Repo, resolveRoundBases, type Task } from '@shinsa/core';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { constFalse } from 'effect/Function';
@@ -7,7 +6,7 @@ import { Checkout } from '../../git/checkout/service.ts';
 import { Remote } from '../../git/remote/service.ts';
 import type { GitFailed } from '../../git/schema.ts';
 import { Git } from '../../git/service.ts';
-import { requireCheckout } from '../checkout.ts';
+import { isRepositoryPath, requireCheckout } from '../checkout.ts';
 import type { WorktreeRoot } from '../root/service.ts';
 import { type CheckoutCommit, NO_BRANCH_YET, TaskCheckoutMissing, type Workspace } from '../schema.ts';
 
@@ -25,8 +24,6 @@ export class WorktreeWorkspaces extends Context.Service<
       const fs = yield* FileSystem.FileSystem;
       const checkout = yield* Checkout;
       const remote = yield* Remote;
-
-      const isRepositoryPath = (repo: Repo, path: string) => resolve(path) === resolve(repo.path);
 
       const commit = Effect.fn('WorktreeWorkspaces.commit')(function* (path: string, message: string) {
         const before = yield* checkout.head(path);

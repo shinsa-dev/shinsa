@@ -936,7 +936,7 @@ Only these, and they win over anything below:
       for repositories in those folders, so they come first), Browser, Integrations (Context optimizer, MCPs,
       Plugins, Skills; 29, its search pinned in the header under the tab bar, so the lists fade under it through
       the page's own `scroll-fade` mask) and Automations (Watchdogs, Schedules). A project's repository row is its name and path: what always runs before review,
-      its test coverage and where agents work fold under its gear button, closed by default. Each is
+      its test coverage fold under its gear button, closed by default. Each is
       its own pane, not a scroll position: the main use is a floating, tablet-sized window, where one long page
       meant scrolling past everything to reach anything, and a scroll-spy table of contents would have kept that
       page. The tab is in the URL (`?tab=agents`; General is the bare `/settings`), and a link to a section
@@ -973,9 +973,8 @@ Only these, and they win over anything below:
       found, "Measures with Vitest." or "Found no coverage tool here, so nothing is measured.", from GET
       /api/repos/coverage; choosing Custom opens the Custom test coverage dialog with the command, the report's path
       inside the repository and its format, Infer from the path until the path says nothing, and a pencil button
-      beside the select edits it again; `lib/coverage.ts`), a ghost `sm` select of where agents work (Worktrees or
-      Main checkout, each with its one-line hint, `components/settings/workspace-select.tsx`), a remove ×;
-      repositories without a project have the three selects alone), and "No repositories or folders yet." when
+      beside the select edits it again; `lib/coverage.ts`), both under the row's gear button, and a
+      remove ×; repositories without a project have the two selects alone), and "No repositories or folders yet." when
       empty. Add is a menu of the repositories found on disk ("In your folders", "In other projects") and Folder
       by its path…, which puts a path field with Add folder and Cancel (Escape) at the end of the shelf. The
       description lives only in its dialog.

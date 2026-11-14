@@ -65,8 +65,8 @@ src/
 │                    isOfCurrentRound, the stack and how a round ships: resolveRoundBase, listStackedPullRequests,
 │                    canChangeRoundShipping, selectShippingTarget), gates (gates.ts: isPausingGate, isDecisionGate
 │                    for plan, review and merge, isAgentQuestion for a question or a secret), the on-your-behalf record
-│                    (on-behalf.ts: OnBehalfAction), where agents work (workspaces.ts: WORKSPACE_MODES,
-│                    resolveRepoWorkspace, WORKSPACE_SETUP_REASON; resolveApprovalPath, what
+│                    (on-behalf.ts: OnBehalfAction), where agents work (workspaces.ts: WORKSPACE_SETUP_REASON,
+│                    isSettingUpWorkspace, resolveEditRefusal; resolveApprovalPath, what
 │                    approving the review or the merge does with your edits, for decide and the web's toast), the
 │                    files another open task changes too (overlaps.ts: listNewOverlapPaths, describeOverlaps, the
 │                    note the Agent's next turn gets), how a person is named (people.ts: resolveFirstName, the

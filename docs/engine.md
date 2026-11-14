@@ -573,7 +573,7 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
 
 Every task works in a git worktree of its own (`apps/engine/src/workspaces/`, one `Workspace` of effects: prepare,
 commit, syncBase, push, writeEdit, remove). There is no other mode and no setting for it: a repository's own checkout
-is yours, and no task ever works in it.
+is yours, and no new task works in it (one set up before this, below, finishes there).
 
 | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|
@@ -584,7 +584,7 @@ is yours, and no task ever works in it.
 - **Your checkout is never removed.** A task whose `worktreePath` is the repository itself (one set up before the
   main-checkout mode was removed, `worktrees-only` in `LOG_MIGRATIONS`) keeps working there, since git makes no second
   worktree for a branch already checked out; when it settles, `remove` leaves that folder alone and cleanup stops no
-  process in it (`isRepositoryPath`, `Cleanup`).
+  process in it (`isRepositoryPath` in `workspaces/checkout.ts`, read by `WorktreeWorkspaces.remove` and `Cleanup`).
 - **Where the worktrees go.** New worktrees and isolated delegation checkouts go into one folder, `data/worktrees`
   unless you choose another in Settings → Projects → Worktrees, for example a folder in an S3 or R2 bucket you mount
   with s3fs, rclone or Mountain Duck, to keep worktrees off the local disk. The choice is `config.json`'s
@@ -3649,8 +3649,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
 | `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&word=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut`; asked with `Accept: application/x-ndjson` (the web does), a stream of `SearchLine`s instead: `matches` lines as git finds them, then one `done` line with how it ended (or one `failed` line), `no-store` | `git grep -n -I --column`: a plain search that ignores case is `-E` with each letter folded into a class (`[cC][oO]…`, the rest escaped; `-i` made git grep up to twenty times slower), a case-sensitive one `-F`, `regex=1` is `-E` with `-i` unless `case=1`, `-w` with `word=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked`. git is stopped at the 2,001st line, so a common word answers at once |
 | `GET /api/tasks/<id>/diff?base=&head=&path=&previous=` | `TaskDiff` with both ends: every changed file with its status, counts and risk, and the patch of the small ones only; the rest have `patch: ''` and `patchOmitted` (with `path`, and `previous` for a rename, the named file alone with its whole patch) | `git diff --raw --numstat -z --find-renames base head` for the list (`parseDiffSummary`), then one `git diff` over the files that fit the patch budget, in risk order (`selectPatchedFiles`, `mergeDiffPatches`: none over 2,000 changed lines or 256 KB, 20,000 lines and 1 MB in all, 400 files; a named file up to 2 MB); `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
 
-- **Where agents work.** The working copy is the task's own checkout in either mode: its worktree, or the main
-  checkout while the task holds it, so the `working` ref reads the checkout from disk (Where agents work).
+- **Where agents work.** The working copy is the task's own worktree, so the `working` ref reads it from disk
+  (Where agents work).
 - **Refs.** A `ref` is a full commit id that `git cat-file -t` says is a commit of that repository, or `working` for
   the task's working copy while its checkout exists; nothing else is passed to git (`ref_invalid`, `ref_unknown`). A
   commit once found is remembered per repository (`assertCommit`), so later reads at it start no process. Leaving `ref` out
@@ -6025,8 +6025,7 @@ finishing), so a burst of changes costs one call: each request interrupts the fi
   were working come back through restart continuation (The agent loop, below).
 - So every effect that touches the outside world is safe to run twice. A worktree's path depends only on the task
   and the branch it asked for, so a second `worktree.create` finds the first one and reuses it (a half-made folder
-  is cleared first), and a main
-  checkout already on the task's branch is kept (Where agents work, above). Opening a pull request reuses an open one for the branch. Merging asks GitHub first and never
+  is cleared first). Opening a pull request reuses an open one for the branch. Merging asks GitHub first and never
   asks it to merge a pull request that is already merged or queued; one GitHub still shows as open (and not queued)
   after the merge fails the effect, which retries and
   then opens a failure gate, so a task can never sit in "merging" with nothing moving it. A commit after a crash

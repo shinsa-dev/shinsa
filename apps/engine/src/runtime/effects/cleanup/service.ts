@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { isTaskSettled, type Repo } from '@shinsa/core';
 import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
 import { SharedCaches } from '../../../checks/caches/service.ts';
@@ -6,6 +5,7 @@ import { resolveScratchPath } from '../../../config/index.ts';
 import { Checkout } from '../../../git/checkout/service.ts';
 import { LeftoverProcesses } from '../../../git/leftovers/service.ts';
 import { describeError } from '../../../log/redact.ts';
+import { isRepositoryPath } from '../../../workspaces/checkout.ts';
 import type { EffectAttempt } from '../../engine/schema.ts';
 import { resolveEffectFailure } from '../../failures/classify.ts';
 import type { EffectFailure } from '../../failures/schema.ts';
@@ -56,7 +56,7 @@ export class Cleanup extends Context.Service<
         yield* closeTerminals(taskId);
         const services = world.services;
         yield* Effect.gen(function* () {
-          if (resolve(worktreePath) !== resolve(repo.path)) {
+          if (!isRepositoryPath(repo, worktreePath)) {
             const spare = services ? yield* services.listTerminalPids : [];
             yield* leftovers.stop(worktreePath, { spare });
           }

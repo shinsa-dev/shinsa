@@ -795,8 +795,8 @@ The agent chooses a task's checks and Shinsa runs them (`docs/engine.md` → Che
 | `Evidence.checkId?` | string | the check a piece of evidence is the output of (Shinsa's, `runId: null`) or links to (an agent's `test` or `check`, `uri` `shinsa://check/<id>`) |
 
 Refusals of a check change: `check_unknown` (an id the task does not have), `check_exists` (an `add` whose command the
-task already has), `check_phases_invalid` (a phase the plan does not have), `check_human_only` (a repository check,
-`r*`). A linked test or check with an unknown id is refused with `check_unknown` too.
+task already has), `check_phases_invalid` (a phase the plan does not have), `check_repo_owned` (a repository check,
+`r*`, whose message points the agent at `repos_update`). A linked test or check with an unknown id is refused with `check_unknown` too.
 
 ## Messages
 
