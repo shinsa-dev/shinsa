@@ -45,6 +45,46 @@ export function CardLine({
   );
 }
 
+export function CardToggle({
+  icon,
+  title,
+  meta,
+  open,
+  onToggle,
+}: {
+  icon: IconName;
+  title: React.ReactNode;
+  meta?: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const titleId = React.useId();
+  return (
+    <h3 data-chat-line className={cn(CARD_LINE, 'group/row relative hover:bg-bg-a2 active:bg-bg-a2')}>
+      <button
+        type='button'
+        aria-expanded={open}
+        aria-labelledby={titleId}
+        onClick={onToggle}
+        className='absolute inset-0 cursor-pointer'
+      />
+      <IconSlot className='pointer-events-none'>
+        <Icon name={icon} size='sm' className='text-fg-4' />
+      </IconSlot>
+      <span
+        id={titleId}
+        className='pointer-events-none min-w-0 truncate font-medium text-fg-4 [&_a]:pointer-events-auto [&_a]:relative'
+      >
+        {title}
+      </span>
+      <span className='pointer-events-none ms-auto flex shrink-0 items-center gap-1 ps-3 text-fg-2'>
+        {meta}
+        <RowChevron open={open} />
+      </span>
+    </h3>
+  );
+}
+
 function RowChevron({ open, className }: { open: boolean; className?: string }) {
   return (
     <Icon

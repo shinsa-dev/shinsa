@@ -27,9 +27,18 @@ export function resolveAskAnswer(call: ToolCall) {
   return splitMessageAttachments(readAnsweredReply(call.result));
 }
 
-export function resolveSpotsMeta(args: ChatToolArgs) {
+export function resolveSummaryMeta(args: ChatToolArgs) {
   const spots = readList(args, 'spots').length;
-  return spots > 0 ? `${describeCount(spots, 'spot', 'spots')} to review` : null;
+  const calls = readList(args, 'judgement_calls').length;
+  const parts = [
+    spots > 0 ? `${describeCount(spots, 'spot', 'spots')} to review` : null,
+    calls > 0 ? describeCount(calls, 'judgement call', 'judgement calls') : null,
+  ].filter((part) => part !== null);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+export function resolveDeliveryMeta(args: ChatToolArgs) {
+  return readProposedChange(args) ? 'Proposes a change' : null;
 }
 
 function readLine(args: ChatToolArgs, key: string) {

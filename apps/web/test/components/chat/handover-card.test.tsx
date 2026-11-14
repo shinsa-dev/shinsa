@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { type ChatTool, resolveAnsweredReply, serializeAttachments, type Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, type RenderResult, render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
@@ -29,7 +29,14 @@ function call(
   };
 }
 
-function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
+function openCards(view: RenderResult) {
+  for (const header of view.container.querySelectorAll('h3 button[aria-expanded="false"]')) {
+    fireEvent.click(header);
+  }
+  return view;
+}
+
+function renderClosed(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
   return render(
     <TooltipProvider>
       <HandoverCard
@@ -41,6 +48,10 @@ function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | n
       />
     </TooltipProvider>
   );
+}
+
+function renderCard(toolCall: ToolCall, task: Task | null = null, at: number | null = null) {
+  return openCards(renderClosed(toolCall, task, at));
 }
 
 describe('HandoverCard for the process tools', () => {
@@ -204,18 +215,20 @@ describe('HandoverCard for the process tools', () => {
   });
 
   it('names the owner instead of you on a teammate’s shared page', () => {
-    const view = render(
-      <TooltipProvider>
-        <ReadOnlyProvider owner={{ name: 'Kai', user: null }}>
-          <HandoverCard
-            call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
-            run={createRun({ id: 'r', taskId: 't' })}
-            live={false}
-            task={null}
-            at={null}
-          />
-        </ReadOnlyProvider>
-      </TooltipProvider>
+    const view = openCards(
+      render(
+        <TooltipProvider>
+          <ReadOnlyProvider owner={{ name: 'Kai', user: null }}>
+            <HandoverCard
+              call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
+              run={createRun({ id: 'r', taskId: 't' })}
+              live={false}
+              task={null}
+              at={null}
+            />
+          </ReadOnlyProvider>
+        </TooltipProvider>
+      )
     );
     expect(view.getByText('Asked Kai')).toBeTruthy();
     expect(view.getByText('Kai’s answer')).toBeTruthy();
@@ -224,18 +237,22 @@ describe('HandoverCard for the process tools', () => {
   });
 
   it('tags the owner with their user card when the share names their account', () => {
-    const view = render(
-      <TooltipProvider>
-        <ReadOnlyProvider owner={{ name: 'Kai', user: { login: 'kai', name: 'Kai Lane', avatarUrl: null } }}>
-          <HandoverCard
-            call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
-            run={createRun({ id: 'r', taskId: 't' })}
-            live={false}
-            task={null}
-            at={null}
-          />
-        </ReadOnlyProvider>
-      </TooltipProvider>
+    const view = openCards(
+      render(
+        <TooltipProvider>
+          <ReadOnlyProvider
+            owner={{ name: 'Kai', user: { login: 'kai', name: 'Kai Lane', avatarUrl: null } }}
+          >
+            <HandoverCard
+              call={call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false))}
+              run={createRun({ id: 'r', taskId: 't' })}
+              live={false}
+              task={null}
+              at={null}
+            />
+          </ReadOnlyProvider>
+        </TooltipProvider>
+      )
     );
     const links = view.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
     expect(links).toEqual([
@@ -265,10 +282,12 @@ describe('HandoverCard for the process tools', () => {
         requestedAt: 0,
       },
     });
-    const view = render(
-      <TooltipProvider>
-        <HandoverCard call={call('ask', { question: 'Which file?' }, 'Use a.ts')} run={run} live={false} />
-      </TooltipProvider>
+    const view = openCards(
+      render(
+        <TooltipProvider>
+          <HandoverCard call={call('ask', { question: 'Which file?' }, 'Use a.ts')} run={run} live={false} />
+        </TooltipProvider>
+      )
     );
     expect(view.getByText('Asked the agent that delegated it')).toBeTruthy();
     expect(view.getByText('Its answer')).toBeTruthy();
@@ -363,6 +382,104 @@ describe('HandoverCard for the process tools', () => {
   });
 });
 
+describe('HandoverCard folded to its header', () => {
+  const closed: [string, ToolCall, string, string][] = [
+    [
+      'a plan',
+      call('propose_plan', { goal: 'Ship it.', phases: [{ title: 'One' }, { title: 'Two' }] }),
+      '2 phases',
+      'Ship it.',
+    ],
+    [
+      'a phase',
+      call('complete_phase', {
+        summary: 'Moved the pool.',
+        judgement_calls: [{ title: 'Pool', call: 'Shared', reason: 'Fewer sockets.' }],
+      }),
+      '1 judgement call',
+      'Moved the pool.',
+    ],
+    [
+      'a fix',
+      call('complete_fix', { summary: 'Fixed the leak.', spots: [{ file: 'a.ts', start: 1 }] }),
+      '1 spot to review',
+      'Fixed the leak.',
+    ],
+    [
+      'a review',
+      call('report_review', {
+        findings: [{ file: 'a.ts', message: 'Leaks a socket.', severity: 'blocking' }],
+      }),
+      '1 blocking',
+      'Leaks a socket.',
+    ],
+    [
+      'an answered question',
+      call('ask', { question: 'Which run?' }, resolveAnsweredReply('The last one', false)),
+      'Answered',
+      'The last one',
+    ],
+    [
+      'an answer that proposes a change',
+      call('answer', { answer: 'It retries.', propose_change: { request: 'Cap it.', why: 'It loops.' } }),
+      'Proposes a change',
+      'It retries.',
+    ],
+    [
+      'composed steps',
+      call('reshape_task', { steps: ['answer', 'your_ok'], reason: 'Ask first.' }),
+      '2 steps',
+      'Ask first.',
+    ],
+    [
+      'suggested tasks',
+      call('suggest_tasks', { tasks: [{ title: 'Tidy logs', why: 'Noise.' }] }),
+      'In Overview',
+      'Tidy logs',
+    ],
+    [
+      'a rule',
+      call('remember', { text: 'Keep plans short.', why: 'You said so.' }),
+      'In Settings → Memory',
+      'Keep plans short.',
+    ],
+    [
+      'a move',
+      call('move_to_repository', { repository: 'web', reason: 'It lives there.' }),
+      '',
+      'It lives there.',
+    ],
+  ];
+
+  it.each(closed)(
+    'shows %s as one line with its summary, and opens it on click',
+    (_, toolCall, meta, body) => {
+      const view = renderClosed(toolCall);
+      const header = view.getByRole('button', { expanded: false });
+      if (meta) expect(header.closest('h3')?.textContent).toContain(meta);
+      expect(view.queryByText(body)).toBeNull();
+      fireEvent.click(header);
+      expect(view.getByRole('button', { expanded: true })).toBeTruthy();
+      expect(view.getByText(body)).toBeTruthy();
+      fireEvent.click(view.getByRole('button', { expanded: true }));
+      expect(view.queryByText(body)).toBeNull();
+    }
+  );
+
+  it('keeps a question that waits for you open', () => {
+    const view = renderClosed(call('ask', { question: 'Which run?', choices: ['First', 'Last'] }));
+    expect(view.getByRole('button', { expanded: true })).toBeTruthy();
+    expect(view.getByText('Waiting for your answer')).toBeTruthy();
+    expect(view.getByText('Last')).toBeTruthy();
+  });
+
+  it('draws a review with no findings as a plain line that opens nothing', () => {
+    const view = renderClosed(call('report_review', { findings: [] }));
+    expect(view.getByText('Reported no findings')).toBeTruthy();
+    expect(view.queryByRole('button')).toBeNull();
+  });
+});
+
 describe('HandoverCard for a watch an agent suggests', () => {
   const args = {
     name: 'Bugs in #feedback',
@@ -406,6 +523,18 @@ describe('HandoverCard for a watch an agent suggests', () => {
       { type: 'watch_suggestion.accept', suggestionId: 's1' },
       { type: 'watch_suggestion.dismiss', suggestionId: 's1' },
     ]);
+  });
+
+  it('keeps a watch that waits for you open, and folds one you already added', () => {
+    pushSuggestion({ id: 's1' });
+    expect(
+      renderClosed(call('set_schedule', args), task).getByRole('button', { name: 'Add the watch' })
+    ).toBeTruthy();
+    cleanup();
+    pushSuggestion({ id: 's1', status: 'accepted', scheduleId: 'w1' });
+    const added = renderClosed(call('set_schedule', args), task);
+    expect(added.getByRole('button', { expanded: false })).toBeTruthy();
+    expect(added.queryByRole('link', { name: 'Open the watch' })).toBeNull();
   });
 
   it('once added, links to the watch and offers no buttons', () => {

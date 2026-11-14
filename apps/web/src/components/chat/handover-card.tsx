@@ -1,5 +1,6 @@
 import {
   describeCount,
+  type ChatTool,
   type ChatToolArgs,
   capitalise,
   type Run,
@@ -12,7 +13,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { Option } from 'effect';
 import * as React from 'react';
 import { SuggestedWatchButtons } from '@/components/automations/suggested-watch.tsx';
-import { CardLine, ROW_INDENT } from '@/components/chat/chat-line.tsx';
+import { CardLine, CardToggle, ROW_INDENT } from '@/components/chat/chat-line.tsx';
 import { ToolRow } from '@/components/chat/tool-group.tsx';
 import { MessageAttachments } from '@/components/chat/user-message.tsx';
 import { CARD, CHAT_INSET, CHIP } from '@/components/layout/surface/card.ts';
@@ -35,13 +36,14 @@ import {
   readProposedChange,
   resolveAskAnswer,
   resolveAskMeta,
-  resolveSpotsMeta,
+  resolveDeliveryMeta,
+  resolveSummaryMeta,
 } from '@/lib/chat/handover.ts';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { selectPlanRevision } from '@/lib/overview/plan-version.ts';
-import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { resolveTaskDisclosureId, useDisclosure, useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
 import { resolveReviewPath } from '@/lib/review/places.ts';
 import { resolveOwnerMention, resolveOwnerPossessive } from '@/lib/share/page.ts';
@@ -53,21 +55,35 @@ import {
 } from '@/lib/watch-suggestions.ts';
 import { resolveAutomationPath } from '@/router.ts';
 
+const CardKey = React.createContext('');
+
 function Card({
   icon,
   title,
   meta,
+  defaultOpen = false,
   children,
 }: {
   icon: IconName;
   title: React.ReactNode;
   meta?: React.ReactNode;
+  defaultOpen?: boolean;
   children?: React.ReactNode;
 }) {
+  const { open, toggle } = useDisclosure(
+    useDisclosureScope('handover', React.useContext(CardKey)),
+    defaultOpen
+  );
   return (
     <section data-message className={cn(CARD, 'flex min-w-0 flex-col overflow-hidden')}>
-      <CardLine icon={icon} title={title} meta={meta} />
-      {children && <div className='flex min-w-0 flex-col gap-3 border-t border-border p-3'>{children}</div>}
+      {children ? (
+        <CardToggle icon={icon} title={title} meta={meta} open={open} onToggle={toggle} />
+      ) : (
+        <CardLine icon={icon} title={title} meta={meta} />
+      )}
+      {children && open && (
+        <div className='flex min-w-0 flex-col gap-3 border-t border-border p-3'>{children}</div>
+      )}
     </section>
   );
 }
@@ -245,6 +261,7 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
         )
       }
       meta={resolveAskMeta(call, delegated)}
+      defaultOpen={call.result === null}
     >
       <span className='selectable text-xs text-fg-4'>
         <InlineMarkdown text={call.description.target ?? ''} />
@@ -322,7 +339,12 @@ function SuggestedWatchCard({ args, task }: { args: ChatToolArgs; task: Task | n
   const suggestion = useShinsaSelector(select);
   const open = suggestion?.status === 'open';
   return (
-    <Card icon='IconRadar' title='Suggested a watch' meta={describeSuggestionStatus(suggestion)}>
+    <Card
+      icon='IconRadar'
+      title='Suggested a watch'
+      meta={describeSuggestionStatus(suggestion)}
+      defaultOpen={open}
+    >
       <div className='flex flex-col text-xs'>
         <InlineMarkdown
           text={readString(args, 'message') ?? ''}
@@ -345,7 +367,7 @@ function SuggestedWatchCard({ args, task }: { args: ChatToolArgs; task: Task | n
 function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArgs; field: string }) {
   const proposal = readProposedChange(args);
   return (
-    <Card icon='IconSend' title={title}>
+    <Card icon='IconSend' title={title} meta={resolveDeliveryMeta(args)}>
       <ReplyFirst args={args}>
         <Markdown text={readString(args, field) ?? ''} />
         {proposal && (
@@ -362,7 +384,11 @@ function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArg
 function ReshapeCard({ args }: { args: ChatToolArgs }) {
   const steps = readStrings(args, 'steps');
   return (
-    <Card icon='IconSplit' title={steps.length > 0 ? 'Set the steps' : 'Changed the kind of task'}>
+    <Card
+      icon='IconSplit'
+      title={steps.length > 0 ? 'Set the steps' : 'Changed the kind of task'}
+      meta={steps.length > 0 ? describeCount(steps.length, 'step', 'steps') : null}
+    >
       <Markdown text={readString(args, 'reason') ?? ''} />
       {steps.length > 0 && (
         <div className='flex flex-col border-t border-border pt-2.5 text-xs'>
@@ -416,6 +442,28 @@ export function HandoverCard({
       </div>
     );
   }
+  return (
+    <CardKey value={call.key}>
+      <ShinsaCard call={call} tool={tool} run={run} live={live} task={task} at={at} />
+    </CardKey>
+  );
+}
+
+function ShinsaCard({
+  call,
+  tool,
+  run,
+  live,
+  task,
+  at,
+}: {
+  call: ToolCall;
+  tool: Extract<ChatTool, { kind: 'shinsa' }>;
+  run: Run;
+  live: boolean;
+  task: Task | null;
+  at: number | null;
+}) {
   switch (tool.name) {
     case 'propose_plan':
       return <PlanCard args={tool.args} task={task} at={at} />;
@@ -429,12 +477,20 @@ export function HandoverCard({
               : 'Handed over the phase'
           }
           args={tool.args}
-          meta={resolveSpotsMeta(tool.args)}
+          meta={resolveSummaryMeta(tool.args)}
           task={task}
         />
       );
     case 'complete_fix':
-      return <SummaryCard icon='IconSend' title='Handed over the fix' args={tool.args} task={task} />;
+      return (
+        <SummaryCard
+          icon='IconSend'
+          title='Handed over the fix'
+          args={tool.args}
+          meta={resolveSummaryMeta(tool.args)}
+          task={task}
+        />
+      );
     case 'report_review':
       return <ReviewCard args={tool.args} task={task} />;
     case 'ask':

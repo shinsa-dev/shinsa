@@ -13,7 +13,8 @@ import {
   readProposedChange,
   resolveAskAnswer,
   resolveAskMeta,
-  resolveSpotsMeta,
+  resolveDeliveryMeta,
+  resolveSummaryMeta,
 } from '@/lib/chat/handover.ts';
 import { createToolCall, shinsaTool } from '../../support/chat.ts';
 
@@ -75,15 +76,31 @@ describe('resolveAskAnswer', () => {
   });
 });
 
-describe('resolveSpotsMeta', () => {
+describe('resolveSummaryMeta', () => {
   it('counts the spots a hand-over asks you to review', () => {
-    expect(resolveSpotsMeta({ spots: [{ path: 'a.ts' }] })).toBe('1 spot to review');
-    expect(resolveSpotsMeta({ spots: [{ path: 'a.ts' }, { path: 'b.ts' }] })).toBe('2 spots to review');
+    expect(resolveSummaryMeta({ spots: [{ path: 'a.ts' }] })).toBe('1 spot to review');
+    expect(resolveSummaryMeta({ spots: [{ path: 'a.ts' }, { path: 'b.ts' }] })).toBe('2 spots to review');
   });
 
-  it('says nothing when there are no spots', () => {
-    expect(resolveSpotsMeta({ spots: [] })).toBeNull();
-    expect(resolveSpotsMeta({})).toBeNull();
+  it('counts the judgement calls beside the spots', () => {
+    expect(resolveSummaryMeta({ judgement_calls: [{ title: 'A' }] })).toBe('1 judgement call');
+    expect(resolveSummaryMeta({ spots: [{ path: 'a.ts' }], judgement_calls: [{}, {}] })).toBe(
+      '1 spot to review · 2 judgement calls'
+    );
+  });
+
+  it('says nothing when there are neither', () => {
+    expect(resolveSummaryMeta({ spots: [], judgement_calls: [] })).toBeNull();
+    expect(resolveSummaryMeta({})).toBeNull();
+  });
+});
+
+describe('resolveDeliveryMeta', () => {
+  it('says when the hand-over proposes a change, and nothing otherwise', () => {
+    expect(resolveDeliveryMeta({ propose_change: { request: 'Release it.', why: 'It leaks.' } })).toBe(
+      'Proposes a change'
+    );
+    expect(resolveDeliveryMeta({ answer: 'Done.' })).toBeNull();
   });
 });
 
