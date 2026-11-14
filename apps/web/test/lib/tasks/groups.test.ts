@@ -17,6 +17,7 @@ import {
   type TeamEntry,
 } from '@/lib/tasks/groups.ts';
 import { resolveTeamTaskState } from '@/lib/teams/feeds.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
 import { createTeamFeedTask } from '../teams/machine.ts';
 
@@ -500,6 +501,39 @@ describe('listTaskGroupSections search by repository', () => {
     });
     const working = listSections(state, 'paywall-next', 'working')[0]?.entries.map(({ task }) => task.id);
     expect(working).toEqual(['web']);
+  });
+});
+
+describe('a task a watchdog is checking', () => {
+  const merged = { state: 'merged' as const };
+  const checking = createTask({
+    id: 'checking',
+    stage: 'watching',
+    pullRequest: createPullRequest({ number: 7, ...merged }),
+    stageChangedAt: NOW - 5000,
+  });
+
+  it('stays in Done, in its place from the merge, and never shows in In progress', () => {
+    const later = createTask({ id: 'later', stage: 'merged', stageChangedAt: NOW - 1000 });
+    const state = createShinsaState({ tasks: [checking, later] });
+    expect(resolveTaskGroup(state, checking)).toBe('done');
+    expect(listSections(state, '', 'done')[0]?.entries.map((entry) => entry.task.id)).toEqual([
+      'later',
+      'checking',
+    ]);
+    expect(listSections(state, '', 'working').flatMap((section) => section.entries)).toEqual([]);
+  });
+
+  it('does not hold a task that waits on it, and is not offered as a task to wait on', () => {
+    const child = waiting('child', ['checking']);
+    const state = createShinsaState({ tasks: [checking, child] });
+    expect(resolveTaskGroup(state, child)).toBe('working');
+    expect(listOpenTaskChoices(state, null).map((task) => task.id)).toEqual(['child']);
+  });
+
+  it('counts as done, merged or not', () => {
+    const unmerged = createTask({ id: 'unmerged', stage: 'watching' });
+    expect(describeTaskCounts([checking, unmerged, createTask({ id: 'open' })])).toBe('1 open · 2 done');
   });
 });
 
