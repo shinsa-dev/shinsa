@@ -47,7 +47,7 @@ export function IntegrationSettings({ state }: { state: ShinsaState }) {
     <>
       <div
         data-slot='integrations-search'
-        className='sticky top-0 z-40 -mx-2 -mt-3 -mb-3 bg-background px-2 py-3'
+        className='sticky top-0 z-40 -mx-2 -mt-3 -mb-3 bg-background px-2 py-3 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent'
       >
         <Input
           type='search'
