@@ -1,3 +1,5 @@
+import { isTyping } from '@/lib/keys.ts';
+
 export type ReviewStep = 1 | -1;
 
 interface ReviewKeyPress {
@@ -10,12 +12,6 @@ interface ReviewKeyPress {
 }
 
 export const REVIEW_KEY: Record<'next' | 'previous', string> = { next: 'J', previous: 'K' };
-
-function isTyping(target: EventTarget | null) {
-  const element = target as Partial<HTMLElement> | null;
-  if (!element || typeof element.tagName !== 'string') return false;
-  return element.isContentEditable === true || ['INPUT', 'TEXTAREA', 'SELECT'].includes(element.tagName);
-}
 
 export function resolveReviewKey(event: ReviewKeyPress): ReviewStep | null {
   if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || isTyping(event.target)) {

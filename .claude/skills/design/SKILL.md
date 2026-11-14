@@ -60,7 +60,7 @@ Checklist:
       `+N −N`, on a self-evident count or on a `•••` menu trigger; a labelled control keeps one that says what its
       label can't (Approve changes: "Opens the pull request"). Never a `delay`: every tooltip waits `TOOLTIP_DELAY`
       (lint fails on a delay and on a tooltip equal to its trigger's text; docs/design.md → Where Shinsa differs, 13).
-- [ ] No keyboard shortcut but ⌘K, and the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (lint fails on a global
+- [ ] No keyboard shortcut but ⌘K, the app-wide moves in `APP_SHORTCUTS` (⌘J, ⌘, and G then H, T or S), and the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (lint fails on a global
       key listener anywhere else; docs/design.md → Where Shinsa differs, 32).
 - [ ] A tooltip opens over its text and icon only: what a `Hint` or `TooltipTrigger` wraps is inline or
       `w-fit`, never a block across a full-width row (lint fails; docs/design.md → Where Shinsa differs, 13).
