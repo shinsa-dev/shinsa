@@ -864,15 +864,23 @@ Only these, and they win over anything below:
       and Skills, and while typing each MCP, plugin and skill by name; 29), and Versions (Update Claude Code and
       Update Codex; 26). With an empty query, Recent lists the
       last tasks visited (`shinsa.recent-tasks`) within the focus that no group above already shows.
-    - **Typing** matches by word (`lib/command/score.ts`: whole label, label prefix, word prefix, then
-      substring; hints and keywords count at 0.7). Groups are ordered by their best match, since
-      cmdk's own group sort does not work. Choices flatten into their options ("urgent", "dark",
-      "cards"), every task matches by title, repository, branch and status, and the queue's
-      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). Typing
-      searches every task, not only the newest 300 shown with an empty query, against an index of
-      each task's words built once per state (`resolveTaskIndex`, `lib/command/menu.ts`), and only
-      the best 20 task matches render (100 on Jump to a task, 20 per group of commands), so cmdk
-      never scores hundreds of rows a key. A closed menu works out nothing. At the
+    - **Typing** ranks each word once, in `lib/command/menu.ts`, and cmdk only draws what it is given
+      (`shouldFilter={false}`): no row appears and then moves. Each word scores against a row's fields
+      (`lib/command/search/score.ts`): the whole text 1, its prefix 0.9, a word's prefix 0.8, a substring
+      0.6, then, on a label, a title, a handle or a branch only, a fuzzy match from the start of a word
+      (0.2 to 0.5, more for word starts and runs of letters, less for gaps: "fdv" finds Fix decide
+      invariant violations, "loc287" finds LOC-287). A field counts at its weight (a label, a title and a
+      handle 1, a branch 0.8, hints, keywords, the repository and the status 0.7, a task's summary 0.6,
+      the first 200 characters of its request 0.5), every word must match, and a row scores the mean of
+      its words. The letters a word matched show in the row's label in the full text colour. Groups are
+      ordered by their best match. Choices flatten into their options ("urgent", "dark", "cards") and a
+      choice page narrows to the options that match, the queue's decisions match across tasks ("merge"
+      finds Merge #4531 on whichever task it is), and New task and Jump to a task stay in Tasks only when
+      they match, above the tasks when they match better. Typing searches every task, not only the
+      newest 300 shown with an empty query, against an index built once per state (`resolveTaskIndex`)
+      from each task's fields, which are kept per task until it or its repository's name changes, and
+      only the best 20 task matches render (100 on Jump to a task, 20 per group of commands). A closed
+      menu works out nothing. At the
       bottom, always: "Create task: …" (starts it straight away) and "Edit it before starting"
       (Home's composer, filled in).
     - Rows: 24px. Icons are plain, never on a tile; a task's is its status icon in the status

@@ -147,6 +147,25 @@ describe('typing in the root', () => {
     ]);
   });
 
+  it('finds a task by the first letters of its words and marks the letters it matched', async () => {
+    renderMenu();
+    await pressCommandK();
+    await type('frd');
+    expect(optionNames()[0]).toBe('Fix the login redirectBuilding');
+    const marks = screen.getAllByRole('option')[0]?.querySelectorAll('mark') ?? [];
+    expect([...marks].map((mark) => mark.textContent)).toEqual(['F', 'r', 'd']);
+    expect(selectedOption()).toBe('Fix the login redirectBuilding');
+  });
+
+  it('lists a better task match above New task and Jump to a task', async () => {
+    renderMenu();
+    await pressCommandK();
+    await type('rework');
+    expect(optionNames().slice(0, 1)).toEqual(['Rework billing emailsBuilding']);
+    await type('jump');
+    expect(optionNames()[0]).toMatch(/^Jump to a task/);
+  });
+
   it('finds a task older than the newest 300', async () => {
     const many = Array.from({ length: 320 }, (_, index) =>
       createTask({
@@ -217,6 +236,15 @@ describe('pages', () => {
     expect(input().getAttribute('placeholder')).toBe('Change theme…');
     expect(optionNames()).toEqual(['System', 'Light', 'Dark']);
     await waitFor(() => expect(selectedOption()).toBe('Dark'));
+  });
+
+  it('narrows a choice page to the options that match', async () => {
+    renderMenu();
+    await pressCommandK();
+    await type('change theme');
+    await choose(/^Change theme/);
+    await type('dar');
+    expect(optionNames()).toEqual(['Dark']);
   });
 
   it('applies the option picked on a choice page', async () => {
