@@ -1,4 +1,5 @@
 import {
+  AUTOPILOT_AREA_LIMITS,
   AUTOPILOT_READINESS_LIMITS,
   AUTOPILOT_SCORE_LIMITS,
   AUTOPILOT_TOPIC_LABEL,
@@ -7,6 +8,7 @@ import {
   type AutopilotDone,
   type AutopilotDoneAction,
   type AutopilotGateKind,
+  type AutopilotAreaReadiness,
   type AutopilotKindReadiness,
   type AutopilotReadinessKind,
   type AutopilotGate,
@@ -24,6 +26,7 @@ import {
   type Project,
   type ReviewRating,
   isWatchdogTask,
+  listAutopilotAreaReadiness,
   resolveAutopilotPolicy,
   resolveAutopilotReadiness,
   resolveAutopilotScore,
@@ -190,6 +193,7 @@ export const AUTOPILOT_BLOCKS = {
   asks: { title: 'Who it asks', icon: 'IconMegaphone' },
   score: { title: 'How well it knows you', icon: 'IconGauge' },
   readiness: { title: 'By kind of decision', icon: 'IconLayersThree' },
+  areas: { title: 'By kind of work', icon: 'IconFolders' },
 } as const;
 
 export const AUTOPILOT_SCORE_ROWS = {
@@ -349,6 +353,45 @@ export function listAutopilotReadinessRows(
     ready: readiness.ready,
   }));
 }
+
+export type AutopilotAreaStatus = 'alone' | 'waits' | 'learning';
+
+export interface AutopilotAreaRow {
+  area: string;
+  percent: string;
+  detail: string;
+  status: AutopilotAreaStatus;
+}
+
+function resolveAreaStatus({ known, ready }: AutopilotAreaReadiness): AutopilotAreaStatus {
+  if (ready) return 'alone';
+  return known ? 'waits' : 'learning';
+}
+
+function describeArea({ score, known, ready }: AutopilotAreaReadiness) {
+  const { minScored, agreement, margin } = AUTOPILOT_AREA_LIMITS;
+  const noun = score.scored === 1 ? 'decision' : 'decisions';
+  const right = `It guessed you right on ${score.agreed} of ${score.scored} ${noun} in this area`;
+  if (!known) return `${right}. Until it has ${minScored}, each kind of decision decides on its own.`;
+  const lead = score.margin === null ? right : `${right}, ${describeMarginPhrase(score.margin)}`;
+  if (ready) return `${lead}. At Everything, it handles this work alone.`;
+  return `${lead}. Under ${Math.round(agreement * 100)}% or ${Math.round(margin * 100)} points ahead, this work waits for you.`;
+}
+
+export function listAutopilotAreaRows(state: Pick<ShinsaState, 'autopilotProfile'>): AutopilotAreaRow[] {
+  return listAutopilotAreaReadiness(state).map((readiness) => ({
+    area: readiness.area,
+    percent: `${Math.floor((readiness.score.agreement ?? 0) * 100)}%`,
+    detail: describeArea(readiness),
+    status: resolveAreaStatus(readiness),
+  }));
+}
+
+export const AUTOPILOT_AREA_STATUS: Record<AutopilotAreaStatus, string> = {
+  alone: 'Handles it alone',
+  waits: 'Waits for you',
+  learning: 'Still learning',
+};
 
 export const AUTOPILOT_ROWS = {
   level: 'On its own',

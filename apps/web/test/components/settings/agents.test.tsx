@@ -28,6 +28,7 @@ import {
   stopFakeServer,
 } from '../../support/server.ts';
 import {
+  createAutopilotAreasProfile,
   createAutopilotKindsProfile,
   createAutopilotProfile,
   createProject,
@@ -296,7 +297,9 @@ describe('Settings → Autopilot', () => {
     unmount();
     renderAgents(ESCALATING);
     await settle();
-    for (const block of Object.values(AUTOPILOT_BLOCKS)) expect(screen.getByText(block.title)).toBeTruthy();
+    const { areas, ...always } = AUTOPILOT_BLOCKS;
+    for (const block of Object.values(always)) expect(screen.getByText(block.title)).toBeTruthy();
+    expect(screen.queryByText(areas.title)).toBeNull();
     expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.usage })).toBeTruthy();
   });
 
@@ -378,6 +381,31 @@ describe('Settings → Autopilot', () => {
     expect(listSentCommands()).toEqual([
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'everything' } } },
     ]);
+  });
+
+  it('lists each area of the app and whether Autopilot handles it alone', async () => {
+    spyOnEngine();
+    const { unmount } = renderAgents(ESCALATING);
+    await settle();
+    expect(screen.queryByText(AUTOPILOT_BLOCKS.areas.title)).toBeNull();
+    unmount();
+    pushState(
+      createShinsaState({
+        patch: {
+          autopilotProfile: createAutopilotAreasProfile({
+            'apps/web/settings': { scored: 60, agreed: 57, base: 0.8 },
+            'packages/core/autopilot': { scored: 40, agreed: 32, base: 0.75 },
+          }),
+        },
+      })
+    );
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(AUTOPILOT_BLOCKS.areas.title)).toBeTruthy();
+    expect(screen.getByText('apps/web/settings')).toBeTruthy();
+    expect(screen.getByText('Handles it alone · 95%')).toBeTruthy();
+    expect(screen.getByLabelText('Handles it alone')).toBeTruthy();
+    expect(screen.getByText('Waits for you · 80%')).toBeTruthy();
   });
 
   it('keeps showing Everything once it is your level', async () => {

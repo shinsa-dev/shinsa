@@ -152,6 +152,29 @@ export function createAutopilotKindsProfile(
   return { ...EMPTY_AUTOPILOT_PROFILE, kinds: Object.fromEntries(entries) };
 }
 
+export function createAutopilotAreasProfile(
+  areas: Record<string, Pick<AutopilotAgreement, 'scored' | 'agreed'> & { base: number }>
+): AutopilotProfile {
+  const entries = Object.entries(areas).map(([area, { scored, agreed, base }]) => {
+    const combined = {
+      scored,
+      agreed,
+      weight: scored,
+      agreedWeight: agreed,
+      baseWeight: base * scored,
+      loss: 0,
+    };
+    return [
+      area,
+      {
+        tracks: { ...EMPTY_AUTOPILOT_PROFILE.tracks, combined },
+        rate: EMPTY_AUTOPILOT_PROFILE.rates.gate,
+      },
+    ];
+  });
+  return { ...EMPTY_AUTOPILOT_PROFILE, areas: Object.fromEntries(entries) };
+}
+
 export function createAutopilotProfile(parts: {
   agreed: number;
   disagreed: number;
