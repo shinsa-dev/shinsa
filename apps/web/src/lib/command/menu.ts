@@ -93,7 +93,7 @@ const JUMP_MATCHES_SHOWN = 100;
 
 export const SECTION_MATCHES_SHOWN = 20;
 
-export const RELEVANCE_SHARE = 0.5;
+const RELEVANCE_SHARE = 0.5;
 
 const TASK_INDEXES = new WeakMap<ShinsaState, TaskEntry[]>();
 
@@ -113,7 +113,7 @@ export const COMPOSE_VALUE = 'compose.submit';
 
 export const JUMP_VALUE = 'tasks.jump';
 
-export const JUMP_KEYWORDS = ['Jump to a task', 'find', 'search', 'open', 'go to'];
+const JUMP_KEYWORDS = ['Jump to a task', 'find', 'search', 'open', 'go to'];
 
 export function requestNewTaskOnHome(draft = '') {
   navigate('/');

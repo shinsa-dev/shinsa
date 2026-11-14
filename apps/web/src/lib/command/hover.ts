@@ -4,7 +4,7 @@ import { resolveTaskPage } from '@/lib/command/task.ts';
 import { findTaskTarget } from '@/lib/tasks/prefetch.ts';
 import type { Route } from '@/router.ts';
 
-export const HOVER_SCOPED_ROUTES: ReadonlySet<Route['name']> = new Set(['home', 'tasks']);
+const HOVER_SCOPED_ROUTES: ReadonlySet<Route['name']> = new Set(['home', 'tasks']);
 
 let hovered: string | null = null;
 

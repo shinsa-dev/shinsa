@@ -3,11 +3,11 @@ import { resolveTerminalEntry } from '@/lib/terminal/tabs.ts';
 
 export type AppShortcutTarget = 'home' | 'tasks' | 'settings' | 'terminal';
 
-export type AppShortcutKeys =
+type AppShortcutKeys =
   | { kind: 'modifier'; key: string }
   | { kind: 'chord'; first: string; then: string };
 
-export interface AppShortcut {
+interface AppShortcut {
   target: AppShortcutTarget;
   keys: AppShortcutKeys;
 }
@@ -36,7 +36,7 @@ export type AppShortcutResult =
 
 export const CHORD_WINDOW_MS = 1500;
 
-export const APP_SHORTCUTS: readonly AppShortcut[] = [
+const APP_SHORTCUTS: readonly AppShortcut[] = [
   { target: 'terminal', keys: { kind: 'modifier', key: 'j' } },
   { target: 'settings', keys: { kind: 'modifier', key: ',' } },
   { target: 'home', keys: { kind: 'chord', first: 'g', then: 'h' } },
