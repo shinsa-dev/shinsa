@@ -9,6 +9,7 @@ import {
   type InitiativeMilestone,
   type InitiativeTeamMember,
   isInitiativeInTeam,
+  isRetryArmed,
   resolveGateDefinition,
   resolveInitiativeText,
   selectLeadInitiative,
@@ -214,7 +215,7 @@ export function wakeLead(decider: Decider, command: CommandOf<'initiative.wake_l
   const initiative = decider.state.initiatives[command.initiativeId];
   if (!initiative || (initiative.milestones ?? []).length === 0) return;
   const lead = Option.getOrNull(selectInitiativeLead(decider.state, initiative));
-  if (!lead || lead.stage !== 'leading' || !isIdle(decider.state, lead)) return;
+  if (!lead || lead.stage !== 'leading' || !isIdle(decider.state, lead) || isRetryArmed(lead)) return;
   startLeadTurn(decider, lead.id, null);
 }
 

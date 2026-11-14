@@ -7,12 +7,16 @@ import {
   type AutopilotModelGuess,
   type AutopilotScoredDecision,
   type AutopilotVerdict,
+  AUTOPILOT_READINESS_LIMITS,
+  type AutopilotDecisionKind,
   isAutopilotAgreement,
+  isAutopilotKindReady,
   recordAutopilotDecisions,
   resolveAutopilotBaseRate,
   resolveAutopilotCombinedVerdict,
   resolveAutopilotLoss,
   resolveAutopilotFollowUpScore,
+  resolveAutopilotReadiness,
   resolveAutopilotScore,
   EMPTY_AUTOPILOT_PROFILE,
   type AutopilotProfile,
@@ -64,7 +68,14 @@ describe('agreeing with you', () => {
     expect(isAutopilotAgreement('forward', 'revised')).toBe(true);
     expect(isAutopilotAgreement('forward', 'rejected')).toBe(true);
     expect(isAutopilotAgreement('act', 'revised')).toBe(false);
-    expect(isAutopilotAgreement('act', 'replied')).toBe(false);
+  });
+
+  test('a retry with your guidance agrees with a retry, and only your cancel agrees with a cancel', () => {
+    expect(isAutopilotAgreement('act', 'replied')).toBe(true);
+    expect(isAutopilotAgreement('forward', 'replied')).toBe(false);
+    expect(isAutopilotAgreement('cancel', 'replied')).toBe(false);
+    expect(isAutopilotAgreement('cancel', 'approved')).toBe(false);
+    expect(isAutopilotAgreement('cancel', 'rejected')).toBe(true);
   });
 
   test('a follow-up agrees when you ask for a change, never when you approve or reject', () => {
@@ -108,6 +119,13 @@ describe('combining the model with the model call', () => {
     expect(resolveAutopilotCombinedVerdict('act', DOUBTFUL)).toBe('forward');
     expect(resolveAutopilotCombinedVerdict('act', { ...DOUBTFUL, confidence: 0.3 })).toBe('act');
     expect(resolveAutopilotCombinedVerdict('act', null)).toBe('act');
+  });
+
+  test('keeps a cancel, unless a sure model says you would retry', () => {
+    expect(resolveAutopilotCombinedVerdict('cancel', DOUBTFUL)).toBe('cancel');
+    expect(resolveAutopilotCombinedVerdict('cancel', null)).toBe('cancel');
+    expect(resolveAutopilotCombinedVerdict('cancel', SURE)).toBe('forward');
+    expect(resolveAutopilotCombinedVerdict('cancel', { ...SURE, confidence: 0.3 })).toBe('cancel');
   });
 
   test('keeps a follow-up as it is, whatever the model says', () => {
@@ -265,5 +283,99 @@ describe('the Autopilot score', () => {
     });
     expect(profile.decisions.every((kept) => !('modelGuess' in kept))).toBe(true);
     expect(profile.rates.finding.positive).toBeGreaterThan(0);
+  });
+});
+
+describe('readiness for Everything, per kind of gate', () => {
+  const FIXING: AutopilotModelGuess = { head: 'finding', p: 0.9, confidence: 0.8, similar: 40 };
+  const DISMISSING: AutopilotModelGuess = { head: 'finding', p: 0.1, confidence: 0.8, similar: 40 };
+
+  function ofKind(kind: AutopilotDecisionKind, decisions: AutopilotScoredDecision[]) {
+    return decisions.map((entry) => ({ ...entry, kind }));
+  }
+
+  function mixed(length: number) {
+    return Array.from({ length }, (_, index) =>
+      index % 3 === 0 ? guessed('forward', 'revised', DOUBTFUL) : guessed('act', 'approved', SURE)
+    );
+  }
+
+  function readinessOf(decisions: AutopilotScoredDecision[]) {
+    const state = { autopilotProfile: recordAutopilotDecisions(undefined, decisions) };
+    return { state, readiness: resolveAutopilotReadiness(state) };
+  }
+
+  test('lists every kind it can earn, none ready and Everything not offered before any decision', () => {
+    const { readiness } = readinessOf([]);
+    expect(readiness.offered).toBe(false);
+    expect(readiness.kinds.map(({ kind, track, ready }) => [kind, track, ready])).toEqual([
+      ['plan', 'combined', false],
+      ['review', 'combined', false],
+      ['merge', 'combined', false],
+      ['proposal', 'combined', false],
+      ['failure', 'combined', false],
+      ['finding', 'model', false],
+    ]);
+    expect(readiness.kinds[0]?.score).toMatchObject({ scored: 0, agreement: null, margin: null });
+  });
+
+  test('a kind is ready at 100 of its own decisions, 90% agreement and 5 points over your usual answer', () => {
+    const { state, readiness } = readinessOf(mixed(AUTOPILOT_READINESS_LIMITS.minScored));
+    const plan = readiness.kinds.find((kind) => kind.kind === 'plan');
+    expect(plan).toMatchObject({ ready: true, score: { scored: 100, agreed: 100, agreement: 1 } });
+    expect(plan?.score.margin).toBeGreaterThanOrEqual(AUTOPILOT_READINESS_LIMITS.margin);
+    expect(readiness.offered).toBe(true);
+    expect(isAutopilotKindReady(state, 'plan')).toBe(true);
+    expect(isAutopilotKindReady(state, 'review')).toBe(false);
+  });
+
+  test('99 decisions are not enough, however well it guessed', () => {
+    const { state, readiness } = readinessOf(mixed(AUTOPILOT_READINESS_LIMITS.minScored - 1));
+    expect(readiness.offered).toBe(false);
+    expect(isAutopilotKindReady(state, 'plan')).toBe(false);
+  });
+
+  test('a kind you always approve is not ready, since your usual answer does as well', () => {
+    const always = Array.from({ length: 120 }, () => guessed('act', 'approved', SURE));
+    const { state } = readinessOf(always);
+    expect(isAutopilotKindReady(state, 'plan')).toBe(false);
+  });
+
+  test('a kind that agrees too rarely is not ready', () => {
+    const wrong = Array.from({ length: 120 }, (_, index) =>
+      index % 5 === 0 ? guessed('act', 'revised', SURE) : (mixed(1)[0] ?? guessed(null, 'approved', null))
+    );
+    expect(isAutopilotKindReady(readinessOf(wrong).state, 'plan')).toBe(false);
+  });
+
+  test('each kind is scored against its own usual answer, not the other kinds of its head', () => {
+    const merges = ofKind(
+      'merge',
+      Array.from({ length: 200 }, () => guessed('act', 'approved', SURE))
+    );
+    const { state } = readinessOf([...merges, ...ofKind('review', mixed(120))]);
+    const profile = state.autopilotProfile;
+    expect(profile.kinds.review?.tracks.combined.scored).toBe(120);
+    expect(profile.kinds.merge?.tracks.combined.scored).toBe(200);
+    expect(profile.kinds.plan).toBeUndefined();
+    expect(profile.kinds.review?.rate.negative).toBeGreaterThan(0);
+    expect(profile.kinds.merge?.rate.negative).toBe(0);
+    expect(isAutopilotKindReady(state, 'review')).toBe(true);
+    expect(isAutopilotKindReady(state, 'merge')).toBe(false);
+  });
+
+  test('findings are scored on the local model, which decides them', () => {
+    const findings = Array.from({ length: 120 }, (_, index) => ({
+      ...decision(null, index % 3 === 0 ? 'dismissed' : 'fixed'),
+      kind: 'finding' as const,
+      modelGuess: index % 3 === 0 ? DISMISSING : FIXING,
+    }));
+    const { state, readiness } = readinessOf(findings);
+    expect(readiness.kinds.find((kind) => kind.kind === 'finding')?.score).toMatchObject({
+      scored: 120,
+      agreement: 1,
+    });
+    expect(isAutopilotKindReady(state, 'finding')).toBe(true);
+    expect(state.autopilotProfile.kinds.finding?.tracks.combined.scored).toBe(0);
   });
 });

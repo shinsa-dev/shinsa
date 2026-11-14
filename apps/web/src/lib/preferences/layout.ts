@@ -1,23 +1,7 @@
-import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { createSignal } from '@/lib/signal.ts';
 
 export type LayoutPreference = 'sidebar' | 'cards';
-
-export const LAYOUT_NAMES: Record<LayoutPreference, { label: string; hint: string; icon: IconName }> = {
-  cards: {
-    label: 'Desk',
-    hint: 'Pages sit centred with nothing at the sides, and a button at the top opens what needs you.',
-    icon: 'IconLayoutGrid1',
-  },
-  sidebar: {
-    label: 'Shelf',
-    hint: 'A rail at the side lists every task and stays open, so each one is a click away.',
-    icon: 'IconSidebar',
-  },
-};
-
-export const LAYOUT_ORDER: LayoutPreference[] = ['cards', 'sidebar'];
 
 const STORAGE_KEY = 'shinsa.layout';
 
@@ -37,8 +21,7 @@ export function writeLayoutPreference(layout: LayoutPreference) {
 }
 
 export function applyLayoutParam(search = location.search) {
-  const requested = parseLayout(new URLSearchParams(search).get('layout'));
-  if (requested) writeLayoutPreference(requested);
+  writeLayoutPreference(parseLayout(new URLSearchParams(search).get('layout')) ?? 'cards');
 }
 
 export function useLayoutPreference() {

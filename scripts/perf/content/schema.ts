@@ -21,6 +21,30 @@ export const ListScroll = Schema.NullOr(
   Schema.Struct({ p95: Schema.Number, max: Schema.Number, long: LongTasks })
 );
 
+export const BlankTarget = Schema.NullOr(
+  Schema.Struct({ x: Schema.Number, y: Schema.Number, viewport: Schema.Number })
+);
+
+export const BlankRecording = Schema.Struct({
+  blank: Schema.Array(Schema.Number),
+  deltas: Schema.Array(Schema.Number),
+  distance: Schema.Number,
+  long: LongTasks,
+});
+
+export const WHEEL_FLICK = { events: 45, deltaY: 240, everyMs: 16, pushEveryMs: 250 };
+
+export const HARD_FLICK = { ...WHEEL_FLICK, events: 15, deltaY: 720 };
+
+export const RevealCounts = Schema.Array(Schema.Number);
+
+export const RowPushes = Schema.Struct({
+  pushes: Schema.Array(Schema.Struct({ ms: Schema.Number, components: Schema.Number, rows: Schema.Number })),
+  visibleRows: Schema.Number,
+});
+
+export const TASK_ROW = '[data-depth]';
+
 export const HeldPlace = Schema.NullOr(Schema.Struct({ jumps: Schema.Number, worst: Schema.Number }));
 
 export const Inputs = Schema.Array(Schema.Struct({ delay: Schema.Number, paint: Schema.Number }));

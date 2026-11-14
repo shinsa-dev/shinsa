@@ -559,6 +559,40 @@ describe('describeTaskCounts', () => {
   });
 });
 
+describe('a task whose merge you approved', () => {
+  function groupOf(task: Partial<Task>, gates: Partial<Gate>[] = []) {
+    const subject = createTask({ id: 't', stage: 'awaiting_merge', ...task });
+    const state = createShinsaState({
+      tasks: [subject],
+      gates: gates.map((gate, index) => createGate({ id: `g${index}`, taskId: 't', ...gate })),
+    });
+    return resolveTaskGroup(state, subject);
+  }
+
+  it('files under Done while GitHub merges it', () => {
+    expect(groupOf({})).toBe('done');
+    expect(groupOf({}, [{ type: 'merge', status: 'answered' }])).toBe('done');
+  });
+
+  it('stays under Ready to merge while the merge gate is open, and pauses when the merge fails', () => {
+    expect(groupOf({}, [{ type: 'merge' }])).toBe('merge');
+    expect(groupOf({}, [{ type: 'failure' }])).toBe('paused');
+  });
+
+  it('stays in progress while a retry is armed or it only waits for its bundle', () => {
+    expect(groupOf({ autoRetry: { status: 'armed' } as never })).toBe('working');
+    expect(groupOf({ bundleReady: { commit: 'a' } })).toBe('working');
+  });
+
+  it('files a bundle member with its root, under Done once the root merges', () => {
+    const root = createTask({ id: 'root', stage: 'awaiting_merge' });
+    const top = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: ['root'] });
+    const state = createShinsaState({ tasks: [root, top] });
+    expect(resolveTaskGroup(state, root)).toBe('done');
+    expect(resolveTaskGroup(state, top)).toBe('done');
+  });
+});
+
 describe('the tasks of a bundle in All tasks', () => {
   it('lists a ready task with the root of its bundle, each one nested under the one below', () => {
     const root = createTask({ id: 'root', stage: 'shipping', bundleReady: { commit: 'a' } });

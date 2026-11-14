@@ -1262,7 +1262,7 @@ describe('the Slack channels and people Autopilot can escalate to', () => {
   });
 });
 
-describe('Settings → General → Slack', () => {
+describe('Settings → Cloud → Slack', () => {
   test('shows the connect link and the owner’s own Slack through app.shinsa.dev', async () => {
     const { slack, relay } = setUp();
     expect(await slack.snapshot(null)).toEqual({
@@ -1775,7 +1775,7 @@ describe('a Slack channel that triggers automations', () => {
     const off = setUp({ enabled: false });
     await expect(off.slack.channels()).rejects.toMatchObject({
       code: 'slack_not_connected',
-      message: expect.stringContaining('connect Slack in Settings → General → Slack'),
+      message: expect.stringContaining('connect Slack in Settings → Cloud → Slack'),
     });
     const { slack, answers } = setUp();
     answers['/__remote/slack/channels'] = () =>

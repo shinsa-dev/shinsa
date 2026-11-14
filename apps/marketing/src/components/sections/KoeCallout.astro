@@ -1,6 +1,7 @@
 ---
 import { koe } from '../../lib/content';
 import { koeSite } from '../../lib/site';
+import KoeVideo from '../koe/KoeVideo.astro';
 import Button from '../ui/Button.astro';
 ---
 
@@ -20,9 +21,17 @@ import Button from '../ui/Button.astro';
     <a
       href={koeSite.path}
       aria-label={koe.calloutLink}
-      class='koe-desktop relative flex min-h-60 items-end justify-center p-8 md:min-h-0'
+      class='koe-desktop relative flex items-center justify-center p-6 md:p-8'
     >
-      <img src='/koe/koe-pill.webp' alt={koe.pillLabel} width='560' height='80' class='h-auto w-full max-w-[560px]' />
+      <KoeVideo
+        name='koe-session'
+        width={2548}
+        height={1492}
+        label={koe.sessionLabel}
+        captions={koe.sessionCaptions}
+        compact
+        class='w-full shadow-lg'
+      />
     </a>
   </div>
 </section>

@@ -53,11 +53,19 @@ export function resolveShareEnd(limit: ShareLimit, now: number): Option.Option<n
   return span === undefined ? Option.none() : Option.some(now + span);
 }
 
-export type AutopilotLevel = 'ask_first' | 'balanced' | 'most';
+export type AutopilotLevel = 'ask_first' | 'balanced' | 'most' | 'everything';
 
-export const AUTOPILOT_LEVELS: readonly AutopilotLevel[] = ['ask_first', 'balanced', 'most'];
+export const AUTOPILOT_LEVELS: readonly AutopilotLevel[] = ['ask_first', 'balanced', 'most', 'everything'];
 
-export type AutopilotGate = 'plans' | 'questions' | 'reviews' | 'suggestions' | 'watchdogTasks';
+export type AutopilotGate =
+  | 'plans'
+  | 'questions'
+  | 'reviews'
+  | 'suggestions'
+  | 'watchdogTasks'
+  | 'proposals'
+  | 'failures'
+  | 'findings';
 
 export const AUTOPILOT_GATES: readonly AutopilotGate[] = [
   'plans',
@@ -65,6 +73,9 @@ export const AUTOPILOT_GATES: readonly AutopilotGate[] = [
   'reviews',
   'suggestions',
   'watchdogTasks',
+  'proposals',
+  'failures',
+  'findings',
 ];
 
 export type AutoMerge = 'off' | 'low_risk' | 'approved';
@@ -110,7 +121,7 @@ export interface AutopilotPolicy {
 export const AUTOPILOT_DEFAULTS: AutopilotPolicy = {
   enabled: false,
   level: 'balanced',
-  gates: ['plans', 'questions', 'reviews', 'watchdogTasks'],
+  gates: ['plans', 'questions', 'reviews', 'watchdogTasks', 'proposals', 'failures', 'findings'],
   autoMerge: 'low_risk',
   escalate: true,
   ignoreUsageLimits: true,
@@ -266,6 +277,8 @@ export function resolveAutoPaceResets(settings: Settings) {
   return settings.autoPaceResets ?? false;
 }
 
+const DEFAULT_PLAN_APPROVAL: PlanApproval = 'large';
+
 const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
@@ -273,7 +286,7 @@ const DEFAULT_SETTINGS: Settings = {
   delegationLimit: null,
   mergeMethod: 'squash',
   attentionLimit: DEFAULT_ATTENTION_LIMIT,
-  approvePlans: 'when_asked',
+  approvePlans: DEFAULT_PLAN_APPROVAL,
   agentModels: {},
   agentProviders: {},
   agentFastModes: {},
@@ -303,6 +316,10 @@ const DEFAULT_SETTINGS: Settings = {
 
 export function createSettings(): Settings {
   return structuredClone(DEFAULT_SETTINGS);
+}
+
+export function resolvePlanApproval(settings: Settings): PlanApproval {
+  return settings.approvePlans ?? DEFAULT_PLAN_APPROVAL;
 }
 
 export function resolveAttentionLimit(settings: Settings) {

@@ -31,6 +31,7 @@ const ROW_DISCLOSURES: Record<string, string> = {
   'components/settings/agents.tsx': 'the inline Per role toggle',
   'components/onboarding/projects.tsx': 'the inline Repositories toggle at the end of a suggested project',
   'components/settings/mcp-server-row.tsx': 'a settings row with a leading chevron, not a header',
+  'components/settings/project-block.tsx': 'the gear button that opens a repository row’s options',
 };
 
 const MENU_BUTTONS: Record<string, string> = {

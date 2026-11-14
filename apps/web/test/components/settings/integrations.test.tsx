@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { IntegrationSettings } from '@/components/settings/integrations.tsx';
+import { IntegrationSettings, IntegrationsSearch } from '@/components/settings/integrations.tsx';
 import { resetExtensions, stopSignInWatch } from '@/lib/connection/extensions.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createExtensions, createPlugin, createServer, createSkill } from '../../support/extensions.ts';
@@ -107,6 +107,7 @@ async function renderIntegrations(path = '/settings?tab=integrations') {
   dispatchEvent(new PopStateEvent('popstate'));
   render(
     <TooltipProvider>
+      <IntegrationsSearch />
       <IntegrationSettings state={STATE} />
     </TooltipProvider>
   );

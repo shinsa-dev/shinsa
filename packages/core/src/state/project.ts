@@ -197,7 +197,7 @@ export function replaceBriefing(state: ShinsaState, key: string, stored: StoredB
   return { ...state, briefings: { ...state.briefings, [key]: stored } };
 }
 
-function recordHandle(state: ShinsaState, handle: string) {
+export function recordHandle(state: ShinsaState, handle: string) {
   const parsed = parseTaskHandle(handle);
   if (Option.isNone(parsed)) return;
   const [key = NO_PROJECT_KEY, number = '0'] = parsed.value.split('-');

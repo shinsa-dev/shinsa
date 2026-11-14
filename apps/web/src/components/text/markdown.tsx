@@ -2,16 +2,22 @@ import { markInlineCode } from '@shinsa/core';
 import { Checklist, ChecklistItem, ChecklistMark } from '@shinsa/ui/components/checklist';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import renderMarkdown, { type Components, type ExtraProps } from 'react-markdown';
+import renderMarkdown, { type Components, defaultUrlTransform, type ExtraProps } from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
+import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
 import { ReferenceAnchor, ReferenceLabel, useReferenceMarkdown } from '@/components/links/reference.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
 import { isRunnableFence } from '@/lib/code/block.ts';
+import { useMediaUrl } from '@/lib/connection/socket.ts';
 import { createCache } from '@/lib/format/cache.ts';
 import { isTaskItemDone, isTaskList, isTaskListItem } from '@/lib/format/checklist.ts';
 import { isReferenceHref, transformUrl } from '@/lib/tasks/references.ts';
 
 const REMARK_PLUGINS = [remarkGfm];
+
+const FILE_REHYPE_PLUGINS = [rehypeRaw, rehypeSlug, rehypeSanitize];
 
 const PARSED_LIMIT = 400;
 
@@ -109,6 +115,72 @@ const inlines = createCache<React.ReactElement>(PARSED_LIMIT);
 
 const linkedInlines = createCache<React.ReactElement>(PARSED_LIMIT);
 
+const FILE_PARSED_LIMIT = 40;
+
+const files = createCache<React.ReactElement>(FILE_PARSED_LIMIT);
+
+export interface FileMarkdownLinks {
+  resolveImage: (src: string | undefined) => string | null;
+  openLink: (href: string | undefined) => boolean;
+}
+
+const FileLinks = React.createContext<FileMarkdownLinks | null>(null);
+
+function FileAnchor({ href, children }: { href?: string; children?: React.ReactNode }) {
+  const links = React.useContext(FileLinks);
+  if (href?.startsWith('#')) {
+    return (
+      <a
+        href={href}
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById(`user-content-${href.slice(1)}`)?.scrollIntoView({ block: 'start' });
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  return (
+    <a
+      href={href}
+      target='_blank'
+      rel='noreferrer'
+      onClick={(event) => {
+        if (links?.openLink(href)) event.preventDefault();
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
+function FileImage({ src, alt, width, height }: React.ComponentProps<'img'>) {
+  const links = React.useContext(FileLinks);
+  const given = typeof src === 'string' ? src : undefined;
+  const local = links?.resolveImage(given) ?? null;
+  const media = useMediaUrl(local ?? '');
+  return <img src={local ? media : given} alt={alt ?? ''} width={width} height={height} loading='lazy' />;
+}
+
+const FILE_COMPONENTS: Components = {
+  ...BLOCK_COMPONENTS,
+  a: ({ href, children }) => <FileAnchor href={href}>{children}</FileAnchor>,
+  img: ({ src, alt, width, height }) => <FileImage src={src} alt={alt} width={width} height={height} />,
+};
+
+function parseFile(text: string) {
+  return files.read(text, () =>
+    renderMarkdown({
+      children: text,
+      remarkPlugins: REMARK_PLUGINS,
+      rehypePlugins: FILE_REHYPE_PLUGINS,
+      components: FILE_COMPONENTS,
+      urlTransform: defaultUrlTransform,
+    })
+  );
+}
+
 function parseBlock(text: string) {
   return blocks.read(text, () =>
     renderMarkdown({
@@ -178,5 +250,21 @@ export const LinkedInlineMarkdown = React.memo(function LinkedInlineMarkdownText
     <span className={cn('prose-shinsa min-w-0 break-words', className)}>
       {parseInline(useReferenceMarkdown(text), true)}
     </span>
+  );
+});
+
+export const FileMarkdown = React.memo(function FileMarkdownPreview({
+  text,
+  links,
+  className,
+}: {
+  text: string;
+  links: FileMarkdownLinks;
+  className?: string;
+}) {
+  return (
+    <FileLinks.Provider value={links}>
+      <div className={cn('prose-shinsa min-w-0 selectable break-words', className)}>{parseFile(text)}</div>
+    </FileLinks.Provider>
   );
 });

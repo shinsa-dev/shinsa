@@ -3,6 +3,7 @@ import { AUTOPILOT_DEFAULTS, createSettings, resolveEngineInfo, type Settings } 
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
+import { AutopilotSettings } from '@/components/settings/autopilot.tsx';
 import {
   AUTO_MERGE_DESCRIPTION,
   AUTOPILOT_BLOCKS,
@@ -26,7 +27,13 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createAutopilotProfile, createProject, createShinsaState, NOW } from '../../support/state.ts';
+import {
+  createAutopilotKindsProfile,
+  createAutopilotProfile,
+  createProject,
+  createShinsaState,
+  NOW,
+} from '../../support/state.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -52,6 +59,7 @@ function renderAgents(settings: Settings = createSettings(), automatic = false) 
   return render(
     <TooltipProvider>
       <AgentSettings settings={settings} automatic={automatic} />
+      <AutopilotSettings settings={settings} />
     </TooltipProvider>
   );
 }
@@ -262,7 +270,7 @@ describe('Settings → Agents → Engine', () => {
   });
 });
 
-describe('Settings → Agents → Autopilot', () => {
+describe('Settings → Autopilot', () => {
   const ESCALATING: Settings = {
     ...createSettings(),
     autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },
@@ -306,7 +314,12 @@ describe('Settings → Agents → Autopilot', () => {
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
       {
         type: 'settings.change',
-        patch: { autopilot: { ...ESCALATING.autopilot, gates: ['plans', 'reviews', 'watchdogTasks'] } },
+        patch: {
+          autopilot: {
+            ...ESCALATING.autopilot,
+            gates: ['plans', 'reviews', 'watchdogTasks', 'proposals', 'failures', 'findings'],
+          },
+        },
       },
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, autoMerge: 'off' } } },
     ]);
@@ -322,7 +335,7 @@ describe('Settings → Agents → Autopilot', () => {
     renderAgents(ESCALATING);
     await settle();
     expect(screen.getByText(AUTOPILOT_BLOCKS.score.title)).toBeTruthy();
-    const percent = screen.getByText(/^\d+%$/).textContent ?? '';
+    const percent = screen.getAllByText(/^\d+%$/)[0]?.textContent ?? '';
     expect(Number.parseInt(percent, 10)).toBeGreaterThanOrEqual(90);
     expect(screen.queryByRole('meter')).toBeNull();
     expect(screen.queryByText('Ready')).toBeNull();
@@ -339,6 +352,41 @@ describe('Settings → Agents → Autopilot', () => {
     expect(listSentCommands()).toEqual([
       { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'most' } } },
     ]);
+  });
+
+  it('offers Everything once a kind of gate is ready and marks that kind', async () => {
+    spyOnEngine();
+    const { unmount } = renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByText(AUTOPILOT_BLOCKS.readiness.title)).toBeTruthy();
+    expect(screen.getByText('It has not guessed any of your failed steps yet.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.level }));
+    await settle();
+    expect(screen.queryByRole('option', { name: /^Everything/ })).toBeNull();
+    unmount();
+    pushState(
+      createShinsaState({
+        patch: {
+          autopilotProfile: createAutopilotKindsProfile({ review: { scored: 120, agreed: 114, base: 0.85 } }),
+        },
+      })
+    );
+    renderAgents(ESCALATING);
+    await settle();
+    expect(screen.getByLabelText('Ready for Everything')).toBeTruthy();
+    await choose(AUTOPILOT_ROWS.level, /^Everything/);
+    expect(listSentCommands()).toEqual([
+      { type: 'settings.change', patch: { autopilot: { ...ESCALATING.autopilot, level: 'everything' } } },
+    ]);
+  });
+
+  it('keeps showing Everything once it is your level', async () => {
+    spyOnEngine();
+    renderAgents({ ...ESCALATING, autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true, level: 'everything' } });
+    await settle();
+    expect(screen.getByRole('combobox', { name: AUTOPILOT_ROWS.level }).textContent).toBe('Everything');
+    expect(screen.getByText(AUTOPILOT_LEVEL_DESCRIPTION.everything)).toBeTruthy();
+    expect(screen.queryByLabelText('Ready for Everything')).toBeNull();
   });
 
   it('shows the topics you raise and how often its follow-ups matched yours', async () => {
@@ -369,7 +417,7 @@ describe('Settings → Agents → Autopilot', () => {
     spyOnEngine();
     renderAgents(ESCALATING);
     await settle();
-    expect(screen.getByText('0%')).toBeTruthy();
+    expect(screen.getAllByText('0%')).toHaveLength(7);
     expect(screen.queryByText('Learning')).toBeNull();
     expect(screen.getByText('In use')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();

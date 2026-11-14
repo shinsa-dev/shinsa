@@ -38,6 +38,7 @@ import {
   applyAutopilotWeighed,
   fireAutopilot,
   markAutopilotSeen,
+  syncAutopilotFailures,
 } from './autopilot.ts';
 import { moveToBacklog, removeFromBacklog } from './backlog.ts';
 import { requestBrowserSignIn } from './browser-sign-in.ts';
@@ -101,7 +102,7 @@ import {
   sendQueuedRound,
 } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
-import { moveToRepository } from './moves.ts';
+import { moveTaskToRepository, moveToRepository } from './moves.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { recordWelcome } from './onboarding.ts';
 import { applyOrchestration } from './orchestration.ts';
@@ -262,6 +263,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return waitOnTasks(decider, command);
     case 'task.stack_on_tasks':
       return stackOnTasks(decider, command);
+    case 'task.move_to_repository':
+      return moveTaskToRepository(decider, command);
     case 'task.move_to_backlog':
       return moveToBacklog(decider, command);
     case 'task.remove_from_backlog':
@@ -636,6 +639,7 @@ function resolveDecision(state: ShinsaState, command: ShinsaCommand, context: De
   dispatchRuns(decider);
   syncSlackThreads(decider);
   syncSlackEscalations(decider, state);
+  syncAutopilotFailures(decider, state);
   assertGatesStayOpen(decider, state);
   if (context.onBehalf) recordOnBehalfAction(decider, command);
   const changes = sealDraft(decider.state);

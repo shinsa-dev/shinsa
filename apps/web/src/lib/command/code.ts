@@ -14,6 +14,11 @@ export interface CodeCommandContext {
   side: ExplorerSide;
   hasEditor: boolean;
   applyMode: (mode: CodeMode) => void;
+  copyPath: (() => void) | null;
+  showInFiles: (() => void) | null;
+  openInEditor: (() => void) | null;
+  preview: boolean | null;
+  togglePreview: () => void;
   run: (key: CodeKey) => void;
   toggleSplit: () => void;
   toggleHideViewed: () => void;
@@ -98,6 +103,46 @@ export function listCodeCommands(context: CodeCommandContext): CommandSection {
         run: context.toggleSplit,
       }
     );
+  }
+  if (context.preview !== null) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.preview`,
+      label: context.preview ? 'Show source' : 'Show preview',
+      icon: context.preview ? 'IconCode' : 'IconEyeOpen',
+      keywords: ['markdown', 'preview', 'render', 'readme', 'source'],
+      run: context.togglePreview,
+    });
+  }
+  if (context.copyPath) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.copy-path`,
+      label: 'Copy path',
+      icon: 'IconClipboard2',
+      keywords: ['copy', 'path', 'file', 'name'],
+      run: context.copyPath,
+    });
+  }
+  if (context.showInFiles) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.show-in-files`,
+      label: 'Show in Files',
+      icon: 'IconFolderOpen',
+      keywords: ['reveal', 'tree', 'explorer', 'folder', 'locate'],
+      run: context.showInFiles,
+    });
+  }
+  if (context.openInEditor) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.open-in-editor`,
+      label: 'Open in editor',
+      icon: 'IconCodeLines',
+      keywords: ['vs code', 'cursor', 'zed', 'external', 'editor', 'open'],
+      run: context.openInEditor,
+    });
   }
   return { id, heading: 'Code', rank: RANK.context, commands: [...modes, ...keys] };
 }

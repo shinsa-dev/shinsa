@@ -244,6 +244,7 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolvePlanApproval,
   resolveShareEnd,
   resolveShareLimit,
   resolveSharePreset,

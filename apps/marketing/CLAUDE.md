@@ -95,14 +95,17 @@ src/
                             name, "by Shinsa" back to `/`, its section links, GitHub and Download for Mac): the icon
                             (public/koe/koe.svg), headline, Download for Mac and View on GitHub (`koeSite.githubUrl`), the hero recording (in the hero section, `#demo`), one `Section` per tool, the bundle,
                             the speed (measured numbers in `koeSpeed`; measure again before changing them; each card a `koe-speed` with its own
-                            blurred lights held at its edges, still under prefers-reduced-motion; the method under them sits in
+                            blurred lights held at its edges (`plus-lighter` on dark; in light, where `plus-lighter` adds nothing on white, `multiply` with more saturation), still under prefers-reduced-motion; the method under them sits in
                             Section's `after` slot, outside the chip, so the board's traces meet the cards), the models (one card the chip's width)
                             and a short feature row. `#soon` is the "coming soon" note, shown by CSS `:target` alone: a Koe
-                            download with no release behind it redirects there. Shinsa's Header leads to it with an
-                            "Also from us: Koe" chip beside the wordmark, and sections/KoeCallout.astro, an "Also from
-                            us" block under Closing, with a Meet Koe button and the pill
+                            download with no release behind it redirects there. Shinsa's Hero leads to it with a launch
+                            badge above the headline ("New · Koe, dictation for your Mac", `koe.launchTag` and
+                            `koe.launchText`), and sections/KoeCallout.astro, an "Also from us" card under Closing,
+                            with a Meet Koe button and a small, caption-free copy of the hero recording (`compact`)
   components/koe/           Koe's page, shown with real recordings of the Mac app, never redrawn: KoeVideo.astro (one
-                            recording from public/koe/: `<name>.webm`, `.mp4` and its `.webp` poster; it plays muted
+                            recording from public/koe/ in two takes: `<name>-light.webm`, `.mp4` and `.webp` poster for
+                            light mode and `<name>.*` for dark, picked by `prefers-color-scheme` in each `<source>`'s
+                            `media` and a small inline script for the poster, so only one take loads; it plays muted
                             on a loop from a small script, only while it is the recording most in view (at least 35%
                             of it on screen), from its start each time it takes the focus, and under
                             prefers-reduced-motion stays on its poster with controls; encoded at the capture's full
@@ -111,9 +114,11 @@ src/
                             time by length), since the pill sits at the bottom), KoeTools.astro (one `Section` per tool,
                             the comment, screenshot and clip recordings at full width, from `koeTools`)
                             and KoeBundle.astro (what one recorded session put on the clipboard: its two images and
-                            the exact text Koe copied, numbered [1] and [2]). public/koe/koe-session is the hero, and
-                            koe-pill.webp the real pill in KoeCallout. Every recording is Koe over the seeded Shinsa (the
-                            `seeded` service) in dark, never a made-up app; the comment one pins two comments in a row, each with ⇧⌘-click, so the second click attaches the first.
+                            the exact text Koe copied, numbered [1] and [2], each image with a `-light` take of its own
+                            size). public/koe/koe-session is the hero. Every recording is Koe over the seeded Shinsa (the
+                            `seeded` service), recorded once in light and once in dark appearance from the same script and
+                            voice, each light take cut to its dark take's length so one set of captions fits both, never a
+                            made-up app; a new recording needs both takes; the comment one pins two comments in a row, each with ⇧⌘-click, so the second click attaches the first.
                             Record them again from the installed Koe when its look changes, crop the bottom edge and 6px off each side (Koe's frame
                             around the screen while you pick) and time the captions again
   pages/                    index, 404, open (where a pull request's "Open it in Shinsa" lands: the pull request's
