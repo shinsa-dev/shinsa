@@ -9,7 +9,17 @@ const TranscriptLine = Schema.fromJsonString(
 
 const decodeTranscriptLine = Schema.decodeUnknownOption(TranscriptLine);
 
-export function insertNotices(transcript: string, notices: readonly object[], now: number) {
+interface NoticePlacement {
+  runId: string;
+  now: number;
+  context: boolean;
+}
+
+export function insertNotices(
+  transcript: string,
+  notices: readonly object[],
+  { runId, now, context }: NoticePlacement
+) {
   return Option.map(
     Option.all(
       transcript
@@ -22,19 +32,19 @@ export function insertNotices(transcript: string, notices: readonly object[], no
       const at = brief?.at ?? now;
       const inserted = notices.map((notice, index) => ({
         ...brief,
-        id: `task-account-move-run-1-notice-${index}`,
+        id: `${runId}-notice-${index}`,
         at: at + index + 1,
         type: 'notice',
         notice,
       }));
-      const context = {
+      const meter = {
         ...brief,
-        id: 'task-account-move-run-1-context',
+        id: `${runId}-context`,
         at: now - MINUTE,
         type: 'notice',
         notice: { kind: 'context', usedTokens: 132_000, maxTokens: 200_000, totalProcessedTokens: 910_000 },
       };
-      const lines = [...entries.slice(0, 2), ...inserted, ...entries.slice(2), context];
+      const lines = [...entries.slice(0, 2), ...inserted, ...entries.slice(2), ...(context ? [meter] : [])];
       return `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`;
     }
   );

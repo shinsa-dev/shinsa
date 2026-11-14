@@ -23,6 +23,7 @@ export function RecentlyFinished({ state, finished }: { state: ShinsaState; fini
       {finished.map((task) => (
         <ListRow
           key={task.id}
+          taskId={task.id}
           leading={<TaskGlyph state={state} task={task} />}
           title={task.title}
           mark={hasShareMark(task) && <SharedMark task={task} />}
@@ -51,6 +52,7 @@ export function RecentConversations({ conversations }: { conversations: { task: 
       {conversations.map(({ task, entry }) => (
         <ListRow
           key={task.id}
+          taskId={task.id}
           leading={<StatusTile icon='IconBubbleText' tone='neutral' />}
           title={task.title}
           mark={hasShareMark(task) && <SharedMark task={task} />}

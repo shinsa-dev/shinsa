@@ -129,7 +129,7 @@ describe('ChatTab', () => {
     const row = view.getByRole('button', { name: /Worked for/ });
     expect(row.textContent).toBe('Worked for 3m · 6 steps');
     expect(row.getAttribute('aria-expanded')).toBe('false');
-    expect(view.getByText('Handed over the phase')).toBeTruthy();
+    expect(view.getByText('Finished the phase')).toBeTruthy();
     expect(view.getByText('The login form is done.')).toBeTruthy();
     expect(view.queryByText('Looking around the code first.')).toBeNull();
     expect(view.queryByText(/Read 2 files/)).toBeNull();
@@ -154,7 +154,9 @@ describe('ChatTab', () => {
     const task = createTask({ id: 'task-1' });
     pushTranscript('run-1', workEntries());
     const view = renderChat(createShinsaState({ tasks: [task], runs: [finishedRun()] }), task);
-    expect(view.getByText('Handed over the phase')).toBeTruthy();
+    const card = view.getByRole('button', { name: 'Finished the phase' });
+    expect(view.queryByText('The form validates input.')).toBeNull();
+    fireEvent.click(card);
     expect(view.getByText('The form validates input.')).toBeTruthy();
   });
 
@@ -195,9 +197,12 @@ describe('ChatTab', () => {
       ])
     );
     const view = renderChat(createShinsaState({ tasks: [task], runs: [finishedRun()] }), task);
+    for (const header of view.container.querySelectorAll('h3 button[aria-expanded="false"]')) {
+      fireEvent.click(header);
+    }
     expect(view.getByText('Proposed the plan')).toBeTruthy();
     expect(view.getByText('Add fields')).toBeTruthy();
-    expect(view.getByText('Handed over the fix')).toBeTruthy();
+    expect(view.getByText('Finished the fix')).toBeTruthy();
     expect(view.getByRole('link', { name: 'Read the walkthrough' }).getAttribute('href')).toBe(
       '/tasks/task-1?tab=review'
     );
@@ -316,7 +321,7 @@ describe('ChatTab', () => {
     expect(within(section).getByText(/Failed/)).toBeTruthy();
   });
 
-  it('reads as one agent working through the round: each run headed Agent with what it did', () => {
+  it('reads as one agent working through the round, with no header, and heads the reviewer’s run with what it did', () => {
     const document = {
       goal: 'Goal',
       phases: [
@@ -344,16 +349,10 @@ describe('ChatTab', () => {
       run('review', 40, { role: 'reviewer' }),
     ];
     const view = renderChat(serializeState(createShinsaState({ tasks: [task], runs })), task);
-    const headers = [...view.container.querySelectorAll('section[id^="run-"] > [data-chat-line]')].map(
-      (header) => header.textContent ?? ''
-    );
-    expect(headers.map((header) => header.trim())).toEqual([
-      'Agent · Planned 2 phases',
-      'Agent · Phase 1 of 2: Add the form',
-      'Agent · Phase 2 of 2: Wire the API',
-      'Agent · Fixed the failing checks',
-      'Reviewer · Reviewed the change',
-    ]);
+    expect(view.queryByText('Agent')).toBeNull();
+    expect(view.queryByRole('button', { name: /^Reviewer/ })).toBeNull();
+    const header = view.container.querySelector('#run-review [data-speaker-header]') as HTMLElement;
+    expect(header.textContent?.trim()).toBe('ReviewerReviewed the change');
   });
 
   it('shows a run headline the role header cuts short in full in its tooltip', async () => {
@@ -367,8 +366,11 @@ describe('ChatTab', () => {
     try {
       const task = createTask({ id: 'task-1' });
       pushTranscript('run-1', workEntries());
-      const view = renderChat(createShinsaState({ tasks: [task], runs: [finishedRun()] }), task);
-      const header = view.container.querySelector('#run-run-1 [data-chat-line]') as HTMLElement;
+      const view = renderChat(
+        createShinsaState({ tasks: [task], runs: [finishedRun({ role: 'reviewer' })] }),
+        task
+      );
+      const header = view.container.querySelector('#run-run-1 [data-speaker-header]') as HTMLElement;
       const headline = header.querySelector('[data-slot="truncate"]') as HTMLElement;
       expect(headline.textContent).not.toBe('');
       expect(await findTooltipText(headline)).toBe(headline.textContent ?? '');
@@ -378,7 +380,7 @@ describe('ChatTab', () => {
     }
   });
 
-  it('names the account each run used, and runs the current step again on the account you pick', async () => {
+  it('names no account on a run that went well, and runs a failed step again on the account you pick', async () => {
     pushAccounts(
       createSnapshot({
         accounts: [
@@ -403,14 +405,15 @@ describe('ChatTab', () => {
       id: 'run-2',
       taskId: 'task-1',
       startedAt: at(200),
+      endedAt: at(260),
+      outcome: 'failed',
       attempts: [{ ...attempt, account: { id: 'w', email: 'work@example.com' } }],
     });
     pushTranscript('run-1', workEntries());
     pushTranscript('run-2', workEntries('b'));
     const view = renderChat(createShinsaState({ tasks: [task], runs: [earlier, current] }), task);
     const first = view.container.querySelector('#run-run-1') as HTMLElement;
-    expect(within(first).getByText('· home@example.com')).toBeTruthy();
-    expect(within(first).queryByRole('button', { name: '· home@example.com' })).toBeNull();
+    expect(within(first).queryByText(/home@example\.com/)).toBeNull();
     fireEvent.click(view.getByRole('button', { name: '· work@example.com' }));
     expect(await view.findByText('Run this step again on')).toBeTruthy();
     expect(
@@ -662,7 +665,7 @@ describe('a follow-up and the next round in the chat', () => {
     expect(view.getByText('hey!')).toBeTruthy();
   });
 
-  it('opens the next run with your message above its role, never under the finished run', () => {
+  it('opens the next run with your message above its reply, never under the finished run', () => {
     const task = answered();
     pushTranscript('run-1', answerEntries('one', 'Hey! I am the answerer.', 0));
     pushTranscript('run-2', answerEntries('two', 'Still here.', 210));
@@ -683,9 +686,9 @@ describe('a follow-up and the next round in the chat', () => {
     );
     const second = view.container.querySelector('#run-run-2') as HTMLElement;
     expect(within(second).getByText('hey!')).toBeTruthy();
-    expect(within(second).getAllByText('Answerer')).toHaveLength(1);
+    expect(within(second).queryByText('Answerer')).toBeNull();
     const text = second.textContent ?? '';
-    expect(text.indexOf('hey!')).toBeLessThan(text.indexOf('Answerer'));
+    expect(text.indexOf('hey!')).toBeLessThan(text.indexOf('Still here.'));
     expect(view.queryByText('Answered the question.')).toBeNull();
   });
 

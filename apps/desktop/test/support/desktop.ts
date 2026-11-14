@@ -37,6 +37,7 @@ import { DesktopShell } from '../../src/shell/service.ts';
 import type { TrayClick, TrayView } from '../../src/tray/schema.ts';
 import { StatusTray } from '../../src/tray/service.ts';
 import { UpdateClient } from '../../src/update-client/service.ts';
+import { UpdateLink } from '../../src/update-link/service.ts';
 import { UpdateLog } from '../../src/update-log/service.ts';
 import { UpdateCheckFailed, type UpdateEvent, type UpdaterOptions } from '../../src/updates/schema.ts';
 import { Updater } from '../../src/updates/service.ts';
@@ -62,6 +63,7 @@ export interface DesktopWorld {
   unwritable: Set<string>;
   answer: (path: string) => HttpAnswer;
   requests: string[];
+  posted: { path: string; body: string }[];
   launchctl: string[][];
   print: () => { ok: boolean; output: string };
   registration: Registration;
@@ -125,6 +127,7 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     unwritable: new Set(),
     answer: () => 'refuse',
     requests: [],
+    posted: [],
     launchctl: [],
     print: () => ({ ok: false, output: '' }),
     registration: 'not-registered',
@@ -179,6 +182,8 @@ function makeHttpLayer(world: DesktopWorld) {
     HttpClient.HttpClient,
     HttpClient.make((request, url) => {
       world.requests.push(url.pathname);
+      if (request.body._tag === 'Uint8Array')
+        world.posted.push({ path: url.pathname, body: new TextDecoder().decode(request.body.body) });
       const answer = world.answer(url.pathname);
       if (answer === 'hang') return Effect.never;
       if (answer === 'refuse') {
@@ -555,5 +560,15 @@ export type ConnectedServices = Layer.Success<ReturnType<typeof makeConnectedLay
 export function runConnected<A, E>(world: DesktopWorld, effect: Effect.Effect<A, E, ConnectedServices>) {
   return Effect.runPromise(
     Effect.scoped(effect).pipe(Effect.provide(Layer.merge(makeConnectedLayer(world), Logger.layer([]))))
+  );
+}
+
+export function runLinked<A, E>(world: DesktopWorld, effect: Effect.Effect<A, E, DesktopServices>) {
+  return Effect.runPromise(
+    Effect.scoped(effect).pipe(
+      Effect.provide(
+        Layer.merge(UpdateLink.pipe(Layer.provideMerge(makeDesktopLayer(world))), Logger.layer([]))
+      )
+    )
   );
 }
