@@ -328,7 +328,7 @@ function MachineUpdates({ machineId, name }: { machineId: string | null; name: s
   );
 }
 
-export function BrowserUpdateSettings() {
+function BrowserUpdateSettings() {
   const listed = useMachines();
   const changelog = useChangelogAvailable();
   const machines = React.useMemo(

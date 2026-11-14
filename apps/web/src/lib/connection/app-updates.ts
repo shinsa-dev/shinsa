@@ -9,7 +9,7 @@ import type { AppServices } from '@/lib/runtime/schema.ts';
 import { createSignal } from '@/lib/signal.ts';
 import { APP_UPDATES_POLL } from './schema.ts';
 
-export type AppUpdatesAction = AppUpdateRequest['kind'] | 'open' | 'restart';
+type AppUpdatesAction = AppUpdateRequest['kind'] | 'open' | 'restart';
 
 export interface AppUpdatesView {
   answer: AppUpdatesAnswer | null;
