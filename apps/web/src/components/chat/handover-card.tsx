@@ -94,7 +94,7 @@ function Card({
   );
 }
 
-function ReplyLead({ args }: { args: ChatToolArgs }) {
+function resolveReplyLead(args: ChatToolArgs) {
   const reply = readHandOverReply(args);
   return reply ? <AgentReplyBlock reply={reply} /> : null;
 }
@@ -109,7 +109,7 @@ function PlanCard({ args, task, at }: { args: ChatToolArgs; task: Task | null; a
       icon='IconMap'
       title={revision && revision.version > 1 ? 'Revised the plan' : 'Proposed the plan'}
       meta={phases.length > 0 ? describeCount(phases.length, 'phase', 'phases') : null}
-      lead={readHandOverReply(args) && <ReplyLead args={args} />}
+      lead={resolveReplyLead(args)}
     >
       {goal && <Markdown text={goal} />}
       {phases.length > 0 && (
@@ -178,7 +178,7 @@ function SummaryCard({
   const summary = readString(args, 'summary');
   const calls = readList(args, 'judgement_calls');
   return (
-    <Card icon={icon} title={title} meta={meta} lead={readHandOverReply(args) && <ReplyLead args={args} />}>
+    <Card icon={icon} title={title} meta={meta} lead={resolveReplyLead(args)}>
       {summary && <Markdown text={summary} />}
       {calls.length > 0 && (
         <div className='flex flex-col gap-1.5'>
@@ -376,7 +376,7 @@ function DeliveryReply({ args, field }: { args: ChatToolArgs; field: string }) {
   const proposal = readProposedChange(args);
   return (
     <div data-message className={cn('flex min-w-0 flex-col gap-3', CHAT_PROSE_INSET)}>
-      <ReplyLead args={args} />
+      {resolveReplyLead(args)}
       <Markdown text={readString(args, field) ?? ''} className='prose-chat' />
       {proposal && (
         <div className='flex flex-col text-xs'>

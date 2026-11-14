@@ -128,9 +128,10 @@ Only these, and they win over anything below:
      `md`, `StepNumber`) is that slot: so the header's icon and every row icon under it share one centre.
    - **The Agent speaks without a header.** A round has one agent, so its own runs (planning, each phase, each
      fix, the operation, an answer, an investigation or research: `isAgentVoice` in `lib/chat/run-role.ts`) read
-     as one voice and are set apart by space alone: no role name, no model, no account. Only a run that failed,
-     was stopped or can be run again on another account shows the role header, so "Failed", "Stopped" and the
-     account picker have a place. **Every other voice has a header and a rail**: the reviewer, a watch check,
+     as one voice and are set apart by space alone: no role name, no model, no account. Only a run that failed
+     or was stopped shows the role header, so "Failed", "Stopped" and the picker that runs it again on another
+     account have a place; a run going fine reaches that picker from ⌘K. **Every other voice has a header and a
+     rail**: the reviewer, a watch check,
      an initiative's lead and a delegated helper. The header is a chat line with the role's icon and its name
      (from `RUN_ROLE`: Reviewer `IconShieldCheck`, and for the others Agent `IconAgent`, Planner `IconMap`,
      Builder `IconHammer`…), then as its meta what it did (`resolveRunHeadline`, "Reviewed the change, 3
