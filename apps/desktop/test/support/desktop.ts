@@ -34,6 +34,7 @@ import { Prefs } from '../../src/prefs/service.ts';
 import { EngineServer } from '../../src/server/service.ts';
 import type { AboutPanel, ShellEvent, ShellGuards } from '../../src/shell/schema.ts';
 import { DesktopShell } from '../../src/shell/service.ts';
+import { EngineSource } from '../../src/source/service.ts';
 import type { TrayClick, TrayView } from '../../src/tray/schema.ts';
 import { StatusTray } from '../../src/tray/service.ts';
 import { UpdateClient } from '../../src/update-client/service.ts';
@@ -443,6 +444,7 @@ function makeNativeLayer(world: DesktopWorld) {
               world.shellGuards = guards;
             }),
           quit: push('quit'),
+          relaunch: push('relaunch'),
           setBadge: (text) => push(`badge ${text}`),
           openExternal: (url) => push(`open ${url}`),
           openPath: (path) => push(`open path ${path}`),
@@ -517,7 +519,9 @@ function makeDesktopLayer(world: DesktopWorld) {
     Layer.provideMerge(Updater.layer),
     Layer.provideMerge(Notifications.layer),
     Layer.provideMerge(AppWindow.layer),
-    Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+    Layer.provideMerge(Layer.mergeAll(EngineServer.layer, UpdateLog.layer, EngineActions.layer)),
+    Layer.provideMerge(EngineSource.layer),
+    Layer.provideMerge(Prefs.layer),
     Layer.provideMerge(makeWorldLayer(world)),
     Layer.provideMerge(TestClock.layer())
   );

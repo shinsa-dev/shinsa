@@ -39,9 +39,11 @@ export const DesktopShellLive = Layer.effect(
       if (entry.kind === 'separator') return { type: 'separator' };
       if (entry.kind === 'role')
         return entry.label === undefined ? { role: entry.role } : { role: entry.role, label: entry.label };
+      if (entry.kind === 'submenu') return { label: entry.label, submenu: entry.entries.map(toMenuItem) };
       const { command, kind: _kind, ...item } = entry;
       return {
         ...item,
+        ...(item.checked === undefined ? {} : { type: 'checkbox' as const }),
         click: () => {
           Queue.offerUnsafe(commands, command);
         },
@@ -54,6 +56,10 @@ export const DesktopShellLive = Layer.effect(
           guards = next;
         }),
       quit: Effect.sync(() => app.quit()),
+      relaunch: Effect.sync(() => {
+        app.relaunch();
+        app.quit();
+      }),
       setBadge: (text) => Effect.sync(() => app.dock?.setBadge(text)),
       openExternal: (url) => Effect.ignore(Effect.tryPromise(() => shell.openExternal(url))),
       openPath: (path) => Effect.ignore(Effect.tryPromise(() => shell.openPath(path))),

@@ -1,20 +1,37 @@
 import { describe, expect, it } from 'bun:test';
 import { parseConfigPort, resolveConfigPath, resolveServerUrl } from '../../src/server/url.ts';
+import { LOCAL_SOURCE } from '../../src/source/schema.ts';
 
 describe('resolveServerUrl', () => {
   it('uses the server on the port the command line uses', () => {
-    expect(resolveServerUrl({ env: {}, packaged: true, configPort: null })).toBe('http://127.0.0.1:7446');
-    expect(resolveServerUrl({ env: {}, packaged: true, configPort: 5300 })).toBe('http://127.0.0.1:5300');
-    expect(resolveServerUrl({ env: { SHINSA_PORT: '5400' }, packaged: true, configPort: 5300 })).toBe(
-      'http://127.0.0.1:5400'
-    );
-    expect(resolveServerUrl({ env: { SHINSA_PORT: 'abc' }, packaged: true, configPort: null })).toBe(
+    expect(resolveServerUrl({ env: {}, packaged: true, configPort: null, source: LOCAL_SOURCE })).toBe(
       'http://127.0.0.1:7446'
     );
+    expect(resolveServerUrl({ env: {}, packaged: true, configPort: 5300, source: LOCAL_SOURCE })).toBe(
+      'http://127.0.0.1:5300'
+    );
+    expect(
+      resolveServerUrl({
+        env: { SHINSA_PORT: '5400' },
+        packaged: true,
+        configPort: 5300,
+        source: LOCAL_SOURCE,
+      })
+    ).toBe('http://127.0.0.1:5400');
+    expect(
+      resolveServerUrl({
+        env: { SHINSA_PORT: 'abc' },
+        packaged: true,
+        configPort: null,
+        source: LOCAL_SOURCE,
+      })
+    ).toBe('http://127.0.0.1:7446');
   });
 
   it('uses the Vite dev server when unpackaged', () => {
-    expect(resolveServerUrl({ env: {}, packaged: false, configPort: 5300 })).toBe('http://127.0.0.1:5181');
+    expect(resolveServerUrl({ env: {}, packaged: false, configPort: 5300, source: LOCAL_SOURCE })).toBe(
+      'http://127.0.0.1:5181'
+    );
   });
 
   it('takes SHINSA_URL over everything, by its origin', () => {
@@ -23,14 +40,45 @@ describe('resolveServerUrl', () => {
         env: { SHINSA_URL: 'http://localhost:5190/tasks' },
         packaged: false,
         configPort: null,
+        source: LOCAL_SOURCE,
       })
     ).toBe('http://localhost:5190');
-    expect(resolveServerUrl({ env: { SHINSA_URL: 'ftp://host' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:7446'
-    );
-    expect(resolveServerUrl({ env: { SHINSA_URL: 'not a url' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:7446'
-    );
+    expect(
+      resolveServerUrl({
+        env: { SHINSA_URL: 'ftp://host' },
+        packaged: true,
+        configPort: null,
+        source: LOCAL_SOURCE,
+      })
+    ).toBe('http://127.0.0.1:7446');
+    expect(
+      resolveServerUrl({
+        env: { SHINSA_URL: 'not a url' },
+        packaged: true,
+        configPort: null,
+        source: LOCAL_SOURCE,
+      })
+    ).toBe('http://127.0.0.1:7446');
+  });
+
+  it('uses Shinsa Cloud for a cloud source, from SHINSA_CLOUD_URL when it is set', () => {
+    const cloud = { kind: 'cloud', machine: null } as const;
+    expect(
+      resolveServerUrl({
+        env: { SHINSA_URL: 'http://127.0.0.1:5180' },
+        packaged: true,
+        configPort: 5300,
+        source: cloud,
+      })
+    ).toBe('https://app.shinsa.dev');
+    expect(
+      resolveServerUrl({
+        env: { SHINSA_CLOUD_URL: 'http://127.0.0.1:5195/sandbox' },
+        packaged: false,
+        configPort: null,
+        source: cloud,
+      })
+    ).toBe('http://127.0.0.1:5195');
   });
 });
 

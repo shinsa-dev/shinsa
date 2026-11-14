@@ -1,4 +1,5 @@
 import { Predicate, Schema, SchemaGetter } from 'effect';
+import type { SourceChoice } from '../source/schema.ts';
 
 export const TRAY_LABEL = {
   open: 'Open Shinsa',
@@ -7,6 +8,8 @@ export const TRAY_LABEL = {
   decisions: 'Needs you',
   working: 'Working',
   updating: 'Moves to the new version once agents hand over',
+  viewerQuitHint: 'The machine you view keeps running',
+  cloudDown: 'Shinsa Cloud is not answering',
 } as const;
 
 export const TRAY_TASK_LIMIT = 5;
@@ -65,6 +68,7 @@ export type TrayItem =
   | { kind: 'header'; label: string }
   | { kind: 'separator' }
   | { kind: 'task'; path: string; label: string; sublabel: string }
+  | { kind: 'source'; choice: SourceChoice; label: string; checked: boolean }
   | { kind: 'action'; action: TrayAction; label: string; sublabel?: string };
 
 export interface TrayView {
@@ -73,4 +77,7 @@ export interface TrayView {
   items: TrayItem[];
 }
 
-export type TrayClick = { kind: 'action'; action: TrayAction } | { kind: 'task'; path: string };
+export type TrayClick =
+  | { kind: 'action'; action: TrayAction }
+  | { kind: 'task'; path: string }
+  | { kind: 'source'; choice: SourceChoice };

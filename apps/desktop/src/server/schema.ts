@@ -55,3 +55,12 @@ export const PortSetting = Schema.Union([
 ]);
 
 export const ConfigFile = Schema.fromJsonString(Schema.Struct({ port: PortSetting }));
+
+export const CLOUD_SESSION_PATH = '/__remote/session';
+
+export const CloudSessionAnswer = Schema.Struct({ user: Schema.Unknown }).pipe(
+  Schema.decodeTo(ServerHealth, {
+    decode: SchemaGetter.transform(() => ({ version: null, working: 0, updating: false })),
+    encode: SchemaGetter.forbidden(() => 'The app reads Shinsa Cloud’s session and never writes one'),
+  })
+);

@@ -8,6 +8,7 @@ export class DesktopShell extends Context.Service<
     readonly events: Stream.Stream<ShellEvent>;
     guard(guards: ShellGuards): Effect.Effect<void>;
     readonly quit: Effect.Effect<void>;
+    readonly relaunch: Effect.Effect<void>;
     setBadge(text: string): Effect.Effect<void>;
     openExternal(url: string): Effect.Effect<void>;
     openPath(path: string): Effect.Effect<void>;

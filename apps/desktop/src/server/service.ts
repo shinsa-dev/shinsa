@@ -4,8 +4,16 @@ import { HttpClient, HttpClientRequest } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
 import { Files } from '../files/service.ts';
 import { DesktopHost } from '../host/service.ts';
+import { EngineSource } from '../source/service.ts';
 import { TrayQueue } from '../tray/schema.ts';
-import { EngineUnreachable, HEALTH_TIMEOUT, HealthAnswer, type ServerHealth } from './schema.ts';
+import {
+  CLOUD_SESSION_PATH,
+  CloudSessionAnswer,
+  EngineUnreachable,
+  HEALTH_TIMEOUT,
+  HealthAnswer,
+  type ServerHealth,
+} from './schema.ts';
 import { parseConfigPort, resolveConfigPath, resolveServerUrl } from './url.ts';
 
 export class EngineServer extends Context.Service<
@@ -21,11 +29,13 @@ export class EngineServer extends Context.Service<
     Effect.gen(function* () {
       const host = yield* DesktopHost;
       const files = yield* Files;
+      const source = yield* EngineSource;
       const configText = yield* files.readText(resolveConfigPath(host.env, host.home));
       const origin = resolveServerUrl({
         env: host.env,
         packaged: host.packaged,
         configPort: parseConfigPort(Option.getOrNull(configText)),
+        source: source.started,
       });
       const httpClient = (yield* HttpClient.HttpClient).pipe(
         HttpClient.mapRequest(HttpClientRequest.prependUrl(origin)),
@@ -33,6 +43,8 @@ export class EngineServer extends Context.Service<
       );
       const server = yield* HttpApiClient.group(EngineApi, { group: 'server', httpClient });
       const decodeHealth = Schema.decodeUnknownEffect(HealthAnswer);
+      const decodeCloudSession = Schema.decodeUnknownEffect(CloudSessionAnswer);
+      const cloudSession = Effect.flatMap(httpClient.get(CLOUD_SESSION_PATH), (response) => response.json);
       const decodeQueue = Schema.decodeUnknownEffect(TrayQueue);
       const reach = <A, E, B>(
         request: Effect.Effect<A, E>,
@@ -50,9 +62,10 @@ export class EngineServer extends Context.Service<
         );
       return EngineServer.of({
         origin,
-        requestHealth: reach(server.health(), decodeHealth).pipe(
-          Effect.withSpan('EngineServer.requestHealth')
-        ),
+        requestHealth: (source.started.kind === 'cloud'
+          ? reach(cloudSession, decodeCloudSession)
+          : reach(server.health(), decodeHealth)
+        ).pipe(Effect.withSpan('EngineServer.requestHealth')),
         requestQueue: reach(server.queue(), decodeQueue).pipe(Effect.withSpan('EngineServer.requestQueue')),
       });
     })

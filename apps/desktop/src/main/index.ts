@@ -19,6 +19,7 @@ import { isPermissionAllowed } from '../navigation/origin.ts';
 import { Notifications } from '../notifications/service.ts';
 import { Prefs } from '../prefs/service.ts';
 import { EngineServer } from '../server/service.ts';
+import { EngineSource } from '../source/service.ts';
 import { StatusTray } from '../tray/service.ts';
 import { UpdateLog } from '../update-log/service.ts';
 import { Updater } from '../updates/service.ts';
@@ -53,7 +54,9 @@ const ElectronLayer = Layer.mergeAll(
 ).pipe(Layer.provide(PlatformLive));
 
 const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, CommandLine.layer).pipe(
-  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, UpdateLog.layer, EngineActions.layer)),
+  Layer.provideMerge(EngineSource.layer),
+  Layer.provideMerge(Prefs.layer),
   Layer.provideMerge(ElectronLayer)
 );
 

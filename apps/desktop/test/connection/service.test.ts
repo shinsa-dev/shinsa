@@ -12,6 +12,7 @@ import {
   type DesktopWorld,
   flush,
   runConnected,
+  USER_DATA,
 } from '../support/desktop.ts';
 
 const SERVER = 'load http://127.0.0.1:7446/';
@@ -191,5 +192,70 @@ describe('the status page’s buttons', () => {
     );
     expect(world.window).toEqual([WAITING_FOR_DEV, 'load http://127.0.0.1:5181/']);
     expect(world.requests.filter((path) => path === '/api/health')).toHaveLength(3);
+  });
+});
+
+describe('viewing a machine on Shinsa Cloud', () => {
+  const CLOUD = 'load https://app.shinsa.dev/';
+
+  const CLOUD_DOWN = 'waiting Shinsa Cloud is not answering';
+
+  function createViewer(up: { value: boolean }) {
+    const world = createWorld({
+      answer: (path) => (up.value && path === '/__remote/session' ? answerJson({ user: null }) : 'refuse'),
+    });
+    world.files.set(
+      `${USER_DATA}/prefs.json`,
+      JSON.stringify({ engineSource: { kind: 'cloud', machine: { id: 'm1', name: 'Studio' } } })
+    );
+    return world;
+  }
+
+  it('opens Shinsa Cloud without registering, starting or asking the local engine', async () => {
+    const world = createViewer({ value: true });
+    await connect(world, advance('5 seconds'));
+    expect(world.window).toEqual([CLOUD]);
+    expect(world.requests).toEqual(['/__remote/session', '/__remote/session']);
+    expect(world.launchctl).toEqual([]);
+    expect(world.loginItems).toEqual([]);
+    expect(world.tray.at(-1)?.tooltip).toBe('Showing Studio on Shinsa Cloud');
+    expect(world.about.at(-1)?.credits).toBe('Shinsa at https://app.shinsa.dev');
+  });
+
+  it('shows the status page while Shinsa Cloud does not answer and returns once it does', async () => {
+    const up = { value: false };
+    const world = createViewer(up);
+    await connect(
+      world,
+      Effect.gen(function* () {
+        yield* advance('5 seconds');
+        up.value = true;
+        yield* advance('5 seconds');
+        up.value = false;
+        yield* advance('15 seconds');
+      })
+    );
+    expect(world.window).toEqual([CLOUD_DOWN, CLOUD, CLOUD_DOWN]);
+    expect(world.launchctl).toEqual([]);
+    expect(world.tray.at(-1)?.tooltip).toBe('Shinsa Cloud is not answering');
+  });
+
+  it('tries Shinsa Cloud again for Restart, and moves back to This Mac’s engine on request', async () => {
+    const up = { value: false };
+    const world = createViewer(up);
+    await connect(
+      world,
+      Effect.gen(function* () {
+        up.value = true;
+        yield* request('restart');
+        yield* request('use-local');
+      })
+    );
+    expect(world.window).toEqual([CLOUD_DOWN, CLOUD]);
+    expect(world.launchctl).toEqual([]);
+    expect(world.shell).toContain('relaunch');
+    expect(JSON.parse(world.files.get(`${USER_DATA}/prefs.json`) ?? '{}')).toEqual({
+      engineSource: { kind: 'local' },
+    });
   });
 });

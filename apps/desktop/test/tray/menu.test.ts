@@ -38,6 +38,10 @@ describe('listTrayItems', () => {
     expect(listTrayItems(HEALTH)).toEqual([
       { kind: 'status', label: 'The engine is running. 2 agents are working' },
       { kind: 'separator' },
+      { kind: 'header', label: 'Engine' },
+      { kind: 'source', choice: 'local', label: 'This Mac', checked: true },
+      { kind: 'source', choice: 'choose', label: 'Choose a Machine…', checked: false },
+      { kind: 'separator' },
       { kind: 'action', action: 'open', label: 'Open Shinsa' },
       { kind: 'separator' },
       { kind: 'action', action: 'quit', label: 'Quit Shinsa', sublabel: TRAY_LABEL.quitHint },
@@ -56,6 +60,10 @@ describe('listTrayItems', () => {
       { kind: 'header', label: 'Working (1)' },
       { kind: 'task', path: '/tasks/LOC-2', label: 'Task 2', sublabel: 'Review · LOC-2' },
       { kind: 'separator' },
+      { kind: 'header', label: 'Engine' },
+      { kind: 'source', choice: 'local', label: 'This Mac', checked: true },
+      { kind: 'source', choice: 'choose', label: 'Choose a Machine…', checked: false },
+      { kind: 'separator' },
       { kind: 'action', action: 'open', label: 'Open Shinsa' },
       { kind: 'separator' },
       { kind: 'action', action: 'quit', label: 'Quit Shinsa', sublabel: TRAY_LABEL.quitHint },
@@ -68,6 +76,24 @@ describe('listTrayItems', () => {
     expect(items.filter((item) => item.kind === 'task')).toHaveLength(TRAY_TASK_LIMIT + 1);
     expect(items).toContainEqual({ kind: 'task', path: '/', label: '2 more', sublabel: 'Open Home' });
     expect(items).toContainEqual({ kind: 'header', label: `Needs you (${TRAY_TASK_LIMIT + 2})` });
+  });
+
+  it('shows the machine it views, the engines to switch to and that the machine keeps running', () => {
+    const source = { kind: 'cloud', machine: { id: 'm1', name: 'Studio' } } as const;
+    expect(listTrayItems(HEALTH, null, source)).toEqual([
+      { kind: 'status', label: 'Showing Studio on Shinsa Cloud' },
+      { kind: 'separator' },
+      { kind: 'header', label: 'Engine' },
+      { kind: 'source', choice: 'local', label: 'This Mac', checked: false },
+      { kind: 'source', choice: 'pinned', label: 'Studio', checked: true },
+      { kind: 'source', choice: 'choose', label: 'Choose a Machine…', checked: false },
+      { kind: 'separator' },
+      { kind: 'action', action: 'open', label: 'Open Shinsa' },
+      { kind: 'separator' },
+      { kind: 'action', action: 'quit', label: 'Quit Shinsa', sublabel: TRAY_LABEL.viewerQuitHint },
+    ]);
+    expect(describeTrayStatus(null, null, source)).toBe(TRAY_LABEL.cloudDown);
+    expect(describeTrayStatus(HEALTH, null, { kind: 'cloud', machine: null })).toBe('Showing Shinsa Cloud');
   });
 
   it('leaves the tasks out while the engine does not answer', () => {

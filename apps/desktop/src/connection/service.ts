@@ -8,6 +8,8 @@ import { AppMenu } from '../menu/service.ts';
 import type { ServerHealth } from '../server/schema.ts';
 import { EngineServer } from '../server/service.ts';
 import { DesktopShell } from '../shell/service.ts';
+import { LOCAL_SOURCE } from '../source/schema.ts';
+import { EngineSource } from '../source/service.ts';
 import { StatusTray } from '../tray/service.ts';
 import { AppWindow } from '../window/service.ts';
 import { type ConnectStep, MISSES_BEFORE_WAITING, RETRY_SCHEDULE, WATCH_SCHEDULE } from './schema.ts';
@@ -26,6 +28,8 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
       const menu = yield* AppMenu;
       const shell = yield* DesktopShell;
       const actions = yield* EngineActions;
+      const source = yield* EngineSource;
+      const viewer = source.started.kind === 'cloud';
       const scope = yield* Effect.scope;
       const connecting = yield* Ref.make(false);
       const usedFirstHealth = yield* Ref.make(false);
@@ -36,7 +40,7 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
       const refreshTray = Effect.fn('Connection.refreshTray')(function* (
         health: Option.Option<ServerHealth>
       ) {
-        if (Option.isNone(health)) return yield* tray.update(null, null);
+        if (Option.isNone(health) || viewer) return yield* tray.update(Option.getOrNull(health), null);
         const queue = yield* Effect.option(server.requestQueue);
         yield* tray.update(health.value, Option.getOrNull(queue));
       });
@@ -55,6 +59,11 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
         yield* shell.setBadge('');
         yield* window.showWaiting(view);
       });
+      const reachCloud = Effect.gen(function* () {
+        const health = yield* requestHealth;
+        if (Option.isSome(health)) return yield* showApp(health.value);
+        yield* showScreen({ kind: 'cloud', host: new URL(server.origin).host });
+      });
       const attempt = Effect.gen(function* () {
         const outcome = yield* engine.ensure(showScreen({ kind: 'starting' }));
         if (outcome._tag === 'Running') {
@@ -70,6 +79,7 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
           ? yield* requestHealth
           : yield* firstHealth.answer;
         if (Option.isSome(found)) return yield* showApp(found.value);
+        if (viewer) return yield* reachCloud;
         yield* Effect.repeat(attempt, RETRY_SCHEDULE);
       });
       const connect = Effect.gen(function* () {
@@ -101,7 +111,10 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
             return yield* shell.openExternal(PRIVACY_URL);
           case 'copy-details':
             return yield* shell.writeClipboard(yield* engine.readDetails);
+          case 'use-local':
+            return yield* Effect.asVoid(source.use(LOCAL_SOURCE));
           case 'restart':
+            if (viewer) return yield* connect;
             yield* showScreen({ kind: 'starting' });
             yield* engine.restart;
             return yield* connect;

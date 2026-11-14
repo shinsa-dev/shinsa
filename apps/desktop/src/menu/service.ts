@@ -8,6 +8,8 @@ import type { ServerHealth } from '../server/schema.ts';
 import { EngineServer } from '../server/service.ts';
 import { describeServer } from '../server/url.ts';
 import { DesktopShell } from '../shell/service.ts';
+import { EngineSource } from '../source/service.ts';
+import { resolveSourceChoice } from '../source/source.ts';
 import { describeAppVersion } from '../updates/channel.ts';
 import type { UpdateSnapshot } from '../updates/schema.ts';
 import { Updater } from '../updates/service.ts';
@@ -28,6 +30,7 @@ export class AppMenu extends Context.Service<
       const window = yield* AppWindow;
       const updater = yield* Updater;
       const actions = yield* EngineActions;
+      const source = yield* EngineSource;
       const { origin } = yield* EngineServer;
       const scope = yield* Effect.scope;
       const credits = yield* Ref.make<string | undefined>(undefined);
@@ -43,7 +46,10 @@ export class AppMenu extends Context.Service<
       });
       const refresh = Effect.fn('AppMenu.refresh')(function* (snapshot: UpdateSnapshot) {
         yield* shell.applyMenu(
-          listMenuSections({ ...describeUpdateItem(snapshot.state), visible: snapshot.supported })
+          listMenuSections(
+            { ...describeUpdateItem(snapshot.state), visible: snapshot.supported },
+            yield* source.current
+          )
         );
         yield* applyAbout;
       });
@@ -69,6 +75,13 @@ export class AppMenu extends Context.Service<
             return yield* shell.openExternal(command.url);
           case 'ShowEngineLog':
             return yield* shell.openPath(resolveEngineLog(host.env, host.home));
+          case 'UseEngine': {
+            const step = yield* source.use(resolveSourceChoice(yield* source.current, command.choice));
+            if (step !== 'reload') return;
+            yield* refresh(yield* updater.snapshot);
+            yield* window.show;
+            return yield* window.reload;
+          }
         }
       });
       yield* Effect.forkIn(Stream.runForEach(updater.changes, refresh), scope, { startImmediately: true });
