@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { resolveVisibleRange, type VisibleRange } from '@/lib/extensions.ts';
+import { resolveRevealScroll } from '@/lib/format/rows.ts';
 
 const VIEWPORT = '[data-slot=scroll-area-viewport]';
 
@@ -11,14 +12,29 @@ export function VirtualRows<Item>({
   items,
   rowHeight,
   keyOf,
+  reveal = null,
   children,
 }: {
   items: Item[];
   rowHeight: number;
   keyOf: (item: Item) => string;
+  reveal?: { index: number; key: string } | null;
   children: (item: Item, index: number) => React.ReactNode;
 }) {
   const list = React.useRef<HTMLDivElement>(null);
+  const revealed = React.useRef<string | null>(null);
+  const revealIndex = reveal?.index ?? -1;
+  const revealKey = reveal?.key ?? null;
+  React.useLayoutEffect(() => {
+    const node = list.current;
+    if (!node || revealIndex < 0 || revealKey === null || revealed.current === revealKey) return;
+    revealed.current = revealKey;
+    const viewport = node.closest<HTMLElement>(VIEWPORT);
+    if (!viewport) return;
+    const top = node.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
+    const scroll = resolveRevealScroll(top + revealIndex * rowHeight, rowHeight, viewport);
+    if (scroll !== null) viewport.scrollTop = scroll;
+  }, [revealIndex, revealKey, rowHeight]);
   const [range, setRange] = React.useState<VisibleRange>(() =>
     resolveVisibleRange(0, 0, items.length, rowHeight)
   );

@@ -150,11 +150,11 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
 - **Skills** (`.claude/skills`): `conventions` is the pattern catalog, load it before writing code; `effect` before any code that imports `effect`; `review` is the method for a cleanup or review pass (scope the diff, prove every finding by reverting its fix); `copy` for any string a person or an agent reads; `design` for UI.
 - **`packages/core` stays pure**: no `node:*`, no Bun, no I/O (Oxlint bans the imports). New behaviour is a command, events and effects there, and the I/O for the effect in `apps/engine`.
 - **Icons** are Central Icons through `<Icon name='Icon…' />` (`@shinsa/ui/components/icon`); run `bun run --cwd packages/ui generate:icons` after using a new name. Primitives size their icons; don't pass a size inside a Button, Badge, tab or menu row.
-- **UI copy** follows the `copy` skill: sentence case, full sentences, no em dashes, plain professional words (task, review, workspace), never playful labels (the two layout names in `LAYOUT_NAMES`, Desk and Shelf, are names chosen on purpose, each with a plain hint line).
+- **UI copy** follows the `copy` skill: sentence case, full sentences, no em dashes, plain professional words (task, review, workspace), never playful labels.
 - **Desktop first, responsive.** Screens are built for a full desktop window and must still work in an ~900px
-  floating window. Cards is the default layout (no rail, centred pages, a "3 need you" button opens the queue;
-  on screen its name comes from `LAYOUT_NAMES`, Desk, and Sidebar's is Shelf);
-  Sidebar, picked in Settings → Appearance, adds a permanent rail that moves into a sheet below `md`.
+  floating window. Cards (Desk) is the only layout offered (no rail, centred pages, a "3 need you" button opens the
+  queue); Sidebar (Shelf) stays in the code, opened only by `?layout=sidebar` for one load, with a permanent rail
+  that moves into a sheet below `md`.
 - **One keyboard shortcut, a few app-wide moves, and the Code tab's, Review tab's and Terminal page's own.** ⌘K (Ctrl K)
   opens the command menu, opened over a task row on Home or All tasks it opens on that task, and `APP_SHORTCUTS`
   (`lib/command/shortcuts.ts`) binds ⌘J (the terminal), ⌘, (Settings) and G then H, T or S (Home, All tasks, Settings;

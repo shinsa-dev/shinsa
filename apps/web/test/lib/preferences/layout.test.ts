@@ -30,10 +30,12 @@ describe('layout preference', () => {
     expect(localStorage.getItem('shinsa.layout')).toBe('sidebar');
   });
 
-  it('ignores a missing or unknown ?layout= param', () => {
+  it('opens Desk on every start unless the ?layout= param asks for Shelf', () => {
     writeLayoutPreference('sidebar');
     applyLayoutParam('?layout=grid');
+    expect(localStorage.getItem('shinsa.layout')).toBe('cards');
+    writeLayoutPreference('sidebar');
     applyLayoutParam('');
-    expect(localStorage.getItem('shinsa.layout')).toBe('sidebar');
+    expect(localStorage.getItem('shinsa.layout')).toBe('cards');
   });
 });

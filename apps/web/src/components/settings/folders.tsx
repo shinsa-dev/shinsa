@@ -16,12 +16,7 @@ import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { SelectedMark } from '@/components/status/check-mark.tsx';
 import { useMenuAnswer } from '@/hooks/use-menu-answer.ts';
-import {
-  requestRootSuggestions,
-  restartOnboarding,
-  updateRoots,
-  useOnboardingStatus,
-} from '@/lib/connection/onboarding.ts';
+import { requestRootSuggestions, updateRoots, useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { listFolderRows, listFolderSuggestions } from '@/lib/onboarding.ts';
 import {
   FOLDERS_TITLE,
@@ -30,7 +25,7 @@ import {
   resolveRootRemoved,
   resolveRootToggled,
 } from '@/lib/settings.ts';
-import { PathRow, SETTING_ROW, SettingRow, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { PathRow, SETTING_ROW, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 function changeRoots(change: RootsChange) {
   return updateRoots(change.roots, change.done);
@@ -141,23 +136,6 @@ export function FolderSettings() {
         />
       ))}
       <AddFolder configured={configured} />
-    </SettingsGroup>
-  );
-}
-
-export function SetupSettings() {
-  return (
-    <SettingsGroup title='Setup'>
-      <SettingRow title='Setup steps'>
-        <Button
-          variant='secondary'
-          size='sm'
-          icon='IconArrowRotateClockwise'
-          onClick={() => void restartOnboarding()}
-        >
-          Run setup again
-        </Button>
-      </SettingRow>
     </SettingsGroup>
   );
 }

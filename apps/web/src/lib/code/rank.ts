@@ -47,10 +47,11 @@ function matchSubstring(path: string, lower: string, needle: string, nameStart: 
   return { score: 60 + (isWordStart(path, anywhere) ? 10 : 0), hits: listRange(anywhere, needle.length) };
 }
 
-export function scorePath(path: string, query: string): RankedPath | null {
-  const needle = query.toLowerCase().replace(/\s+/g, '');
-  if (!needle) return { path, score: 0, hits: [] };
-  const lower = path.toLowerCase();
+function resolveNeedle(query: string) {
+  return query.toLowerCase().replace(/\s+/g, '');
+}
+
+function scoreNeedle(path: string, lower: string, needle: string): RankedPath | null {
   const nameStart = path.lastIndexOf('/') + 1;
   const exact = matchSubstring(path, lower, needle, nameStart);
   const inName = exact ? null : matchFrom(path, lower, needle, nameStart);
@@ -58,6 +59,37 @@ export function scorePath(path: string, query: string): RankedPath | null {
     exact ?? (inName ? { ...inName, score: inName.score + 10 } : matchFrom(path, lower, needle, 0));
   if (!match) return null;
   return { path, score: match.score - path.length * 0.01, hits: match.hits };
+}
+
+export function scorePath(path: string, query: string): RankedPath | null {
+  const needle = resolveNeedle(query);
+  if (!needle) return { path, score: 0, hits: [] };
+  return scoreNeedle(path, path.toLowerCase(), needle);
+}
+
+const lowered = new WeakMap<readonly string[], readonly string[]>();
+
+function listLowered(paths: readonly string[]) {
+  const known = lowered.get(paths);
+  if (known) return known;
+  const next = paths.map((path) => path.toLowerCase());
+  lowered.set(paths, next);
+  return next;
+}
+
+function ranksBefore(a: RankedPath, b: RankedPath) {
+  if (a.score !== b.score) return b.score - a.score;
+  if (a.path === b.path) return 0;
+  return a.path < b.path ? -1 : 1;
+}
+
+function insertRanked(top: RankedPath[], entry: RankedPath, limit: number) {
+  const last = top.at(-1);
+  if (top.length >= limit && last && ranksBefore(entry, last) >= 0) return;
+  let index = top.length;
+  while (index > 0 && ranksBefore(entry, top[index - 1] as RankedPath) < 0) index -= 1;
+  top.splice(index, 0, entry);
+  if (top.length > limit) top.pop();
 }
 
 export function rankPaths(
@@ -72,12 +104,14 @@ export function rankPaths(
     const rest = paths.filter((path) => !first.includes(path));
     return [...first, ...rest].slice(0, limit).map((path) => ({ path, score: 0, hits: [] }));
   }
-  const ranked: RankedPath[] = [];
-  for (const path of paths) {
-    const match = scorePath(path, query);
-    if (match) ranked.push(match);
+  const needle = resolveNeedle(query);
+  const lower = listLowered(paths);
+  const top: RankedPath[] = [];
+  for (const [index, path] of paths.entries()) {
+    const match = scoreNeedle(path, lower[index] as string, needle);
+    if (match) insertRanked(top, match, limit);
   }
-  return ranked.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path)).slice(0, limit);
+  return top;
 }
 
 export function splitHits(text: string, hits: readonly number[], offset = 0) {

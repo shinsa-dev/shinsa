@@ -118,8 +118,26 @@ describe('FileSaver', () => {
     expect(saves).toEqual([{ text: 'c\n', base: 'a\n' }]);
     expect(saved).toEqual(['c\n']);
     expect(saver.disk).toBe('c\n');
-    expect(states.at(-1)).toEqual({ saving: false, notice: null, refusal: null });
+    expect(states.at(-1)).toEqual({ status: 'saved', notice: null, refusal: null });
     saver.dispose();
+  });
+
+  it('says the file is edited, then saving, then saved, and clean again when you undo your typing', async () => {
+    const { saver, type, states } = createSaver('a\n', []);
+    type('b\n');
+    expect(states.at(-1)?.status).toBe('edited');
+    await runApp(saver.flush());
+    expect(states.map((state) => state.status)).toEqual(['edited', 'saving', 'saved']);
+    type('c\n');
+    expect(states.at(-1)?.status).toBe('edited');
+    const untouched = createSaver('a\n', []);
+    untouched.type('x\n');
+    untouched.type('a\n');
+    await runApp(untouched.saver.flush());
+    expect(untouched.states.map((state) => state.status)).toEqual(['edited', 'clean']);
+    expect(untouched.saves).toEqual([]);
+    saver.dispose();
+    untouched.saver.dispose();
   });
 
   it('saves again once a save in flight is done, when you typed meanwhile', async () => {
@@ -190,6 +208,7 @@ describe('FileSaver', () => {
     type('two\n');
     await runApp(saver.flush());
     expect(states.at(-1)?.refusal).toBe('This task is merged.');
+    expect(states.at(-1)?.status).toBe('clean');
     type('three\n');
     await runApp(saver.flush());
     expect(saves).toHaveLength(1);

@@ -11,6 +11,19 @@ const PATHS = [
 ];
 
 describe('rankPaths', () => {
+  it('keeps the same best matches as ranking every path, in the same order', () => {
+    const paths = Array.from(
+      { length: 600 },
+      (_, index) => `src/${['lib', 'code', 'web'][index % 3]}/file-${index}.ts`
+    );
+    const query = 'file-1';
+    const everything = paths
+      .flatMap((path) => scorePath(path, query) ?? [])
+      .sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    expect(rankPaths(paths, query, 20)).toEqual(everything.slice(0, 20));
+    expect(rankPaths(paths, 'FILE-1', 20)).toEqual(everything.slice(0, 20));
+  });
+
   it('puts a file whose name contains the query first, its name start before the middle', () => {
     expect(rankPaths(PATHS, 'spots', 3).map((entry) => entry.path)).toEqual([
       'apps/web/src/lib/review/spots.ts',
