@@ -33,6 +33,7 @@ export const ENGINE_FEATURES = [
   'slack-channel-triggers',
   'models.routing',
   'accounts.provider_choice',
+  'app-updates',
 ] as const;
 
 export type EngineFeature = (typeof ENGINE_FEATURES)[number];

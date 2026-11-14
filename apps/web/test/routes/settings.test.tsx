@@ -69,9 +69,9 @@ describe('Settings tabs', () => {
       'Automations',
     ]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
-    for (const section of ['Appearance', 'Notifications', 'Versions'])
+    for (const section of ['Appearance', 'Notifications', 'Updates', 'Versions'])
       expect(screen.getByText(section)).toBeTruthy();
-    for (const section of ['Attention', 'Layout', 'Setup', 'Updates', 'Engine', 'Remote access'])
+    for (const section of ['Attention', 'Layout', 'Setup', 'Engine', 'Remote access'])
       expect(screen.queryByText(section)).toBeNull();
     fireEvent.click(within(tabs).getByRole('tab', { name: 'Agents' }));
     await settle();
