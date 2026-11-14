@@ -3,6 +3,7 @@ import {
   isCoveringWindows,
   isSameRange,
   isSameWindows,
+  resolveRevealScroll,
   resolveOverscanRows,
   resolveRowWindow,
   resolveSectionWindows,
@@ -45,5 +46,15 @@ describe('resolveRowWindow', () => {
       { start: 0, end: 0 },
     ]);
     expect(resolveSectionWindows([], 360, [30], 36)).toEqual([{ start: 0, end: 24 }]);
+  });
+});
+
+describe('resolveRevealScroll', () => {
+  it('leaves a row in view where it is and centres one out of view', () => {
+    expect(resolveRevealScroll(40, 20, { scrollTop: 0, clientHeight: 200 })).toBeNull();
+    expect(resolveRevealScroll(500, 20, { scrollTop: 0, clientHeight: 200 })).toBe(410);
+    expect(resolveRevealScroll(10, 20, { scrollTop: 300, clientHeight: 200 })).toBe(0);
+    expect(resolveRevealScroll(190, 20, { scrollTop: 0, clientHeight: 200 })).toBe(100);
+    expect(resolveRevealScroll(0, 20, { scrollTop: 0, clientHeight: 10 })).toBe(0);
   });
 });

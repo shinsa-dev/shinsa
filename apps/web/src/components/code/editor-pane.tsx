@@ -1,5 +1,6 @@
 import { type FileContent, type Task, type TaskRefs, WORKING_REF } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -11,8 +12,10 @@ import type {
   EditorReveal,
   EditorSessionHolder,
 } from '@/components/code/editor/code-editor.tsx';
+import { MarkdownPreview } from '@/components/code/markdown-preview.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
 import { HintButton } from '@/components/controls/hint-button.tsx';
+import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
@@ -20,7 +23,7 @@ import { FilePath } from '@/components/text/file-path.tsx';
 import { useDelay } from '@/hooks/use-delay.ts';
 import { useFileSaver } from '@/hooks/use-file-saver.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
-import { isEditedPath, resolveEditState } from '@/lib/code/edits.ts';
+import { isEditedPath, resolveEditState, type SaveStatus } from '@/lib/code/edits.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import {
@@ -42,6 +45,7 @@ import {
 } from '@/lib/code/pane.ts';
 import { type FileSource, hasOneSide } from '@/lib/code/source.ts';
 import { resolveRawUrl, useFileContent } from '@/lib/connection/code.ts';
+import { copyText } from '@/lib/connection/commands.ts';
 import { useMediaUrl } from '@/lib/connection/socket.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
@@ -181,20 +185,39 @@ function LayoutToggle({ split, onToggle }: { split: boolean; onToggle: () => voi
   );
 }
 
+function PreviewToggle({ preview, onToggle }: { preview: boolean; onToggle: () => void }) {
+  return (
+    <HintButton
+      label={preview ? 'Show source' : 'Show preview'}
+      size='icon-sm'
+      icon={preview ? 'IconCode' : 'IconEyeOpen'}
+      onClick={onToggle}
+    />
+  );
+}
+
 function PaneToolbar({
   source,
   split,
   showLayout,
-  saving,
+  status,
+  preview,
   toolbar,
   onSplit,
+  onPreview,
+  onShowInFiles,
+  onOpenInEditor,
 }: {
   source: FileSource;
   split: boolean;
   showLayout: boolean;
-  saving: boolean;
+  status: SaveStatus;
+  preview: boolean | null;
   toolbar: React.ReactNode;
   onSplit: (() => void) | null;
+  onPreview: () => void;
+  onShowInFiles: (() => void) | null;
+  onOpenInEditor: (() => void) | null;
 }) {
   const path = source.file.path;
   return (
@@ -211,9 +234,44 @@ function PaneToolbar({
         <DiffStats added={source.change.additions} removed={source.change.deletions} />
       )}
       <span className='flex-1' />
-      {saving && <span className='shrink-0 text-2xs text-fg-2'>Saving…</span>}
+      <SaveStatusLabel status={status} />
       {showLayout && onSplit && <LayoutToggle split={split} onToggle={onSplit} />}
+      {preview !== null && <PreviewToggle preview={preview} onToggle={onPreview} />}
+      <DropdownMenu>
+        <OptionsTrigger label='File options' />
+        <DropdownMenuContent align='end' className='min-w-44'>
+          <DropdownMenuItem icon='IconClipboard2' onClick={() => void copyText(path)}>
+            Copy path
+          </DropdownMenuItem>
+          {onShowInFiles && (
+            <DropdownMenuItem icon='IconFolderOpen' onClick={onShowInFiles}>
+              Show in Files
+            </DropdownMenuItem>
+          )}
+          {onOpenInEditor && source.headPath && (
+            <DropdownMenuItem icon='IconCodeLines' onClick={onOpenInEditor}>
+              Open in editor
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Toolbar>
+  );
+}
+
+const SAVE_STATUS_LABEL: Record<SaveStatus, string | null> = {
+  clean: null,
+  edited: 'Edited',
+  saving: 'Saving…',
+  saved: 'Saved',
+};
+
+function SaveStatusLabel({ status }: { status: SaveStatus }) {
+  const label = SAVE_STATUS_LABEL[status];
+  return (
+    <span role='status' className='shrink-0 text-2xs text-fg-2 empty:hidden'>
+      {label}
+    </span>
   );
 }
 
@@ -224,6 +282,23 @@ function PaneNotice({ text, readOnly }: { text: string; readOnly: boolean }) {
       <Truncate>{text}</Truncate>
     </p>
   );
+}
+
+function usePanePreview(input: {
+  preview: boolean | null;
+  content: PaneContent;
+  headPath: string | null;
+  guard: string | null;
+  latest: string | null;
+}) {
+  const readable = input.content.kind === 'text' && input.headPath !== null && input.guard === null;
+  if (!readable || input.content.kind !== 'text')
+    return { shown: null, text: null, editing: input.guard === null };
+  return {
+    shown: input.preview,
+    text: input.preview ? (input.latest ?? input.content.content) : null,
+    editing: !input.preview,
+  };
 }
 
 export function EditorPane({
@@ -238,6 +313,11 @@ export function EditorPane({
   handle,
   session,
   toolbar,
+  preview,
+  onPreview,
+  onOpenPath,
+  onShowInFiles,
+  onOpenInEditor,
 }: {
   task: Task;
   refs: TaskRefs;
@@ -250,6 +330,11 @@ export function EditorPane({
   handle: React.RefObject<EditorHandle | null>;
   session?: EditorSessionHolder;
   toolbar: React.ReactNode;
+  preview: boolean | null;
+  onPreview: () => void;
+  onOpenPath: (path: string, line: number | null) => void;
+  onShowInFiles: (() => void) | null;
+  onOpenInEditor: (() => void) | null;
 }) {
   const draft = useReviewDraft();
   const path = source.file.path;
@@ -304,6 +389,13 @@ export function EditorPane({
   });
   const spots = pinned ? listSpotMarks(targets, path, location.spot) : [];
   const { reveal, focus } = useLinkFocus(path, location);
+  const markdown = usePanePreview({
+    preview,
+    content,
+    headPath: source.headPath,
+    guard,
+    latest: saver.latest,
+  });
 
   function renderNote(note: CodeNote) {
     return (
@@ -338,11 +430,17 @@ export function EditorPane({
         source={source}
         split={split}
         showLayout={diffing && !oneSide && content.kind === 'text'}
-        saving={saver.state.saving}
+        status={saver.state.status}
+        preview={markdown.shown}
         toolbar={toolbar}
         onSplit={onSplit}
+        onPreview={onPreview}
+        onShowInFiles={onShowInFiles}
+        onOpenInEditor={onOpenInEditor}
       />
-      {content.kind === 'text' && notice && !guard && <PaneNotice text={notice} readOnly={!editable} />}
+      {content.kind === 'text' && markdown.editing && notice && (
+        <PaneNotice text={notice} readOnly={!editable} />
+      )}
       {guard && (
         <EmptyState
           size='sm'
@@ -360,7 +458,10 @@ export function EditorPane({
       {content.kind === 'absent' && (
         <NoText task={task} refs={refs} gitRef={gitRef} source={source} head={content.head} />
       )}
-      {content.kind === 'text' && !guard && (
+      {markdown.text !== null && (
+        <MarkdownPreview task={task} gitRef={gitRef} path={path} text={markdown.text} onOpen={onOpenPath} />
+      )}
+      {content.kind === 'text' && markdown.editing && (
         <CodeEditor
           path={path}
           docKey={resolvePaneKey(gitRef, source.file)}

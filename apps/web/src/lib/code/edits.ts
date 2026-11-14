@@ -113,8 +113,10 @@ export function selectSaved(taskId: string, path: string, from: string) {
   return entry?.from === from ? entry.text : null;
 }
 
+export type SaveStatus = 'clean' | 'edited' | 'saving' | 'saved';
+
 export interface SaverState {
-  saving: boolean;
+  status: SaveStatus;
   notice: string | null;
   refusal: string | null;
 }
@@ -138,8 +140,9 @@ export class FileSaver {
   #timer: (() => void) | null = null;
   #saving: Deferred.Deferred<void> | null = null;
   #again = false;
+  #saved = false;
   #reloads: { previous: string | null; next: string | null }[] = [];
-  #state: SaverState = { saving: false, notice: null, refusal: null };
+  #state: SaverState = { status: 'clean', notice: null, refusal: null };
   readonly #options: SaverOptions;
 
   constructor(disk: string | null, options: SaverOptions) {
@@ -158,7 +161,8 @@ export class FileSaver {
       this.#timer = null;
       this.#start();
     });
-    if (this.#state.notice) this.#update({ notice: null });
+    if (this.#state.notice || this.#state.status !== 'edited')
+      this.#update({ status: 'edited', notice: null });
   }
 
   flush() {
@@ -201,8 +205,11 @@ export class FileSaver {
       return this.#saving;
     }
     const text = this.#options.read();
-    if (text === this.#disk) return null;
-    this.#update({ saving: true });
+    if (text === this.#disk) {
+      if (this.#state.status === 'edited') this.#update({ status: this.#saved ? 'saved' : 'clean' });
+      return null;
+    }
+    this.#update({ status: 'saving' });
     const saving = Deferred.makeUnsafe<void>();
     this.#saving = saving;
     forkApp(this.#write(text).pipe(Effect.ensuring(this.#finish(saving))));
@@ -212,7 +219,7 @@ export class FileSaver {
   #finish(saving: Deferred.Deferred<void>) {
     const settle = Effect.sync(() => {
       this.#saving = null;
-      this.#update({ saving: false });
+      this.#update({ status: this.#saved && !this.#state.refusal ? 'saved' : 'clean' });
       for (const { previous, next } of this.#reloads.splice(0)) this.reload(previous, next);
       if (!this.#again) return;
       this.#again = false;
@@ -229,6 +236,7 @@ export class FileSaver {
         onSuccess: (result) => {
           if (result.kind === 'saved') {
             this.#disk = text;
+            this.#saved = true;
             this.#options.onSaved(text);
           } else {
             this.#absorb(base, result.content);
