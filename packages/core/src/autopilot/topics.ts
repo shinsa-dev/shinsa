@@ -74,9 +74,7 @@ export function countDecisionTopics(
   });
 }
 
-function isFollowUpScored(
-  decision: Pick<AutopilotDecision, 'guess' | 'followUp' | 'answer' | 'note'>
-) {
+function isFollowUpScored(decision: Pick<AutopilotDecision, 'guess' | 'followUp' | 'answer' | 'note'>) {
   return (
     decision.guess === 'revise' &&
     decision.followUp !== null &&
