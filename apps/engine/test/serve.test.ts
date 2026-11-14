@@ -578,6 +578,7 @@ function createAccountLayer(root: string, delay: Duration.Duration) {
       TerminalPty.of({
         spawn: () => Effect.die('not used'),
         readForeground: () => Effect.succeed(null),
+        isAnswering: () => Effect.succeed(true),
         pickPort: () => Effect.die('not used'),
       })
     ),
