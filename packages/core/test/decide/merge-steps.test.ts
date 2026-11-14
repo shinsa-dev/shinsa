@@ -483,4 +483,28 @@ describe('the steps around the merge', () => {
     tick(harness, taskId, SECRET);
     expect(listOpenMergeSteps(harness.task(taskId), 'pre_merge')).toEqual([]);
   });
+
+  test('steps before the merge stay due once a later round that found nothing closes back to the merge', () => {
+    const { harness, taskId } = reachMergeGate([SECRET]);
+    harness.send({ type: 'task.message', taskId, text: 'Why is it slow?', kind: 'new_round', shape: 'fix' });
+    readyWorktree(harness, taskId);
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'investigate',
+      body: 'Nothing to fix.',
+      recommend: 'close',
+    });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'reject',
+      response: null,
+    });
+    const steps = listMergeSteps(harness.task(taskId));
+    expect(steps.map((step) => [step.title, step.round, step.due])).toEqual([
+      ['Set STRIPE_WEBHOOK_SECRET', 1, true],
+    ]);
+    expect(listOpenMergeSteps(harness.task(taskId), 'pre_merge')).toHaveLength(1);
+  });
 });

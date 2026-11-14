@@ -1022,8 +1022,7 @@ describe('the agent composes the steps', () => {
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
   });
 
-  test('a later find-and-fix round that finds nothing, onto an open pull request, plans without your OK', () => {
-    const harness = createHarness();
+  function reachLaterDiagnosis(harness: ReturnType<typeof createHarness>) {
     const taskId = createTask(harness);
     linkSession(harness, taskId, 'agent-session');
     harness.send({
@@ -1042,13 +1041,82 @@ describe('the agent composes the steps', () => {
     ]);
     passSetup(harness, taskId);
     deliver(harness, taskId, 'investigate', null, 'close');
-    const task = harness.task(taskId);
-    expect(task.pipeline).toEqual([...SHAPE_PIPELINES.fix]);
-    expect(task.proposal ?? null).toBeNull();
-    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual([]);
-    expect(task.pullRequest).toMatchObject({ number: 42, state: 'open' });
+    return taskId;
+  }
+
+  test('a later find-and-fix round that finds nothing, onto an open pull request, asks your OK', () => {
+    const harness = createHarness();
+    const taskId = reachLaterDiagnosis(harness);
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'awaiting_proposal',
+      pipeline: ['investigate', 'your_ok', ...SHAPE_PIPELINES.change],
+      proposal: { status: 'open', recommend: 'close' },
+      pullRequest: { number: 42, state: 'open' },
+    });
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'proposal',
+      title: 'The diagnosis found nothing to fix',
+      round: 2,
+    });
+  });
+
+  test('closing a later round that found nothing brings back the merge of the open pull request', () => {
+    const harness = createHarness();
+    const taskId = reachLaterDiagnosis(harness);
+    const branch = harness.task(taskId).branch;
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'reject',
+      response: null,
+    });
+    const closed = harness.task(taskId);
+    expect(closed).toMatchObject({
+      stage: 'shipping',
+      branch,
+      pipeline: [...SHAPE_PIPELINES.change],
+      pullRequest: { number: 42, state: 'open' },
+      result: null,
+      proposal: null,
+    });
+    const rounds = resolveTaskRounds(closed);
+    expect(rounds.map((round) => round.status)).toEqual(['active', 'finished']);
+    expect(rounds[0]).toMatchObject({ endedAt: null, pullRequest: { number: 42 } });
+    expect(rounds[1]).toMatchObject({
+      pipeline: ['investigate'],
+      outcome: { result: 'The investigate result.' },
+    });
+    expect(listOpenGates(harness.state, taskId)).toEqual([]);
+    expect(harness.effects.at(-1)).toMatchObject({ kind: 'pull_request.watch', taskId });
+    expect(closed.activity.map((entry) => entry.text)).toContain('Closed round 2, back to the merge of #42');
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ number: 42 }) });
+    expect(harness.openGate(taskId).type).toBe('merge');
+    expect(harness.openGate(taskId).round ?? 1).toBe(1);
+    expect(harness.task(taskId).stage).toBe('awaiting_merge');
+    approve(harness, taskId);
+    harness.send({
+      type: 'pull_request.record',
+      taskId,
+      pullRequest: pullRequest({ number: 42, state: 'merged' }),
+    });
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(resolveTaskRounds(harness.task(taskId)).map((round) => round.status)).toEqual([
+      'merged',
+      'finished',
+    ]);
+  });
+
+  test('going on from a later round that found nothing plans the change onto the open pull request', () => {
+    const harness = createHarness();
+    const taskId = reachLaterDiagnosis(harness);
+    approve(harness, taskId);
     passSetup(harness, taskId);
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
+    expect(harness.task(taskId).pullRequest).toMatchObject({ number: 42, state: 'open' });
+    expect(resolveTaskRounds(harness.task(taskId)).map((round) => round.status)).toEqual([
+      'shipped',
+      'active',
+    ]);
   });
 
   test('an answer can lead to an operation, and approving plans it without asking for another proposal', () => {

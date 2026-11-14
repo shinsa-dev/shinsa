@@ -129,9 +129,10 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | Snoozing | `Task.snoozed` (`TaskSnooze`), `task.snooze_changed`, `task.snooze`, `task.unsnooze`, `queue.snoozed`, `decide/snooze.ts`, the task group and queue section `snoozed`; UI "Snooze", "Unsnooze", "Snoozed". Never "pause" for it: Paused is a step that stopped for you |
 | The backlog | `Task.backlog`, `task.backlog_changed`, `task.move_to_backlog`, `task.remove_from_backlog`, `backlog: true` on `task.create`, `suggestion.accept` and `create_task`; the rules in `domain/backlog.ts` (`canWaitInBacklog`, `resolveBacklogRefusal`) and `decide/backlog.ts`; UI "Backlog" |
 | A round that waits to start | `RoundStatus 'waiting'`; event `round.queued`, `Round.queuedAt`, `ROUND_LIMITS.queued` |
+| Closing a later round | event `round.closed`, `closeLaterRound`, `selectEarlierOpenRound`; UI "Close" on a later round's "found nothing" gate |
 | Your OK | step `your_ok`; gate type `proposal`; stage `awaiting_proposal`; `ChangeProposal`, `task.change_proposed|approved|declined`, `propose_change`; UI "Your OK", "Change to approve" (also for an operation), "Make it a change" |
 | Ask for changes | decision `revise`; UI "Ask for changes", "Request changes"; CLI `plans revise`, `reviews revise`; message effects `revise_plan`, `request_changes`, `send_back` |
-| Answered | stage `answered`; gate type `result` ("Read the answer", "Read the report", "Read the diagnosis"), opened by an answer, research or investigation that hands over with nothing after it; its approve is Close (`closeResult`), which settles the task as done; UI "Answered", "Close". Never "done" for it: done means you have read it |
+| Answered | stage `answered`; gate type `result` ("Read the answer", "Read the report", "Read the diagnosis"), opened by an answer, research or investigation that hands over with nothing after it; its approve is Close (`closeResult`), which settles the task as done, or ends only the round (`round.closed`) when it rode on an earlier round's open pull request; UI "Answered", "Close". Never "done" for it: done means you have read it |
 | Answering a question | decision `reply`, command `gate.answer` (which takes every decision), CLI `questions answer`; a parent answering its delegation: `delegation_answer`, `agent.answer_delegation` |
 | CI on the pull request | `CiRun`, `CiState`; stored on `PullRequest` as `checkRuns` and `checks` |
 | The classifier | agent role `classifier`, command and effect `task.triage`, stage `triage`; UI "Quick jobs" |
@@ -1164,6 +1165,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `round.shipping_changed` | how a round ships changed; for an active round also its `branch`, `base` and `onto` |
 | `round.updated` | a waiting round asks for something else (`request`, `title`) |
 | `round.removed` | a waiting round was removed; the waiting rounds after it took the numbers one lower |
+| `round.closed` | a later round that found nothing to change ended without shipping (`number`): it is archived as finished with its result, and the round it rode on (`to`) is active again with its branch, steps and pull request, so that pull request's merge gate comes back |
 | `round.pull_request_merged` | an earlier round's pull request merged outside Shinsa while a later round works: that round is merged, and the active round takes a new `branch` from the default branch for its own pull request |
 | `task.noted` | an agent kept a note |
 | `task.recovered` | the recovery count changed |

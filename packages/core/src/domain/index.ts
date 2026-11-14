@@ -192,6 +192,7 @@ export {
   resolveRoundTitle,
   resolveSettledStatus,
   resolveTaskRounds,
+  selectEarlierOpenRound,
   selectShippingTarget,
   toRoundPullRequest,
 } from './rounds.ts';

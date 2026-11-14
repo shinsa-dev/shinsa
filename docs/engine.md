@@ -969,6 +969,8 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   merge, which a later round can extend. A round that ships no pull request (an answer, research, an investigation or
   an operation) waits for rest instead, so an open pull request is never left without its merge gate. The Agent of a
   later round cannot drop the pull request step while one is open, nor compose `your_ok` then (`pull_request_open`).
+  A later round that finds nothing to change gives the merge gate back instead: closing it returns the task to the
+  round it rode on (`round.closed`, Task shapes below).
   When an earlier round's pull request merges outside Shinsa while a later round works on top of it
   (`round.pull_request_merged`), that round is marked merged and the round in flight goes on to its own pull request
   from the default branch.
@@ -1126,9 +1128,11 @@ folds in `state/shapes.ts`).
   notifications and the Home guide agree, Close
   (a veto, `closeProposal`) leads, and going on drops to the quiet link; ⌘K orders them the same way. A find-and-fix
   diagnosis with `close` reshapes the task to `[investigate, your_ok, …]` (`by: agent`) so it stops for your OK instead
-  of planning a fix, except while an earlier round's pull request is still open: that round ships through the pull
-  request, so it plans its change onto it with no your OK (a veto there would settle the task and leave the pull
-  request without a merge gate).
+  of planning a fix. In a later round riding an earlier round's open pull request, Close (and Keep as it is, and a
+  result's Close) ends that round only: `round.closed` archives it as `finished` with its result, makes the round it
+  rode on active again with its branch, steps and pull request, and `recheckPullRequest` brings back that pull
+  request's merge gate (`closeLaterRound`). Going on plans the change onto the open pull request as before. No path
+  settles a task as done while one of its pull requests is open.
 - **Suggested replies.** Any hand-over but the reviewer's can carry at most two `actions` (`label`, `message`), and agents are told to add them rarely: only for a real fork the gate's own buttons do not cover.
   `task.actions_suggested` keeps them on `task.suggestedActions`; the next hand-over replaces them, and your message
   that reaches the agent or your answer to a gate clears them (a message only kept for a later agent does not). The

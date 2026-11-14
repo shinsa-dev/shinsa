@@ -19,6 +19,7 @@ import {
   resolveTaskPipeline,
   resolveTaskRounds,
   SHAPE_PIPELINES,
+  selectEarlierOpenRound,
   selectShippingTarget,
   type Task,
   type TaskShape,
@@ -28,6 +29,7 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { startWork } from './lifecycle.ts';
+import { recheckPullRequest } from './pull-requests.ts';
 
 interface RoundRequest {
   request: string;
@@ -166,6 +168,21 @@ function startRound(decider: Decider, task: Task, round: Round) {
   decider.emit({ type: 'round.started', taskId: task.id, number: round.number, ...branch });
   decider.requestBriefing(task.id);
   startWork(decider, task.id);
+}
+
+export function closeLaterRound(decider: Decider, taskId: string) {
+  const task = decider.task(taskId);
+  const earlier = selectEarlierOpenRound(task);
+  if (Option.isNone(earlier)) return false;
+  decider.withdrawGates(taskId, (gate) => gate.type === 'proposal' || gate.type === 'result');
+  decider.emit({
+    type: 'round.closed',
+    taskId,
+    number: resolveCurrentRound(task).number,
+    to: earlier.value.number,
+  });
+  recheckPullRequest(decider, taskId);
+  return true;
 }
 
 export function restartInNewRound(decider: Decider, taskId: string) {

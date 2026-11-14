@@ -223,6 +223,7 @@ type EventBody =
   | { type: 'round.pull_request_merged'; taskId: string; pullRequest: number; branch: string }
   | { type: 'round.updated'; taskId: string; number: number; request: string; title: string }
   | { type: 'round.removed'; taskId: string; number: number }
+  | { type: 'round.closed'; taskId: string; number: number; to: number }
   | {
       type: 'round.shipping_changed';
       taskId: string;

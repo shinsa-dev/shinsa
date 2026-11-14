@@ -239,6 +239,63 @@ describe('a task is a conversation of rounds', () => {
     expect(listStackedPullRequests(task)).toEqual([]);
   });
 
+  test('a stacked round that found nothing closes back to the round it stacked on, with its branch and pull request', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { request: 'MCP v2' });
+    harness.send({ type: 'task.message', taskId, text: 'Is it slow?', kind: 'new_round', shape: 'fix' });
+    harness.send({ type: 'round.ship', taskId, number: 2, shipping: 'stacked' });
+    reachMergeGate(harness, taskId);
+    expect(harness.task(taskId)).toMatchObject({ branch: `fix/${taskId}-round-2`, pullRequest: null });
+    readyRound(harness, taskId);
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'investigate',
+      body: 'Nothing to fix.',
+      recommend: 'close',
+      ...resolveReply(harness, harness.activeRun(taskId).id),
+    });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'reject',
+      response: null,
+    });
+    const task = harness.task(taskId);
+    expect(task).toMatchObject({
+      stage: 'shipping',
+      branch: `fix/${taskId}`,
+      pullRequest: { number: 42, state: 'open', checks: 'pending' },
+      pushedSha: null,
+    });
+    expect(listStatuses(task)).toEqual([
+      [1, 'active'],
+      [2, 'finished'],
+    ]);
+    expect(resolveTaskRounds(task)[1]).toMatchObject({ branch: `fix/${taskId}-round-2`, pullRequest: null });
+    expect(listStackedPullRequests(task)).toEqual([]);
+    expect(replayEventLog(harness.events).state).toEqual(harness.state);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ number: 42 }) });
+    expect(harness.openGate(taskId).type).toBe('merge');
+    merge(harness, taskId);
+    expect(listStatuses(harness.task(taskId))).toEqual([
+      [1, 'merged'],
+      [2, 'finished'],
+    ]);
+  });
+
+  test('a round that closes onto a missing round changes nothing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const before = harness.task(taskId);
+    const state = replayEventLog([
+      ...harness.events,
+      { type: 'round.closed', taskId, number: 2, to: 7, seq: 9_998, at: 9_999 },
+      { type: 'round.closed', taskId: 'missing', number: 2, to: 1, seq: 9_999, at: 9_999 },
+    ]).state;
+    expect(state.tasks[taskId]).toEqual(before);
+  });
+
   test('a new round after the merge starts from the default branch on a new branch', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'MCP v2' });

@@ -224,6 +224,18 @@ export function selectShippingTarget(
   return Option.fromNullishOr(shipped.at(-1)?.pullRequest);
 }
 
+export function selectEarlierOpenRound(task: RoundSource): Option.Option<Round> {
+  const current = resolveCurrentRound(task);
+  if (current.status !== 'active') return Option.none();
+  const shipped = resolveTaskRounds(task).filter(
+    (candidate) =>
+      candidate.number < current.number &&
+      candidate.status === 'shipped' &&
+      candidate.pullRequest?.state === 'open'
+  );
+  return Option.fromNullishOr(shipped.at(-1));
+}
+
 export function canChangeRoundShipping(task: ShippingSource, round: Pick<Round, 'status'>) {
   if (isTaskClosed(task)) return false;
   if (round.status === 'waiting') return true;

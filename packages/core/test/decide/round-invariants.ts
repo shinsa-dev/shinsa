@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import { Option } from 'effect';
 import {
   isDecisionGate,
   isRetryArmed,
@@ -7,6 +8,7 @@ import {
   listActiveRuns,
   listLiveRuns,
   listOpenGates,
+  listQueuedRounds,
   listStackedPullRequests,
   type MessageKind,
   needsWorktree,
@@ -15,6 +17,7 @@ import {
   resolveCurrentRound,
   resolveTaskPipeline,
   resolveTaskRounds,
+  selectEarlierOpenRound,
   type ShinsaCommand,
   type ShinsaState,
   type Task,
@@ -211,18 +214,56 @@ function listLaterTaskIds(state: ShinsaState) {
   );
 }
 
+function listNothingFoundOnOpenPullRequest(state: ShinsaState): ShinsaCommand[] {
+  const vetoes = listOpenGates(state).flatMap((gate): ShinsaCommand[] => {
+    const task = state.tasks[gate.taskId];
+    if (gate.type !== 'proposal' || !task || Option.isNone(selectEarlierOpenRound(task))) return [];
+    return [{ type: 'gate.answer', gateId: gate.id, decision: 'reject', response: null }];
+  });
+  const deliveries = listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
+    const task = state.tasks[run.taskId];
+    if (run.role !== 'investigator' || run.delegation || !task) return [];
+    if (Option.isNone(selectEarlierOpenRound(task))) return [];
+    return [
+      {
+        type: 'agent.deliver',
+        runId: run.id,
+        step: 'investigate',
+        body: 'Nothing to fix.',
+        recommend: 'close',
+        ...resolveOwedReply(state, run.id),
+      },
+    ];
+  });
+  return [...vetoes, ...deliveries];
+}
+
 export function listLaterChangeAnswers(state: ShinsaState, random: Random): ShinsaCommand[] {
   const later = listLaterTaskIds(state);
-  return listOpenGates(state).flatMap((gate): ShinsaCommand[] => {
-    if (!later.has(gate.taskId) || gate.type !== 'proposal') return [];
+  const answers = listOpenGates(state).flatMap((gate): ShinsaCommand[] => {
+    const task = state.tasks[gate.taskId];
+    if (!task || !later.has(gate.taskId) || gate.type !== 'proposal') return [];
+    if (Option.isSome(selectEarlierOpenRound(task))) return [];
     const decision = chance(random, 0.7) ? 'reject' : 'approve';
     return [{ type: 'gate.answer', gateId: gate.id, decision, response: null }];
+  });
+  return [...answers, ...listNothingFoundOnOpenPullRequest(state)];
+}
+
+function listFixRoundsAtMerge(state: ShinsaState): ShinsaCommand[] {
+  return listOpenGates(state).flatMap((gate): ShinsaCommand[] => {
+    const task = state.tasks[gate.taskId];
+    const rounds = task ? resolveTaskRounds(task) : [];
+    if (gate.type !== 'merge' || !task || rounds.length > 3 || listQueuedRounds(task).length > 0) return [];
+    return [
+      { type: 'task.message', taskId: task.id, text: 'Why is it slow?', kind: 'new_round', shape: 'fix' },
+    ];
   });
 }
 
 function listLaterComposingCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   const later = listLaterTaskIds(state);
-  return listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
+  const runs = listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
     if (!later.has(run.taskId) || run.delegation) return [];
     if (run.purpose === 'plan') {
       const steps = pick(random, LATER_COMPOSITIONS) ?? [];
@@ -244,6 +285,7 @@ function listLaterComposingCommands(state: ShinsaState, random: Random): ShinsaC
     }
     return [];
   });
+  return [...runs, ...listFixRoundsAtMerge(state)];
 }
 
 export function listComposedRoundCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
@@ -306,6 +348,14 @@ function assertPullRequests(task: Task, context: string) {
       rounds.filter((round) => round.status === 'shipped').map((round) => round.number),
       `${context}: a settled task leaves a pull request open with no merge gate`
     ).toEqual([]);
+  }
+  if (task.stage === 'done') {
+    expect(
+      [task.pullRequest, ...rounds.map((round) => round.pullRequest)].some(
+        (pullRequest) => pullRequest?.state === 'open'
+      ),
+      `${context}: a done task leaves a pull request open`
+    ).toBe(false);
   }
   for (const round of rounds) {
     if (round.status === 'shipped') {

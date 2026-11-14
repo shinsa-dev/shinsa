@@ -84,7 +84,7 @@ function endRound(task: Task, round: Round, status: Round['status'], at: number)
     pullRequest: task.pullRequest
       ? keepMergedAt(round.pullRequest, toRoundPullRequest(task.pullRequest))
       : round.pullRequest,
-    outcome: resolveRoundOutcome(task),
+    outcome: round.outcome ?? resolveRoundOutcome(task),
   };
 }
 
@@ -270,6 +270,33 @@ function applyRoundPullRequestMerged(state: ShinsaState, event: EventOf<'round.p
   });
 }
 
+function applyRoundClosed(state: ShinsaState, event: EventOf<'round.closed'>) {
+  const task = state.tasks[event.taskId];
+  const rounds = task ? resolveTaskRounds(task) : [];
+  const to = rounds.find((round) => round.number === event.to);
+  if (!task || !to) return;
+  const choice = { branch: to.branch, base: to.base, onto: to.pullRequest?.number ?? null };
+  const updated = rounds.map((round): Round => {
+    if (round.number === event.number) return endRound(task, round, 'finished', event.at);
+    if (round.number === event.to) return { ...round, status: 'active', endedAt: null };
+    return round;
+  });
+  writeRounds(state, task, event.at, updated, {
+    pipeline: [...to.pipeline],
+    result: null,
+    proposal: null,
+    shapeChanges: [],
+    ...resolveBranchPatch(task, choice, needsWorktree(to.pipeline), event.at),
+  });
+  record(state, task.id, event.at, {
+    actor: 'you',
+    kind: 'round',
+    text: choice.onto
+      ? `Closed round ${event.number}, back to the merge of #${choice.onto}`
+      : `Closed round ${event.number}, back to round ${event.to}`,
+  });
+}
+
 function resolveSettledRound(task: Task, round: Round, stage: TaskStage, at: number): Round {
   if (round.status === 'active') return endRound(task, round, resolveSettledStatus(stage), at);
   if (round.status === 'shipped' && stage === 'merged') {
@@ -440,6 +467,7 @@ type RoundEvent = Extract<
       | 'round.pull_request_merged'
       | 'round.updated'
       | 'round.removed'
+      | 'round.closed'
       | 'task.retitled';
   }
 >;
@@ -463,6 +491,9 @@ export function applyRoundEvent(state: ShinsaState, event: RoundEvent) {
       return;
     case 'round.removed':
       applyRoundRemoved(state, event);
+      return;
+    case 'round.closed':
+      applyRoundClosed(state, event);
       return;
     case 'task.retitled':
       applyTaskRetitled(state, event);
