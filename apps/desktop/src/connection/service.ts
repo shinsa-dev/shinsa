@@ -1,15 +1,19 @@
 import { Context, Effect, Layer, Option, Ref, Stream } from 'effect';
 import { EngineActions } from '../engine-actions/service.ts';
+import { resolveDataDir } from '../engine/launchd.ts';
 import { type EngineAction, type EngineScreen, LOGIN_ITEMS_URL, PRIVACY_URL } from '../engine/schema.ts';
 import { describeEngineScreen } from '../engine/screen.ts';
 import { EngineSupervisor } from '../engine/service.ts';
+import { Files } from '../files/service.ts';
 import { FirstHealth } from '../first-health/service.ts';
+import { DesktopHost } from '../host/service.ts';
 import { AppMenu } from '../menu/service.ts';
 import type { ServerHealth } from '../server/schema.ts';
 import { EngineServer } from '../server/service.ts';
 import { DesktopShell } from '../shell/service.ts';
-import { LOCAL_SOURCE } from '../source/schema.ts';
+import { CHOOSE_CLOUD_SOURCE, LOCAL_SOURCE } from '../source/schema.ts';
 import { EngineSource } from '../source/service.ts';
+import { isWelcomeNeeded } from '../source/source.ts';
 import { StatusTray } from '../tray/service.ts';
 import { AppWindow } from '../window/service.ts';
 import { type ConnectStep, MISSES_BEFORE_WAITING, RETRY_SCHEDULE, WATCH_SCHEDULE } from './schema.ts';
@@ -29,6 +33,8 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
       const shell = yield* DesktopShell;
       const actions = yield* EngineActions;
       const source = yield* EngineSource;
+      const host = yield* DesktopHost;
+      const files = yield* Files;
       const viewer = source.started.kind === 'cloud';
       const scope = yield* Effect.scope;
       const connecting = yield* Ref.make(false);
@@ -112,7 +118,10 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
           case 'copy-details':
             return yield* shell.writeClipboard(yield* engine.readDetails);
           case 'use-local':
+          case 'choose-local':
             return yield* Effect.asVoid(source.use(LOCAL_SOURCE));
+          case 'choose-cloud':
+            return yield* Effect.asVoid(source.use(CHOOSE_CLOUD_SOURCE));
           case 'restart':
             if (viewer) return yield* connect;
             yield* showScreen({ kind: 'starting' });
@@ -122,12 +131,23 @@ export class Connection extends Context.Service<Connection, { readonly start: Ef
             return yield* connect;
         }
       });
+      const welcome = Effect.gen(function* () {
+        const needed = isWelcomeNeeded({
+          chosen: yield* source.chosen,
+          packaged: host.packaged,
+          hasData: yield* files.exists(resolveDataDir(host.env, host.home)),
+        });
+        if (!needed) return;
+        yield* window.showWelcome;
+        yield* source.firstChoice;
+      });
       const start = Effect.gen(function* () {
         yield* Effect.forkIn(
           Stream.runForEach(actions.requests, (action) => later(run(action))),
           scope,
           { startImmediately: true }
         );
+        yield* welcome;
         yield* connect;
         yield* Effect.forkIn(Effect.schedule(watch, WATCH_SCHEDULE), scope, { startImmediately: true });
       }).pipe(Effect.withSpan('Connection.start'));

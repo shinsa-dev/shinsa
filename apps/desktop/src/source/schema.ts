@@ -21,6 +21,8 @@ export type SourceSetting = typeof SourceSetting.Type;
 
 export const LOCAL_SOURCE: SourceSetting = { kind: 'local' };
 
+export const CHOOSE_CLOUD_SOURCE: SourceSetting = { kind: 'cloud', machine: null };
+
 export const SourceChoice = Schema.Literals(['local', 'pinned', 'choose']);
 
 export type SourceChoice = typeof SourceChoice.Type;

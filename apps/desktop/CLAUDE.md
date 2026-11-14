@@ -50,22 +50,25 @@ src/
 │                   options, when a version ahead is offered the latest there); Updater (start, every four hours,
 │                   download, install with a 15 s timeout, channel switches)
 │   window/         bounds.ts (saved on move or resize), close.ts (close or hide), context-menu.ts (the right-click text menu); AppWindow
-│                   (the page, navigation, Back and Forward, the waiting page)
+│                   (the page, navigation, Back and Forward, the waiting and welcome pages)
 │   dialogs/ files/ host/ launchctl/ login-items/ login-shell/ native-notices/ native-tray/ native-window/
 │   power-monitor/ shell/ update-client/
 │                   The outside world as services with no logic: Electron, the file system, launchctl, a login
 │                   shell, electron-updater. Their Electron events arrive as Streams; tests replace each with a fake
 ├── main/           Outside coverage: index.ts, the composition root (one ManagedRuntime, disposed on `will-quit`),
 │                   and the Electron and Node layers of the outside-world services (`*Live`)
+├── welcome-page/   Outside coverage: index.ts, the first launch's intro and question on Glimm, which the build
+│                   inlines into dist/welcome.html
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
                     updateBadge, notify, openNotificationSettings, onNotifyFailed, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, source, signIn, useLocalEngine, useMachine, onNavigate,
                     onWindowState, onUpdate, onAway, onAction) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
-static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
+static/waiting.html The "Shinsa is not running" page; welcome.html, the first launch's page (its script and the mark
+                    are inlined at build); trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
 resources/          The app icons: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
                     all written by scripts/icon.ts; the engine's job in LaunchAgents/; app-update.yml, the updater's
                     config the build copies into Contents/Resources (Updates, below)
-scripts/            build.ts (bundles main and preload), dev.ts, icon.ts, dmg-background.ts, each one Effect program run
+scripts/            build.ts (bundles main, preload and the welcome page), dev.ts, icon.ts, dmg-background.ts, each one Effect program run
                     with BunRuntime.runMain; kit/ holds what they share (runScriptCommand, readMarkPaths, ScriptStepFailed)
 electron-builder.shared.yml    The build settings; electron-builder.yml extends it with what names the app (its id,
                                scheme, icon and engine job). Every channel builds this one app, so a stable, beta or
@@ -175,6 +178,14 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   and notifications count only its tasks, or a chooser of your machines while none is pinned; its add-device page
   takes a pasted invite link instead of a QR code. The menu bar item shows "Showing <machine> on Shinsa Cloud" and
   the count, no task list.
+- **The first launch asks.** Until `engineSource` is saved, a Mac with no Shinsa data folder (or the dev app) opens
+  on the welcome page instead of registering the engine (`isWelcomeNeeded`, `Connection`'s `welcome`): an intro drawn
+  with Glimm (`glimm`, WebGL sweeps; `src/welcome-page/index.ts`, bundled and inlined with the logo's paths into
+  `dist/welcome.html` by `scripts/build.ts`, since its CSP loads no file), then On this Mac or On another machine,
+  links to `shinsa://engine/choose-local` and `choose-cloud` that `AppWindow` takes as engine actions. The first
+  `EngineSource.use` saves the choice, even This Mac, and lets `Connection` go on; On another machine relaunches on
+  Shinsa Cloud. A Mac that already has `~/.config/shinsa/data` keeps This Mac and never sees it. To see it again in
+  the dev app, remove `engineSource` from `~/Library/Application Support/Shinsa Dev/prefs.json`.
 - **Signing in to Shinsa Cloud** happens in your browser, never in the window: the page's Sign in calls `signIn`,
   and `CloudSignIn` opens `/__remote/sign-in?client=native&redirect=shinsa://signed-in` with a PKCE challenge (the
   same native sign-in the iPhone app uses, `apps/cloud/CLAUDE.md` → Sign-in). The cloud sends you back to
@@ -199,7 +210,7 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
 
 | Command | Description |
 |---|---|
-| `bun run build` | Bundles `src/main` and `src/preload` to `dist/` (`scripts/build.ts`) |
+| `bun run build` | Bundles `src/main` and `src/preload` to `dist/`, and writes `dist/welcome.html` with `src/welcome-page` and the mark inlined (`scripts/build.ts`) |
 | `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app, as `.electron/Shinsa.app`, on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
 | `bun run package` | Builds the web app and the engine (`SHINSA_VERSION` sets its version), then `release/mac-arm64/Shinsa.app` with the engine and its job inside, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`) |
 | `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo, and the menu bar item's `static/trayTemplate.png` and `@2x` (`scripts/icon.ts`) |

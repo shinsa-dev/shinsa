@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { BunServices } from '@effect/platform-bun';
 import { Effect, type Layer } from 'effect';
 import { readMarkPaths } from '../../scripts/kit/marks.ts';
+import { inlinePageScript } from '../../scripts/kit/page.ts';
 import { runScriptCommand } from '../../scripts/kit/run.ts';
 
 const folders: string[] = [];
@@ -62,5 +63,18 @@ describe('readMarkPaths', () => {
     const logo = writeLogo('<svg></svg>');
     const error = await runScript(Effect.flip(readMarkPaths(logo)));
     expect(error.message).toBe(`No mark paths found in ${logo}.`);
+  });
+});
+
+describe('inlinePageScript', () => {
+  it('puts the mark and the script into the page, so its CSP needs no file of its own', () => {
+    const page = inlinePageScript('<svg><!-- marks --></svg><!-- script -->', {
+      script: 'a("$&</script>")',
+      marks: ['M0 0', 'M1 1'],
+    });
+    expect(page).toBe(
+      '<svg><path class="piece" style="--piece: 0" d="M0 0" /><path class="piece" style="--piece: 1" d="M1 1" /></svg>' +
+        '<script>a("$&<\\/script>")</script>'
+    );
   });
 });

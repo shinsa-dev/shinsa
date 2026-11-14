@@ -45,6 +45,8 @@ export const EngineAction = Schema.Literals([
   'retry',
   'open-privacy',
   'use-local',
+  'choose-local',
+  'choose-cloud',
 ]);
 
 export type EngineAction = typeof EngineAction.Type;
@@ -56,6 +58,8 @@ export const ENGINE_ACTION_LABEL: Record<EngineAction, string> = {
   retry: 'Try again',
   'open-privacy': 'Open Privacy & Security',
   'use-local': 'Use this Mac’s engine',
+  'choose-local': 'On this Mac',
+  'choose-cloud': 'On another machine',
 };
 
 export const ENGINE_ACTION_LINK = /^shinsa:\/\/engine\/([a-z-]+)$/;

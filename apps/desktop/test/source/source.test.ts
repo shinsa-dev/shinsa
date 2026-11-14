@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { LOCAL_SOURCE, type SourceSetting } from '../../src/source/schema.ts';
 import {
   describeSource,
+  isWelcomeNeeded,
   listSourceOptions,
   resolveCloudOrigin,
   resolveSourceChoice,
@@ -65,5 +66,14 @@ describe('the engine choices', () => {
     expect(describeSource(LOCAL_SOURCE)).toBe('This Mac');
     expect(describeSource(STUDIO)).toBe('Studio on Shinsa Cloud');
     expect(describeSource(CHOOSER)).toBe('Shinsa Cloud');
+  });
+});
+
+describe('the welcome page', () => {
+  it('shows only before a first choice, on a new install or in the dev app', () => {
+    expect(isWelcomeNeeded({ chosen: false, packaged: true, hasData: false })).toBe(true);
+    expect(isWelcomeNeeded({ chosen: false, packaged: false, hasData: true })).toBe(true);
+    expect(isWelcomeNeeded({ chosen: false, packaged: true, hasData: true })).toBe(false);
+    expect(isWelcomeNeeded({ chosen: true, packaged: false, hasData: false })).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Fiber } from 'effect';
 import { EngineSource } from '../../src/source/service.ts';
 import { createWorld, runDesktop, USER_DATA } from '../support/desktop.ts';
 
@@ -45,5 +45,22 @@ describe('the engine source', () => {
     expect(JSON.parse(world.files.get(FILE) ?? '{}')).toEqual({
       engineSource: { kind: 'cloud', machine: { id: 'm1', name: 'Studio' } },
     });
+  });
+
+  it('saves the first choice even when it keeps This Mac, and lets the welcome page go on', async () => {
+    const world = createWorld();
+    const answers = await runDesktop(
+      world,
+      Effect.gen(function* () {
+        const source = yield* EngineSource;
+        const before = yield* source.chosen;
+        const waiting = yield* Effect.forkChild(source.firstChoice);
+        const step = yield* source.use({ kind: 'local' });
+        yield* Fiber.join(waiting);
+        return [before, step, yield* source.chosen, yield* source.use({ kind: 'local' })];
+      })
+    );
+    expect(answers).toEqual([false, 'none', true, 'none']);
+    expect(JSON.parse(world.files.get(FILE) ?? '{}')).toEqual({ engineSource: { kind: 'local' } });
   });
 });

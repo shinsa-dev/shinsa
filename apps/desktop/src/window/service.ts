@@ -24,6 +24,7 @@ export class AppWindow extends Context.Service<
     readonly reload: Effect.Effect<void>;
     readonly showServerPage: Effect.Effect<boolean>;
     showWaiting(view: EngineScreenView): Effect.Effect<boolean>;
+    readonly showWelcome: Effect.Effect<boolean>;
     open(path: string): Effect.Effect<void>;
     load(path: string): Effect.Effect<void>;
     step(offset: -1 | 1): Effect.Effect<void>;
@@ -62,12 +63,13 @@ export class AppWindow extends Context.Service<
       const later = (effect: Effect.Effect<void>) => Effect.asVoid(Effect.forkIn(effect, scope));
       const hide = Effect.andThen(Ref.set(hideOnLeave, false), native.hide);
       const reload = Effect.gen(function* () {
-        if ((yield* Ref.get(page)) === 'app') yield* native.reload;
+        const current = yield* Ref.get(page);
+        if (current === 'app' || current === 'welcome') yield* native.reload;
         else yield* actions.request('retry');
       });
       const navigate = Effect.fn('AppWindow.navigate')(function* (url: string) {
         const current = yield* Ref.get(page);
-        const action = current === 'waiting' ? parseEngineAction(url) : null;
+        const action = current === 'waiting' || current === 'welcome' ? parseEngineAction(url) : null;
         if (action) {
           yield* actions.request(action);
           return false;
@@ -124,6 +126,7 @@ export class AppWindow extends Context.Service<
         showServerPage,
         showWaiting: (view) =>
           Effect.andThen(Ref.set(page, 'waiting'), native.loadWaiting(resolveWaitingQuery(view))),
+        showWelcome: Effect.andThen(Ref.set(page, 'welcome'), native.loadWelcome),
         open,
         load: Effect.fn('AppWindow.load')(function* (path: string) {
           yield* Ref.set(pending, path);

@@ -118,6 +118,8 @@ const HOME = '/Users/me';
 
 export const USER_DATA = '/Users/me/Library/Application Support/Shinsa';
 
+export const ENGINE_DATA = '/Users/me/.config/shinsa/data';
+
 export const LOGS = '/Users/me/Library/Logs/Shinsa';
 
 export const RESOURCES = '/Applications/Shinsa.app/Contents/Resources';
@@ -128,7 +130,7 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     platform: 'darwin',
     version: '1.2.0',
     env: {},
-    files: new Map(),
+    files: new Map([[ENGINE_DATA, '']]),
     unwritable: new Set(),
     answer: () => 'refuse',
     requests: [],
@@ -425,6 +427,7 @@ function makeNativeLayer(world: DesktopWorld) {
             }),
           loadUrl: (url) => Effect.as(record(world, `load ${url}`), world.loads),
           loadWaiting: (query) => Effect.as(record(world, `waiting ${query.title}`), world.loads),
+          loadWelcome: Effect.as(record(world, 'welcome'), world.loads),
           send: (channel, value) =>
             Effect.sync(() => {
               world.sent.push([channel, value]);

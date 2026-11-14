@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Welcome to Shinsa</title>
+    <style>
+      @property --angle {
+        syntax: '<angle>';
+        inherits: false;
+        initial-value: 0deg;
+      }
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #18181b;
+        --muted: #71717a;
+        --card: rgb(255 255 255 / 0.72);
+        --line: rgb(24 24 27 / 0.1);
+        --primary: #0a72ef;
+        --glow-a: #2e70ff;
+        --glow-b: #7b4fff;
+        --glow-c: #00e5d6;
+        --glow-opacity: 0.32;
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0b0d;
+          --fg: #f4f4f5;
+          --muted: #a1a1aa;
+          --card: rgb(24 24 27 / 0.66);
+          --line: rgb(244 244 245 / 0.1);
+          --primary: #3b8eff;
+          --glow-opacity: 0.4;
+        }
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .drag {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 3;
+        height: 44px;
+        -webkit-app-region: drag;
+      }
+      #sweep {
+        position: fixed;
+        inset: 0;
+        z-index: 4;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .aurora {
+        position: fixed;
+        inset: -20%;
+        z-index: 0;
+        opacity: 0;
+        filter: blur(80px) saturate(140%);
+        animation: aurora-in 2.4s var(--ease-out) 0.1s forwards;
+      }
+      .aurora span {
+        position: absolute;
+        width: 46vmax;
+        height: 46vmax;
+        border-radius: 50%;
+        mix-blend-mode: normal;
+        animation: drift 18s ease-in-out infinite alternate;
+      }
+      .aurora span:nth-child(1) {
+        top: 10%;
+        left: 8%;
+        background: var(--glow-a);
+      }
+      .aurora span:nth-child(2) {
+        top: 30%;
+        right: 6%;
+        background: var(--glow-b);
+        animation-duration: 22s;
+        animation-direction: alternate-reverse;
+      }
+      .aurora span:nth-child(3) {
+        bottom: 4%;
+        left: 34%;
+        background: var(--glow-c);
+        animation-duration: 26s;
+      }
+      @keyframes aurora-in {
+        to {
+          opacity: var(--glow-opacity);
+        }
+      }
+      @keyframes drift {
+        0% {
+          transform: translate3d(0, 0, 0) scale(1);
+        }
+        50% {
+          transform: translate3d(6vmax, -4vmax, 0) scale(1.15);
+        }
+        100% {
+          transform: translate3d(-5vmax, 5vmax, 0) scale(0.92);
+        }
+      }
+      .stage {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        padding: 56px 32px 40px;
+      }
+      .intro {
+        display: grid;
+        justify-items: center;
+        gap: 20px;
+        text-align: center;
+      }
+      .mark-box {
+        position: relative;
+        width: 112px;
+        height: 112px;
+      }
+      .mark {
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        fill: var(--fg);
+      }
+      .piece {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: piece-in 1.1s var(--ease-out) forwards;
+        animation-delay: calc(0.25s + var(--piece) * 0.14s);
+      }
+      .piece:nth-child(1) {
+        --from: translate(-60%, 60%) rotate(-24deg) scale(0.4);
+      }
+      .piece:nth-child(2) {
+        --from: translate(70%, 70%) rotate(30deg) scale(0.3);
+      }
+      .piece:nth-child(3) {
+        --from: translate(-70%, -70%) rotate(-36deg) scale(0.3);
+      }
+      @keyframes piece-in {
+        from {
+          opacity: 0;
+          transform: var(--from);
+          filter: blur(10px);
+        }
+        60% {
+          opacity: 1;
+        }
+        to {
+          opacity: 1;
+          transform: none;
+          filter: blur(0);
+        }
+      }
+      #shine {
+        position: absolute;
+        inset: -24px;
+        width: calc(100% + 48px);
+        height: calc(100% + 48px);
+        pointer-events: none;
+      }
+      .wordmark {
+        display: flex;
+        margin: 0;
+        font-size: 44px;
+        font-weight: 650;
+        letter-spacing: -0.035em;
+        line-height: 1;
+      }
+      .wordmark span {
+        display: inline-block;
+        opacity: 0;
+        transform: translateY(0.5em) rotateX(-70deg);
+        filter: blur(8px);
+        animation: letter-in 0.9s var(--ease-out) forwards;
+        animation-delay: calc(1.15s + var(--letter) * 0.055s);
+      }
+      @keyframes letter-in {
+        to {
+          opacity: 1;
+          transform: none;
+          filter: blur(0);
+        }
+      }
+      .slogan {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0 0.3em;
+        margin: 0;
+        color: var(--muted);
+        font-size: 17px;
+        letter-spacing: -0.01em;
+      }
+      .slogan span {
+        opacity: 0;
+        transform: translateY(10px);
+        filter: blur(6px);
+        animation: letter-in 0.8s var(--ease-out) forwards;
+        animation-delay: calc(1.75s + var(--word) * 0.09s);
+      }
+      #cue {
+        position: absolute;
+        width: 0;
+        height: 0;
+        animation: cue 1ms linear 3.7s forwards;
+      }
+      @keyframes cue {
+        to {
+          opacity: 0;
+        }
+      }
+      .choice {
+        display: none;
+        width: min(640px, 100%);
+        gap: 28px;
+        justify-items: center;
+        text-align: center;
+      }
+      body[data-stage='choice'] .intro,
+      body[data-stage='leaving'] .intro {
+        display: none;
+      }
+      body[data-stage='choice'] .choice,
+      body[data-stage='leaving'] .choice {
+        display: grid;
+      }
+      .choice header {
+        display: grid;
+        gap: 6px;
+      }
+      .choice h1 {
+        margin: 0;
+        font-size: 26px;
+        font-weight: 650;
+        letter-spacing: -0.025em;
+        line-height: 1.2;
+      }
+      .choice header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .rise {
+        opacity: 0;
+        transform: translateY(18px);
+        filter: blur(8px);
+      }
+      body[data-stage='choice'] .rise {
+        animation: letter-in 0.9s var(--ease-out) forwards;
+        animation-delay: calc(0.08s + var(--rise) * 0.09s);
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        width: 100%;
+        perspective: 900px;
+      }
+      @media (max-width: 560px) {
+        .cards {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        --x: 50%;
+        --y: 50%;
+        position: relative;
+        display: grid;
+        align-content: start;
+        gap: 6px;
+        padding: 22px 20px 20px;
+        border-radius: 16px;
+        color: inherit;
+        text-align: left;
+        text-decoration: none;
+        background:
+          radial-gradient(260px circle at var(--x) var(--y), rgb(46 112 255 / 0.12), transparent 70%),
+          var(--card);
+        box-shadow:
+          inset 0 0 0 1px var(--line),
+          0 1px 2px rgb(0 0 0 / 0.04),
+          0 12px 32px -12px rgb(0 0 0 / 0.18);
+        backdrop-filter: blur(24px) saturate(160%);
+        cursor: default;
+        opacity: 0;
+        transform: translateY(32px) rotateX(24deg) scale(0.96);
+        filter: blur(10px);
+        transition:
+          transform 0.5s var(--ease-out),
+          box-shadow 0.5s var(--ease-out);
+      }
+      body[data-stage='choice'] .card {
+        animation: card-in 1.1s var(--ease-out) forwards;
+        animation-delay: calc(0.3s + var(--card) * 0.12s);
+      }
+      @keyframes card-in {
+        to {
+          opacity: 1;
+          transform: none;
+          filter: blur(0);
+        }
+      }
+      .card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        padding: 1px;
+        border-radius: inherit;
+        background: conic-gradient(from var(--angle), var(--glow-a), var(--glow-b), var(--glow-c), var(--glow-a));
+        opacity: 0;
+        transition: opacity 0.4s var(--ease-out);
+        -webkit-mask:
+          linear-gradient(#000 0 0) content-box,
+          linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        animation: turn 4s linear infinite;
+      }
+      @keyframes turn {
+        to {
+          --angle: 360deg;
+        }
+      }
+      .card:hover::before,
+      .card:focus-visible::before {
+        opacity: 1;
+      }
+      .card:hover,
+      .card:focus-visible {
+        outline: none;
+        box-shadow:
+          inset 0 0 0 1px transparent,
+          0 2px 4px rgb(0 0 0 / 0.05),
+          0 24px 48px -16px rgb(46 112 255 / 0.35);
+      }
+      .card:active {
+        transform: scale(0.985);
+      }
+      .card svg {
+        width: 22px;
+        height: 22px;
+        margin-bottom: 10px;
+        fill: none;
+        stroke: var(--primary);
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .card strong {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .card span {
+        color: var(--muted);
+      }
+      .hint {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      body[data-stage='leaving'] .choice {
+        animation: leave 0.55s var(--ease-out) forwards;
+      }
+      @keyframes leave {
+        to {
+          opacity: 0;
+          transform: scale(0.97);
+          filter: blur(10px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before {
+          animation-duration: 1ms !important;
+          animation-delay: 0s !important;
+          transition: none !important;
+        }
+        .aurora span {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body data-stage="intro">
+    <div class="drag"></div>
+    <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+    <main class="stage">
+      <section class="intro" aria-label="Welcome to Shinsa">
+        <div class="mark-box">
+          <svg class="mark" viewBox="0 0 365 365" role="img" aria-label="Shinsa"><!-- marks --></svg>
+          <canvas id="shine" aria-hidden="true"></canvas>
+        </div>
+        <h2 class="wordmark" aria-label="Shinsa">
+          <span style="--letter: 0">S</span><span style="--letter: 1">h</span><span style="--letter: 2">i</span
+          ><span style="--letter: 3">n</span><span style="--letter: 4">s</span><span style="--letter: 5">a</span>
+        </h2>
+        <p class="slogan">
+          <span style="--word: 0">Hand</span><span style="--word: 1">over</span><span style="--word: 2">the</span
+          ><span style="--word: 3">work.</span><span style="--word: 4">Keep</span><span style="--word: 5">the</span
+          ><span style="--word: 6">decisions.</span>
+        </p>
+        <i id="cue" aria-hidden="true"></i>
+      </section>
+      <section class="choice" aria-labelledby="choice-title">
+        <header>
+          <h1 id="choice-title" class="rise" style="--rise: 0">Where should your agents run?</h1>
+          <p class="rise" style="--rise: 1">Pick one to start. You can switch later in Shinsa → Engine.</p>
+        </header>
+        <div class="cards">
+          <a class="card" href="shinsa://engine/choose-local" data-palette="lagoon" style="--card: 0">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="12" rx="2" />
+              <path d="M8 20h8M12 16v4" />
+            </svg>
+            <strong>On this Mac</strong>
+            <span>Shinsa’s engine runs here in the background, also when this window is closed.</span>
+          </a>
+          <a class="card" href="shinsa://engine/choose-cloud" data-palette="berry" style="--card: 1">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.5 9.5H7Z" />
+            </svg>
+            <strong>On another machine</strong>
+            <span>Sign in to Shinsa Cloud and show a machine you already run Shinsa on. Nothing runs here.</span>
+          </a>
+        </div>
+      </section>
+    </main>
+    <canvas id="sweep" aria-hidden="true"></canvas>
+    <!-- script -->
+  </body>
+</html>

@@ -15,6 +15,7 @@ export class NativeWindow extends Context.Service<
     guard(guards: WindowGuards): Effect.Effect<void>;
     loadUrl(url: string): Effect.Effect<boolean>;
     loadWaiting(query: WaitingQuery): Effect.Effect<boolean>;
+    readonly loadWelcome: Effect.Effect<boolean>;
     send(channel: string, value?: unknown): Effect.Effect<void>;
     readonly show: Effect.Effect<void>;
     readonly hide: Effect.Effect<void>;

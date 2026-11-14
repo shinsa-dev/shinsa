@@ -2176,6 +2176,13 @@ Only these, and they win over anything below:
       says "Shinsa Cloud is not answering" with Try again and Use this Mac's engine, and the menu bar item's first
       line says the same; otherwise it reads "Showing Studio on Shinsa Cloud" with the count and no task list, and
       Quit sits over "The machine you view keeps running".
+    - **The welcome page.** The first launch asks before anything starts: a page of the app's own
+      (`static/welcome.html`, `src/welcome-page/`, drawn with Glimm's WebGL sweeps) assembles the mark from its three
+      pieces, sweeps a light band across it, sets the wordmark and the slogan letter by letter, then a full-window
+      spectrum sweep reveals "Where should your agents run?" with two cards, On this Mac and On another machine.
+      Picking one sweeps the window once more and starts that engine. A click or Return during the intro skips to
+      the question, and under reduced motion it shows at once. It shows only before the first choice, on a Mac that
+      never ran Shinsa (or in the dev app); everyone else keeps This Mac and switches from Shinsa → Engine.
     - **The window**: closing it hides it and the Dock icon with it, so the app lives on in the menu bar (the page
       keeps its socket, so notifications go on); the menu bar item's Open Shinsa, a `shinsa://` link, a
       notification or opening Shinsa again brings both back, and ⌘Q quits the app and never stops the engine. Its

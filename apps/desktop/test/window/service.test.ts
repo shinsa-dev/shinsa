@@ -86,6 +86,21 @@ describe('the window', () => {
     expect(world.actions).toEqual(['restart']);
   });
 
+  it('shows the welcome page, takes its choice and reloads it in place', async () => {
+    const world = createWorld();
+    const answers = await run(world, (window, guards) =>
+      Effect.gen(function* () {
+        const loaded = yield* window.showWelcome;
+        const choice = yield* guards.navigate('shinsa://engine/choose-cloud');
+        yield* window.reload;
+        return [loaded, choice, yield* window.page];
+      })
+    );
+    expect(answers).toEqual([true, false, 'welcome']);
+    expect(world.window).toEqual(['welcome', 'reload']);
+    expect(world.actions).toEqual(['choose-cloud']);
+  });
+
   it('keeps app links in the window, opens the web outside it and blocks the rest', async () => {
     const world = createWorld();
     const answers = await run(world, (window, guards) =>

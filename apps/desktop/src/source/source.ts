@@ -1,5 +1,6 @@
 import { REMOTE_APP_ORIGIN } from '@shinsa/core';
 import {
+  CHOOSE_CLOUD_SOURCE,
   CLOUD_URL_VARIABLE,
   SOURCE_LABEL,
   type SourceChoice,
@@ -31,7 +32,7 @@ export function resolveSourceSwitch(current: SourceSetting, next: SourceSetting)
 
 export function resolveSourceChoice(current: SourceSetting, choice: SourceChoice): SourceSetting {
   if (choice === 'local') return { kind: 'local' };
-  if (choice === 'choose') return { kind: 'cloud', machine: null };
+  if (choice === 'choose') return CHOOSE_CLOUD_SOURCE;
   return current;
 }
 
@@ -47,4 +48,8 @@ export function listSourceOptions(current: SourceSetting): SourceOption[] {
 export function describeSource(current: SourceSetting) {
   if (current.kind === 'local') return SOURCE_LABEL.local;
   return current.machine ? `${current.machine.name} on ${SOURCE_LABEL.cloud}` : SOURCE_LABEL.cloud;
+}
+
+export function isWelcomeNeeded(launch: { chosen: boolean; packaged: boolean; hasData: boolean }) {
+  return !launch.chosen && (!launch.packaged || !launch.hasData);
 }
