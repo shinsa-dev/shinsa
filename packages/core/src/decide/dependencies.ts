@@ -172,14 +172,29 @@ export function stackOnTasks(decider: Decider, command: CommandOf<'task.stack_on
   if (isTaskSettled(task)) throw new DomainError({ code: 'task_settled', message: 'This task is finished.' });
   const stacksOn = resolveStackParents(decider, task, command.stacksOn);
   if (isSameOrder(task.stacksOn ?? [], stacksOn)) return;
-  if (!canChangeStack(task)) {
+  if (canChangeStack(task)) {
+    changeStack(decider, task.id, stacksOn, 'you');
+    restartForStack(decider, task.id);
+    return;
+  }
+  const left = (task.stacksOn ?? []).filter((id) => !stacksOn.includes(id));
+  if (left.length === 0 || stacksOn.some((id) => !task.stacksOn?.includes(id))) {
     throw new DomainError({
       code: 'stack_started',
-      message: 'This task has started building, so its bundle can no longer change.',
+      message:
+        'This task has started building, so it can no longer stack on more tasks. You can still take it out of its bundle.',
     });
   }
-  changeStack(decider, task.id, stacksOn, 'you');
-  restartForStack(decider, task.id);
+  leaveStartedStack(decider, task.id, stacksOn, left);
+}
+
+function leaveStartedStack(decider: Decider, taskId: string, stacksOn: string[], left: string[]) {
+  changeStack(decider, taskId, stacksOn, 'you');
+  const task = decider.task(taskId);
+  const open = left.filter((id) => decider.state.tasks[id]?.stage !== 'cancelled');
+  changeDependencies(decider, taskId, resolveDependencies(decider, task, [...task.waitsOn, ...open]), 'you');
+  syncStackBases(decider, taskId);
+  if (decider.task(taskId).pullRequest?.state === 'open') decider.run({ kind: 'pull_request.watch', taskId });
 }
 
 function pauseForCancelled(decider: Decider, task: Task, cancelled: Task[], remaining: Task[]) {

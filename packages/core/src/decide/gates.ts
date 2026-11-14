@@ -259,7 +259,7 @@ function answerDecision(
 export function answerGateForYou(
   decider: Decider,
   gate: Gate,
-  decision: 'approve' | 'reply',
+  decision: 'approve' | 'reply' | 'revise',
   response: string | null,
   reason: string
 ) {

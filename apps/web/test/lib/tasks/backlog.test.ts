@@ -74,9 +74,43 @@ describe('describePlanCard', () => {
       describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan, backlog: { at: 1 } })).title
     ).toBe('Planned as 3 tasks, 2 in a bundle and kept in the backlog');
   });
+
+  it('calls a split that starts an initiative an initiative, in the backlog too', () => {
+    const plan = withParts(
+      [
+        { title: 'A', request: 'a', order: 'parallel', phase: 1 },
+        { title: 'B', request: 'b', order: 'waits_on', on: 1, phase: 2 },
+      ],
+      true
+    );
+    expect(describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan }))).toEqual({
+      title: 'The agent wants to start this as an initiative of 3 tasks',
+      approve: 'Start initiative',
+      note: 'Each task merges on its own, and a lead agent keeps track of them. To change the parts, say it in the chat.',
+    });
+    expect(
+      describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan, backlog: { at: 1 } }))
+    ).toMatchObject({
+      title: 'Planned as an initiative of 3 tasks and kept in the backlog',
+      approve: 'Start initiative',
+    });
+  });
+
+  it('names an initiative even when its parts stack, so the card never says bundle', () => {
+    const plan = withParts(
+      [
+        { title: 'A', request: 'a', order: 'stacks_on', on: 0 },
+        { title: 'B', request: 'b', order: 'stacks_on', on: 1 },
+      ],
+      true
+    );
+    expect(describePlanCard(createTask({ id: 't', stage: 'awaiting_plan', plan })).approve).toBe(
+      'Start initiative'
+    );
+  });
 });
 
-function withParts(split: PlanSplitPart[]) {
+function withParts(split: PlanSplitPart[], initiative = false) {
   return {
     version: 1,
     body: '',
@@ -91,6 +125,7 @@ function withParts(split: PlanSplitPart[]) {
       verification: [],
       questions: [],
       split,
+      initiative,
     },
   };
 }

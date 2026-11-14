@@ -81,6 +81,7 @@ function describeInitiativeGroupProgress(state: ShinsaState, initiative: Initiat
 }
 
 function createInitiativeGroup(state: ShinsaState, initiative: Initiative, items: QueueItem[]): QueueGroup {
+  const root = items.find((item) => item.task.id === initiative.leadTaskId) ?? null;
   return {
     kind: 'initiative',
     id: initiative.id,
@@ -88,8 +89,8 @@ function createInitiativeGroup(state: ShinsaState, initiative: Initiative, items
     title: initiative.name,
     progress: describeInitiativeGroupProgress(state, initiative),
     opens: Option.getOrNull(selectInitiativeLead(state, initiative)),
-    root: null,
-    members: items,
+    root,
+    members: items.filter((item) => item !== root),
   };
 }
 
@@ -179,7 +180,7 @@ export function listQueueSections(state: ShinsaState, queue: Queue): QueueSectio
       icon: 'IconInboxEmpty',
       tone: 'neutral',
       items: gates,
-      entries: gates.map((item) => ({ kind: 'item' as const, item })),
+      entries: listSectionEntries(state, gates),
       empty: 'Nothing is waiting on you.',
       startsCollapsed: false,
       opensOnHome: true,

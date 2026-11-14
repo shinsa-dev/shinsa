@@ -10,7 +10,7 @@ import {
   validatePlanRules,
   validateVerification,
 } from '../../src/index.ts';
-import { IMPACT, PLAN, SPLIT_PLAN } from '../harness.ts';
+import { IMPACT, INITIATIVE_PLAN, PLAN, SPLIT_PLAN } from '../harness.ts';
 
 const POST_MERGE: PipelineStep[] = [...SHAPE_PIPELINES.change, 'operate'];
 
@@ -71,10 +71,20 @@ describe('the verification rules', () => {
   });
 
   test('a plan makes an initiative only of a split', () => {
-    expect(validatePlanRules(SHAPE_PIPELINES.change, { ...SPLIT_PLAN, initiative: true })).toEqual([]);
+    expect(validatePlanRules(SHAPE_PIPELINES.change, INITIATIVE_PLAN)).toEqual([]);
     expect(validatePlanRules(SHAPE_PIPELINES.change, { ...PLAN, initiative: true })).toEqual([
       '`initiative` makes this task and its split parts an initiative: give the parts in `split`, or leave it out.',
     ]);
+  });
+
+  test('an initiative never stacks its parts as a bundle, while a plain split may', () => {
+    const stacked =
+      "An initiative's tasks each merge on their own, so none stacks as a bundle: give each part `parallel`, or `waits_on` when it needs another part merged first.";
+    expect(validatePlanRules(SHAPE_PIPELINES.change, SPLIT_PLAN)).toEqual([]);
+    expect(validatePlanRules(SHAPE_PIPELINES.change, { ...SPLIT_PLAN, initiative: true })).toEqual([stacked]);
+    const lead = { ...SPLIT_PLAN, files: [], verification: [] };
+    expect(validatePlanRules(SHAPE_PIPELINES.lead, lead)).toEqual([stacked]);
+    expect(validatePlanRules(SHAPE_PIPELINES.lead, { ...lead, split: INITIATIVE_PLAN.split })).toEqual([]);
   });
 
   test('a plan splits off other tasks only when this task opens a pull request', () => {

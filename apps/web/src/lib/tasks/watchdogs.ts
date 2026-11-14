@@ -3,6 +3,7 @@ import {
   describeList,
   isTaskClosed,
   listActiveWatchdogs,
+  resolveShownStage,
   type ShinsaState,
   type Task,
   type Watchdog,
@@ -93,7 +94,7 @@ export function describeWatchdogSummary(state: ShinsaState, watchdog: Watchdog, 
 }
 
 export function isWatchedTask(task: Task) {
-  return task.stage === 'merged' && !isTaskClosed(task) && listActiveWatchdogs(task).length > 0;
+  return resolveShownStage(task) === 'merged' && !isTaskClosed(task) && listActiveWatchdogs(task).length > 0;
 }
 
 export function resolveWatchingReason(task: Task, now: number) {

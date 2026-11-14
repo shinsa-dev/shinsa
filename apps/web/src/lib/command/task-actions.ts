@@ -18,6 +18,7 @@ import {
   updatePriority,
 } from '@/lib/tasks/actions.ts';
 import { resolveMessageHint } from '@/lib/tasks/messages.ts';
+import { isTaskMovable } from '@/lib/tasks/move.ts';
 
 const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   giveBack: ['teammate', 'handoff', 'return', 'owner'],
@@ -29,6 +30,7 @@ const ACTION_KEYWORDS: Record<Exclude<TaskActionKey, 'open'>, string[]> = {
   fork: ['handoff', 'copy', 'follow-up', 'new task'],
   share: ['link', 'public', 'teammate', 'publish'],
   unshare: ['link', 'private', 'revoke', 'unshare'],
+  move: ['repository', 'directory', 'folder', 'project', 'wrong repo'],
   moveToBacklog: ['later', 'park', 'schedule', 'not now'],
   removeFromBacklog: ['backlog', 'remove', 'plan to approve', 'needs you'],
   snooze: ['hide', 'later', 'not now', 'put aside', 'pause'],
@@ -140,7 +142,8 @@ export function listTaskActionCommands(state: ShinsaState, task: Task): Command[
     selectEngineCommands(connection.selectEngine(task.id)),
     Date.now(),
     connection.selectMachine(task.id)?.teammate ?? null,
-    isTaskPausable(state, task)
+    isTaskPausable(state, task),
+    isTaskMovable(state, task)
   )
     .flat()
     .flatMap((key) => (key === 'open' ? [] : [createActionCommand(task, key)]));

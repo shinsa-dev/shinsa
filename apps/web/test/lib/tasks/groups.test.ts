@@ -17,6 +17,7 @@ import {
   type TeamEntry,
 } from '@/lib/tasks/groups.ts';
 import { resolveTeamTaskState } from '@/lib/teams/feeds.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
 import { createTeamFeedTask } from '../teams/machine.ts';
 
@@ -503,6 +504,47 @@ describe('listTaskGroupSections search by repository', () => {
   });
 });
 
+describe('a task a watchdog is checking', () => {
+  const merged = { state: 'merged' as const };
+  const checking = createTask({
+    id: 'checking',
+    stage: 'watching',
+    pullRequest: createPullRequest({ number: 7, ...merged }),
+    stageChangedAt: NOW - 5000,
+  });
+
+  it('stays in Done, in its place from the merge, and never shows in In progress', () => {
+    const later = createTask({ id: 'later', stage: 'merged', stageChangedAt: NOW - 1000 });
+    const state = createShinsaState({ tasks: [checking, later] });
+    expect(resolveTaskGroup(state, checking)).toBe('done');
+    expect(listSections(state, '', 'done')[0]?.entries.map((entry) => entry.task.id)).toEqual([
+      'later',
+      'checking',
+    ]);
+    expect(listSections(state, '', 'working').flatMap((section) => section.entries)).toEqual([]);
+  });
+
+  it('shows in Paused when the check opens a sign-in gate', () => {
+    const state = createShinsaState({
+      tasks: [checking],
+      gates: [createGate({ id: 'sign-in', taskId: 'checking', type: 'sign_in' })],
+    });
+    expect(resolveTaskGroup(state, checking)).toBe('paused');
+  });
+
+  it('does not hold a task that waits on it, and is not offered as a task to wait on', () => {
+    const child = waiting('child', ['checking']);
+    const state = createShinsaState({ tasks: [checking, child] });
+    expect(resolveTaskGroup(state, child)).toBe('working');
+    expect(listOpenTaskChoices(state, null).map((task) => task.id)).toEqual(['child']);
+  });
+
+  it('counts as done, merged or not', () => {
+    const unmerged = createTask({ id: 'unmerged', stage: 'watching' });
+    expect(describeTaskCounts([checking, unmerged, createTask({ id: 'open' })])).toBe('1 open · 2 done');
+  });
+});
+
 describe('describeTaskCounts', () => {
   it('counts open tasks and finished ones among the tasks it is given, leaving cancelled tasks out of both', () => {
     const tasks = [
@@ -514,6 +556,40 @@ describe('describeTaskCounts', () => {
     ];
     expect(describeTaskCounts(tasks)).toBe('2 open · 2 done');
     expect(describeTaskCounts([])).toBe('0 open · 0 done');
+  });
+});
+
+describe('a task whose merge you approved', () => {
+  function groupOf(task: Partial<Task>, gates: Partial<Gate>[] = []) {
+    const subject = createTask({ id: 't', stage: 'awaiting_merge', ...task });
+    const state = createShinsaState({
+      tasks: [subject],
+      gates: gates.map((gate, index) => createGate({ id: `g${index}`, taskId: 't', ...gate })),
+    });
+    return resolveTaskGroup(state, subject);
+  }
+
+  it('files under Done while GitHub merges it', () => {
+    expect(groupOf({})).toBe('done');
+    expect(groupOf({}, [{ type: 'merge', status: 'answered' }])).toBe('done');
+  });
+
+  it('stays under Ready to merge while the merge gate is open, and pauses when the merge fails', () => {
+    expect(groupOf({}, [{ type: 'merge' }])).toBe('merge');
+    expect(groupOf({}, [{ type: 'failure' }])).toBe('paused');
+  });
+
+  it('stays in progress while a retry is armed or it only waits for its bundle', () => {
+    expect(groupOf({ autoRetry: { status: 'armed' } as never })).toBe('working');
+    expect(groupOf({ bundleReady: { commit: 'a' } })).toBe('working');
+  });
+
+  it('files a bundle member with its root, under Done once the root merges', () => {
+    const root = createTask({ id: 'root', stage: 'awaiting_merge' });
+    const top = createTask({ id: 'top', stage: 'awaiting_merge', stacksOn: ['root'] });
+    const state = createShinsaState({ tasks: [root, top] });
+    expect(resolveTaskGroup(state, root)).toBe('done');
+    expect(resolveTaskGroup(state, top)).toBe('done');
   });
 });
 

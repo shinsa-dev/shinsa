@@ -6,6 +6,8 @@ import {
   AUTOPILOT_TRACKS,
   type AutopilotAgreement,
   type AutopilotDecisionAnswer,
+  type AutopilotFollowUpMatch,
+  type AutopilotFollowUpScore,
   type AutopilotRate,
   type AutopilotScore,
   type AutopilotTrack,
@@ -14,22 +16,29 @@ import {
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
 
-const AGREEING_VERDICT: Partial<Record<AutopilotDecisionAnswer, AutopilotVerdict>> = {
-  approved: 'act',
-  revised: 'forward',
-  rejected: 'forward',
+const AGREEING_VERDICTS: Partial<Record<AutopilotDecisionAnswer, readonly AutopilotVerdict[]>> = {
+  approved: ['act'],
+  revised: ['revise', 'forward'],
+  rejected: ['forward'],
 };
 
 export function isAutopilotAgreement(guess: AutopilotVerdict, answer: AutopilotDecisionAnswer) {
-  return AGREEING_VERDICT[answer] === guess;
+  return AGREEING_VERDICTS[answer]?.includes(guess) ?? false;
 }
 
 export function resolveAutopilotCombinedVerdict(
   call: AutopilotVerdict,
   guess: AutopilotModelGuess | null
 ): AutopilotVerdict {
-  if (call !== 'act') return 'forward';
+  if (call !== 'act') return call;
   return isAutopilotModelVeto(guess) ? 'forward' : 'act';
+}
+
+export function resolveAutopilotFollowUpScore(
+  match: AutopilotFollowUpMatch | undefined
+): AutopilotFollowUpScore {
+  const { scored, matched } = match ?? EMPTY_AUTOPILOT_PROFILE.followUps;
+  return { scored, matched, share: scored === 0 ? null : matched / scored };
 }
 
 export function isAutopilotModelVeto(guess: AutopilotModelGuess | null) {
@@ -83,5 +92,6 @@ export function resolveAutopilotScore(state: Pick<ShinsaState, 'autopilotProfile
     ready,
     suggested: ready ? 'most' : 'balanced',
     tracks,
+    followUps: resolveAutopilotFollowUpScore(profile.followUps),
   };
 }
