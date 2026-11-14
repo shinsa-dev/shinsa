@@ -301,6 +301,7 @@ type EventBody =
       type: 'autopilot.guessed';
       gateId: string;
       verdict: AutopilotVerdict;
+      followUp: string | null;
       estimate: AutopilotModelGuess | null;
     }
   | { type: 'autopilot.forwarded'; gateId: string; reason: string; teaches: boolean }

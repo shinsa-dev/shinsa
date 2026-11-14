@@ -839,6 +839,7 @@ export interface Gate {
   autopilotJudging?: boolean;
   autopilotFollowUpOnly?: string | null;
   autopilotGuess?: AutopilotVerdict;
+  autopilotFollowUp?: string | null;
   autopilotEstimate?: AutopilotModelGuess | null;
   autopilotOpened?: AutopilotOpenedFacts;
   autopilotAnswer?: string;

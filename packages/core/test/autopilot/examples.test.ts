@@ -42,6 +42,7 @@ function decision(overrides: Partial<AutopilotLearnedDecision> = {}): AutopilotL
     watchdog: false,
     touched: false,
     guess: null,
+    followUp: null,
     note: null,
     facts: FACTS,
     estimate: null,

@@ -129,6 +129,7 @@ function createSeedDecision(index: number): AutopilotDecision {
     watchdog: index % 11 === 0,
     touched: index % 4 === 0,
     guess: resolveSeedGuess(kind, answer, index),
+    followUp: null,
     note: SEED_NOTES[index] ?? null,
     facts: createSeedFacts(answer, index),
     estimate: createSeedEstimate(kind, answer, index),

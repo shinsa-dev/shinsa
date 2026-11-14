@@ -13,6 +13,7 @@ import {
   type AutopilotFacts,
   type AutopilotGateKind,
 } from './schema.ts';
+import { listAutopilotTopicLines } from './topics.ts';
 
 export const AUTOPILOT_JUDGE_SYSTEM = [
   'You are Autopilot, the delegate of one developer who runs coding agents in Shinsa.',
@@ -87,16 +88,18 @@ export interface AutopilotHistoryLines {
   estimate: string | null;
   examples: readonly string[];
   steering: readonly string[];
+  topics?: readonly string[];
 }
 
 const NO_HISTORY: AutopilotHistoryLines = { estimate: null, examples: [], steering: [] };
 
-function describeHistory({ estimate, examples, steering }: AutopilotHistoryLines) {
+function describeHistory({ estimate, examples, steering, topics = [] }: AutopilotHistoryLines) {
   const lines: string[] = [];
   if (estimate) lines.push('', estimate);
   if (examples.length > 0)
     lines.push('', 'Earlier decisions most like this one, with or without you:', ...examples);
   if (steering.length > 0) lines.push('', ...steering);
+  if (topics.length > 0) lines.push('', ...topics);
   return lines;
 }
 
@@ -177,6 +180,7 @@ export function selectAutopilotJudgeRequest(state: ShinsaState, gateId: string, 
       estimate: Option.getOrNull(Option.map(estimate, describeAutopilotEstimate)),
       examples: listAutopilotExampleLines(state, task, gate, kind, now),
       steering: listAutopilotSteeringLines(state, { projectId: task.projectId ?? null, risk: facts.risk }),
+      topics: listAutopilotTopicLines(state.autopilotProfile),
     };
     return {
       system: AUTOPILOT_JUDGE_SYSTEM,

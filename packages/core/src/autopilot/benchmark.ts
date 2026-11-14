@@ -13,6 +13,7 @@ import {
   EMPTY_AUTOPILOT_PROFILE,
 } from './schema.ts';
 import { resolveAutopilotLoss } from './score.ts';
+import { scoreFollowUp } from './topics.ts';
 
 interface Tally {
   scored: number;
@@ -78,5 +79,6 @@ export function resolveAutopilotBenchmark(history: readonly AutopilotLearnedDeci
           addTally(tallies, resolveTallyKey(kind, scope, judgment.track), judgment.right, loss);
     }
   }
-  return { decisions: history.length, judged, rows: listRows(tallies) };
+  const followUps = history.reduce(scoreFollowUp, EMPTY_AUTOPILOT_PROFILE.followUps);
+  return { decisions: history.length, judged, rows: listRows(tallies), followUps };
 }

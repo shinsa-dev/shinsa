@@ -27,6 +27,7 @@ function decision(answer: AutopilotDecisionAnswer, at: number): AutopilotDecisio
     watchdog: false,
     touched: false,
     guess: at % 2 === 0 ? 'act' : null,
+    followUp: null,
     note: null,
     facts: null,
     estimate: null,

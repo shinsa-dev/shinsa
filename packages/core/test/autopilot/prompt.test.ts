@@ -246,6 +246,7 @@ describe('the judge request', () => {
           watchdog: false,
           touched: false,
           guess: null,
+          followUp: null,
           note: 'Keep it smaller',
           facts: null,
           estimate: null,
@@ -263,6 +264,7 @@ describe('the judge request', () => {
           watchdog: false,
           touched: false,
           guess: null,
+          followUp: null,
           note: null,
           facts: null,
           estimate: null,
@@ -278,5 +280,44 @@ describe('the judge request', () => {
     );
     expect(prompt).toContain('- All messages to agents: 1 decided: sent 1; lately sent 100%');
     expect(prompt).not.toContain('- All plans:');
+  });
+
+  test('names the topics you raise most when you ask for changes', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: 'always' } });
+    harness.send({ type: 'settings.change', patch: { autopilot: { enabled: true } } });
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const gate = harness.openGate(taskId);
+    const revised = {
+      at: 1,
+      taskId,
+      gateId: null,
+      kind: 'review',
+      answer: 'revised',
+      projectId: null,
+      risk: null,
+      scope: null,
+      urgent: false,
+      watchdog: false,
+      touched: false,
+      guess: null,
+      followUp: null,
+      facts: null,
+      estimate: null,
+    } as const;
+    harness.replay({
+      type: 'autopilot.decided',
+      decisions: [
+        { ...revised, note: 'How is auth checked?' },
+        { ...revised, note: 'Keep the token out of the logs.' },
+        { ...revised, note: 'Add a migration.' },
+      ],
+    });
+    const prompt = Option.getOrNull(selectAutopilotJudgeRequest(harness.state, gate.id, harness.now))?.prompt;
+    expect(prompt).toContain(
+      '\n\nTopics they raise most when they ask for changes or reply, the ones raised lately first: security (2).\n'
+    );
+    expect(prompt).not.toContain('migrations (1)');
   });
 });

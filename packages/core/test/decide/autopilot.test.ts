@@ -1115,14 +1115,20 @@ describe('Autopilot judges each gate', () => {
   });
 });
 
-function shadowJudge(harness: Harness, taskId: string, verdict: 'act' | 'forward', gateId?: string) {
+function shadowJudge(
+  harness: Harness,
+  taskId: string,
+  verdict: 'act' | 'revise' | 'forward',
+  gateId?: string,
+  reply: string | null = null
+) {
   return harness.send({
     type: 'autopilot.judgment',
     taskId,
     gateId: gateId ?? harness.openGate(taskId).id,
     verdict,
     reason: 'A guess.',
-    reply: null,
+    reply,
     shadow: true,
   });
 }
@@ -1151,6 +1157,41 @@ describe('Autopilot guesses at what it brings to you', () => {
       kind: 'plan',
       answer: 'approved',
       guess: 'act',
+    });
+  });
+
+  test('keeps the follow-up it would send as its guess, and scores it against your words', () => {
+    const { harness, taskId } = planGateHarness({ gates: ['reviews'] });
+    shadowJudge(harness, taskId, 'revise', undefined, '  How does this check the token?  ');
+    expect(harness.openGate(taskId)).toMatchObject({
+      autopilotGuess: 'revise',
+      autopilotFollowUp: 'How does this check the token?',
+    });
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'What about auth here?',
+    });
+    expect(harness.state.autopilotProfile.decisions.at(-1)).toMatchObject({
+      kind: 'plan',
+      answer: 'revised',
+      guess: 'revise',
+      followUp: 'How does this check the token?',
+    });
+    expect(harness.state.autopilotProfile.followUps).toEqual({ scored: 1, matched: 1 });
+    expect(harness.state.autopilotProfile.topics).toMatchObject([{ topic: 'security', total: 1 }]);
+  });
+
+  test('keeps no follow-up with a guess to approve or bring it to you, nor an empty one', () => {
+    const acted = planGateHarness({ gates: ['reviews'] });
+    shadowJudge(acted.harness, acted.taskId, 'act', undefined, 'Looks fine.');
+    expect(acted.harness.openGate(acted.taskId).autopilotFollowUp).toBeNull();
+    const empty = planGateHarness({ gates: ['reviews'] });
+    shadowJudge(empty.harness, empty.taskId, 'revise', undefined, '   ');
+    expect(empty.harness.openGate(empty.taskId)).toMatchObject({
+      autopilotGuess: 'revise',
+      autopilotFollowUp: null,
     });
   });
 
@@ -1277,7 +1318,7 @@ describe('Autopilot follows up for you', () => {
     review(harness, taskId);
     followUp(harness, taskId, '  ');
     expectWaitsForYou(harness, taskId, 'Autopilot had no follow-up to send, so this waits for you.');
-    expect(harness.openGate(taskId).autopilotGuess).toBe('revise');
+    expect(harness.openGate(taskId)).toMatchObject({ autopilotGuess: 'revise', autopilotFollowUp: null });
     const above = setup({ autoMerge: 'off' });
     review(above.harness, above.taskId, { confidence: 'high', risk: 'high' });
     followUp(above.harness, above.taskId, null);
@@ -1296,6 +1337,10 @@ describe('Autopilot follows up for you', () => {
     followUp(harness, taskId, 'And the rollback?');
     expectWaitsForYou(harness, taskId, 'Autopilot already followed up 2 times here, so this waits for you.');
     expect(reviewGates(harness, taskId).filter((gate) => gate.decision === 'revise')).toHaveLength(2);
+    expect(harness.openGate(taskId)).toMatchObject({
+      autopilotGuess: 'revise',
+      autopilotFollowUp: 'And the rollback?',
+    });
   });
 
   test('past its cap on a gate it may not approve, it brings it to you at once and guesses quietly', () => {
