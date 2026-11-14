@@ -376,7 +376,7 @@ describe('composed steps', () => {
     expect(describeChangeGate(later, createGate({ id: 'g', taskId: 't' })).primary).toEqual({
       label: 'Close this round',
       reply: 'closeProposal',
-      note: 'The agent found nothing to change. Close ends this round and brings back the merge of #276.',
+      note: "Close ends this round and brings back #276's merge.",
     });
     expect(resolveCloseLabel(later)).toBe('Close this round');
     const merged = {

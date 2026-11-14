@@ -134,7 +134,7 @@ function resolveClose(task: Task): ChangeAction & { note: string } {
     onSome: (number) => ({
       label: resolveCloseLabel(task),
       reply: CLOSE.reply,
-      note: `The agent found nothing to change. Close ends this round and brings back the merge of #${number}.`,
+      note: `Close ends this round and brings back #${number}'s merge.`,
     }),
   });
 }
