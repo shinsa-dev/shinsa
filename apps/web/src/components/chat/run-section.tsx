@@ -46,7 +46,7 @@ function SpeakerHeader({ run, headline }: { run: Run; headline: string }) {
       <span aria-hidden className='grid size-5 shrink-0 place-items-center rounded-full bg-bg-a2 text-fg-4'>
         <Icon name={role.icon} size='sm' />
       </span>
-      <span className='text-fg-6 shrink-0 font-medium'>{role.name}</span>
+      <span className='shrink-0 font-medium text-fg-4'>{role.name}</span>
       <Truncate className='min-w-0 text-fg-3 max-sm:line-clamp-2 max-sm:whitespace-normal'>
         {headline}
         {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}

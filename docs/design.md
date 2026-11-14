@@ -134,7 +134,7 @@ Only these, and they win over anything below:
      reviewer, a watch check, an initiative's lead and a delegated helper. Its run opens with a sender line
      (`SpeakerHeader` in `components/chat/run-section.tsx`): the role's icon in a 20px round `bg-bg-a2` avatar,
      its name (from `RUN_ROLE`: Reviewer `IconShieldCheck`, Agent `IconAgent`, Planner `IconMap`, Builder
-     `IconHammer`…) in `font-medium text-fg-6`, then what it did (`resolveRunHeadline`, "Reviewed the change, 3
+     `IconHammer`…) in `font-medium text-fg-4`, then what it did (`resolveRunHeadline`, "Reviewed the change, 3
      findings (2 blocking, 1 should fix)") in `text-fg-3`, with no model, no chevron and no fold. Its work,
      reply, cards and errors hang 28px in, under the name and not under the avatar, with no card and no rail,
      the way a second person's message reads in a chat, so a review never reads as the Agent's own turn (26). When your message started the run, your bubble sits above its header, so you speak, then the agent
