@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { Option } from 'effect';
 import {
   INITIATIVE_LIMITS,
+  listActiveRuns,
   listInitiatives,
   listInitiativeWork,
   listOpenGates,
@@ -18,6 +19,7 @@ import {
   createHarness,
   createInitiative,
   createTask,
+  fireRetry,
   type Harness,
   planLead,
   proposePlan,
@@ -436,6 +438,28 @@ describe('waking the lead', () => {
     const settled = harness.events.length;
     harness.send({ type: 'initiative.wake_lead', initiativeId });
     expect(harness.events).toHaveLength(settled);
+  });
+
+  test('waits for an armed retry, whose turn then carries the milestones', () => {
+    const { harness, initiativeId, leadId } = ledInitiative();
+    while (harness.task(leadId).autoRetry?.status !== 'armed') {
+      harness.send({
+        type: 'run.end',
+        runId: harness.activeRun(leadId).id,
+        outcome: 'failed',
+        summary: 'Broke',
+      });
+    }
+    expect(listActiveRuns(harness.state, leadId)).toEqual([]);
+    const memberId = addMember(harness, initiativeId);
+    harness.send({ type: 'initiative.wake_lead', initiativeId });
+    expect(listActiveRuns(harness.state, leadId)).toEqual([]);
+    expect(harness.task(leadId).autoRetry?.status).toBe('armed');
+    fireRetry(harness, leadId);
+    expect(readInstruction(harness.activeRun(leadId))).toContain(
+      `(shinsa://task/${memberId}) joined the initiative`
+    );
+    expect(initiativeOf(harness, initiativeId).milestones).toEqual([]);
   });
 
   test('cancelling the lead mid-turn ends its run and dissolves the initiative', () => {
