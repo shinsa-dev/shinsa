@@ -74,7 +74,6 @@ import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
 import { listFocusTeams } from '@/lib/focus.ts';
 import { describeNewTask } from '@/lib/new-task.ts';
-import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { listRecentTaskIds, recordRecentTask } from '@/lib/preferences/recent-tasks.ts';
 import { useThemePreference } from '@/lib/preferences/theme.ts';
 import { scheduleAfter } from '@/lib/runtime/timers.ts';
@@ -433,7 +432,6 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
     .flatMap((section) => section.commands.map((command) => command.id))
     .join('\n');
   const theme = useThemePreference();
-  const layout = useLayoutPreference();
   const engineCommands = useEngineCommands();
   const accounts = useAccounts();
   const extensions = useExtensions(open);
@@ -459,7 +457,7 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
     () =>
       state
         ? [
-            ...listGlobalSections(state, route, theme, layout, engineCommands, focusTeams),
+            ...listGlobalSections(state, route, theme, engineCommands, focusTeams),
             ...listInitiativeSections(state, route, { feed: teamFeed, teams: focusTeams }),
             ...listAccountSections(accounts),
             ...listScheduleSections(state),
@@ -472,7 +470,6 @@ function CommandMenuContent({ open, focus }: { open: boolean; focus: React.RefOb
       state,
       route,
       theme,
-      layout,
       engineCommands,
       focusTeams,
       teamFeed,

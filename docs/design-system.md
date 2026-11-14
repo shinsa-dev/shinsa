@@ -5674,7 +5674,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Do** put a page's parts behind a segmented tab bar under its heading. **Don't** add a table of contents, a scroll-spy or a list of section links beside the column.
 
-**Example.** Settings is six panes (General, Agents, Agent usage, Projects, Integrations, Automations) behind a segmented `Choice` under the heading, the tab in the URL (`?tab=agents`, General is bare `/settings`). The heading reads the open tab's name ("Agents"), never "Settings", and switching tabs swaps only the pane under the bar.
+**Example.** Settings is ten panes (General, Agents, Autopilot, Cloud, Usage, Statistics, Projects, Browser, Integrations, Automations) behind a segmented `Choice` under the heading, which stays put while the pane scrolls, the tab in the URL (`?tab=agents`, General is bare `/settings`). The heading reads the open tab's name ("Agents"), never "Settings", and switching tabs swaps only the pane under the bar.
 
 #### Page heading
 
@@ -5709,7 +5709,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Do** put "Add account" on the Accounts section label. **Don't** put it in the page heading.
 
-**Example.** Settings → Agent usage puts Refresh and Add account as the Accounts `SectionLabel`'s action, 2px apart (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns).
+**Example.** Settings → Usage puts Refresh and Add account as the Accounts `SectionLabel`'s action, 2px apart (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns).
 
 #### A short flow is an overlay, not a page
 
@@ -5831,9 +5831,9 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Why.** The setting's name and its options are the whole message; descriptions under every row turned Settings into reading.
 
-**Do** name a setting so its options explain it ("Setup steps" with Run setup again). **Don't** add a grey sentence under a setting row.
+**Do** name a setting so its options explain it ("Merge with" with Squash, Merge commit and Rebase). **Don't** add a grey sentence under a setting row.
 
-**Example.** Settings → Projects: one block per project, 6px apart: the colour dot, the name, the key as a mono `Badge`, then a `secondary` `xs` Add and the `•••`; the shelf lists each repository and folder as a path row with ghost `sm` selects.
+**Example.** Settings → Projects: one block per project, 6px apart: the colour dot, the name, the key as a mono `Badge`, then a `secondary` `xs` Add and the `•••`; the shelf lists each repository and folder as a path row with only its name and path; a repository's checks, coverage and workspace fold under its gear button, closed by default.
 
 #### Tables and divided lists
 
@@ -6362,11 +6362,7 @@ Example: the Home section card, the Overview panel, the chat's hand-over card an
 
 #### Two layouts, one frame
 
-- The app has two layouts, chosen in Settings, both rendered by one frame around one `main`. Switching adds or removes the top bar and the side rail; it never remounts the pages inside, so scroll and state survive.
-- Each layout has a display name, a one-line hint and an icon, kept in one constant. Code, URL params and docs keep the internal ids (`cards`, `sidebar`); the screen shows the names. Renaming is a one-constant change.
-  - Desk (`cards`, the default): "Pages sit centred with nothing at the sides, and a button at the top opens what needs you."
-  - Shelf (`sidebar`): "A rail at the side lists every task and stays open, so each one is a click away."
-  - The hint shows as the tooltip of each layout's option in Settings and as the hint of the command menu's Switch layout.
+- The app has two layouts, both rendered by one frame around one `main`, but only Desk (`cards`) is offered: Settings and the command menu have no switch, and every start opens Desk. Shelf (`sidebar`) stays in the code and opens only from the `?layout=sidebar` address, for that load. Adding or removing the top bar and the side rail never remounts the pages inside, so scroll and state survive.
 - Desk: no rail. A top bar holds navigation at the left (logo, Home button in the Mac app, Tasks, Services, then the "3 need you" queue button) and Update, Settings, Agent usage and Focus at the right. Pages are centred on the same axis as Home. The queue button sits after Services so that nothing on the right moves when it appears or disappears; it shows on every task page at every width and is Desk's only queue outside Home.
 - Shelf: a permanent rail with the queue that never hides. From `md` (768px) up it sits beside the page; below 768px it opens as a sheet. Its nav names the same places in the same words as Desk's bar (New task, Tasks, Services, Settings), each showing its filled icon on its own page.
 - Nav buttons: `Button` `variant='secondary'`, `size='sm'` with icon and label, or `size='icon-sm'` with the icon alone (Settings: the cog only, tooltip "Settings"). Inactive `text-fg-3`; on its own page `text-fg-4`, the filled twin of the icon, and `aria-current="page"`.
@@ -6973,9 +6969,9 @@ Example: "Agent · 3 runs", under it "↳ Builder · Add the guard · Finished".
 - A row may still show data under or beside its name (a reset time, a summary, a path in `text-2xs fg-2`).
 - Selects show human display names from the first paint, never raw ids or aliases.
 - Settings is split into tabs, each its own pane, not one long scroll with a table of contents (the main use is a floating tablet-sized window). Links to a section open its tab and scroll to it.
-- Path rows: a 14px icon 8px from the name, the path after it in `text-2xs fg-2`, then ghost `sm` selects and a remove ×.
+- Path rows: a 14px icon 8px from the name, the path after it in `text-2xs fg-2`, then a gear button that opens the row's ghost `sm` selects below it, closed by default, and a remove ×.
 
-Example: Settings → General → Appearance: "Theme" with a select, "Layout" with Desk and Shelf, each option's hint in its tooltip.
+Example: Settings → Agents → Engine: "Merge with" with a select, each option's hint in its tooltip.
 
 #### Composers
 
@@ -7354,7 +7350,7 @@ readings on a shelf.
   ("Signed in with ChatGPT", "Not signed in", "Not installed", "Too old for Shinsa"), and, on its shelf when there
   is something to do, a row with the fix as inline markdown and a `CopyButton` for its command. Its menu offers only
   what makes sense (Copy the sign-in command, Check the sign-in again); no version is shown.
-- Example: Settings → Agent usage → Accounts.
+- Example: Settings → Usage → Accounts.
 
 #### Status words appear only when something is wrong
 
@@ -7513,8 +7509,7 @@ style of its own.
   queue, no usage glance, no Focus, and the command menu is not mounted (and is closed on the way in). The page is
   `flex h-dvh flex-col overflow-hidden bg-background text-fg-3`.
 - **Locked until done**: while setup is not complete every route replaces itself with setup, so a link, the address
-  bar, Back or the app's menu all land there. A run started again from Settings is not locked: every step's footer
-  then has "Close setup" (`secondary`), which goes to Settings. Opening setup once it is finished goes to the welcome task, or Home on a run again.
+  bar, Back or the app's menu all land there. Nothing in the app starts setup again once it is complete. Opening setup once it is finished goes to the welcome task, or Home on a run again.
 - **Column**: `mx-auto flex w-full max-w-xl flex-col gap-6 px-6` + `pt-6 pb-16 md:pt-12` (48px from the top from
   `md` up). Everything starts on the column's left edge. The header, the step and its footer are 24px apart.
 - **Setup reads as the first task**: above the step, the page's own heading ("Set up Shinsa", one line under it),
@@ -7799,7 +7794,7 @@ Structure that only matters once there is more than one of something stays invis
 - A search with no match shows "Nothing matches." alone (`px-1 text-fg-2 text-xs`), with every non-matching section
   hidden.
 - An empty state that is good news says so ("Agents used everything turned on here.").
-- Example: Settings → Agents → Versions before the first read.
+- Example: Settings → General → Versions before the first read.
 
 #### Settings search
 
@@ -9062,7 +9057,7 @@ Rules that sit behind the table:
 | `·` (U+00B7), spaced | Separator between facts on one line: "Building · Round 2", "Claude · a@b.com" | `•`, `|`, ` - ` |
 | `–` (U+2013), no spaces around it, in a number range | Ranges: "lines 4–9" | `-` |
 | `−` (U+2212) | The minus of a diff count: "+12 −3" | `-` |
-| `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Agent usage" | `->` |
+| `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Usage" | `->` |
 | `⌘ ⇧ ⌥` | Key names, joined with no space: "⌘K", "⇧⌘H", "⇧⌘F"; Ctrl spelled out with a space elsewhere: "Ctrl K" | "Cmd+K" |
 | `—` (em dash) | Never in a UI string. Use a colon, a comma or a second sentence | |
 | `!` | Never | |

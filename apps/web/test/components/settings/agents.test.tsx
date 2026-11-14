@@ -3,6 +3,7 @@ import { AUTOPILOT_DEFAULTS, createSettings, resolveEngineInfo, type Settings } 
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
+import { AutopilotSettings } from '@/components/settings/autopilot.tsx';
 import {
   AUTO_MERGE_DESCRIPTION,
   AUTOPILOT_BLOCKS,
@@ -58,6 +59,7 @@ function renderAgents(settings: Settings = createSettings(), automatic = false) 
   return render(
     <TooltipProvider>
       <AgentSettings settings={settings} automatic={automatic} />
+      <AutopilotSettings settings={settings} />
     </TooltipProvider>
   );
 }
@@ -268,7 +270,7 @@ describe('Settings → Agents → Engine', () => {
   });
 });
 
-describe('Settings → Agents → Autopilot', () => {
+describe('Settings → Autopilot', () => {
   const ESCALATING: Settings = {
     ...createSettings(),
     autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },

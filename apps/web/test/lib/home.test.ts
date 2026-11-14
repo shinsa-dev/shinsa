@@ -101,11 +101,11 @@ describe('listRecentlyFinished', () => {
     ]);
   });
 
-  it('shows five at most', () => {
-    const tasks = Array.from({ length: 6 }, (_, index) =>
+  it('shows ten at most', () => {
+    const tasks = Array.from({ length: 12 }, (_, index) =>
       createTask({ id: `t${index}`, stage: 'done', stageChangedAt: NOW - index })
     );
-    expect(listRecentlyFinished(createShinsaState({ tasks }), NOW, NONE)).toHaveLength(5);
+    expect(listRecentlyFinished(createShinsaState({ tasks }), NOW, NONE)).toHaveLength(10);
   });
 });
 

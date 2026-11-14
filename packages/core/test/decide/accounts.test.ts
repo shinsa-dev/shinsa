@@ -794,7 +794,7 @@ describe('the sign-in gate', () => {
     expect(harness.openGate(taskId)).toMatchObject({
       type: 'sign_in',
       title: 'Paused: Kai needs a Claude account on this machine',
-      body: "This is a shared machine, so the task runs only on Kai's own Claude accounts, and Kai has none signed in here. Kai can sign one in from Settings → Accounts. Signing in starts the step again.",
+      body: "This is a shared machine, so the task runs only on Kai's own Claude accounts, and Kai has none signed in here. Kai can sign one in from Settings → Usage. Signing in starts the step again.",
       provider: 'claude',
       account: null,
       runId: run.id,

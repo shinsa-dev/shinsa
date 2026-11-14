@@ -715,7 +715,7 @@ export class Slack extends Context.Service<
           const credentials = yield* input.credentials;
           if (!credentials) return { sent: false, problem: SLACK_REMOTE_OFF_PROBLEM };
           const now = yield* Clock.currentTimeMillis;
-          const message = serializeSlackEscalationTest(`${input.appOrigin}/settings?tab=agents`, now);
+          const message = serializeSlackEscalationTest(`${input.appOrigin}/settings?tab=autopilot`, now);
           return yield* relay
             .notify(token(credentials.machineToken), {
               teamId: contact.teamId,

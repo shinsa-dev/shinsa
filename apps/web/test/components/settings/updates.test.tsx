@@ -139,17 +139,13 @@ describe('the Updates settings', () => {
     expect(screen.getByText('1.1.0')).toBeTruthy();
   });
 
-  it('in a browser points to the app', () => {
+  it('in a browser shows no Updates section', () => {
     render(
       <TooltipProvider>
         <UpdateSettings />
       </TooltipProvider>
     );
-    expect(
-      screen.getByText(
-        'Shinsa for Mac updates itself. Its version and update channel are in its own Settings.'
-      )
-    ).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Updates' })).toBeNull();
   });
 
   it('in the app reads the bridge', () => {

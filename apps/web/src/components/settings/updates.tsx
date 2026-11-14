@@ -29,7 +29,7 @@ import {
   UPDATES_LABEL,
   UPDATES_SECTION,
 } from '@/lib/updates.ts';
-import { SETTING_ROW, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
+import { SETTING_ROW, SettingsGroup, TOKEN_TEXT } from './group.tsx';
 
 export interface UpdateActions {
   check: () => void;
@@ -99,10 +99,10 @@ export function UpdatesGroup({
   actions: UpdateActions;
 }) {
   if (!app) {
+    if (!changelog) return null;
     return (
       <SettingsGroup title={UPDATES_SECTION}>
-        <SettingsEmpty>{UPDATES_LABEL.browser}</SettingsEmpty>
-        {changelog && <ChangelogRow />}
+        <ChangelogRow />
       </SettingsGroup>
     );
   }

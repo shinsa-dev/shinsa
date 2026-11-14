@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { OnboardingStatus } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
+import { FolderSettings } from '@/components/settings/folders.tsx';
 import { refreshOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import {
@@ -48,7 +48,6 @@ async function renderFolders(status: OnboardingStatus, saved: (body: unknown) =>
   return render(
     <TooltipProvider>
       <FolderSettings />
-      <SetupSettings />
     </TooltipProvider>
   );
 }
@@ -134,16 +133,5 @@ describe('the Folders settings', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Find folders' }));
     });
     expect(await screen.findByText('Search failed.')).toBeTruthy();
-  });
-
-  it('runs setup again from the start', async () => {
-    await renderFolders(CHOSEN);
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Run setup again' }));
-    });
-    await waitFor(() => expect(location.pathname).toBe('/onboarding'));
-    expect(fake?.requests.find((request) => request.path === '/api/onboarding/flow')?.body).toEqual({
-      type: 'restart',
-    });
   });
 });
