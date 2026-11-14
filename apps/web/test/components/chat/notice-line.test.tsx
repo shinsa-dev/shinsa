@@ -19,6 +19,10 @@ afterEach(() => {
   stopFakeServer();
 });
 
+function openWork() {
+  fireEvent.click(screen.getByRole('button', { name: /^Worked for/ }));
+}
+
 describe('notices in the chat', () => {
   it('shows an account switch with why it switched, and a compaction, as quiet rows', async () => {
     const task = createTask({ id: 'task-switch' });
@@ -68,6 +72,8 @@ describe('notices in the chat', () => {
       ),
       createEntry({ type: 'agent', phase: 'final', text: 'Done.' }, 'a1', NOW + 3000),
     ]);
+    expect(screen.queryByText('Conversation compacted')).toBeNull();
+    openWork();
     const rows = screen.getAllByRole('button', { name: /^Account switched/ });
     expect(rows.map((row) => row.textContent)).toEqual([
       'Account switched · b@example.com',
@@ -117,6 +123,7 @@ describe('notices in the chat', () => {
       ),
       createEntry({ type: 'agent', phase: 'final', text: 'Done.' }, 'a1', NOW + 3000),
     ]);
+    openWork();
     fireEvent.click(screen.getByRole('button', { name: /^Conversation handed over/ }));
     expect(screen.getByText('· Codex')).toBeTruthy();
     expect(screen.getByText('From Claude to Codex. All 80 entries carried over.')).toBeTruthy();
@@ -154,6 +161,7 @@ describe('notices in the chat', () => {
       ),
       createEntry({ type: 'agent', phase: 'final', text: 'Done.' }, 'a1', NOW + 3000),
     ]);
+    openWork();
     fireEvent.click(screen.getByRole('button', { name: /^Loaded 1 MCP/ }));
     expect(screen.getByText('· ~4.2k tokens')).toBeTruthy();
     expect(screen.getByText('MCPs')).toBeTruthy();

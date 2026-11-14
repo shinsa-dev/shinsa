@@ -96,9 +96,9 @@ export type QuietNoticeKind =
   | 'background_wait'
   | 'extensions';
 
-type NoticeKind = QuietNoticeKind | 'delegation';
+type NoticeKind = 'delegation';
 
-export type WorkItem = TimelineItemOf<'instructions' | 'agent' | 'tools'>;
+export type WorkItem = TimelineItemOf<'instructions' | 'agent' | 'tools' | QuietNoticeKind>;
 
 export type TimelineItemOf<K extends TimelineItem['kind']> = Extract<TimelineItem, { kind: K }>;
 
@@ -454,11 +454,7 @@ function countSteps(items: TimelineItem[]) {
   );
 }
 
-function isWork(item: TimelineItem): item is WorkItem {
-  return item.kind === 'instructions' || item.kind === 'agent' || item.kind === 'tools';
-}
-
-function isNotice(item: TimelineItem): item is TimelineItemOf<NoticeKind> {
+function isQuietNotice(item: TimelineItem): item is TimelineItemOf<QuietNoticeKind> {
   return (
     item.kind === 'account' ||
     item.kind === 'retrying' ||
@@ -467,8 +463,17 @@ function isNotice(item: TimelineItem): item is TimelineItemOf<NoticeKind> {
     item.kind === 'fast_mode' ||
     item.kind === 'background_wait' ||
     item.kind === 'extensions' ||
-    item.kind === 'handoff' ||
-    item.kind === 'delegation'
+    item.kind === 'handoff'
+  );
+}
+
+function isNotice(item: TimelineItem): item is TimelineItemOf<NoticeKind> {
+  return item.kind === 'delegation';
+}
+
+function isWork(item: TimelineItem): item is WorkItem {
+  return (
+    item.kind === 'instructions' || item.kind === 'agent' || item.kind === 'tools' || isQuietNotice(item)
   );
 }
 

@@ -1,4 +1,5 @@
 import type { Run, Task } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -7,14 +8,13 @@ import { ChatLine, DetailRail, FoldLine, SELECTED_WASH } from '@/components/chat
 import { DelegationNotice } from '@/components/chat/delegation-card.tsx';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { LiveCard } from '@/components/chat/live-card.tsx';
-import { NoticeLine } from '@/components/chat/notice-line.tsx';
 import { AgentText, ErrorLine, TurnDetail } from '@/components/chat/turn-detail.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
 import { CHAT_INSET, CHAT_PROSE_INSET } from '@/components/layout/surface/card.ts';
 import { SKIPPED_OFFSCREEN } from '@/components/layout/surface/offscreen.ts';
 import { Duration } from '@/components/text/time-ago.tsx';
 import { RunEvidence, TaskEvidence } from '@/lib/chat/run-evidence.ts';
-import { RUN_ROLE, resolveRunHeadline, resolveRunModelLabel } from '@/lib/chat/run-role.ts';
+import { isAgentVoice, RUN_ROLE, resolveRunHeadline, resolveRunModelLabel } from '@/lib/chat/run-role.ts';
 import { type HumanMessage, type RunTurn, resolveTimeline, resolveTurns } from '@/lib/chat/timeline.ts';
 import { resolveClosing } from '@/lib/chat/turns.ts';
 import { useTranscript } from '@/lib/connection/socket.ts';
@@ -35,6 +35,47 @@ const PAINT_ROOM = '-mx-0.5 mt-1.5 mb-2.5 p-0.5';
 const NO_MESSAGES: HumanMessage[] = [];
 
 const NO_EVIDENCE: never[] = [];
+
+const SPEAKER_BODY =
+  'flex min-w-0 flex-col [&>:first-child]:mt-0 [&>:first-child]:pt-0 [&>:last-child]:mb-0 [&>:last-child]:pb-0';
+
+function SpeakerHeader({ run, headline }: { run: Run; headline: string }) {
+  const role = RUN_ROLE[run.role];
+  return (
+    <div
+      data-speaker-header
+      className={cn('flex min-w-0 items-center gap-2 text-xs max-sm:items-start', CHAT_INSET)}
+    >
+      <span aria-hidden className='grid size-5 shrink-0 place-items-center rounded-full bg-bg-a2 text-fg-4'>
+        <Icon name={role.icon} size='sm' />
+      </span>
+      <span className='shrink-0 font-medium text-fg-4'>{role.name}</span>
+      <Truncate className='min-w-0 text-fg-3 max-sm:line-clamp-2 max-sm:whitespace-normal'>
+        {headline}
+        {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
+        {run.outcome === 'cancelled' && ' · Stopped'}
+      </Truncate>
+    </div>
+  );
+}
+
+function SpeakerBlock({
+  run,
+  headline,
+  children,
+}: {
+  run: Run;
+  headline: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div data-speaker={run.role} className='mt-4 mb-3 flex min-w-0 flex-col gap-1.5'>
+      <div aria-hidden data-speaker-divider className='mx-(--chat-inset) mb-2.5 border-t border-border' />
+      <SpeakerHeader run={run} headline={headline} />
+      <div className={SPEAKER_BODY}>{children}</div>
+    </div>
+  );
+}
 
 function RunEvidenceScope({ runId, children }: { runId: string; children: React.ReactNode }) {
   const evidence = React.useContext(TaskEvidence).get(runId) ?? NO_EVIDENCE;
@@ -96,20 +137,12 @@ function TurnView({
           />
         </div>
       )}
-      {turn.notices.map((item) => (
-        <div key={item.key} className={item.kind === 'delegation' ? ROW : LINE_ROW}>
-          {item.kind === 'delegation' ? (
-            task && (
-              <DelegationNotice
-                item={item}
-                conversation={(view) => <RunTurns run={view.run} task={task} />}
-              />
-            )
-          ) : (
-            <NoticeLine item={item} />
-          )}
-        </div>
-      ))}
+      {task &&
+        turn.notices.map((item) => (
+          <div key={item.key} className={ROW}>
+            <DelegationNotice item={item} conversation={(view) => <RunTurns run={view.run} task={task} />} />
+          </div>
+        ))}
       {turn.live && (
         <div className={ROW}>
           <LiveCard run={run} turn={turn} waiting={waiting} />
@@ -139,36 +172,65 @@ function TurnView({
   );
 }
 
-function RunLabel({
+function RunMeta({ run, task, headline, rerun }: { run: Run; task: Task; headline: string; rerun: boolean }) {
+  const model = resolveRunModelLabel(run);
+  return (
+    <span className='flex min-w-0 max-sm:flex-wrap'>
+      <Truncate className='min-w-0 max-sm:line-clamp-2 max-sm:whitespace-normal'>{headline}</Truncate>
+      <span className='shrink-0 max-sm:whitespace-pre'>
+        {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
+        {run.outcome === 'cancelled' && ' · Stopped'}
+        {model && ` · ${model}`}
+        {rerun && (
+          <>
+            {' '}
+            <RunAccount task={task} run={run} rerun />
+          </>
+        )}
+      </span>
+    </span>
+  );
+}
+
+const RUN_LABEL = cn('mt-2 mb-3 w-full', CHAT_INSET);
+
+function hasStopped(run: Run) {
+  return run.outcome === 'failed' || run.outcome === 'cancelled';
+}
+
+function RunBody({
   run,
   task,
   headline,
   rerun,
+  children,
 }: {
   run: Run;
   task: Task;
   headline: string;
   rerun: boolean;
+  children: React.ReactNode;
 }) {
   const role = RUN_ROLE[run.role];
-  const model = resolveRunModelLabel(run);
+  if (isAgentVoice(run)) {
+    if (!hasStopped(run)) return children;
+    return (
+      <>
+        <ChatLine
+          className={RUN_LABEL}
+          icon={role.icon}
+          label={role.name}
+          wraps
+          meta={<RunMeta run={run} task={task} headline={headline} rerun={rerun} />}
+        />
+        {children}
+      </>
+    );
+  }
   return (
-    <ChatLine
-      className={cn('mt-2 mb-3 w-full', CHAT_INSET)}
-      icon={role.icon}
-      label={role.name}
-      wraps
-      meta={
-        <span className='flex min-w-0 max-sm:flex-wrap'>
-          <Truncate className='min-w-0 max-sm:line-clamp-2 max-sm:whitespace-normal'>{headline}</Truncate>
-          <span className='shrink-0 max-sm:whitespace-pre'>
-            {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
-            {run.outcome === 'cancelled' && ' · Stopped'}
-            {model && ` · ${model}`} <RunAccount task={task} run={run} rerun={rerun} />
-          </span>
-        </span>
-      }
-    />
+    <SpeakerBlock run={run} headline={headline}>
+      {children}
+    </SpeakerBlock>
   );
 }
 
@@ -237,15 +299,20 @@ export const RunSection = React.memo(function RunSectionView({
             />
           </div>
         )}
-        <RunLabel run={run} task={task} headline={headline} rerun={rerun} />
-        {turns.map((turn, index) => (
-          <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={waiting} lead={index > 0} />
-        ))}
-        {closing && (
-          <div className={closing.kind === 'error' ? LINE_ROW : PROSE_ROW}>
-            {closing.kind === 'error' ? <ErrorLine text={closing.text} /> : <AgentText text={closing.text} />}
-          </div>
-        )}
+        <RunBody run={run} task={task} headline={headline} rerun={rerun}>
+          {turns.map((turn, index) => (
+            <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={waiting} lead={index > 0} />
+          ))}
+          {closing && (
+            <div className={closing.kind === 'error' ? LINE_ROW : PROSE_ROW}>
+              {closing.kind === 'error' ? (
+                <ErrorLine text={closing.text} />
+              ) : (
+                <AgentText text={closing.text} />
+              )}
+            </div>
+          )}
+        </RunBody>
       </section>
     </RunEvidenceScope>
   );
