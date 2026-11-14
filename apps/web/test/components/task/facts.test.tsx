@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { Task, TriageDecisions } from '@shinsa/core';
+import { DEFAULT_TEAM_SCOPES, type Task, type TriageDecisions } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskFacts } from '@/components/task/facts.tsx';
@@ -113,6 +113,83 @@ describe('a task with no repository', () => {
     expect(bound?.textContent).not.toContain('Superwall');
     expect(loose?.textContent).toContain('scratch');
     expect(loose?.querySelector('[data-project-ink]')).toBeNull();
+  });
+});
+
+describe('the repository fact', () => {
+  const task = createTask({
+    id: 'mv',
+    handle: 'LOC-3',
+    repoId: 'engine',
+    projectId: 'shinsa',
+    stage: 'planning',
+  });
+  const state = createShinsaState({
+    tasks: [task, { ...task, id: 'built', phaseReports: [{} as never] }],
+    projects: [createProject({ id: 'shinsa', name: 'Shinsa' })],
+    repos: [
+      createRepo({ id: 'engine', name: 'shinsa', projectId: 'shinsa' }),
+      createRepo({ id: 'ios', name: 'Shinsa-iOS', projectId: 'shinsa' }),
+    ],
+  });
+
+  const KAI_MACHINE = {
+    id: 'kai',
+    name: 'Kai’s MacBook',
+    current: false,
+    teammate: {
+      owner: { id: 'u2', login: 'kai', name: 'Kai', avatarUrl: null },
+      viewerId: 'u1',
+      scopes: DEFAULT_TEAM_SCOPES,
+    },
+  };
+
+  afterEach(() => replaceConnection(null));
+
+  async function openRepoCard(shown: Task, readOnly = false, teammate = false) {
+    pushState(state);
+    if (teammate) {
+      const local = connection;
+      replaceConnection({ ...local, selectMachine: () => KAI_MACHINE });
+    }
+    const facts = (
+      <TooltipProvider>
+        <TaskFacts state={state} task={shown} />
+      </TooltipProvider>
+    );
+    render(readOnly ? <ReadOnlyProvider>{facts}</ReadOnlyProvider> : facts);
+    const trigger = screen.getByRole('button', { name: 'shinsa' });
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    return waitFor(() => {
+      const card = document.querySelector('[data-slot="preview-card-content"]');
+      if (!card?.textContent) throw new Error('No card is open.');
+      return card as HTMLElement;
+    });
+  }
+
+  it('offers Move to another repository before real work starts', async () => {
+    const card = await openRepoCard(task);
+    expect(card.textContent).toContain('Move to another repository');
+  });
+
+  it('hides it once a phase reported', async () => {
+    const card = await openRepoCard(state.tasks.built as Task);
+    expect(card.textContent).not.toContain('Move to another repository');
+  });
+
+  it('hides it on a read-only page', async () => {
+    const card = await openRepoCard(task, true);
+    expect(card.textContent).not.toContain('Move to another repository');
+  });
+
+  it('hides it on a teammate’s task, as the task menu does', async () => {
+    const card = await openRepoCard(task, false, true);
+    expect(card.textContent).not.toContain('Move to another repository');
   });
 });
 

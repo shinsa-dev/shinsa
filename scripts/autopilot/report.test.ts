@@ -28,12 +28,25 @@ function replay(overrides: Partial<BenchmarkReplay> = {}): BenchmarkReplay {
         row({}),
         row({ scope: 'shared', track: 'combined', scored: 12, agreed: 11, agreement: 11 / 12 }),
       ],
+      followUps: { scored: 8, matched: 6 },
     },
     ...overrides,
   };
 }
 
 describe('the benchmark report', () => {
+  test('says how often a follow-up raised your own topic, or that there is none yet', () => {
+    expect(serializeBenchmark(replay())).toContain(
+      'Follow-ups: 6 of 8 raised a topic you raised yourself (75.0%).'
+    );
+    const none = replay();
+    const text = serializeBenchmark({
+      ...none,
+      benchmark: { ...none.benchmark, followUps: { scored: 0, matched: 0 } },
+    });
+    expect(text).toContain('Follow-ups: none to compare yet.');
+  });
+
   test('prints each guesser per kind, the fair comparison apart, with agreement and log loss', () => {
     const text = serializeBenchmark(replay());
     expect(text).toContain('Replayed 1200 events from a copy of /data/shinsa.sqlite.');
@@ -46,13 +59,20 @@ describe('the benchmark report', () => {
   });
 
   test('leaves out a comparison with no rows', () => {
-    const text = serializeBenchmark(replay({ benchmark: { decisions: 60, judged: 40, rows: [row({})] } }));
+    const text = serializeBenchmark(
+      replay({
+        benchmark: { decisions: 60, judged: 40, rows: [row({})], followUps: { scored: 0, matched: 0 } },
+      })
+    );
     expect(text).not.toContain('the fair comparison');
   });
 
   test('says when there is nothing to score yet, and how many events it skipped', () => {
     const text = serializeBenchmark(
-      replay({ unreadable: 3, benchmark: { decisions: 2, judged: 0, rows: [] } })
+      replay({
+        unreadable: 3,
+        benchmark: { decisions: 2, judged: 0, rows: [], followUps: { scored: 0, matched: 0 } },
+      })
     );
     expect(text).toContain('3 events could not be read and were skipped.');
     expect(text).toContain('The log holds 2 decisions, and none is a plan');
@@ -60,7 +80,9 @@ describe('the benchmark report', () => {
   });
 
   test('says when the log holds no decisions Autopilot recorded at all', () => {
-    const text = serializeBenchmark(replay({ benchmark: { decisions: 0, judged: 0, rows: [] } }));
+    const text = serializeBenchmark(
+      replay({ benchmark: { decisions: 0, judged: 0, rows: [], followUps: { scored: 0, matched: 0 } } })
+    );
     expect(text).toContain('The log holds no decisions Autopilot recorded.');
   });
 });

@@ -24,7 +24,18 @@ function describeBundleCard(task: Task, count: number): PlanCardCopy {
   };
 }
 
+function describeInitiativeCard(task: Task, count: number): PlanCardCopy {
+  return {
+    title: task.backlog
+      ? `Planned as an initiative of ${count} tasks and kept in the backlog`
+      : `The agent wants to start this as an initiative of ${count} tasks`,
+    approve: 'Start initiative',
+    note: 'Each task merges on its own, and a lead agent keeps track of them. To change the parts, say it in the chat.',
+  };
+}
+
 function describeSplitCard(task: Task, count: number): PlanCardCopy {
+  if (task.plan?.document?.initiative) return describeInitiativeCard(task, count);
   const bundled = countBundledTasks(task);
   if (bundled === count) return describeBundleCard(task, count);
   const inBundle = bundled > 0 ? `, ${bundled} in a bundle` : '';

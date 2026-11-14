@@ -216,6 +216,15 @@ describe('what is working and what is waiting', () => {
     expect(listWaitsOn(harness.state, harness.task(taskId))).toEqual([]);
   });
 
+  test('a finished task checking a watchdog is not working, while its agent run still is for any other stage', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = harness.task(taskId);
+    const checking = { ...harness.state, tasks: { [taskId]: { ...task, stage: 'watching' as const } } };
+    expect(resolveQueue(harness.state, 0).working.map((entry) => entry.id)).toEqual([taskId]);
+    expect(resolveQueue(checking, 0).working).toHaveLength(0);
+  });
+
   test('a focus with an end date stops focusing once it passes', () => {
     const harness = createHarness();
     harness.send({ type: 'project.write', project: { name: 'Side', color: 'blue' } });

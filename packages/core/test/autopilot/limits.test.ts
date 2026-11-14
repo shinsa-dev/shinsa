@@ -220,3 +220,43 @@ describe('when Autopilot may contact your team', () => {
     expect(escalate(facts, policy)).toEqual({ allowed: false, reason, setting: false });
   });
 });
+
+function revise(facts: Partial<AutopilotFacts>, policy: Partial<AutopilotPolicy> = {}) {
+  return resolveAutopilotLimits({ ...FACTS, ...facts }, { ...ON, ...policy }).revise;
+}
+
+describe('the follow-up limit', () => {
+  test('lets Autopilot follow up past the risk and size it would approve', () => {
+    expect(revise({ gate: 'review', risk: 'high', confidence: 'low', urgent: false })).toEqual({
+      allowed: true,
+    });
+    expect(revise({ gate: 'plan', scope: { phases: 8, files: 40 } }, { level: 'ask_first' })).toEqual({
+      allowed: true,
+    });
+    expect(revise({ gate: 'merge', risk: 'high' })).toEqual({ allowed: true });
+  });
+
+  test('never follows up where you must decide', () => {
+    expect(revise({ gate: 'review' }, { enabled: false })).toMatchObject({
+      reason: 'Autopilot is off.',
+      setting: true,
+    });
+    expect(revise({ gate: 'question' })).toMatchObject({
+      reason: 'Autopilot follows up only on plans, reviews and merges.',
+      setting: true,
+    });
+    expect(revise({ gate: 'proposal' })).toMatchObject({ allowed: false });
+    expect(revise({ gate: 'review' }, { gates: ['plans'] })).toMatchObject({
+      reason: 'Autopilot does not act on this kind of gate.',
+    });
+    expect(revise({ gate: 'plan', heldPlan: true })).toMatchObject({ allowed: false, setting: true });
+    expect(revise({ gate: 'plan', scope: null })).toMatchObject({ reason: 'The plan has no phases yet.' });
+    expect(revise({ gate: 'review', escalatedReview: true })).toMatchObject({
+      reason: 'The agents could not settle the review.',
+    });
+    expect(revise({ gate: 'merge' }, { autoMerge: 'off' })).toMatchObject({ reason: 'Auto merge is off.' });
+    expect(revise({ gate: 'merge', approvedByYou: true })).toMatchObject({
+      reason: 'You approved the review yourself.',
+    });
+  });
+});

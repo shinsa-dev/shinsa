@@ -34,6 +34,7 @@ import {
   resolveAutopilotCombinedVerdict,
   resolveAutopilotLoss,
 } from './score.ts';
+import { countDecisionTopics, scoreFollowUp } from './topics.ts';
 
 const GATE_KIND: Partial<Record<Gate['type'], AutopilotDecisionKind>> = {
   plan: 'plan',
@@ -110,6 +111,10 @@ function resolveDecisionGuess(draft: DecisionDraft) {
   return isScoredKind(draft.kind) ? (draft.gate?.autopilotGuess ?? null) : null;
 }
 
+function resolveDecisionFollowUp(draft: DecisionDraft) {
+  return isScoredKind(draft.kind) ? (draft.gate?.autopilotFollowUp ?? null) : null;
+}
+
 const FINDING_COUNT: Record<ReviewFinding['severity'], keyof AutopilotFindingCounts> = {
   blocking: 'blocking',
   should_fix: 'shouldFix',
@@ -156,6 +161,7 @@ export function createAutopilotDecision(
     watchdog: task.createdBy?.kind === 'watchdog',
     touched: gate?.autopilotHeld !== undefined,
     guess: resolveDecisionGuess(draft),
+    followUp: resolveDecisionFollowUp(draft),
     note: clipNote(draft.note),
     facts: resolveDecisionFacts(state, draft, at),
     estimate: isScoredKind(draft.kind) ? (draft.gate?.autopilotEstimate ?? null) : null,
@@ -300,6 +306,8 @@ export function recordAutopilotDecisions(
   const tallies = new Map(current.tallies.map((tally) => [tally.key, tally]));
   for (const decision of decisions) countDecision(tallies, decision);
   const scored = decisions.reduce(scoreDecision, { tracks: current.tracks, rates: current.rates });
+  const topics = decisions.reduce(countDecisionTopics, current.topics);
+  const followUps = decisions.reduce(scoreFollowUp, current.followUps);
   return {
     total: current.total + decisions.length,
     decisions: [
@@ -309,6 +317,8 @@ export function recordAutopilotDecisions(
     tracks: scored.tracks,
     rates: scored.rates,
     tallies: [...tallies.values()],
+    topics,
+    followUps,
   };
 }
 

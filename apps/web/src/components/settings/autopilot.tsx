@@ -272,6 +272,16 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
           <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.margin.points}</span>
         </DescribedRow>
       ) : null}
+      {view.followUps ? (
+        <DescribedRow title={AUTOPILOT_SCORE_ROWS.followUps} description={view.followUps.detail}>
+          <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.followUps.percent}</span>
+        </DescribedRow>
+      ) : null}
+      {view.topics ? (
+        <DescribedRow title={AUTOPILOT_SCORE_ROWS.topics} description={view.topics.detail}>
+          <span className={cn(TOKEN_TEXT, 'pr-1.5')}>{view.topics.value}</span>
+        </DescribedRow>
+      ) : null}
       <DescribedRow title={AUTOPILOT_SCORE_ROWS.suggested} description={view.suggested.detail}>
         {view.suggested.apply ? (
           <Button variant='secondary' size='sm' onClick={() => onUse(view.suggested.level)}>

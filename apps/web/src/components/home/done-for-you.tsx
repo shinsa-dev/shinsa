@@ -38,11 +38,7 @@ export function DoneForYou({ state }: { state: ShinsaState }) {
           holdsLinks
           leading={<StatusTile icon={row.icon} tone={row.tone} />}
           title={row.title}
-          meta={
-            <span className='truncate'>
-              {row.summary} {row.reason}
-            </span>
-          }
+          meta={`${row.summary} ${row.reason}`}
           trailing={<TimeAgo at={row.at} compact />}
           onClick={() => {
             markSeen([row.gateId]);

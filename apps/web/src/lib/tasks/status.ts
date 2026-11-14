@@ -5,6 +5,7 @@ import {
   isHeldInBacklog,
   isPausingGate,
   isRetryArmed,
+  resolveShownStage,
   type Run,
   type ShinsaState,
   selectLeadGate,
@@ -18,7 +19,7 @@ import { GATE, STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.t
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { describePostMergeStatus, describePreMergeStatus } from '@/lib/review/merge-steps.ts';
 import { BUNDLE_MERGING_STATUS, BUNDLE_READY_STATUS, isMergingWithBundle } from '@/lib/tasks/bundles.ts';
-import { isHeldByTasks, resolveTaskGroup, TASK_GROUP } from '@/lib/tasks/groups.ts';
+import { isHeldByTasks, isMergeInFlight, resolveTaskGroup, TASK_GROUP } from '@/lib/tasks/groups.ts';
 import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
 export interface Status {
@@ -82,6 +83,8 @@ export function resolveGateStatus(gate: Gate): Status {
   return { label, tone };
 }
 
+const MERGING: Status = { label: 'Merging', tone: 'green' };
+
 const WATCHING: Status = { label: 'Watching', tone: 'blue' };
 
 const DUPLICATE: Status = { label: 'Duplicate', tone: 'neutral' };
@@ -109,7 +112,7 @@ export function isResolvingConflicts(task: Pick<Task, 'stage' | 'fixFor'>) {
 }
 
 export function resolveStageLabel(task: Task) {
-  return isResolvingConflicts(task) ? RESOLVING_CONFLICTS : STAGE_LABEL[task.stage];
+  return isResolvingConflicts(task) ? RESOLVING_CONFLICTS : STAGE_LABEL[resolveShownStage(task)];
 }
 
 export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
@@ -122,6 +125,7 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (gate) return resolveGateStatus(gate);
   if (task.bundleReady && task.stage === 'shipping') return BUNDLE_READY_STATUS;
   if (isMergingWithBundle(state, task)) return BUNDLE_MERGING_STATUS;
+  if (isMergeInFlight(state, task)) return MERGING;
   if (task.duplicate) return DUPLICATE;
   if (isWatchedTask(task)) return WATCHING;
   if (isRetryArmed(task)) return RETRYING;
@@ -134,14 +138,14 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (task.stage !== 'waiting_on_tasks' && isHeldByTasks(state, task)) {
     return { label: 'Waiting on another task', tone: 'neutral' };
   }
-  return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
+  return { label: resolveStageLabel(task), tone: STAGE_TONE[resolveShownStage(task)] };
 }
 
 export function resolveRowStatus(state: ShinsaState, task: Task, gate: Gate | null = null): Status {
   if (gate?.type === 'post_merge') return { label: describePostMergeStatus(task), tone: 'amber' };
   const status = resolveTaskStatus(state, task);
   if (status !== WAITING_TO_CHECK_IN) return status;
-  return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
+  return { label: resolveStageLabel(task), tone: STAGE_TONE[resolveShownStage(task)] };
 }
 
 const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
@@ -176,12 +180,13 @@ export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName 
   if (gate) return resolveGateGlyph(gate).icon;
   if (task.duplicate) return TASK_GROUP.duplicate.icon;
   if (isWatchedTask(task)) return 'IconRadar';
+  if (isMergeInFlight(state, task)) return 'IconMerged';
   if (isRetryArmed(task)) return 'IconArrowRotateClockwise';
   if (task.monitor?.status === 'armed') return 'IconClockSnooze';
   if (isUsageWaitArmed(task)) return 'IconGauge';
   if (isWaitingForDelegations(state, task)) return 'IconAgents';
   if (task.stage !== 'waiting_on_tasks' && isHeldByTasks(state, task)) return 'IconHourglass';
-  return STAGE_STATUS_ICON[task.stage];
+  return STAGE_STATUS_ICON[resolveShownStage(task)];
 }
 
 export function resolveTaskGlyph(state: ShinsaState, task: Task): Glyph {
@@ -190,7 +195,8 @@ export function resolveTaskGlyph(state: ShinsaState, task: Task): Glyph {
   if (!gate && isHeldByTasks(state, task)) return { icon: 'IconHourglass', tone: 'neutral' };
   const group = TASK_GROUP[resolveTaskGroup(state, task)];
   if (group.key === 'working') return { icon: STAGE_ICON[task.stage] ?? group.icon, tone: group.tone };
-  if (group.key === 'done' && task.stage === 'merged') return { icon: 'IconMerged', tone: group.tone };
+  if (group.key === 'done' && (resolveShownStage(task) === 'merged' || isMergeInFlight(state, task)))
+    return { icon: 'IconMerged', tone: group.tone };
   return { icon: group.icon, tone: group.tone };
 }
 

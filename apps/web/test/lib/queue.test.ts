@@ -332,12 +332,6 @@ describe('groups of a bundle or an initiative', () => {
     expect(waiting).toContain('both');
   });
 
-  it('never groups what needs you', () => {
-    expect(sectionNamed('needs').entries).toEqual(
-      sectionNamed('needs').items.map((item) => ({ kind: 'item', item }))
-    );
-  });
-
   it('says how many of a group’s tasks are here and how far it has come', () => {
     const initiative = groupIn('working');
     const bundle = groupIn('waiting');
@@ -377,5 +371,88 @@ describe('groups of a bundle or an initiative', () => {
     );
     const entry = waiting?.entries.find((candidate) => candidate.kind === 'group');
     expect(entry?.kind === 'group' && entry.group.opens?.id).toBe('mid');
+  });
+});
+
+describe('groups in Needs you', () => {
+  function createNeedsWorld(leadStage: Parameters<typeof createTask>[0]['stage'] = 'leading') {
+    return createShinsaState({
+      initiatives: [createInitiative({ id: 'split', name: 'Chat split', leadTaskId: 'lead' })],
+      tasks: [
+        createTask({
+          id: 'lead',
+          title: 'Chat split',
+          pipeline: ['lead'],
+          stage: leadStage,
+          initiativeId: 'split',
+        }),
+        createTask({ id: 'dock', stage: 'awaiting_review', initiativeId: 'split' }),
+        createTask({ id: 'panel', stage: 'awaiting_review', initiativeId: 'split' }),
+        createTask({ id: 'solo', stage: 'awaiting_review' }),
+        createTask({ id: 'root', title: 'Schema', stage: 'awaiting_review' }),
+        createTask({ id: 'api', title: 'API', stage: 'awaiting_review', stacksOn: ['root'] }),
+      ],
+      gates: [
+        createGate({ id: 'g-dock', taskId: 'dock', type: 'review', openedAt: NOW - 9_000 }),
+        createGate({ id: 'g-solo', taskId: 'solo', type: 'review', openedAt: NOW - 8_000 }),
+        createGate({ id: 'g-api', taskId: 'api', type: 'review', openedAt: NOW - 7_000 }),
+        createGate({ id: 'g-lead', taskId: 'lead', type: 'question', openedAt: NOW - 6_000 }),
+        createGate({ id: 'g-panel', taskId: 'panel', type: 'review', openedAt: NOW - 5_000 }),
+        createGate({ id: 'g-root', taskId: 'root', type: 'review', openedAt: NOW - 4_000 }),
+      ],
+    });
+  }
+
+  function needsOf(state: ReturnType<typeof createNeedsWorld>) {
+    const needs = listQueueSections(state, resolveQueue(state, NOW)).find(
+      (section) => section.key === 'needs'
+    );
+    if (!needs) throw new Error('No needs section');
+    return needs;
+  }
+
+  function describeEntry(entry: QueueEntry) {
+    if (entry.kind === 'item') return entry.item.key;
+    const { group } = entry;
+    return [group.kind, group.title, group.root?.key ?? null, group.members.map((item) => item.key)];
+  }
+
+  it('puts decisions of one initiative and of one bundle under their rows, where the first of them sat', () => {
+    const needs = needsOf(createNeedsWorld());
+    expect(needs.items.map((item) => item.key)).toEqual([
+      'g-dock',
+      'g-solo',
+      'g-api',
+      'g-panel',
+      'g-root',
+      'g-lead',
+    ]);
+    expect(needs.entries.map(describeEntry)).toEqual([
+      ['initiative', 'Chat split', 'g-lead', ['g-dock', 'g-panel']],
+      'g-solo',
+      ['bundle', 'Schema', 'g-root', ['g-api']],
+    ]);
+  });
+
+  it('keeps a single decision of an initiative as a plain row', () => {
+    const state = createNeedsWorld();
+    const single = {
+      ...state,
+      gates: Object.fromEntries(
+        Object.entries(state.gates).filter(([id]) => id !== 'g-panel' && id !== 'g-lead')
+      ),
+    };
+    expect(needsOf(single).entries.map(describeEntry)).toContain('g-dock');
+  });
+
+  it('leaves the decisions of a finished initiative as plain rows', () => {
+    const state = createNeedsWorld('done');
+    const single = {
+      ...state,
+      gates: Object.fromEntries(Object.entries(state.gates).filter(([id]) => id !== 'g-lead')),
+    };
+    const entries = needsOf(single).entries.map(describeEntry);
+    expect(entries).toContain('g-dock');
+    expect(entries).toContain('g-panel');
   });
 });

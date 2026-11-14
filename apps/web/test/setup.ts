@@ -10,6 +10,7 @@ const { resetHighlights } = await import('@/lib/code/highlight.ts');
 const { resetAgentProviders } = await import('@/lib/connection/models.ts');
 const { resetRemoteAccess } = await import('@/lib/connection/remote-access.ts');
 const { resetSlack } = await import('@/lib/connection/slack.ts');
+const { resetFollowedTasks } = await import('@/router.ts');
 const { connection } = await import('@/lib/connection/socket.ts');
 const { resetFeedbackOpen } = await import('@/lib/feedback.ts');
 const { closeInitiativeDialog } = await import('@/lib/initiatives/draft.ts');
@@ -37,6 +38,7 @@ afterEach(() => {
   resetAgentProviders();
   resetRemoteAccess();
   resetSlack();
+  resetFollowedTasks();
   localStorage.clear();
   resetDisclosures();
   replaceSharedHandles(new Set());
