@@ -2,6 +2,7 @@ import { join, resolve } from 'node:path';
 import { Duration, Schedule, Schema } from 'effect';
 import type { Terminals } from '../../apps/engine/src/terminals/index.ts';
 import type { Engine } from '../../apps/engine/test/helpers/engine.ts';
+import type { AppUpdateChannel } from '../../packages/core/src/engine-api/schema.ts';
 import { REMOTE_PATHS, type RemoteUser } from '../../packages/core/src/index.ts';
 import type { StartedRemote } from '../kit/remote.ts';
 
@@ -206,3 +207,22 @@ export const HANDOFF_LINK_TIMEOUT = Duration.seconds(30);
 export const SEED_TIMEOUT = Duration.minutes(5);
 
 export const GIT_TIMEOUT = Duration.seconds(30);
+
+export interface PreviewApp {
+  version: string;
+  channel: AppUpdateChannel;
+  latest: string | null;
+}
+
+export const PREVIEW_ENGINE_VERSION = '1.4.0';
+
+export const PREVIEW_APP_PATH = '/Applications/Shinsa.app';
+
+export const PREVIEW_APP_REPORT = Duration.seconds(5);
+
+export const PREVIEW_APP_RELAUNCH_TICKS = 2;
+
+export const PREVIEW_APPS: Record<string, PreviewApp> = {
+  studio: { version: PREVIEW_ENGINE_VERSION, channel: 'beta', latest: '1.5.0-beta.1' },
+  laptop: { version: PREVIEW_ENGINE_VERSION, channel: 'stable', latest: null },
+};

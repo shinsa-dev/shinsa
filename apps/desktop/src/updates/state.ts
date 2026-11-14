@@ -1,13 +1,12 @@
 import { resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
+import type { AppUpdate, AppUpdateChannel } from '@shinsa/core/engine-api/schema';
 import { Option } from 'effect';
 import { APP_NAME } from '../app/schema.ts';
-import type { DesktopUpdate } from '../bridge/schema.ts';
 import { describeUpdateChannel, isAboveChannel } from './channel.ts';
 import {
   BUSY_STATUSES,
   DOWNGRADE_ACCEPT,
   UPDATE_FAILURE_FALLBACK,
-  type UpdateChannel,
   type UpdateMenuItem,
   type UpdateNotice,
   type UpdateState,
@@ -69,14 +68,14 @@ export function describeInstallError(state: UpdateState, message: string): Updat
   return { title: `${APP_NAME} ${state.version} could not be installed`, body: message };
 }
 
-function describeCurrent(current: string, latest: string | null, channel: UpdateChannel) {
+function describeCurrent(current: string, latest: string | null, channel: AppUpdateChannel) {
   const label = describeUpdateChannel(channel);
   if (latest && Option.contains(resolveVersionOrder(latest, current), -1))
     return `You have ${APP_NAME} ${current}, newer than ${latest}, the latest on the ${label} channel. It stays on ${current} until the ${label} channel passes it.`;
   return `You have ${APP_NAME} ${current}, the latest version on the ${label} channel.`;
 }
 
-export function describeManualResult(state: UpdateState, current: string, channel: UpdateChannel) {
+export function describeManualResult(state: UpdateState, current: string, channel: AppUpdateChannel) {
   switch (state.status) {
     case 'current':
       return {
@@ -90,7 +89,7 @@ export function describeManualResult(state: UpdateState, current: string, channe
   }
 }
 
-export function describeDowngradeDialog(version: string, current: string, channel: UpdateChannel) {
+export function describeDowngradeDialog(version: string, current: string, channel: AppUpdateChannel) {
   const kind = resolveReleaseChannel(current);
   const label = describeUpdateChannel(channel);
   return {
@@ -102,7 +101,7 @@ export function describeDowngradeDialog(version: string, current: string, channe
   };
 }
 
-export function needsDiscard(state: UpdateState, channel: UpdateChannel) {
+export function needsDiscard(state: UpdateState, channel: AppUpdateChannel) {
   if (state.status !== 'downloading' && state.status !== 'preparing' && state.status !== 'ready')
     return false;
   return isAboveChannel(state.version, channel);
@@ -119,7 +118,7 @@ export function describeUpdateFailure(error: unknown) {
   return firstLine || UPDATE_FAILURE_FALLBACK;
 }
 
-export function resolveDesktopUpdate(state: UpdateState): DesktopUpdate {
+export function resolveAppUpdate(state: UpdateState): AppUpdate {
   switch (state.status) {
     case 'checking':
       return { status: 'checking' };

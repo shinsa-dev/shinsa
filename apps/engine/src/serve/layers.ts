@@ -1,3 +1,4 @@
+import { ENGINE_PROTOCOL } from '@shinsa/core';
 import { Duration, Effect, FileSystem, Layer } from 'effect';
 import { constant } from 'effect/Function';
 import { Accounts, AccountsInput, AccountsLayer } from '../accounts/index.ts';
@@ -10,6 +11,7 @@ import { ProgramVersions } from '../agents/providers/versions/service.ts';
 import { QuickCalls, QuickFastMode } from '../agents/quick/index.ts';
 import { RunSupervisorLayer } from '../agents/supervisor/layers.ts';
 import { TeammateTasks } from '../agents/tool-calls/schema.ts';
+import { AppUpdatesLayer } from '../app-updates/layers.ts';
 import { createAutopilotJudge, createAutopilotWeigher } from '../autopilot/judge.ts';
 import { BriefingWriter } from '../briefing/service.ts';
 import { BrowserLayer } from '../browser/layers.ts';
@@ -439,6 +441,9 @@ function createServedLayer(options: ShinsaOptions, instance: ServerInstance, sto
       );
     })
   );
+  const appUpdates = AppUpdatesLayer({ version: instance.version, protocol: ENGINE_PROTOCOL }).pipe(
+    Layer.provideMerge(restarter)
+  );
   const onboarding = Layer.unwrap(
     Effect.gen(function* () {
       const accounts = yield* Accounts;
@@ -459,7 +464,7 @@ function createServedLayer(options: ShinsaOptions, instance: ServerInstance, sto
       })
     ).pipe(Layer.provide(ShellLayer)),
     options.place ? Layer.succeed(PlacementAsker, options.place) : Layer.empty,
-    restarter
+    appUpdates
   );
   return Layer.merge(served, onboarding).pipe(Layer.provideMerge(models));
 }

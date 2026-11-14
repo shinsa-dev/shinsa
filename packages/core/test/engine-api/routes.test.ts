@@ -164,6 +164,12 @@ const FEATURE_ROUTES = {
   'slack-channel-triggers': ['GET /api/slack/channels'],
   'models.routing': [],
   'accounts.provider_choice': ['POST /api/accounts/provider'],
+  'app-updates': [
+    'GET /api/app-updates',
+    'POST /api/app-updates/report',
+    'POST /api/app-updates/request',
+    'POST /api/app-updates/open',
+  ],
 };
 
 const LOCAL_ONLY = [
@@ -172,6 +178,7 @@ const LOCAL_ONLY = [
   { pattern: /^\/api\/tasks\/[^/]+\/open$/, writesOnly: true },
   { pattern: /^\/api\/onboarding\/install$/, writesOnly: true },
   { pattern: /^\/api\/teams\/relays$/, writesOnly: false },
+  { pattern: /^\/api\/app-updates\/report$/, writesOnly: true },
 ];
 
 const OWNER_ONLY = [
@@ -234,6 +241,9 @@ const OWNER_ONLY = [
   'POST /api/extensions/plugins/choose',
   'POST /api/extensions/optimizer',
   'POST /api/versions/update',
+  'GET /api/app-updates',
+  'POST /api/app-updates/request',
+  'POST /api/app-updates/open',
   'GET /api/services/suggestions',
   'GET /api/remote/teams/keys',
   'POST /api/services',

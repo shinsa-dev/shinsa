@@ -16,12 +16,14 @@ import { isTaskSettled, type MachineResources } from '../../packages/core/src/in
 import { startRemoteServices } from '../kit/remote.ts';
 import { startIdleServer } from '../kit/server.ts';
 import { createTranscripts } from '../kit/transcripts.ts';
+import { createPreviewAppUpdates, runPreviewApp } from './app-updates.ts';
 import { createRandomKey } from './requests.ts';
 import {
   GIGABYTE,
   LOCAL_WEB,
   type Machine,
   ORIGIN,
+  PREVIEW_APPS,
   PREVIEW_LOADS,
   PREVIEW_ZONE,
   type PreviewLoad,
@@ -173,6 +175,9 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
     refresh: Effect.void,
     measureDisk: Effect.void,
   };
+  const app = PREVIEW_APPS[id];
+  const appUpdates = yield* createPreviewAppUpdates(app);
+  if (app) yield* Effect.forkScoped(runPreviewApp(appUpdates, app));
   const http = yield* Effect.acquireRelease(
     startIdleServer({
       engine,
@@ -183,6 +188,7 @@ export const startMachine = Effect.fn('Sandbox.startMachine')(function* (
       ...remote.services,
       resources,
       terminals,
+      appUpdates,
       slack: createTestSlackService({
         engine,
         origin: ORIGIN,
