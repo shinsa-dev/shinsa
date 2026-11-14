@@ -34,6 +34,8 @@ export const BlankRecording = Schema.Struct({
 
 export const WHEEL_FLICK = { events: 45, deltaY: 240, everyMs: 16, pushEveryMs: 250 };
 
+export const HARD_FLICK = { ...WHEEL_FLICK, events: 15, deltaY: 720 };
+
 export const RevealCounts = Schema.Array(Schema.Number);
 
 export const RowPushes = Schema.Struct({

@@ -4,8 +4,12 @@ import * as React from 'react';
 import { useSectionWindows, WINDOW_ROWS_ATTRIBUTE } from '@/hooks/use-row-window.ts';
 
 const observers: (() => void)[] = [];
+const frames: FrameRequestCallback[] = [];
+const cancelled: number[] = [];
 const original = {
   ResizeObserver: globalThis.ResizeObserver,
+  requestAnimationFrame: globalThis.requestAnimationFrame,
+  cancelAnimationFrame: globalThis.cancelAnimationFrame,
   clientHeight: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight'),
 };
 
@@ -19,6 +23,12 @@ class FakeResizeObserver {
 
 beforeEach(() => {
   observers.length = 0;
+  frames.length = 0;
+  cancelled.length = 0;
+  globalThis.requestAnimationFrame = (callback) => frames.push(callback);
+  globalThis.cancelAnimationFrame = (handle) => {
+    cancelled.push(handle);
+  };
   globalThis.ResizeObserver = FakeResizeObserver as unknown as typeof ResizeObserver;
   Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
     configurable: true,
@@ -30,6 +40,8 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.ResizeObserver = original.ResizeObserver;
+  globalThis.requestAnimationFrame = original.requestAnimationFrame;
+  globalThis.cancelAnimationFrame = original.cancelAnimationFrame;
   if (original.clientHeight)
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', original.clientHeight);
 });
@@ -55,17 +67,73 @@ function Sections({ counts, shown = counts.map(() => true) }: { counts: number[]
   );
 }
 
+function paintFirstFrame() {
+  act(() => {
+    for (const frame of frames.splice(0)) frame(0);
+  });
+}
+
 function placeSection(view: ReturnType<typeof render>, index: number, top: number) {
   view.getByTestId(`section-${index}`).getBoundingClientRect = () => ({ top }) as DOMRect;
 }
 
 describe('useSectionWindows', () => {
+  it('draws only the rows in view first, and a viewport more each way after the first frame', () => {
+    const view = render(
+      <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
+        <Sections counts={[300]} />
+      </div>
+    );
+    expect(view.getByTestId('section-0').textContent).toBe('0-16');
+    paintFirstFrame();
+    expect(view.getByTestId('section-0').textContent).toBe('0-24');
+  });
+
+  it('cancels its first frame when it goes before the frame comes', () => {
+    const view = render(<Sections counts={[30]} />);
+    view.unmount();
+    expect(cancelled).toEqual([frames.length]);
+  });
+
+  it('moves the window without waiting while the rows in view are still drawn', () => {
+    const view = render(
+      <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
+        <Sections counts={[300]} />
+      </div>
+    );
+    paintFirstFrame();
+    placeSection(view, 0, -360);
+    act(() => {
+      fireEvent.scroll(view.getByTestId('scroller'));
+    });
+    expect(view.getByTestId('section-0').textContent).toBe('0-32');
+    placeSection(view, 0, -360);
+    act(() => {
+      fireEvent.scroll(view.getByTestId('scroller'));
+    });
+    expect(view.getByTestId('section-0').textContent).toBe('0-32');
+  });
+
+  it('draws a viewport ahead as soon as the list scrolls, before the first frame', () => {
+    const view = render(
+      <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
+        <Sections counts={[300]} />
+      </div>
+    );
+    placeSection(view, 0, -3600);
+    act(() => {
+      fireEvent.scroll(view.getByTestId('scroller'));
+    });
+    expect(view.getByTestId('section-0').textContent).toBe('88-128');
+  });
+
   it('windows every section of its scroller from one scroll listener', () => {
     const view = render(
       <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
         <Sections counts={[300, 40]} />
       </div>
     );
+    paintFirstFrame();
     expect(view.getByTestId('section-0').textContent).toBe('0-24');
     placeSection(view, 0, -3600);
     placeSection(view, 1, 2000);
@@ -96,6 +164,7 @@ describe('useSectionWindows', () => {
 
   it('follows the window when nothing scrolls', () => {
     const view = render(<Sections counts={[50]} />);
+    paintFirstFrame();
     placeSection(view, 0, -1850);
     act(() => {
       dispatchEvent(new Event('resize'));
@@ -109,6 +178,7 @@ describe('useSectionWindows', () => {
         <Sections counts={[300, 300]} shown={[true, false]} />
       </div>
     );
+    paintFirstFrame();
     view.rerender(
       <div data-testid='scroller' data-client={360} style={{ overflowY: 'auto' }}>
         <Sections counts={[300, 300]} shown={[true, true]} />
@@ -130,6 +200,6 @@ describe('useSectionWindows', () => {
         <Sections counts={[30, 30]} />
       </div>
     );
-    expect(view.getByTestId('section-1').textContent).toBe('0-24');
+    expect(view.getByTestId('section-1').textContent).toBe('0-16');
   });
 });

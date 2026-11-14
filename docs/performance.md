@@ -546,17 +546,20 @@ each value is the Event Timing duration of one `input` event, handling plus the 
 
 ### All tasks (2026-11-14)
 
-Measured with `content-measure.ts` on the 300-task seed above (production build, `SHINSA_INSPECT=1`), three fresh
-browsers a scenario, the median. `SHINSA_PERF_CPU=4` runs the same with Chromium's CPU slowed four times
+Measured with `content-measure.ts` on the 300-task seed above (production build, `SHINSA_INSPECT=1`), the median of
+fresh browsers a scenario (five for `lists` and the flicks, three for the rest). Before and after are two builds served
+side by side against the same engine and run in turn, since frame times on this machine move by 20 ms or more between
+sessions as other agents build. `SHINSA_PERF_CPU=4` runs the same with Chromium's CPU slowed four times
 (`Emulation.setCPUThrottlingRate`), standing in for a machine busy with other agents' builds. The scenarios:
 
 - **`lists`**: Home → All tasks, timed to the frame after the first row (`[data-depth]`) is in the DOM, then 120
   frames of 120px scrolled by `scrollTop`.
 - **`wheelTasks`** and **`wheelTasksWhilePushed`**: 45 wheel events of 240px, 16 ms apart, sent through CDP
   (`Input.dispatchMouseEvent`, so the browser scrolls as a flick does), the second with a one-task state patch every
-  250 ms. Each frame, the probe hit-tests the list every 4px down its task column; a point on an empty spacer of the
-  window (a childless `aria-hidden` box in the scroller) is blank. `blankFrames` counts frames with any blank,
-  `blankPxMax` the most blank pixels in one.
+  250 ms. **`hardFlickTasks`**: 15 wheel events of 720px, 16 ms apart, the same distance as a hard trackpad flick
+  or a dragged scrollbar covers. Each frame, the probe hit-tests the list every 4px down its task column; a point on
+  an empty spacer of the window (a childless `aria-hidden` box in the scroller) is blank. `blankFrames` counts frames
+  with any blank, `blankPxMax` the most blank pixels in one.
 - **`revealTasks`**: from Home back to the kept All tasks page, rows in view on each of the first 30 frames.
 - **`taskPushes`**: ten `state.patch` messages, each changing `updatedAt` of one task in view, on the page's own
   socket. A stand-in for the React DevTools hook (`__REACT_DEVTOOLS_GLOBAL_HOOK__`, set before the bundle runs)
@@ -565,27 +568,38 @@ browsers a scenario, the median. `SHINSA_PERF_CPU=4` runs the same with Chromium
 
 | Measure (300 tasks) | Before | After |
 | --- | --- | --- |
-| Home → All tasks: to paint / longest task | 25 ms / none | 27 ms / none |
-| … at 4× CPU | 126 / 109 ms | 135 ms / none |
-| Flick (6,568px): frames with blank rows / longest frame | 0 of 112 / 16.8 ms | 0 of 110 / 16.8 ms |
-| … at 4× CPU | 0 of 106 / 66.7 ms (60 frames over 20 ms) | 0 of 107 / 83 ms (39 over 20 ms) |
-| Flick with a push every 250 ms, at 4× CPU | 0 of 100 / 133 ms (80 over 20 ms, longest task 108 ms) | 0 of 105 / 83 ms (63 over 20 ms, longest task 88 ms) |
+| Hard flick (6,568px): frames with blank rows / most blank | 9 of 50 / 180px (31% of the list) | 0 of 51 |
+| … at 4× CPU | 9 of 45 / 180px, longest frame 83 ms (28 over 20 ms) | 0 of 47, longest frame 67 ms (18 over 20 ms) |
+| Flick (6,568px): frames with blank rows / longest frame | 0 of 113 / 16.8 ms | 0 of 111 / 16.8 ms |
+| … at 4× CPU | 0 of 103 / 67 ms (67 over 20 ms) | 0 of 105 / 83 ms (65 over 20 ms) |
+| Flick with a push every 250 ms, at 4× CPU | 0 of 102 / 150 ms (76 over 20 ms, longest task 125 ms) | 0 of 103 / 150 ms (73 over 20 ms, longest task 95 ms) |
+| Home → All tasks: to paint / longest task | 26.9 ms / none | 27.5 ms / none |
+| … at 4× CPU | 162 / 137 ms | 136 / 86 ms |
+| `scrollTop` scroll at 4× CPU: longest frame / longest task | 33 ms / none | 54 ms / none |
 | Back to All tasks: frames short of rows | 0 | 0 |
 | One-task push: rows / components re-rendered | 27 of 27 / 4,471 | 1 of 27 / 3,872 |
-| … to paint, at 1× / 4× CPU | 7 / 35 ms | 5.7 / 22.6 ms |
+| … to paint, at 1× / 4× CPU | 7.1 / 29.6 ms | 5.6 / 24.2 ms |
 
-- **After.** One window over every group with a viewport of rows to spare each way, and rows that take only what
-  they show (`lib/tasks/row-model.ts`, compared field by field), so a push redraws the one row whose task changed.
-  The first paint at 4× CPU no longer has a long task: the work is split across frames, at 9 ms more to paint. A
-  flick that meets pushes tops out at 83 ms instead of 133 ms; the plain flick at 4× has fewer slow frames (39 instead
-  of 60) but a longer worst one, the larger overscan's first render. The 3,872 components a push still renders are
-  the kept pages behind All tasks (Home most of all), outside this page. Once the list is scrolled past one screen, a
-  Back to top button (`hooks/use-scrolled-down.ts`) returns to the first row.
-- **What the numbers said before.** The window keeps up: no frame showed a spacer, even at 4× CPU and with pushes. What is
-  slow is the work behind it: a push for one task re-renders every row in view and 4,471 components (All tasks and
-  the kept pages behind it, `docs/design.md`, 35), 35 ms at 4× CPU, and a flick that meets pushes has 133 ms frames.
-  The probe reads the main thread's view of the list; the compositor scrolls on during such a frame, so that is where
-  a person sees rows arrive late. The first paint at 4× CPU is a 109 ms task.
+- **The late rows.** The 240px flick never showed a blank, before or after, so it did not reproduce what a person
+  sees. The hard flick does: before, 9 of its 50 frames showed up to 180px of empty list, at any CPU speed. Two things
+  caused it. The window kept 12 rows (432px) past the viewport, less than one 720px wheel step. And a scroll's new
+  window rendered at React's continuous priority, in a task after the frame, so the frame painted the spacer first.
+  Now the window keeps a viewport of rows each way, and a scroll that would leave a row in view undrawn renders
+  before the frame (`flushSync` in `hooks/use-row-window.ts`); a scroll that leaves every row in view drawn moves the
+  window in a transition, so it never blocks a frame. No frame of any flick showed a blank.
+- **The first paint.** All tasks draws only the rows in view first, then the viewport each way in a transition
+  after the first frame (the first measure has no overscan, `resolveRowWindow`'s `ahead`). At 1× the paint is the
+  same within the noise (26.9 against 27.5 ms): it is the page, not the rows. At 4× it is 136 instead of 162 ms, and
+  its longest task 86 instead of 137 ms.
+- **Pushes.** Rows take only what they show (`lib/tasks/row-model.ts`, compared field by field), so a push redraws
+  the one row whose task changed. The 3,872 components a push still renders are the kept pages behind All tasks (Home
+  most of all), outside this page.
+- **What did not improve.** At 4× CPU the worst frame of the 240px flick is 83 instead of 67 ms, and the `scrollTop`
+  scroll's 54 instead of 33 ms: with a viewport of overscan the window holds about 56 rows instead of 40, and each
+  move lays out more of them. The count of slow frames stayed about the same (65 against 67), and at 1× every frame
+  stayed at 16.8 ms. With pushes, the worst frame is the same 150 ms, the push's own render, not the list.
+- **Back to top.** Once the list is scrolled past one screen, a Back to top button (`hooks/use-scrolled-down.ts`)
+  returns to the first row.
 - **The user's data.** A copy of the real event log could not be read for this pass: it needs a migration this
   branch's engine does not run in inspect mode.
 

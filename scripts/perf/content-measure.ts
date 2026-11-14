@@ -20,6 +20,7 @@ import {
   RUN_SECTION,
   type Scenario,
   TASK_ROW,
+  HARD_FLICK,
   WHEEL_FLICK,
 } from './content/schema.ts';
 import { writeReport } from './report/write.ts';
@@ -211,24 +212,27 @@ const program = Effect.gen(function* () {
     return tasks;
   });
 
-  const wheelFlick = Effect.fn('ContentMeasure.wheelFlick')(function* (page: CdpPage, withPushes: boolean) {
+  const wheelFlick = Effect.fn('ContentMeasure.wheelFlick')(function* (
+    page: CdpPage,
+    withPushes: boolean,
+    flick: typeof WHEEL_FLICK = WHEEL_FLICK
+  ) {
     yield* openTasks(page);
     const target = yield* page.evaluate(
       `window.__perf.recordBlank(${JSON.stringify(TASK_ROW)})`,
       BlankTarget
     );
     if (!target) return NO_MEASUREMENTS;
-    if (withPushes)
-      yield* page.evaluate(`window.__perf.startPushes(${WHEEL_FLICK.pushEveryMs})`, Schema.Unknown);
-    for (let index = 0; index < WHEEL_FLICK.events; index += 1) {
+    if (withPushes) yield* page.evaluate(`window.__perf.startPushes(${flick.pushEveryMs})`, Schema.Unknown);
+    for (let index = 0; index < flick.events; index += 1) {
       yield* page.send('Input.dispatchMouseEvent', {
         type: 'mouseWheel',
         x: target.x,
         y: target.y,
         deltaX: 0,
-        deltaY: WHEEL_FLICK.deltaY,
+        deltaY: flick.deltaY,
       });
-      yield* Effect.sleep(Duration.millis(WHEEL_FLICK.everyMs));
+      yield* Effect.sleep(Duration.millis(flick.everyMs));
     }
     yield* Effect.sleep(Duration.millis(300));
     const recording = yield* page.evaluate('window.__perf.stopBlank()', BlankRecording);
@@ -267,6 +271,7 @@ const program = Effect.gen(function* () {
     ['lists', lists],
     ['wheelTasks', (page) => wheelFlick(page, false)],
     ['wheelTasksWhilePushed', (page) => wheelFlick(page, true)],
+    ['hardFlickTasks', (page) => wheelFlick(page, false, HARD_FLICK)],
     ['revealTasks', revealTasks],
     ['taskPushes', taskPushes],
   ];
