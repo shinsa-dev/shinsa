@@ -54,6 +54,7 @@ export interface AutopilotFacts {
   escalatedReview: boolean;
   approvedByYou: boolean;
   ready: boolean;
+  heldArea: string | null;
   retried: number;
   waitedMinutes: number;
   presence: AutopilotPresence;
@@ -354,6 +355,7 @@ export interface AutopilotProfile {
   tracks: Record<AutopilotTrack, AutopilotAgreement>;
   rates: Record<AutopilotModelHead, AutopilotRate>;
   kinds: Partial<Record<AutopilotDecisionKind, AutopilotKindProfile>>;
+  areas: Record<string, AutopilotKindProfile>;
   tallies: AutopilotTally[];
   topics: AutopilotTopicTally[];
   followUps: AutopilotFollowUpMatch;
@@ -396,6 +398,7 @@ export const EMPTY_AUTOPILOT_PROFILE: AutopilotProfile = {
   tracks: EMPTY_AUTOPILOT_TRACKS,
   rates: { gate: EMPTY_AUTOPILOT_RATE, finding: EMPTY_AUTOPILOT_RATE, suggestion: EMPTY_AUTOPILOT_RATE },
   kinds: {},
+  areas: {},
   tallies: [],
   topics: [],
   followUps: { scored: 0, matched: 0 },
@@ -493,4 +496,17 @@ export interface AutopilotKindReadiness {
 export interface AutopilotReadiness {
   kinds: AutopilotKindReadiness[];
   offered: boolean;
+}
+
+export const AUTOPILOT_AREA_LIMITS = {
+  minScored: 30,
+  agreement: 0.9,
+  margin: 0.05,
+} as const;
+
+export interface AutopilotAreaReadiness {
+  area: string;
+  score: AutopilotTrackScore;
+  known: boolean;
+  ready: boolean;
 }

@@ -21,7 +21,8 @@ import {
   type AutopilotScope,
   AUTOPILOT_READINESS_KINDS,
 } from './schema.ts';
-import { isAutopilotKindReady } from './score.ts';
+import { isAutopilotAreaHeld, isAutopilotKindReady } from './score.ts';
+import { resolveAutopilotWorkFacts } from './work/index.ts';
 
 const RISK_ORDER: Record<ReviewRating, number> = { low: 0, medium: 1, high: 2 };
 
@@ -114,6 +115,19 @@ function isReadinessKind(kind: AutopilotGateKind): kind is AutopilotGateKind & A
   return (AUTOPILOT_READINESS_KINDS as readonly string[]).includes(kind);
 }
 
+function resolveHeldArea(
+  state: Pick<ShinsaState, 'autopilotProfile'>,
+  task: Task,
+  kind: AutopilotReadinessKind
+) {
+  const area = resolveAutopilotWorkFacts(task).area;
+  return area !== null && isAutopilotAreaHeld(state, area, kind) ? area : null;
+}
+
+function describeHeldArea(area: string) {
+  return `Autopilot does not know how you handle work in ${area} well enough yet, so it waits for you.`;
+}
+
 export function resolveAutopilotFacts(
   state: ShinsaState,
   task: Task,
@@ -133,6 +147,7 @@ export function resolveAutopilotFacts(
     escalatedReview: false,
     approvedByYou: !task.autopiloted,
     ready: isReadinessKind(gate) && isAutopilotKindReady(state, gate),
+    heldArea: isReadinessKind(gate) ? resolveHeldArea(state, task, gate) : null,
     retried: gate === 'failure' ? countAutopilotRetries(state, task) : 0,
     waitedMinutes: Math.max(0, Math.floor((now - openedAt) / MINUTE_MS)),
     presence: resolveAutopilotPresence(state, now),
@@ -154,7 +169,7 @@ function hasBeenAwayLong(facts: AutopilotFacts) {
 }
 
 export function resolveAutopilotLevel(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLevel {
-  return policy.level === 'everything' && !facts.ready ? 'most' : policy.level;
+  return policy.level === 'everything' && (!facts.ready || facts.heldArea !== null) ? 'most' : policy.level;
 }
 
 function resolveGateSetting(facts: AutopilotFacts): AutopilotGate | null {
@@ -223,6 +238,14 @@ function limitMerge(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLi
 }
 
 function limitAct(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
+  const limit = limitGate(facts, policy);
+  if (limit.allowed || facts.heldArea === null) return limit;
+  return limitGate({ ...facts, heldArea: null }, policy).allowed
+    ? refuse(describeHeldArea(facts.heldArea))
+    : limit;
+}
+
+function limitGate(facts: AutopilotFacts, policy: AutopilotPolicy): AutopilotLimit {
   if (!policy.enabled) return refuseBySetting('Autopilot is off.');
   const setting = resolveGateSetting(facts);
   if (setting !== null && !policy.gates.includes(setting)) {
@@ -296,7 +319,8 @@ export function resolveAutopilotLimits(facts: AutopilotFacts, policy: AutopilotP
 
 export function resolveAutopilotFindingLimit(
   state: Pick<ShinsaState, 'autopilotProfile'>,
-  policy: AutopilotPolicy
+  policy: AutopilotPolicy,
+  task: Task
 ): AutopilotLimit {
   if (!policy.enabled) return refuseBySetting('Autopilot is off.');
   if (!policy.gates.includes('findings')) return refuseBySetting('Autopilot does not judge review findings.');
@@ -305,7 +329,8 @@ export function resolveAutopilotFindingLimit(
   if (!isAutopilotKindReady(state, 'finding')) {
     return refuse('Autopilot does not know how you judge review findings well enough yet.');
   }
-  return ALLOWED;
+  const area = resolveHeldArea(state, task, 'finding');
+  return area === null ? ALLOWED : refuse(describeHeldArea(area));
 }
 
 export function resolveAutopilotSuggestionLimit(

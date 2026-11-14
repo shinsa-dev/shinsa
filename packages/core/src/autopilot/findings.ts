@@ -53,7 +53,7 @@ export function selectAutopilotFindingCall(
   gate: Gate,
   now: number
 ): Option.Option<AutopilotFindingCall> {
-  if (!resolveAutopilotFindingLimit(state, resolveAutopilotPolicy(state.settings)).allowed)
+  if (!resolveAutopilotFindingLimit(state, resolveAutopilotPolicy(state.settings), task).allowed)
     return Option.none();
   const open = listOpenFindings(task);
   if (open.length === 0) return Option.none();

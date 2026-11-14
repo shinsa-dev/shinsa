@@ -295,7 +295,7 @@ export function selectAutopilotJudgments(
   });
 }
 
-type ScoredProfile = Pick<AutopilotProfile, 'tracks' | 'rates' | 'kinds'>;
+type ScoredProfile = Pick<AutopilotProfile, 'tracks' | 'rates' | 'kinds' | 'areas'>;
 
 function scoreJudgments(
   current: Record<AutopilotTrack, AutopilotAgreement>,
@@ -330,7 +330,20 @@ function scoreDecision(profile: ScoredProfile, decision: AutopilotScoredDecision
     tracks: scoreJudgments(profile.tracks, judgments, base, positive),
     rates,
     kinds: { ...profile.kinds, [decision.kind]: scoreKind(kind, judgments, positive) },
+    areas: scoreArea(profile.areas, decision, judgments, positive),
   };
+}
+
+function scoreArea(
+  areas: AutopilotProfile['areas'],
+  decision: AutopilotScoredDecision,
+  judgments: readonly AutopilotTrackJudgment[],
+  positive: boolean
+): AutopilotProfile['areas'] {
+  const area = decision.facts?.work?.area ?? null;
+  if (area === null) return areas;
+  const current = areas[area] ?? EMPTY_AUTOPILOT_KIND_PROFILE;
+  return { ...areas, [area]: scoreKind(current, judgments, positive) };
 }
 
 export function recordAutopilotDecisions(
@@ -344,6 +357,7 @@ export function recordAutopilotDecisions(
     tracks: current.tracks,
     rates: current.rates,
     kinds: current.kinds,
+    areas: current.areas,
   });
   const topics = decisions.reduce(countDecisionTopics, current.topics);
   const followUps = decisions.reduce(scoreFollowUp, current.followUps);
@@ -356,6 +370,7 @@ export function recordAutopilotDecisions(
     tracks: scored.tracks,
     rates: scored.rates,
     kinds: scored.kinds,
+    areas: scored.areas,
     tallies: [...tallies.values()],
     topics,
     followUps,

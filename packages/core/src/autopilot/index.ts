@@ -24,6 +24,7 @@ export {
   resolveAutopilotLoss,
   resolveAutopilotFollowUpScore,
   resolveAutopilotReadiness,
+  listAutopilotAreaReadiness,
   resolveAutopilotScore,
 } from './score.ts';
 export {
@@ -68,6 +69,7 @@ export {
   AUTOPILOT_SCORE_LIMITS,
   AUTOPILOT_COMBINE_LIMITS,
   AUTOPILOT_SCORED_KINDS,
+  AUTOPILOT_AREA_LIMITS,
   AUTOPILOT_READINESS_KINDS,
   AUTOPILOT_READINESS_LIMITS,
   AUTOPILOT_READINESS_TRACK,
@@ -86,6 +88,7 @@ export {
   type AutopilotAgreement,
   type AutopilotRate,
   type AutopilotKindProfile,
+  type AutopilotAreaReadiness,
   type AutopilotKindReadiness,
   type AutopilotReadiness,
   type AutopilotReadinessKind,

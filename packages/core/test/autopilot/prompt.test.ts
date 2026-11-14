@@ -23,6 +23,7 @@ const FACTS: AutopilotFacts = {
   escalatedReview: false,
   approvedByYou: true,
   ready: false,
+  heldArea: null,
   retried: 0,
   waitedMinutes: 0,
   presence: { inHours: null, active: true, awayMinutes: 0 },
