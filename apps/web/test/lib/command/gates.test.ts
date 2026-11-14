@@ -5,6 +5,7 @@ import type { Command } from '@/lib/command/registry.ts';
 import * as accounts from '@/lib/connection/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createRoundOntoOpenPullRequest } from '../../support/rounds.ts';
 import { createGate, createShinsaState, createTask } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
@@ -409,6 +410,32 @@ describe('gate commands', () => {
     expect(spies.sent).toHaveBeenCalledWith(
       { type: 'gate.answer', gateId: 'g', decision: 'reject', response: null },
       'Closed. The task is done.'
+    );
+  });
+
+  it('names Close by the round on a later round, and says the earlier merge comes back', () => {
+    const proposal = createGate({ id: 'g', taskId: 't', type: 'proposal', title: 'Nothing to fix' });
+    const task = createTask({
+      id: 't',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      stage: 'awaiting_proposal',
+      rounds: createRoundOntoOpenPullRequest(276),
+      proposal: { request: 'r', why: 'w', status: 'open', recommend: 'close', runId: null, at: 0 },
+    });
+    const commands = commandsFor(task, proposal);
+    expect(commands.map((command) => command.label)).toEqual(['Close this round', 'Make it a change']);
+    run(commands[0]);
+    expect(spies.sent).toHaveBeenLastCalledWith(
+      { type: 'gate.answer', gateId: 'g', decision: 'reject', response: null },
+      'Round closed. Back to #276.'
+    );
+    const result = createGate({ id: 'r', taskId: 't', type: 'result', title: 'Diagnosis' });
+    const close = commandsFor(task, result);
+    expect(close.map((command) => command.label)).toEqual(['Close this round']);
+    run(close[0]);
+    expect(spies.sent).toHaveBeenLastCalledWith(
+      { type: 'gate.answer', gateId: 'r', decision: 'approve', response: null },
+      'Round closed. Back to #276.'
     );
   });
 

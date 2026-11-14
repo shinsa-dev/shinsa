@@ -7,11 +7,13 @@ import {
   isCodeTask,
   isShapeChosen,
   RESULT_PANEL,
+  resolveCloseLabel,
   resolvePlannedOperation,
   resolveShapeIcon,
   resolveShapeLabel,
   SHAPE_LABEL,
 } from '@/lib/tasks/shapes.ts';
+import { createRound, createRoundOntoOpenPullRequest } from '../../support/rounds.ts';
 import { createGate, createTask } from '../../support/state.ts';
 
 describe('shape labels', () => {
@@ -354,6 +356,35 @@ describe('composed steps', () => {
     expect(describeChangeGate(operation, createGate({ id: 'g', taskId: 't' }))).toMatchObject({
       quiet: { label: 'Plan the operation', reply: 'planOperation' },
     });
+  });
+
+  it('says Close ends only this round and brings back the earlier merge on a later round', () => {
+    const later = createTask({
+      id: 't',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      stage: 'awaiting_proposal',
+      rounds: createRoundOntoOpenPullRequest(276),
+      proposal: {
+        request: 'Plan it.',
+        why: 'Nothing.',
+        status: 'open',
+        recommend: 'close',
+        runId: null,
+        at: 0,
+      },
+    });
+    expect(describeChangeGate(later, createGate({ id: 'g', taskId: 't' })).primary).toEqual({
+      label: 'Close this round',
+      reply: 'closeProposal',
+      note: 'The agent found nothing to change. Close ends this round and brings back the merge of #276.',
+    });
+    expect(resolveCloseLabel(later)).toBe('Close this round');
+    const merged = {
+      ...later,
+      rounds: [createRound({ number: 1 }), ...createRoundOntoOpenPullRequest(276).slice(1)],
+    };
+    expect(resolveCloseLabel(merged)).toBe('Close');
+    expect(resolveCloseLabel(createTask({ id: 't' }))).toBe('Close');
   });
 
   it('goes back to the usual buttons once the closing proposal is no longer open', () => {

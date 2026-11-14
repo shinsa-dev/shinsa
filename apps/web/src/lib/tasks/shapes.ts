@@ -15,6 +15,7 @@ import {
   resolveTaskProgress,
   resolveTaskShape,
   resolveWorkStep,
+  selectEarlierOpenRound,
   type Task,
   type TaskShape,
   type WorkStep,
@@ -116,6 +117,28 @@ const CLOSE: ChangeAction & { note: string } = {
   note: 'The agent recommends closing. Close ends the task here and changes nothing.',
 };
 
+export function selectReturningPullRequest(task: Task): Option.Option<number> {
+  return selectEarlierOpenRound(task).pipe(
+    Option.flatMapNullishOr((round) => round.pullRequest),
+    Option.map((pullRequest) => pullRequest.number)
+  );
+}
+
+export function resolveCloseLabel(task: Task) {
+  return Option.isSome(selectReturningPullRequest(task)) ? 'Close this round' : 'Close';
+}
+
+function resolveClose(task: Task): ChangeAction & { note: string } {
+  return Option.match(selectReturningPullRequest(task), {
+    onNone: () => CLOSE,
+    onSome: (number) => ({
+      label: resolveCloseLabel(task),
+      reply: CLOSE.reply,
+      note: `The agent found nothing to change. Close ends this round and brings back the merge of #${number}.`,
+    }),
+  });
+}
+
 const KEEP_LABEL: Record<InquiryStep, string> = {
   answer: 'Keep it as an answer',
   research: 'Keep it as a report',
@@ -216,7 +239,7 @@ export function describeChangeGate(task: Task, gate: Gate): ChangeGate {
     why: open?.why ?? why,
     request: open?.request ?? rest.join('\n\n'),
     requestLabel: resolveRequestLabel(close, composed),
-    primary: close ? CLOSE : goOn,
+    primary: close ? resolveClose(task) : goOn,
     quiet: close ? { label: goOn.label, reply: goOn.reply } : { label: KEEP_LABEL[step], reply: 'keepAsIs' },
   };
 }

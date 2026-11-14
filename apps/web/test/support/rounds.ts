@@ -18,3 +18,23 @@ export function createRound(overrides: Partial<Round> & { number: number }): Rou
     ...overrides,
   };
 }
+
+export function createRoundOntoOpenPullRequest(number: number): Round[] {
+  return [
+    createRound({
+      number: 1,
+      status: 'shipped',
+      endedAt: 1,
+      pullRequest: { number, url: `https://github.com/o/r/pull/${number}`, state: 'open', base: 'main' },
+    }),
+    createRound({
+      number: 2,
+      status: 'active',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      startedAt: 2,
+      endedAt: null,
+      pullRequest: null,
+      outcome: null,
+    }),
+  ];
+}

@@ -13,6 +13,7 @@ import {
 import { Option } from 'effect';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { describeBudgetRetry } from '@/lib/tasks/cost.ts';
+import { selectReturningPullRequest } from '@/lib/tasks/shapes.ts';
 
 export interface AnswerExtras {
   planVersion?: number;
@@ -73,14 +74,31 @@ export function replyToGate(
   gate: Gate,
   reply: GateReply,
   response: string | null = null,
-  extras: AnswerExtras = {}
+  extras: AnswerExtras = {},
+  done: string = GATE_REPLY[reply].done
 ) {
-  const { decision, done } = GATE_REPLY[reply];
+  const { decision } = GATE_REPLY[reply];
   const thenApprove = reply === 'fixFindingsAndApprove' ? { thenApprove: true } : {};
   return sendCommandWithToast(
     { type: 'gate.answer', gateId: gate.id, decision, response, ...extras, ...thenApprove },
     done
   );
+}
+
+const ROUND_CLOSING_REPLIES: ReadonlySet<GateReply> = new Set<GateReply>([
+  'closeProposal',
+  'keepAsIs',
+  'closeResult',
+]);
+
+export function resolveReplyDone(task: Task, reply: GateReply) {
+  const number = selectReturningPullRequest(task);
+  if (!ROUND_CLOSING_REPLIES.has(reply) || Option.isNone(number)) return GATE_REPLY[reply].done;
+  return `Round closed. Back to #${number.value}.`;
+}
+
+export function replyToTaskGate(task: Task, gate: Gate, reply: GateReply) {
+  return replyToGate(gate, reply, null, {}, resolveReplyDone(task, reply));
 }
 
 export function resolveRetryLabel(state: ShinsaState, gate: Gate) {

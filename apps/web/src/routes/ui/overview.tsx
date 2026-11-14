@@ -275,6 +275,16 @@ export function OverviewSpecimens() {
           <ChangeCard state={state} task={tasks.change} gate={gates.change} onReply={acknowledgeSample} />
         </Card>
       </Specimen>
+      <Specimen label='ChangeCard · a later round on an open pull request found nothing to fix'>
+        <Card>
+          <ChangeCard
+            state={state}
+            task={tasks.laterClose}
+            gate={gates.laterClose}
+            onReply={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
       <Specimen label='ChangeCard · your OK in steps the agent composed, before an operation'>
         <Card>
           <ChangeCard state={state} task={tasks.composed} gate={gates.composed} onReply={acknowledgeSample} />
