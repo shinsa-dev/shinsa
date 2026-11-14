@@ -14,10 +14,12 @@ export function describeMachineNames(names: readonly string[]) {
   return describeList(names.map(describeMachineName));
 }
 
-export function listAddDeviceSteps(machines: readonly string[]) {
+export function listAddDeviceSteps(machines: readonly string[], inApp = false) {
   return [
     `On ${describeMachineNames(machines)}, open Settings > Remote access and choose Invite link.`,
-    'Scan the QR code with this device, or open the link here, and ask for access.',
+    inApp
+      ? 'Copy the link, paste it below and ask for access.'
+      : 'Scan the QR code with this device, or open the link here, and ask for access.',
     'Accept the request on the machine.',
   ];
 }

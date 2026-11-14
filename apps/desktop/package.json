@@ -24,6 +24,7 @@
     "electron": "44.9.3",
     "electron-builder": "^26.18.0",
     "electron-updater": "^6.8.11",
+    "glimm": "0.4.1",
     "typescript": "^7.0.2"
   }
 }

@@ -59,6 +59,18 @@ describe('the window', () => {
     expect(world.sent).toEqual([[CHANNELS.navigate, '/settings']]);
   });
 
+  it('loads a page afresh when it shows Shinsa, and keeps it for later on the status page', async () => {
+    const world = createWorld();
+    await run(world, (window) =>
+      Effect.gen(function* () {
+        yield* window.load('/?sign_in_error=sign_in_failed');
+        yield* window.showServerPage;
+        yield* window.load('/');
+      })
+    );
+    expect(world.window).toEqual([`load ${ORIGIN}/?sign_in_error=sign_in_failed`, `load ${ORIGIN}/`]);
+  });
+
   it('shows the waiting page and takes its actions', async () => {
     const world = createWorld({ loads: false });
     const answers = await run(world, (window, guards) =>
@@ -72,6 +84,21 @@ describe('the window', () => {
     expect(answers).toEqual([false, false, false, 'waiting']);
     expect(world.window).toEqual([`waiting ${STARTING.title}`]);
     expect(world.actions).toEqual(['restart']);
+  });
+
+  it('shows the welcome page, takes its choice and reloads it in place', async () => {
+    const world = createWorld();
+    const answers = await run(world, (window, guards) =>
+      Effect.gen(function* () {
+        const loaded = yield* window.showWelcome;
+        const choice = yield* guards.navigate('shinsa://engine/choose-cloud');
+        yield* window.reload;
+        return [loaded, choice, yield* window.page];
+      })
+    );
+    expect(answers).toEqual([true, false, 'welcome']);
+    expect(world.window).toEqual(['welcome', 'reload']);
+    expect(world.actions).toEqual(['choose-cloud']);
   });
 
   it('keeps app links in the window, opens the web outside it and blocks the rest', async () => {

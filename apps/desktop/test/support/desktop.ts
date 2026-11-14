@@ -6,6 +6,7 @@ import { AppLifecycle } from '../../src/app/service.ts';
 import { AwayWatch } from '../../src/away/service.ts';
 import type { DesktopStart } from '../../src/bridge/schema.ts';
 import { PageBridge } from '../../src/bridge/service.ts';
+import { CloudSignIn } from '../../src/cloud-sign-in/service.ts';
 import { CommandLine } from '../../src/command-line/service.ts';
 import { Connection } from '../../src/connection/service.ts';
 import type { MessageDialog } from '../../src/dialogs/schema.ts';
@@ -32,8 +33,11 @@ import { PageChannel } from '../../src/page-channel/service.ts';
 import { PowerMonitor } from '../../src/power-monitor/service.ts';
 import { Prefs } from '../../src/prefs/service.ts';
 import { EngineServer } from '../../src/server/service.ts';
+import { CookieWriteFailed, type SessionCookie } from '../../src/session-cookies/schema.ts';
+import { SessionCookies } from '../../src/session-cookies/service.ts';
 import type { AboutPanel, ShellEvent, ShellGuards } from '../../src/shell/schema.ts';
 import { DesktopShell } from '../../src/shell/service.ts';
+import { EngineSource } from '../../src/source/service.ts';
 import type { TrayClick, TrayView } from '../../src/tray/schema.ts';
 import { StatusTray } from '../../src/tray/service.ts';
 import { UpdateClient } from '../../src/update-client/service.ts';
@@ -63,7 +67,10 @@ export interface DesktopWorld {
   unwritable: Set<string>;
   answer: (path: string) => HttpAnswer;
   requests: string[];
+  posts: { url: string; body: unknown }[];
   posted: { path: string; body: string }[];
+  cookies: SessionCookie[];
+  cookiesFail: boolean;
   launchctl: string[][];
   print: () => { ok: boolean; output: string };
   registration: Registration;
@@ -113,6 +120,8 @@ const HOME = '/Users/me';
 
 export const USER_DATA = '/Users/me/Library/Application Support/Shinsa';
 
+const ENGINE_DATA = '/Users/me/.config/shinsa/data';
+
 export const LOGS = '/Users/me/Library/Logs/Shinsa';
 
 export const RESOURCES = '/Applications/Shinsa.app/Contents/Resources';
@@ -123,11 +132,14 @@ export function createWorld(overrides: Partial<DesktopWorld> = {}): DesktopWorld
     platform: 'darwin',
     version: '1.2.0',
     env: {},
-    files: new Map(),
+    files: new Map([[ENGINE_DATA, '']]),
     unwritable: new Set(),
     answer: () => 'refuse',
     requests: [],
+    posts: [],
     posted: [],
+    cookies: [],
+    cookiesFail: false,
     launchctl: [],
     print: () => ({ ok: false, output: '' }),
     registration: 'not-registered',
@@ -184,6 +196,14 @@ function makeHttpLayer(world: DesktopWorld) {
       world.requests.push(url.pathname);
       if (request.body._tag === 'Uint8Array')
         world.posted.push({ path: url.pathname, body: new TextDecoder().decode(request.body.body) });
+      if (request.method === 'POST')
+        world.posts.push({
+          url: url.toString(),
+          body:
+            request.body._tag === 'Uint8Array'
+              ? JSON.parse(new TextDecoder().decode(request.body.body))
+              : null,
+        });
       const answer = world.answer(url.pathname);
       if (answer === 'hang') return Effect.never;
       if (answer === 'refuse') {
@@ -307,6 +327,17 @@ function makeWorldLayer(world: DesktopWorld) {
       })
     ),
     makeHttpLayer(world),
+    Layer.succeed(
+      SessionCookies,
+      SessionCookies.of({
+        write: (cookie) =>
+          world.cookiesFail
+            ? Effect.fail(new CookieWriteFailed({ cookie: cookie.name, message: 'refused' }))
+            : Effect.sync(() => {
+                world.cookies.push(cookie);
+              }),
+      })
+    ),
     makeUpdateLayer(world)
   );
 }
@@ -401,6 +432,7 @@ function makeNativeLayer(world: DesktopWorld) {
             }),
           loadUrl: (url) => Effect.as(record(world, `load ${url}`), world.loads),
           loadWaiting: (query) => Effect.as(record(world, `waiting ${query.title}`), world.loads),
+          loadWelcome: Effect.as(record(world, 'welcome'), world.loads),
           send: (channel, value) =>
             Effect.sync(() => {
               world.sent.push([channel, value]);
@@ -448,6 +480,7 @@ function makeNativeLayer(world: DesktopWorld) {
               world.shellGuards = guards;
             }),
           quit: push('quit'),
+          relaunch: push('relaunch'),
           setBadge: (text) => push(`badge ${text}`),
           openExternal: (url) => push(`open ${url}`),
           openPath: (path) => push(`open path ${path}`),
@@ -515,14 +548,17 @@ function makeDesktopLayer(world: DesktopWorld) {
     PageBridge,
     AwayWatch,
     AppMenu.layer,
-    StatusTray.layer,
     EngineSupervisor.layer,
     CommandLine.layer
   ).pipe(
+    Layer.provideMerge(StatusTray.layer),
+    Layer.provideMerge(CloudSignIn.layer),
     Layer.provideMerge(Updater.layer),
     Layer.provideMerge(Notifications.layer),
     Layer.provideMerge(AppWindow.layer),
-    Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+    Layer.provideMerge(Layer.mergeAll(EngineServer.layer, UpdateLog.layer, EngineActions.layer)),
+    Layer.provideMerge(EngineSource.layer),
+    Layer.provideMerge(Prefs.layer),
     Layer.provideMerge(makeWorldLayer(world)),
     Layer.provideMerge(TestClock.layer())
   );

@@ -31,6 +31,13 @@ export type DesktopActions = Record<DesktopAction, () => void>;
 
 export type DesktopUpdate = AppUpdate;
 
+export interface PinnedMachine {
+  id: string;
+  name: string;
+}
+
+export type DesktopSource = { kind: 'local' } | { kind: 'cloud'; machine: PinnedMachine | null };
+
 export interface DesktopBridge {
   version: string;
   protocol: number;
@@ -45,6 +52,10 @@ export interface DesktopBridge {
   checkForUpdates: () => void;
   applyUpdateChannel: (channel: UpdateChannel) => void;
   answerDowngrade: (accept: boolean) => void;
+  source?: DesktopSource;
+  signIn?: () => void;
+  useLocalEngine?: () => void;
+  useMachine?: (machine: PinnedMachine | null) => void;
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
@@ -195,4 +206,22 @@ export function applyDesktopChannel(channel: UpdateChannel) {
   desktopChannel = channel;
   desktop.applyUpdateChannel(channel);
   updateSignal.publish();
+}
+
+export function selectDesktopSource(): DesktopSource | null {
+  return selectDesktop()?.source ?? null;
+}
+
+export function requestDesktopSignIn() {
+  const signIn = selectDesktop()?.signIn;
+  signIn?.();
+  return signIn !== undefined;
+}
+
+export function applyDesktopLocalEngine() {
+  selectDesktop()?.useLocalEngine?.();
+}
+
+export function applyDesktopMachine(machine: PinnedMachine | null) {
+  selectDesktop()?.useMachine?.(machine);
 }

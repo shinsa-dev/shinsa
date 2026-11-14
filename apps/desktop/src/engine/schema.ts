@@ -44,6 +44,9 @@ export const EngineAction = Schema.Literals([
   'copy-details',
   'retry',
   'open-privacy',
+  'use-local',
+  'choose-local',
+  'choose-cloud',
 ]);
 
 export type EngineAction = typeof EngineAction.Type;
@@ -54,6 +57,9 @@ export const ENGINE_ACTION_LABEL: Record<EngineAction, string> = {
   'copy-details': 'Copy details',
   retry: 'Try again',
   'open-privacy': 'Open Privacy & Security',
+  'use-local': 'Use this Mac’s engine',
+  'choose-local': 'On this Mac',
+  'choose-cloud': 'On another machine',
 };
 
 export const ENGINE_ACTION_LINK = /^shinsa:\/\/engine\/([a-z-]+)$/;
@@ -65,6 +71,7 @@ export const EngineScreen = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('crashing'), detail: Schema.String }),
   Schema.Struct({ kind: Schema.Literal('port'), port: Schema.Number, detail: Schema.String }),
   Schema.Struct({ kind: Schema.Literal('stopped'), detail: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal('cloud') }),
 ]);
 
 export type EngineScreen = typeof EngineScreen.Type;

@@ -2,6 +2,7 @@ import { AppUpdateChannel } from '@shinsa/core/engine-api/schema';
 import { Schema, SchemaGetter } from 'effect';
 import { CHANNELS } from '../bridge/schema.ts';
 import { NoticePayload } from '../notifications/schema.ts';
+import { PinnedMachine } from '../source/schema.ts';
 import type { SenderFrame } from '../window/schema.ts';
 
 const Accept = Schema.Unknown.pipe(
@@ -19,6 +20,9 @@ export const PageRequest = Schema.Union([
   Schema.Struct({ channel: Schema.Literal(CHANNELS.badge), payload: Schema.Unknown }),
   Schema.Struct({ channel: Schema.Literal(CHANNELS.notify), payload: NoticePayload }),
   Schema.Struct({ channel: Schema.Literal(CHANNELS.notificationSettings) }),
+  Schema.Struct({ channel: Schema.Literal(CHANNELS.signIn) }),
+  Schema.Struct({ channel: Schema.Literal(CHANNELS.useLocalEngine) }),
+  Schema.Struct({ channel: Schema.Literal(CHANNELS.useMachine), payload: Schema.NullOr(PinnedMachine) }),
 ]);
 
 export type PageRequest = typeof PageRequest.Type;
@@ -31,6 +35,9 @@ export const PAGE_REQUEST_CHANNELS = [
   CHANNELS.badge,
   CHANNELS.notify,
   CHANNELS.notificationSettings,
+  CHANNELS.signIn,
+  CHANNELS.useLocalEngine,
+  CHANNELS.useMachine,
 ] as const;
 
 export interface PageMessage {

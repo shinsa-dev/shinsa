@@ -13,6 +13,7 @@ import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
 import { AutopilotSettings } from '@/components/settings/autopilot.tsx';
 import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
+import { EngineSourceSettings } from '@/components/settings/engine-source.tsx';
 import { FolderSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
 import { IntegrationSettings, IntegrationsSearch } from '@/components/settings/integrations.tsx';
@@ -85,6 +86,7 @@ function TabSections({
         <>
           <AppearanceSettings />
           <NotificationSettings />
+          <EngineSourceSettings />
           <UpdateSettings />
           <VersionSettings />
         </>

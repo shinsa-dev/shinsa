@@ -55,3 +55,5 @@ export const PortSetting = Schema.Union([
 ]);
 
 export const ConfigFile = Schema.fromJsonString(Schema.Struct({ port: PortSetting }));
+
+export const CLOUD_HEALTH: ServerHealth = { version: null, working: 0, updating: false };

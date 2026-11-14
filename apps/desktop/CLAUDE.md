@@ -3,7 +3,8 @@
 Shinsa for Mac: an Electron window around the engine, never the other way round. The engine (`shinsa engine`, from the
 bundle) runs on its own as a launchd job the app registers; the app finds it, loads the UI from its URL and adds only what a page cannot do:
 the Dock badge, notifications that open the task, `shinsa://` links, the menu, the menu bar item and the window.
-Quitting the app never stops the server. What it looks like and how it behaves is `docs/design.md` → Where Shinsa differs, 31; the plan
+Quitting the app never stops the server. It can also be a viewer of another machine's engine, reached through Shinsa
+Cloud, with no engine of its own running (Viewer mode, below). What it looks like and how it behaves is `docs/design.md` → Where Shinsa differs, 31; the plan
 behind it is `docs/plans/desktop-plan.md`.
 
 ## Layout
@@ -19,6 +20,8 @@ src/
 │   app/            dev-bundle.ts (the app's name, its userData folder, the renamed Electron.app `bun run dev` runs);
 │                   AppLifecycle (shinsa:// links at launch and later, a second instance, Activate, quitting)
 │   bridge/         The bridge's types and IPC channels; PageBridge answers the page's messages
+│   cloud-sign-in/  link.ts (the sign-in URL with its PKCE challenge, `shinsa://signed-in` read back); CloudSignIn
+│                   (the browser sign-in, the code traded for a session, its cookie set in the window)
 │   command-line/   install.ts (the link and profile decisions); CommandLine puts `shinsa` on your PATH
 │   connection/     Connection: the connect loop (2 s retries for the dev servers or an approval), the 5 s watch,
 │                   three misses, the status page's buttons
@@ -33,10 +36,14 @@ src/
 │                   resolveHistoryStep)
 │   notifications/  notice.ts (the badge text, the settings pane); Notifications (the Dock badge, banners)
 │   page-channel/   PageRequest, every IPC message the page may send, decoded by schema
-│   prefs/          Prefs: window bounds, the update channel and the kept version in userData/prefs.json
+│   prefs/          Prefs: window bounds, the update channel, the kept version and the engine source in
+│                   userData/prefs.json
+│   session-cookies/ SessionCookies, the cookie CloudSignIn writes into the window's session
 │   server/         url.ts (which server to load; resolveConfigHome, the config folder launchd.ts reads too);
 │                   EngineServer: health and the queue through core's EngineApi `server` group client, decoded,
 │                   1.5 s each
+│   source/         source.ts (This Mac or a Shinsa Cloud machine, the cloud origin, the Engine menu's options,
+│                   whether a switch reloads or relaunches); EngineSource (the source read once at start, `use`)
 │   tray/           menu.ts (the menu bar item's status line, count and menu); StatusTray
 │   update-link/    report.ts (the updater's snapshot as core's `AppUpdateReport`); UpdateLink (reports to the
 │                   engine at launch, on every change and every 5 s, and runs the requests it gets back)
@@ -45,22 +52,25 @@ src/
 │                   options, when a version ahead is offered the latest there); Updater (start, every four hours,
 │                   download, install with a 15 s timeout, channel switches)
 │   window/         bounds.ts (saved on move or resize), close.ts (close or hide), context-menu.ts (the right-click text menu); AppWindow
-│                   (the page, navigation, Back and Forward, the waiting page)
+│                   (the page, navigation, Back and Forward, the waiting and welcome pages)
 │   dialogs/ files/ host/ launchctl/ login-items/ login-shell/ native-notices/ native-tray/ native-window/
 │   power-monitor/ shell/ update-client/
 │                   The outside world as services with no logic: Electron, the file system, launchctl, a login
 │                   shell, electron-updater. Their Electron events arrive as Streams; tests replace each with a fake
 ├── main/           Outside coverage: index.ts, the composition root (one ManagedRuntime, disposed on `will-quit`),
 │                   and the Electron and Node layers of the outside-world services (`*Live`)
+├── welcome-page/   Outside coverage: index.ts, the first launch's intro and question on Glimm, which the build
+│                   inlines into dist/welcome.html
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
-                    updateBadge, notify, openNotificationSettings, onNotifyFailed, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
+                    updateBadge, notify, openNotificationSettings, onNotifyFailed, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, source, signIn, useLocalEngine, useMachine, onNavigate,
                     onWindowState, onUpdate, onAway, onAction) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
-static/waiting.html The "Shinsa is not running" page; trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
+static/waiting.html The "Shinsa is not running" page; welcome.html, the first launch's page (its script and the mark
+                    are inlined at build); trayTemplate.png and @2x, the menu bar item's icon (scripts/icon.ts)
 resources/          The app icons: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
                     all written by scripts/icon.ts; the engine's job in LaunchAgents/; app-update.yml, the updater's
                     config the build copies into Contents/Resources (Updates, below)
-scripts/            build.ts (bundles main and preload), dev.ts, icon.ts, dmg-background.ts, each one Effect program run
+scripts/            build.ts (bundles main, preload and the welcome page), dev.ts, icon.ts, dmg-background.ts, each one Effect program run
                     with BunRuntime.runMain; kit/ holds what they share (runScriptCommand, readMarkPaths, ScriptStepFailed)
 electron-builder.shared.yml    The build settings; electron-builder.yml extends it with what names the app (its id,
                                scheme, icon and engine job). Every channel builds this one app, so a stable, beta or
@@ -119,7 +129,8 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   `WATCH_SCHEDULE`, `UPDATE_CHECK_SCHEDULE`, `AWAY_POLL_SCHEDULE`). One `ManagedRuntime` runs the app: the engine services are built
   first, so the first health check goes out before Electron is ready, the native window, tray and IPC layers wait
   for `app.whenReady()`, and `will-quit` disposes the runtime, which closes every listener, the watch and the update
-  schedule. The engine keeps running. The main bundle imports from `@shinsa/core` only the engine API and the app's identity.
+  schedule. The engine keeps running. The main bundle imports from `@shinsa/core` only the engine API, the app's identity and, for viewer mode, the remote
+  API's `session` group (`RemoteApi`) with the `REMOTE_*` constants it needs.
 - **Electron's guards run synchronously.** `close`, `will-navigate`, the window-open handler, `before-quit` and the
   page's start request ask for an answer on the spot, so `main/` runs their guards with `Effect.runSync`. A guard only
   reads `Ref`s and decides; anything that waits (a file write, IPC, the shell) is forked with `later` or happens on an
@@ -152,8 +163,40 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
   `.zprofile` or `.bash_profile`. A failure leaves things as they were and is tried again at the next launch. The
   job runs that executable as `shinsa engine`
   (`serializeEngineAgent`, and the checked-in `resources/LaunchAgents` plist a test compares with it).
-- Which server: `SHINSA_URL` (an origin) wins; unpackaged, the Vite dev server on 5181; packaged, `SHINSA_PORT`, then
+- Which server: viewing a Shinsa Cloud machine, `SHINSA_CLOUD_URL` (an origin), else core's `REMOTE_APP_ORIGIN`
+  (Viewer mode, below); otherwise `SHINSA_URL` (an origin) wins; unpackaged, the Vite dev server on 5181; packaged, `SHINSA_PORT`, then
   `port` in the app's `config.json`, then core's `APP_IDENTITY.port`, 7446, always on 127.0.0.1, whatever the update channel.
+- **Viewer mode.** `engineSource` in `prefs.json` is `{ kind: 'local' }` (the default, This Mac) or
+  `{ kind: 'cloud', machine }`, a machine of yours on Shinsa Cloud pinned by `{ id, name }`, or `null` while none is
+  chosen. `EngineSource` reads it once at start and everything follows that start: the window's origin (so
+  navigation, the page's permissions, the bridge and `isAppSender` keep one origin), the health check (`GET
+  /__remote/session` on Shinsa Cloud instead of `/api/health`) and the status page ("Shinsa Cloud is not answering",
+  Try again and Use this Mac's engine). In cloud mode the app never registers, starts or watches the local engine,
+  and an engine already running is left alone, so no agent is cut off. Switching between This Mac and Shinsa Cloud
+  writes the prefs and relaunches the app (`resolveSourceSwitch`), since the origin is read once; pinning another
+  machine only reloads the page. You switch from Shinsa → Engine and the menu bar item (This Mac, the pinned machine,
+  Choose a Machine…), or from the page through the bridge (`useMachine`, `useLocalEngine`; Settings → General →
+  Engine in this app, the chooser). The page owns the rest: on Shinsa Cloud it reads `source` from the bridge and
+  shows only the pinned machine (`resolveMachineScope`, `apps/web/src/lib/remote/viewer-mode.ts`), so the Dock badge
+  and notifications count only its tasks, or a chooser of your machines while none is pinned; its add-device page
+  takes a pasted invite link instead of a QR code. The menu bar item shows "Showing <machine> on Shinsa Cloud" and
+  the count the page puts on the Dock (`StatusTray.showCount`, from the bridge's `updateBadge`), no task list.
+- **The first launch asks.** Until `engineSource` is saved, a Mac with no Shinsa data folder (or the dev app) opens
+  on the welcome page instead of registering the engine (`isWelcomeNeeded`, `Connection`'s `welcome`): an intro drawn
+  with Glimm (`glimm`, one WebGL wave in the primary blue; `src/welcome-page/index.ts`, bundled and inlined with the
+  logo's paths and the kit's Areal font into `dist/welcome.html` by `scripts/build.ts`, since its CSP loads no file;
+  its colours are the kit's tokens, copied into the page), then On this Mac or On another machine,
+  links to `shinsa://engine/choose-local` and `choose-cloud` that `AppWindow` takes as engine actions. The first
+  `EngineSource.use` saves the choice, even This Mac, and lets `Connection` go on; On another machine relaunches on
+  Shinsa Cloud without letting it go on, so nothing touches the local engine while the app quits. A Mac that already has `~/.config/shinsa/data` keeps This Mac and never sees it. To see it again in
+  the dev app, remove `engineSource` from `~/Library/Application Support/Shinsa Dev/prefs.json`.
+- **Signing in to Shinsa Cloud** happens in your browser, never in the window: the page's Sign in calls `signIn`,
+  and `CloudSignIn` opens `/__remote/sign-in?client=native&redirect=shinsa://signed-in` with a PKCE challenge (the
+  same native sign-in the iPhone app uses, `apps/cloud/CLAUDE.md` → Sign-in). The cloud sends you back to
+  `shinsa://signed-in?code=…`, which `AppLifecycle` hands to `CloudSignIn` before any page link; it trades the code
+  and its verifier at `POST /__remote/sign-in/token` and writes the token as the window's `REMOTE_SESSION_COOKIE` for
+  30 days, then opens the dashboard. Only the last sign-in started is answered; a code with none waiting, or one the
+  cloud refuses, opens the dashboard with `sign_in_error` (`sign_in_expired`, `sign_in_failed`).
 - The app is "Shinsa" everywhere, packaged or not (`app.setName`, the first menu, the About panel, the window, the
   status page and the updater's messages), on every channel. The menu bar and
   the Dock read the bundle's `CFBundleName`, so `bun run dev` (`scripts/dev.ts`) runs a copy of Electron.app at
@@ -171,7 +214,7 @@ electron-builder.shared.yml    The build settings; electron-builder.yml extends 
 
 | Command | Description |
 |---|---|
-| `bun run build` | Bundles `src/main` and `src/preload` to `dist/` (`scripts/build.ts`) |
+| `bun run build` | Bundles `src/main` and `src/preload` to `dist/`, and writes `dist/welcome.html` with `src/welcome-page` and the mark inlined (`scripts/build.ts`) |
 | `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app, as `.electron/Shinsa.app`, on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
 | `bun run package` | Builds the web app and the engine (`SHINSA_VERSION` sets its version), then `release/mac-arm64/Shinsa.app` with the engine and its job inside, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`) |
 | `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo, and the menu bar item's `static/trayTemplate.png` and `@2x` (`scripts/icon.ts`) |
@@ -246,4 +289,23 @@ SHINSA_APP_ID=studio.overclock.shinsa.test SHINSA_HOME=/tmp/shinsa-e2e "$T/Conte
 
 Then quit it and see the engine still answer on 5199, `kill -9` the engine and see it back, take the port and see the
 status page, and `launchctl bootout gui/$(id -u)/studio.overclock.shinsa.test.engine` when done.
+
+## Trying viewer mode
+
+The sandbox stands in for Shinsa Cloud with its machines (Studio, Laptop, Kai's), and a seeded engine stands in for
+This Mac. Start both, each on a port of its own, then open the dev app on them:
+
+```sh
+bun run sandbox                                   # from the repository root; Shinsa Cloud on PORT (5195)
+bun run seed                                      # prints the command that serves ~/.shinsa-seed; run it on 5180
+cd apps/desktop
+SHINSA_URL=http://127.0.0.1:5180 SHINSA_CLOUD_URL=http://127.0.0.1:5195 bun run dev
+```
+
+Remove `engineSource` from `~/Library/Application Support/Shinsa Dev/prefs.json` first to see the welcome page, or set
+it to `{ "kind": "cloud", "machine": null }` to open on the machine chooser. Choose Studio, and to add the app open
+`http://127.0.0.1:5195/sandbox/enroll/studio` in a browser: it makes Studio's invite link and redirects to it, so copy
+the `/enroll#…` address the browser lands on and paste that (the `/sandbox/enroll/studio` address itself is refused as
+not an invite link). Then check the Dock badge and the menu bar item count only Studio's tasks;
+Shinsa → Engine → This Mac relaunches on the seeded engine. Put back the prefs you had when done.
 

@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:"
+    />
+    <title>Welcome to Shinsa</title>
+    <style>
+      @font-face {
+        font-family: 'ABC Areal';
+        font-weight: 100 900;
+        font-display: block;
+        /* font */
+      }
+      :root {
+        color-scheme: light dark;
+        --background: oklch(1 0 0);
+        --bg-1: oklch(1 0 0);
+        --bg-2: oklch(0.973 0.001 286.38);
+        --bg-3: oklch(0.955 0.002 247.84);
+        --fg-2: oklch(0.543 0.009 278.5);
+        --fg-4: oklch(0.21 0.008 274.53);
+        --icon-3: oklch(0.631 0.008 277);
+        --primary-4: oklch(0.6 0.215 256);
+        --ring: color-mix(in srgb, var(--primary-4) 40%, transparent);
+        --shadow-card: 0 1px 2px oklch(0 0 0 / 0.04), 0 8px 24px -12px oklch(0 0 0 / 0.12);
+        --ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: oklch(0.174 0.004 285.97);
+          --bg-1: oklch(0.197 0.004 286.03);
+          --bg-2: oklch(0.228 0.006 285.93);
+          --bg-3: oklch(0.257 0.006 286);
+          --fg-2: oklch(0.655 0.009 286.15);
+          --fg-4: oklch(0.946 0.001 286.37);
+          --icon-3: oklch(0.58 0.007 286.24);
+          --primary-4: oklch(0.62 0.2 256);
+          --shadow-card: 0 1px 2px oklch(0 0 0 / 0.2), 0 8px 24px -12px oklch(0 0 0 / 0.5);
+        }
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--background);
+        color: var(--fg-4);
+        font: 13px/1.5 'ABC Areal', ui-sans-serif, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .drag {
+        position: fixed;
+        inset: 0 0 auto;
+        z-index: 3;
+        height: 44px;
+        -webkit-app-region: drag;
+      }
+      #wave {
+        position: fixed;
+        inset: 0;
+        z-index: 4;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .stage {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        padding: 56px 32px 40px;
+      }
+      .intro {
+        display: grid;
+        justify-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+      .mark {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 8px;
+        overflow: visible;
+        fill: var(--fg-4);
+      }
+      .piece {
+        opacity: 0;
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: piece-in 0.9s var(--ease-emphasized) forwards;
+        animation-delay: calc(0.2s + var(--piece) * 0.12s);
+      }
+      .piece:nth-child(1) {
+        --from: translate(-18%, 18%);
+      }
+      .piece:nth-child(2) {
+        --from: translate(18%, 18%);
+      }
+      .piece:nth-child(3) {
+        --from: translate(-18%, -18%);
+      }
+      @keyframes piece-in {
+        from {
+          opacity: 0;
+          transform: var(--from) scale(0.92);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .wordmark,
+      .slogan {
+        margin: 0;
+        opacity: 0;
+        transform: translateY(8px);
+        animation: rise 0.8s var(--ease-emphasized) forwards;
+      }
+      .wordmark {
+        font-size: 32px;
+        font-weight: 500;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        animation-delay: 0.75s;
+      }
+      .slogan {
+        color: var(--fg-2);
+        font-size: 15px;
+        letter-spacing: -0.01em;
+        animation-delay: 0.95s;
+      }
+      @keyframes rise {
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      #cue {
+        position: absolute;
+        width: 0;
+        height: 0;
+        animation: cue 1ms linear 2.4s forwards;
+      }
+      @keyframes cue {
+        to {
+          opacity: 0;
+        }
+      }
+      .choice {
+        display: none;
+        width: min(560px, 100%);
+        gap: 24px;
+        justify-items: center;
+        text-align: center;
+      }
+      body[data-stage='choice'] .intro,
+      body[data-stage='leaving'] .intro {
+        display: none;
+      }
+      body[data-stage='choice'] .choice,
+      body[data-stage='leaving'] .choice {
+        display: grid;
+      }
+      .choice header {
+        display: grid;
+        gap: 4px;
+      }
+      .choice h1 {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        line-height: 1.3;
+      }
+      .choice header p {
+        margin: 0;
+        color: var(--fg-2);
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        width: 100%;
+      }
+      @media (max-width: 560px) {
+        .cards {
+          grid-template-columns: 1fr;
+        }
+      }
+      .rise {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      body[data-stage='choice'] .rise {
+        animation: rise 0.7s var(--ease-emphasized) forwards;
+        animation-delay: calc(0.1s + var(--rise) * 0.07s);
+      }
+      .card {
+        display: grid;
+        align-content: start;
+        gap: 2px;
+        padding: 14px 14px 16px;
+        border-radius: 0.6875rem;
+        color: inherit;
+        text-align: left;
+        text-decoration: none;
+        background: var(--bg-1);
+        box-shadow:
+          inset 0 0 0 1px var(--bg-3),
+          var(--shadow-card);
+        cursor: default;
+        transition:
+          background-color 0.15s ease,
+          box-shadow 0.15s ease,
+          transform 0.15s ease;
+      }
+      .card:hover {
+        background: var(--bg-2);
+      }
+      .card:focus-visible {
+        outline: none;
+        box-shadow:
+          inset 0 0 0 1px var(--bg-3),
+          0 0 0 3px var(--ring);
+      }
+      .card:active {
+        transform: scale(0.99);
+      }
+      .card svg {
+        width: 16px;
+        height: 16px;
+        margin-bottom: 10px;
+        fill: none;
+        stroke: var(--icon-3);
+        stroke-width: 1.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .card strong {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .card span {
+        color: var(--fg-2);
+      }
+      body[data-stage='leaving'] .choice {
+        animation: leave 0.4s var(--ease-emphasized) forwards;
+      }
+      @keyframes leave {
+        to {
+          opacity: 0;
+          transform: translateY(-6px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before {
+          animation-duration: 1ms !important;
+          animation-delay: 0s !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body data-stage="intro">
+    <div class="drag"></div>
+    <main class="stage">
+      <section class="intro" aria-label="Welcome to Shinsa">
+        <svg class="mark" viewBox="0 0 365 365" role="img" aria-label="Shinsa"><!-- marks --></svg>
+        <h2 class="wordmark">Shinsa</h2>
+        <p class="slogan">Hand over the work. Keep the decisions.</p>
+        <i id="cue" aria-hidden="true"></i>
+      </section>
+      <section class="choice" aria-labelledby="choice-title">
+        <header>
+          <h1 id="choice-title" class="rise" style="--rise: 0">Where should your agents run?</h1>
+          <p class="rise" style="--rise: 1">Pick one to start. You can switch later in Shinsa → Engine.</p>
+        </header>
+        <div class="cards">
+          <a class="card rise" href="shinsa://engine/choose-local" style="--rise: 2">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="12" rx="2" />
+              <path d="M8 20h8M12 16v4" />
+            </svg>
+            <strong>On this Mac</strong>
+            <span>Shinsa’s engine runs here in the background, also when this window is closed.</span>
+          </a>
+          <a class="card rise" href="shinsa://engine/choose-cloud" style="--rise: 3">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.75 4.75 0 0 1-.5 9.5H7Z" />
+            </svg>
+            <strong>On another machine</strong>
+            <span>Sign in to Shinsa Cloud and show a machine you already run Shinsa on. Nothing runs here.</span>
+          </a>
+        </div>
+      </section>
+    </main>
+    <canvas id="wave" aria-hidden="true"></canvas>
+    <!-- script -->
+  </body>
+</html>

@@ -23,7 +23,7 @@ export const CloseAction = Schema.Literals(['close', 'hide', 'leave-full-screen'
 
 export type CloseAction = typeof CloseAction.Type;
 
-export const Page = Schema.Literals(['none', 'app', 'waiting']);
+export const Page = Schema.Literals(['none', 'app', 'waiting', 'welcome']);
 
 export type Page = typeof Page.Type;
 

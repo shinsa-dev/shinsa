@@ -1,6 +1,7 @@
 import { FEEDBACK_REPOSITORY } from '@shinsa/core';
 import { Schema } from 'effect';
 import { PAGE_ACTIONS } from '../bridge/schema.ts';
+import { SourceChoice } from '../source/schema.ts';
 
 export const MenuCommand = Schema.Union([
   Schema.TaggedStruct('Show', {}),
@@ -11,6 +12,7 @@ export const MenuCommand = Schema.Union([
   Schema.TaggedStruct('PageAction', { action: Schema.Literals(PAGE_ACTIONS) }),
   Schema.TaggedStruct('OpenExternal', { url: Schema.String }),
   Schema.TaggedStruct('ShowEngineLog', {}),
+  Schema.TaggedStruct('UseEngine', { choice: SourceChoice }),
 ]);
 
 export type MenuCommand = typeof MenuCommand.Type;
@@ -50,7 +52,9 @@ export type MenuEntry =
       accelerator?: string;
       enabled?: boolean;
       visible?: boolean;
-    };
+      checked?: boolean;
+    }
+  | { kind: 'submenu'; label: string; entries: MenuEntry[] };
 
 export interface MenuSection {
   label: string;

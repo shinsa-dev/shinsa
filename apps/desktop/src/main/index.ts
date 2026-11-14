@@ -7,6 +7,7 @@ import { APP_NAME } from '../app/schema.ts';
 import { AppLifecycle } from '../app/service.ts';
 import { AwayWatch } from '../away/service.ts';
 import { PageBridge } from '../bridge/service.ts';
+import { CloudSignIn } from '../cloud-sign-in/service.ts';
 import { CommandLine } from '../command-line/service.ts';
 import { Connection } from '../connection/service.ts';
 import { URL_SCHEME } from '../deep-links/schema.ts';
@@ -19,6 +20,7 @@ import { isPermissionAllowed } from '../navigation/origin.ts';
 import { Notifications } from '../notifications/service.ts';
 import { Prefs } from '../prefs/service.ts';
 import { EngineServer } from '../server/service.ts';
+import { EngineSource } from '../source/service.ts';
 import { StatusTray } from '../tray/service.ts';
 import { UpdateLink } from '../update-link/service.ts';
 import { UpdateLog } from '../update-log/service.ts';
@@ -36,6 +38,7 @@ import { NativeWindowLive } from './native-window.ts';
 import { PageChannelLive } from './page-channel.ts';
 import { PlatformLive } from './platform.ts';
 import { PowerMonitorLive } from './power-monitor.ts';
+import { SessionCookiesLive } from './session-cookies.ts';
 import { DesktopShellLive } from './shell.ts';
 import { UpdateClientLive } from './update-client.ts';
 
@@ -54,23 +57,21 @@ const ElectronLayer = Layer.mergeAll(
 ).pipe(Layer.provide(PlatformLive));
 
 const EngineLayer = Layer.mergeAll(EngineSupervisor.layer, FirstHealth.layer, CommandLine.layer).pipe(
-  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, Prefs.layer, UpdateLog.layer, EngineActions.layer)),
+  Layer.provideMerge(Layer.mergeAll(EngineServer.layer, UpdateLog.layer, EngineActions.layer)),
+  Layer.provideMerge(EngineSource.layer),
+  Layer.provideMerge(Prefs.layer),
   Layer.provideMerge(ElectronLayer)
 );
 
-const WindowLayer = Layer.mergeAll(
-  AppLifecycle,
-  PageBridge,
-  UpdateLink,
-  AwayWatch,
-  AppMenu.layer,
-  StatusTray.layer
-).pipe(
+const WindowLayer = Layer.mergeAll(AppLifecycle, PageBridge, UpdateLink, AwayWatch, AppMenu.layer).pipe(
+  Layer.provideMerge(StatusTray.layer),
+  Layer.provideMerge(CloudSignIn.layer),
   Layer.provideMerge(Updater.layer),
   Layer.provideMerge(Notifications.layer),
   Layer.provideMerge(AppWindow.layer),
   Layer.provideMerge(
     Layer.mergeAll(
+      SessionCookiesLive,
       NativeWindowLive,
       NativeTrayLive,
       NativeNoticesLive,

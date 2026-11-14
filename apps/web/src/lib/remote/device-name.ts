@@ -10,6 +10,7 @@ const DEVICES: { pattern: RegExp; name: string }[] = [
 ];
 
 const BROWSERS: { pattern: RegExp; name: string }[] = [
+  { pattern: /Electron\//, name: 'Shinsa' },
   { pattern: /Edg\//, name: 'Edge' },
   { pattern: /OPR\//, name: 'Opera' },
   { pattern: /Firefox\/|FxiOS\//, name: 'Firefox' },

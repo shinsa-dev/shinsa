@@ -4,7 +4,7 @@ import { TestClock } from 'effect/testing';
 import { HealthAnswer } from '../../src/server/schema.ts';
 import { EngineServer } from '../../src/server/service.ts';
 import { describeServer } from '../../src/server/url.ts';
-import { answerJson, createWorld, type HttpAnswer, runDesktop } from '../support/desktop.ts';
+import { answerJson, createWorld, type HttpAnswer, runDesktop, USER_DATA } from '../support/desktop.ts';
 
 function requestHealthWith(answer: HttpAnswer) {
   const world = createWorld({ answer: () => answer });
@@ -163,5 +163,33 @@ describe('describeServer', () => {
       'Shinsa at http://127.0.0.1:5180'
     );
     expect(describeServer('http://127.0.0.1:5180', null)).toBe('Shinsa at http://127.0.0.1:5180');
+  });
+});
+
+describe('Shinsa Cloud’s health', () => {
+  it('answers when its session route does, and not for an answer that is not one', async () => {
+    const ask = (answer: HttpAnswer) => {
+      const world = createWorld({ answer: (path) => (path === '/__remote/session' ? answer : 'refuse') });
+      world.files.set(
+        `${USER_DATA}/prefs.json`,
+        JSON.stringify({ engineSource: { kind: 'cloud', machine: null } })
+      );
+      return runDesktop(
+        world,
+        EngineServer.use((server) => Effect.option(server.requestHealth))
+      ).then(Option.getOrNull);
+    };
+    expect(await ask(answerJson({ user: null }))).toEqual({
+      version: null,
+      working: 0,
+      updating: false,
+    });
+    expect(await ask(answerJson({ user: { id: 'u1', login: 'me', name: null, avatarUrl: null } }))).toEqual({
+      version: null,
+      working: 0,
+      updating: false,
+    });
+    expect(await ask(answerJson({ user: { login: 'me' } }))).toBeNull();
+    expect(await ask(answerJson(['not a session']))).toBeNull();
   });
 });

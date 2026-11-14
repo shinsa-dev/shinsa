@@ -15,6 +15,14 @@ export const NativeTrayLive = Layer.effect(
       if (item.kind === 'separator') return { type: 'separator' };
       if (item.kind === 'header') return { type: 'header', label: item.label };
       if (item.kind === 'status') return { label: item.label, enabled: false };
+      if (item.kind === 'source') {
+        return {
+          type: 'checkbox',
+          label: item.label,
+          checked: item.checked,
+          click: click({ kind: 'source', choice: item.choice }),
+        };
+      }
       if (item.kind === 'task') {
         return {
           label: item.label,

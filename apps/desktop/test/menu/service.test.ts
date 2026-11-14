@@ -4,7 +4,7 @@ import { CHANNELS } from '../../src/bridge/schema.ts';
 import type { MenuSection } from '../../src/menu/schema.ts';
 import { AppMenu } from '../../src/menu/service.ts';
 import { AppWindow } from '../../src/window/service.ts';
-import { createWorld, type DesktopWorld, flush, offer, runDesktop } from '../support/desktop.ts';
+import { createWorld, type DesktopWorld, flush, offer, runDesktop, USER_DATA } from '../support/desktop.ts';
 
 function run(
   world: DesktopWorld,
@@ -44,6 +44,7 @@ describe('the app menu', () => {
           'Check for Updates…',
           '-',
           'Settings…',
+          'Engine',
           'Restart Engine',
           '-',
           'services',
@@ -144,5 +145,53 @@ describe('the app menu', () => {
     );
     expect(world.checks).toBe(1);
     expect(world.actions).toEqual(['restart']);
+  });
+
+  it('lists the engines to show and switches between them, hiding Restart Engine while a viewer', async () => {
+    const world = createWorld();
+    world.files.set(
+      `${USER_DATA}/prefs.json`,
+      JSON.stringify({ engineSource: { kind: 'cloud', machine: { id: 'm1', name: 'Studio' } } })
+    );
+    await run(world, (_menu, window) =>
+      Effect.gen(function* () {
+        yield* window.showServerPage;
+        yield* offer(world.menuCommands, { _tag: 'UseEngine', choice: 'pinned' });
+        yield* offer(world.menuCommands, { _tag: 'UseEngine', choice: 'choose' });
+        yield* offer(world.menuCommands, { _tag: 'UseEngine', choice: 'local' });
+      })
+    );
+    const engine = (sections: readonly MenuSection[] | undefined) =>
+      sections?.[0]?.entries.find((entry) => entry.kind === 'submenu');
+    expect(engine(world.menus[0])).toEqual({
+      kind: 'submenu',
+      label: 'Engine',
+      entries: [
+        {
+          kind: 'command',
+          label: 'This Mac',
+          checked: false,
+          command: { _tag: 'UseEngine', choice: 'local' },
+        },
+        { kind: 'command', label: 'Studio', checked: true, command: { _tag: 'UseEngine', choice: 'pinned' } },
+        {
+          kind: 'command',
+          label: 'Choose a Machine…',
+          checked: false,
+          command: { _tag: 'UseEngine', choice: 'choose' },
+        },
+      ],
+    });
+    expect(world.menus[0]?.[0]?.entries).toContainEqual(
+      expect.objectContaining({ label: 'Restart Engine', visible: false })
+    );
+    expect(engine(world.menus.at(-1))).toMatchObject({
+      entries: [{ checked: false }, { label: 'Choose a Machine…', checked: true }],
+    });
+    expect(world.window.slice(-2)).toEqual(['show', 'reload']);
+    expect(world.shell).toEqual(['relaunch']);
+    expect(JSON.parse(world.files.get(`${USER_DATA}/prefs.json`) ?? '{}')).toEqual({
+      engineSource: { kind: 'local' },
+    });
   });
 });

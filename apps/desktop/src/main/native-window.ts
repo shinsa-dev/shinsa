@@ -128,6 +128,7 @@ export const NativeWindowLive = Layer.effect(
       loadUrl: (url) => loaded(() => win.loadURL(url)),
       loadWaiting: (query) =>
         loaded(() => win.loadFile(join(app.getAppPath(), 'static', 'waiting.html'), { query: { ...query } })),
+      loadWelcome: loaded(() => win.loadFile(join(app.getAppPath(), 'dist', 'welcome.html'))),
       send: (channel, ...value) => Effect.sync(() => contents.send(channel, ...value)),
       show: Effect.sync(() => {
         void app.dock?.show();

@@ -1,11 +1,15 @@
 import { describeList, type RemoteUser } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
+import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
+import { SettingsCard } from '@/components/settings/group.tsx';
 import { replaceConnection } from '@/lib/connection/socket.ts';
+import { applyDesktopMachine, selectDesktopSource } from '@/lib/desktop.ts';
 import { serveNotificationOpens } from '@/lib/notifications/worker.ts';
 import { resolveDeviceName } from '@/lib/remote/device-name.ts';
 import { listSettledMachineRows } from '@/lib/remote/enroll.ts';
 import { Fleet } from '@/lib/remote/fleet.ts';
-import { createFleetMember } from '@/lib/remote/machines.ts';
+import { createFleetMember, type MachineRow } from '@/lib/remote/machines.ts';
 import {
   describeOutdatedMachine,
   MACHINE_ICON,
@@ -16,6 +20,17 @@ import {
 import { serveRelayedRequests, startServiceWorker } from '@/lib/remote/relay.ts';
 import type { RemoteServices } from '@/lib/remote/services.ts';
 import { listAddDeviceSteps, PAIR_STEPS } from '@/lib/remote/setup-steps.ts';
+import {
+  describeMachineChoice,
+  describeMissingMachine,
+  isInScope,
+  listScopedRows,
+  type MachineScope,
+  resolveMachineScope,
+  resolveMissingMachine,
+  resolvePinnedMachine,
+  VIEWER_COPY,
+} from '@/lib/remote/viewer-mode.ts';
 import { ViewerContext } from '@/lib/remote/viewer.ts';
 import { forkApp, runApp } from '@/lib/runtime/app.ts';
 import { admitTeamMachines } from '@/lib/teams/admit.ts';
@@ -23,12 +38,21 @@ import { HostedTeamFeeds } from '@/lib/teams/feeds.ts';
 import { syncOwnTeamKeys } from '@/lib/teams/own-keys.ts';
 import { resolveTeammateScopes } from '@/lib/teams/scopes.ts';
 import { navigate } from '@/router.ts';
-import { RemoteBenefits, RemoteCheckAgain, RemoteHero, RemoteLoading, RemoteSteps } from './shell.tsx';
+import {
+  InviteLinkForm,
+  RemoteBenefits,
+  RemoteCheckAgain,
+  RemoteHero,
+  RemoteLoading,
+  RemoteSteps,
+  UseLocalEngineButton,
+} from './shell.tsx';
 
 type FleetState =
   | { kind: 'starting' }
   | { kind: 'empty'; machines: string[]; teams: string[] }
   | { kind: 'waiting'; machines: string[] }
+  | { kind: 'choose'; rows: MachineRow[]; missing: string | null }
   | { kind: 'ready'; fleet: Fleet }
   | { kind: 'failed'; title: string; message: string };
 
@@ -74,7 +98,46 @@ function TeamReachPage({ teams }: { teams: string[] }) {
   );
 }
 
+function ChooseMachinePage({ rows, missing }: { rows: MachineRow[]; missing: string | null }) {
+  return (
+    <section className='flex flex-col items-center gap-6 pt-4'>
+      <RemoteHero icon={MACHINE_ICON} tone={missing ? 'amber' : 'neutral'} title={VIEWER_COPY.chooseTitle}>
+        {missing ? describeMissingMachine(missing) : VIEWER_COPY.chooseBody}
+      </RemoteHero>
+      <SettingsCard className='w-full'>
+        {rows.length === 0 && <p className='px-2.5 py-2 text-xs text-fg-2'>{VIEWER_COPY.noMachines}</p>}
+        {rows.map((row) => (
+          <div key={row.instance.id} className='flex items-center gap-3 px-2.5 py-1.5'>
+            <Icon name={MACHINE_ICON} size='sm' className='shrink-0 text-fg-2' />
+            <div className='flex min-w-0 flex-1 flex-col'>
+              <span className='truncate text-xs text-fg-4'>{row.label}</span>
+              <span className='truncate text-2xs text-fg-2'>{describeMachineChoice(row)}</span>
+            </div>
+            <Button
+              variant='secondary'
+              size='sm'
+              onClick={() => applyDesktopMachine(resolvePinnedMachine(row))}
+            >
+              {VIEWER_COPY.choose}
+            </Button>
+          </div>
+        ))}
+      </SettingsCard>
+      <div className='flex w-full flex-col gap-2'>
+        <RemoteCheckAgain />
+        <UseLocalEngineButton />
+      </div>
+    </section>
+  );
+}
+
+function InAppActions() {
+  if (!selectDesktopSource()) return null;
+  return <UseLocalEngineButton />;
+}
+
 export function NoMachinePage({ machines, teams }: { machines: string[]; teams: string[] }) {
+  const inApp = selectDesktopSource() !== null;
   if (machines.length === 0 && teams.length > 0) return <TeamReachPage teams={teams} />;
   if (machines.length === 0)
     return (
@@ -85,6 +148,7 @@ export function NoMachinePage({ machines, teams }: { machines: string[]; teams: 
         <RemoteSteps title='Pair a machine' steps={PAIR_STEPS} />
         <RemoteBenefits />
         <RemoteCheckAgain />
+        <InAppActions />
       </section>
     );
   return (
@@ -92,9 +156,11 @@ export function NoMachinePage({ machines, teams }: { machines: string[]; teams: 
       <RemoteHero icon='IconKey1' title='Add this device to your machine'>
         {`${describeList(machines)} ${machines.length === 1 ? 'is' : 'are'} paired, but this device has no key for ${machines.length === 1 ? 'it' : 'them'} yet.`}
       </RemoteHero>
-      <RemoteSteps title='Add this device' steps={listAddDeviceSteps(machines)} />
+      <RemoteSteps title='Add this device' steps={listAddDeviceSteps(machines, inApp)} />
+      {inApp && <InviteLinkForm />}
       <RemoteBenefits />
       <RemoteCheckAgain />
+      <InAppActions />
     </section>
   );
 }
@@ -136,6 +202,64 @@ async function listFleetTeams(services: RemoteServices) {
   }
 }
 
+async function listFleetRows(services: RemoteServices, scope: MachineScope) {
+  const settled = await runApp(
+    listSettledMachineRows({
+      dashboard: services.dashboard,
+      devices: services.devices,
+      openSocket: (url) => new WebSocket(url),
+    })
+  );
+  await syncOwnTeamKeys(settled, { dashboard: services.dashboard, teamKeys: services.teamKeys });
+  const admitted = await admitTeamMachines(settled, {
+    dashboard: services.dashboard,
+    devices: services.devices,
+    selectTeamKey: services.teamKeys.selectTeamKey,
+    name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
+  });
+  const teams = await listFleetTeams(services);
+  const missing = resolveMissingMachine(scope, admitted);
+  if (scope.kind === 'choose' || missing) return { kind: 'choose' as const, rows: admitted, missing };
+  return {
+    kind: 'rows' as const,
+    rows: listScopedRows(admitted, scope),
+    teams,
+  };
+}
+
+async function listWaitingMachines(rows: MachineRow[], services: RemoteServices, scope: MachineScope) {
+  const listed = new Set(rows.map((row) => row.instance.id));
+  return [
+    ...rows.flatMap((row) => (row.device?.waiting ? [row.instance.name] : [])),
+    ...(await services.devices.listWaitingDevices()).flatMap((device) =>
+      listed.has(device.instanceId) || !device.waiting || !isInScope(scope, device.instanceId)
+        ? []
+        : [device.waiting.machineName]
+    ),
+  ];
+}
+
+function resolveIdleState(
+  rows: MachineRow[],
+  waiting: string[],
+  teams: readonly { name: string }[]
+): FleetState {
+  if (waiting.length > 0) return { kind: 'waiting', machines: waiting };
+  return {
+    kind: 'empty',
+    machines: rows.flatMap((row) => (row.instance.role === 'teammate' ? [] : [row.instance.name])),
+    teams: teams.map((team) => team.name),
+  };
+}
+
+function createHostedTeams(services: RemoteServices, scope: MachineScope) {
+  if (scope.kind !== 'every') return null;
+  return new HostedTeamFeeds({
+    listTeams: services.dashboard.listTeams,
+    selectTeamKey: services.teamKeys.selectTeamKey,
+  });
+}
+
 export function FleetApp({
   services,
   viewer,
@@ -148,49 +272,25 @@ export function FleetApp({
   children: React.ReactNode;
 }) {
   const [state, setState] = React.useState<FleetState>({ kind: 'starting' });
+  const [scope] = React.useState<MachineScope>(() => resolveMachineScope(selectDesktopSource()));
   React.useEffect(() => {
     let live = true;
     const release: (() => void)[] = [];
     void (async () => {
       try {
-        const settled = await runApp(
-          listSettledMachineRows({
-            dashboard: services.dashboard,
-            devices: services.devices,
-            openSocket: (url) => new WebSocket(url),
-          })
-        );
-        await syncOwnTeamKeys(settled, { dashboard: services.dashboard, teamKeys: services.teamKeys });
-        const rows = await admitTeamMachines(settled, {
-          dashboard: services.dashboard,
-          devices: services.devices,
-          selectTeamKey: services.teamKeys.selectTeamKey,
-          name: resolveDeviceName(navigator.userAgent, navigator.maxTouchPoints > 1, null),
-        });
-        const teams = await listFleetTeams(services);
+        const listed = await listFleetRows(services, scope);
+        if (listed.kind === 'choose') {
+          if (live) setState(listed);
+          return;
+        }
+        const { rows, teams } = listed;
         const added = rows.flatMap((row) =>
           row.device && !row.device.waiting ? [{ instance: row.instance, device: row.device }] : []
         );
-        const listed = new Set(rows.map((row) => row.instance.id));
-        const waiting = [
-          ...rows.flatMap((row) => (row.device?.waiting ? [row.instance.name] : [])),
-          ...(await services.devices.listWaitingDevices()).flatMap((device) =>
-            listed.has(device.instanceId) || !device.waiting ? [] : [device.waiting.machineName]
-          ),
-        ];
+        const waiting = await listWaitingMachines(rows, services, scope);
         if (!live) return;
         if (added.length === 0) {
-          setState(
-            waiting.length > 0
-              ? { kind: 'waiting', machines: waiting }
-              : {
-                  kind: 'empty',
-                  machines: rows.flatMap((row) =>
-                    row.instance.role === 'teammate' ? [] : [row.instance.name]
-                  ),
-                  teams: teams.map((team) => team.name),
-                }
-          );
+          setState(resolveIdleState(rows, waiting, teams));
           return;
         }
         let fleet: Fleet | null = null;
@@ -215,11 +315,8 @@ export function FleetApp({
             },
           })
         );
-        const hostedTeams = new HostedTeamFeeds({
-          listTeams: services.dashboard.listTeams,
-          selectTeamKey: services.teamKeys.selectTeamKey,
-        });
-        release.push(() => hostedTeams.stop());
+        const hostedTeams = createHostedTeams(services, scope);
+        release.push(() => hostedTeams?.stop());
         fleet = new Fleet(
           members,
           rows.flatMap((row) =>
@@ -229,7 +326,7 @@ export function FleetApp({
           ),
           hostedTeams
         );
-        void hostedTeams.start();
+        void hostedTeams?.start();
         release.push(() => fleet?.close());
         await runApp(startServiceWorker(services.worker, SERVICE_WORKER_PATH, SERVICE_WORKER_SCOPE));
         if (!live) return;
@@ -253,7 +350,7 @@ export function FleetApp({
       live = false;
       for (const step of release.splice(0).reverse()) step();
     };
-  }, [services, viewer]);
+  }, [services, viewer, scope]);
   switch (state.kind) {
     case 'starting':
       return shell(<RemoteLoading label='Connecting to your machines' />);
@@ -261,6 +358,8 @@ export function FleetApp({
       return shell(<NoMachinePage machines={state.machines} teams={state.teams} />);
     case 'waiting':
       return shell(<WaitingPage machines={state.machines} />);
+    case 'choose':
+      return shell(<ChooseMachinePage rows={state.rows} missing={state.missing} />);
     case 'failed':
       return shell(
         <section className='flex flex-col items-center gap-6 pt-4'>
@@ -269,6 +368,7 @@ export function FleetApp({
           </RemoteHero>
           <RemoteBenefits />
           <RemoteCheckAgain label='Try again' />
+          <InAppActions />
         </section>
       );
     case 'ready':

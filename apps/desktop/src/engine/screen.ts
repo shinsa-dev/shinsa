@@ -100,6 +100,14 @@ export function describeEngineScreen(screen: EngineScreen): EngineScreenView {
         detail: screen.detail,
         busy: false,
       };
+    case 'cloud':
+      return {
+        title: 'Shinsa Cloud is not answering',
+        text: 'This window shows a machine you reach through Shinsa Cloud. It opens again by itself once Shinsa Cloud answers, or use this Mac’s own engine instead.',
+        actions: ['retry', 'use-local'],
+        detail: '',
+        busy: false,
+      };
   }
 }
 

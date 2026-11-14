@@ -12,6 +12,7 @@ import {
   type DesktopWorld,
   flush,
   runConnected,
+  USER_DATA,
 } from '../support/desktop.ts';
 
 const SERVER = 'load http://127.0.0.1:7446/';
@@ -29,6 +30,10 @@ const QUEUE = {
   ],
   working: [],
 };
+
+function savedSource() {
+  return new Map([[`${USER_DATA}/prefs.json`, JSON.stringify({ engineSource: { kind: 'local' } })]]);
+}
 
 function createEngine(up: { value: boolean }, overrides: Partial<DesktopWorld> = {}) {
   return createWorld({
@@ -78,7 +83,11 @@ describe('connecting to the engine', () => {
 
   it('waits for the dev servers every 2 s and opens Shinsa once they answer', async () => {
     const up = { value: false };
-    const world = createEngine(up, { packaged: false, env: { SHINSA_URL: 'http://127.0.0.1:5180' } });
+    const world = createEngine(up, {
+      packaged: false,
+      files: savedSource(),
+      env: { SHINSA_URL: 'http://127.0.0.1:5180' },
+    });
     await connect(
       world,
       Effect.gen(function* () {
@@ -111,7 +120,7 @@ describe('connecting to the engine', () => {
 describe('watching the engine', () => {
   it('keeps the window after two missed checks and shows the status page after three', async () => {
     const up = { value: true };
-    const world = createEngine(up, { packaged: false });
+    const world = createEngine(up, { packaged: false, files: savedSource() });
     await connect(
       world,
       Effect.gen(function* () {
@@ -179,7 +188,7 @@ describe('the status page’s buttons', () => {
 
   it('tries again once at a time', async () => {
     const up = { value: false };
-    const world = createEngine(up, { packaged: false });
+    const world = createEngine(up, { packaged: false, files: savedSource() });
     await connect(
       world,
       Effect.gen(function* () {
@@ -191,5 +200,106 @@ describe('the status page’s buttons', () => {
     );
     expect(world.window).toEqual([WAITING_FOR_DEV, 'load http://127.0.0.1:5181/']);
     expect(world.requests.filter((path) => path === '/api/health')).toHaveLength(3);
+  });
+});
+
+describe('viewing a machine on Shinsa Cloud', () => {
+  const CLOUD = 'load https://app.shinsa.dev/';
+
+  const CLOUD_DOWN = 'waiting Shinsa Cloud is not answering';
+
+  function createViewer(up: { value: boolean }) {
+    const world = createWorld({
+      answer: (path) => (up.value && path === '/__remote/session' ? answerJson({ user: null }) : 'refuse'),
+    });
+    world.files.set(
+      `${USER_DATA}/prefs.json`,
+      JSON.stringify({ engineSource: { kind: 'cloud', machine: { id: 'm1', name: 'Studio' } } })
+    );
+    return world;
+  }
+
+  it('opens Shinsa Cloud without registering, starting or asking the local engine', async () => {
+    const world = createViewer({ value: true });
+    await connect(world, advance('5 seconds'));
+    expect(world.window).toEqual([CLOUD]);
+    expect(world.requests).toEqual(['/__remote/session', '/__remote/session']);
+    expect(world.launchctl).toEqual([]);
+    expect(world.loginItems).toEqual([]);
+    expect(world.tray.at(-1)?.tooltip).toBe('Showing Studio on Shinsa Cloud');
+    expect(world.about.at(-1)?.credits).toBe('Shinsa at https://app.shinsa.dev');
+  });
+
+  it('shows the status page while Shinsa Cloud does not answer and returns once it does', async () => {
+    const up = { value: false };
+    const world = createViewer(up);
+    await connect(
+      world,
+      Effect.gen(function* () {
+        yield* advance('5 seconds');
+        up.value = true;
+        yield* advance('5 seconds');
+        up.value = false;
+        yield* advance('15 seconds');
+      })
+    );
+    expect(world.window).toEqual([CLOUD_DOWN, CLOUD, CLOUD_DOWN]);
+    expect(world.launchctl).toEqual([]);
+    expect(world.tray.at(-1)?.tooltip).toBe('Shinsa Cloud is not answering');
+  });
+
+  it('tries Shinsa Cloud again for Restart, and moves back to This Mac’s engine on request', async () => {
+    const up = { value: false };
+    const world = createViewer(up);
+    await connect(
+      world,
+      Effect.gen(function* () {
+        up.value = true;
+        yield* request('restart');
+        yield* request('use-local');
+      })
+    );
+    expect(world.window).toEqual([CLOUD_DOWN, CLOUD]);
+    expect(world.launchctl).toEqual([]);
+    expect(world.shell).toContain('relaunch');
+    expect(JSON.parse(world.files.get(`${USER_DATA}/prefs.json`) ?? '{}')).toEqual({
+      engineSource: { kind: 'local' },
+    });
+  });
+});
+
+describe('the first launch', () => {
+  it('asks where agents run before it touches the engine, then starts it for This Mac', async () => {
+    const world = createEngine({ value: false }, { files: new Map() });
+    await connect(
+      world,
+      Effect.gen(function* () {
+        expect(world.window).toEqual(['welcome']);
+        expect(world.launchctl).toEqual([]);
+        expect(world.requests).toEqual(['/api/health']);
+        yield* request('choose-local');
+      })
+    );
+    expect(world.window.slice(0, 2)).toEqual(['welcome', STARTING]);
+    expect(JSON.parse(world.files.get(`${USER_DATA}/prefs.json`) ?? '{}')).toEqual({
+      engineSource: { kind: 'local' },
+    });
+  });
+
+  it('relaunches on Shinsa Cloud when you pick another machine', async () => {
+    const world = createEngine({ value: false }, { files: new Map() });
+    await connect(world, request('choose-cloud'));
+    expect(world.shell).toContain('relaunch');
+    expect(world.launchctl).toEqual([]);
+    expect(world.window).toEqual(['welcome']);
+    expect(JSON.parse(world.files.get(`${USER_DATA}/prefs.json`) ?? '{}')).toEqual({
+      engineSource: { kind: 'cloud', machine: null },
+    });
+  });
+
+  it('skips the question on a Mac that already ran Shinsa', async () => {
+    const world = createEngine({ value: true });
+    await connect(world);
+    expect(world.window).toEqual([SERVER]);
   });
 });

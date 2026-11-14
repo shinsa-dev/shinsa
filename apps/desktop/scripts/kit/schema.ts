@@ -11,3 +11,7 @@ export interface ScriptCommandOptions {
 }
 
 export const MARK_PATH = /<path d='([^']+)'/g;
+
+export const PAGE_SLOTS = { font: '/* font */', marks: '<!-- marks -->', script: '<!-- script -->' } as const;
+
+export const SCRIPT_CLOSE = /<\/script/gi;

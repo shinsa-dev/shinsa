@@ -1,4 +1,6 @@
 import { APP_NAME } from '../app/schema.ts';
+import { SOURCE_LABEL, type SourceSetting } from '../source/schema.ts';
+import { listSourceOptions } from '../source/source.ts';
 import { HELP_LINKS, type MenuEntry, type MenuRole, type MenuSection, type MenuUpdate } from './schema.ts';
 
 const separator: MenuEntry = { kind: 'separator' };
@@ -12,7 +14,16 @@ function open(label: string, path: string, accelerator?: string): MenuEntry {
   return accelerator === undefined ? entry : { ...entry, accelerator };
 }
 
-export function listMenuSections(update: MenuUpdate): MenuSection[] {
+function listEngineEntries(source: SourceSetting): MenuEntry[] {
+  return listSourceOptions(source).map((option) => ({
+    kind: 'command',
+    label: option.label,
+    checked: option.checked,
+    command: { _tag: 'UseEngine', choice: option.choice },
+  }));
+}
+
+export function listMenuSections(update: MenuUpdate, source: SourceSetting): MenuSection[] {
   return [
     {
       label: APP_NAME,
@@ -27,7 +38,13 @@ export function listMenuSections(update: MenuUpdate): MenuSection[] {
         },
         separator,
         open('Settings…', '/settings', 'CmdOrCtrl+,'),
-        { kind: 'command', label: 'Restart Engine', command: { _tag: 'RestartEngine' } },
+        { kind: 'submenu', label: SOURCE_LABEL.menu, entries: listEngineEntries(source) },
+        {
+          kind: 'command',
+          label: 'Restart Engine',
+          visible: source.kind === 'local',
+          command: { _tag: 'RestartEngine' },
+        },
         separator,
         role('services'),
         separator,

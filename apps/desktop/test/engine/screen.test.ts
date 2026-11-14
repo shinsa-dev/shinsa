@@ -43,6 +43,7 @@ describe('the status screen', () => {
       { kind: 'crashing', detail: 'log' },
       { kind: 'port', port: 5180, detail: 'log' },
       { kind: 'stopped', detail: 'log' },
+      { kind: 'cloud' },
     ];
     const views = screens.map((screen) => describeEngineScreen(screen));
     expect(views.map((view) => view.title)).toEqual([
@@ -52,6 +53,7 @@ describe('the status screen', () => {
       'Shinsa’s engine keeps stopping',
       'Port 5180 is taken',
       'Shinsa’s engine is not running',
+      'Shinsa Cloud is not answering',
     ]);
     expect(views.map((view) => view.actions)).toEqual([
       [],
@@ -60,8 +62,10 @@ describe('the status screen', () => {
       ['restart', 'copy-details'],
       ['restart', 'copy-details'],
       ['restart', 'open-privacy', 'copy-details'],
+      ['retry', 'use-local'],
     ]);
-    expect(views.map((view) => view.busy)).toEqual([true, true, false, false, false, false]);
+    expect(views.map((view) => view.busy)).toEqual([true, true, false, false, false, false, false]);
+    expect(views[6]?.text).not.toContain('app.shinsa.dev');
     expect(views[3]?.detail).toBe('log');
   });
 

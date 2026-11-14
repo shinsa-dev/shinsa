@@ -34,10 +34,11 @@ function readIdentity() {
     "import { URL_SCHEME } from './src/deep-links/schema.ts';",
     "import { resolveCommandLink } from './src/command-line/install.ts';",
     "import { resolveServerUrl } from './src/server/url.ts';",
+    "import { LOCAL_SOURCE } from './src/source/schema.ts';",
     "import { UPDATE_FEED } from './src/updates/schema.ts';",
     'console.log(JSON.stringify({ APP_ID, ENGINE_LABEL, APP_NAME, URL_SCHEME,',
     "  command: resolveCommandLink('/u'), data: resolveDataDir({}, '/u'),",
-    '  url: resolveServerUrl({ env: {}, packaged: true, configPort: null }), feed: UPDATE_FEED }));',
+    '  url: resolveServerUrl({ env: {}, packaged: true, configPort: null, source: LOCAL_SOURCE }), feed: UPDATE_FEED }));',
   ].join('\n');
   const env = { ...process.env, SHINSA_APP_ID: '' };
   const result = Bun.spawnSync([process.execPath, '-e', script], { cwd: desktopDir, env });
