@@ -1822,8 +1822,10 @@ out, and a signed-out account.
 
 Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
 behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below). The one
-exception is the pre-approval you give yourself: with Autopilot on, a review or merge gate may be approved for you
-by the policy you set, and only those two (Process and structure → Autopilot).
+exception is the pre-approval you give yourself: with Autopilot on, a plan, question, review, merge or your OK
+gate may be answered for you by the policy you set, and at Everything also a failure gate and a review's
+findings, each kind only once its score clears the bar; secret, Sign in, setup, operation, result and post-merge
+gates never are (Process and structure → Autopilot).
 
 Each gate takes only the answers that mean something for it (`gate.answer` refuses the rest):
 a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
@@ -2342,7 +2344,8 @@ gate opens ──► askAutopilot
                  └─ allowed ──► autopilot.judging ──► autopilot.judge (quick call)
                                    └─► autopilot.judgment {verdict, reason, reply}
                                          ├─ limits checked again; forward ──► waits for you
-                                         └─ act ──► approve / reply / merge, with the reason
+                                         ├─ cancel (a failed step) ──► cancel the task
+                                         └─ act ──► approve / reply / merge / retry, with the reason
 you answer it later ──► lesson (autopilot.learned) ──► next judgment's prompt
 you answer any gate ──► autopilot.decided ──► model guesses, then learns
                                          └─► estimate + examples ──► prompt
@@ -2358,23 +2361,26 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Urgency is the task's priority.** A task you mark urgent is urgent; a watchdog check or a watch's read may set
   `urgency` on `file_report` (a `TaskPriority`), which becomes the filed task's priority instead of the watched task's.
 - **The policy.** `enabled` (false); `level`, how much it may do alone (`AutopilotLevel`: `ask_first`, `balanced` by
-  default, or `most`); `gates`, which of your decisions it may act on (`AutopilotGate`: `plans`, `questions`,
-  `reviews`, `suggestions` and `watchdogTasks`; all but `suggestions` by default); `autoMerge` (`AutoMerge`: `off`, `low_risk` by default, or `approved`, every
+  default, `most` or `everything`, the last offered only once a kind of gate is ready, Everything, below); `gates`,
+  which of your decisions it may act on (`AutopilotGate`: `plans`, `questions`, `reviews`, `suggestions`,
+  `watchdogTasks`, and for Everything `proposals` (your OK on any other task), `failures` and `findings`; all but
+  `suggestions` by default); `autoMerge` (`AutoMerge`: `off`, `low_risk` by default, or `approved`, every
   change it approved); `escalate` (true), whether it may send an urgent change to your team; `ignoreUsageLimits`
   (true), whether an urgent task's runs skip the usage and cost limits; `contacts`, who in Slack also hears of an
   escalation (none by default, at most `MAX_AUTOPILOT_CONTACTS`, 5; each an `AutopilotContact`, a `slack_channel`
   or `slack_person` with its workspace `teamId`, Slack `id` and `name`, listed once, `isSameAutopilotContact`;
   Escalating in Slack, below). `settings.change` takes a partial `autopilot` and merges it into the current policy,
   `gates` and `contacts` replaced whole.
-- **The facts.** For a plan, question, review, merge or your OK gate (`selectJudgedGateKind`; your OK only on a
-  task a watchdog filed, below), `resolveAutopilotFacts`
+- **The facts.** For a plan, question, review, merge, your OK or failure gate (`selectJudgedGateKind`; a failure
+  only with no cause, an agent's wait that ran out (`monitor`) or a failed pre-push hook (`push_hook`),
+  `AUTOPILOT_JUDGED_FAILURE_CAUSES`, `isAutopilotJudgedFailure`), `resolveAutopilotFacts`
   gathers what a colleague would weigh: urgency (`isUrgentTask`: urgent and not set on your behalf), whether a
   watchdog filed it, the reviewer's confidence and risk, the plan's size (phases and files), whether the plan asks
   for you (it runs an operation, splits, is in the backlog, was created plan first or asks for `approval`), whether
   you approved the review yourself, how long the gate has waited, and where you are (`resolveAutopilotPresence`):
   inside your usual hours or not (Your hours, below), active when you were seen in the last 30 minutes
   (`AUTOPILOT_LIMITS.activeMinutes`; anything you do in Shinsa or on your Mac counts, `state.presence`), and how
-  long you have been away.
+  long you have been away, and whether that kind of gate is ready for Everything (`ready`, below).
 - **The hard limits** (`resolveAutopilotLimits`, a ceiling per level in `AUTOPILOT_CEILINGS`):
 
   | Level | Risk it acts on | Risk when urgent | Largest plan it approves |
@@ -2382,6 +2388,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   | `ask_first` (Ask me first) | low | low | 2 phases, 4 files |
   | `balanced` (Balanced) | low | medium | 4 phases, 10 files |
   | `most` (Most things) | medium | high | 6 phases, 20 files |
+  | `everything` (Everything) | high | high | any size |
 
   A gate whose kind is not in `gates` waits for you. A plan within the size and not held for you may be approved;
   a question may be answered; a review needs `high` confidence and a risk within the ceiling (the urgent one for an
@@ -2390,19 +2397,49 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   within `low` (`low_risk`) or the level's ceiling (`approved`), or the urgent ceiling once you have been away 60
   minutes of the wait (`AUTOPILOT_LIMITS.awayMinutes`); and nothing that refuses a merge (`resolveMergeRefusal`: an
   open pre-merge step of it or its bundle, or edits not pushed). Each refusal carries why ("The reviewer’s
-  confidence is medium.") and whether a setting made it.
+  confidence is medium.") and whether a setting made it. Below Everything, your OK waits for you except on a task
+  a watchdog filed, and every failure gate waits for you.
+- **Everything, earned per kind** (`resolveAutopilotReadiness`, `isAutopilotKindReady`, `AUTOPILOT_READINESS_LIMITS`).
+  Each kind of gate Everything widens (plan, review, merge, your OK, failure and finding, `AUTOPILOT_READINESS_KINDS`)
+  is scored on its own track in the profile (`AutopilotProfile.kinds`, below): `combined` for the gates, `model` for
+  findings, which no model call judges (`AUTOPILOT_READINESS_TRACK`). A kind is ready once at least 100 of its own
+  decisions are scored, it agrees with you on at least 90% and it is at least 5 points ahead of your usual answer for
+  that kind (its own `rate`, so merges you nearly always approve do not make plans look easy). Settings offers
+  Everything once any kind is ready, or while it is already your level. The lock is core's, not the page's: at every
+  gate `resolveAutopilotLevel` reads `everything` as `most` for a kind that is not ready, so a kind that later drops
+  below the bar falls back on its own while your level stays where you set it. A ready kind at Everything may approve
+  a plan of any size not held for you, approve a review or merge of any risk with `high` confidence (Auto merge still
+  applies), give your OK on any task, retry a failed step or cancel the task, and set the review's findings. Below
+  Everything nothing changes. Questions are not score-gated: Autopilot answers them at every level and a reply has
+  no yes or no to score. What it never answers is in Who can change Shinsa, below.
 - **The judgment.** When the limits allow acting, core marks the gate (`autopilot.judging`, `Gate.autopilotJudging`)
   and asks for `autopilot.judge {taskId, gateId, shadow: false}`, a replay-safe effect on lane `task:<id>`: the engine builds the
   prompt from the state (`selectAutopilotJudgeRequest`: a fixed system prompt, `AUTOPILOT_JUDGE_SYSTEM`, and the
   task's request, plan goal or question, the facts, the last 8 lessons of that kind of gate and your decision profile
   for it, below, in the user prompt)
   and makes one quick call on the classifier model (`createAutopilotJudge`), answered as `{verdict: 'act' |
-  'revise' | 'forward', reason, reply}` (`revise` on a plan, review or merge only, Follow-ups below). It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
+  'revise' | 'forward' | 'cancel', reason, reply}`; the user turn lists the verdicts the gate takes
+  (`AUTOPILOT_GATE_VERDICTS`: `revise` on a plan, review or merge only, Follow-ups below; `cancel` only on a
+  failure), the system prompt says what each means, and core reads any other verdict as `forward` (a `revise` where
+  it does not apply is refused by the follow-up limit). It dispatches `autopilot.judgment`; when no model answers, the verdict is `forward`
   ("Autopilot could not reach a model, so this waits for you."). Core ignores a judgment for a gate no longer open
   or no longer judging, checks the limits again (the state may have moved), and then acts: a plan is approved
   (`answerGateForYou`), a question answered with the reply (with no reply it waits for you: "Autopilot was not sure
   what to answer"), a review approved as "Fix and approve" does (`approveReviewAhead`), a merge started
-  (`gate.answered` `ahead`, then the usual merge). Every action is `gate.answered` with `autopilot: <reason>`
+  (`gate.answered` `ahead`, then the usual merge), your OK given, a failed step retried (`approve`, or `reply` with
+  the judge's guidance for the agent) or, on `cancel`, the task cancelled (`reject`), unless a confident model puts
+  the chance you would retry at 50% or more, which brings it to you instead. Autopilot retries a task's failed step
+  at most once a round (`AUTOPILOT_LIMITS.retriesPerRound`, counted from the round's failure gates it answered,
+  `AutopilotFacts.retried`): your own answer to a failure gate clears the automatic retries, so a second retry for
+  you would start them over and could loop, and the next failure of that round waits for you ("Autopilot already
+  retried this task once and it failed again."). At Everything, with `findings` on and
+  findings ready, approving a review also sets a verdict on each open finding from the local model, each judged on
+  its own (`selectAutopilotFindingCall`, `autopilot/findings.ts`: a probe per finding with that finding's severity
+  as its counts, `fix` when it puts the chance you fix it at 50% or more, `dismiss` below, and no verdicts at all
+  unless every finding has confidence at least 0.5): any `fix` asks for changes on the review (`revise`, with the
+  verdicts) instead of approving it, all `dismiss` approves it with them; the reason says which and why. A finding
+  you mark is learned with its own severity (`DecisionDraft.finding`), not the review's counts, so the model can
+  tell your findings apart. Every action is `gate.answered` with `autopilot: <reason>`
   (the reason clipped to 240 characters, the reply to 2,000), shown in the activity as done for you by Autopilot
   with the reason as its detail. A forward keeps why on the gate (`autopilot.forwarded`, `Gate.autopilotHeld`) and
   waits for you as always. While a task is a review candidate, `reactToFindings` sends the review's `should_fix`
@@ -2482,7 +2519,7 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   folded on every `autopilot.decided` (`state/autopilot.ts`, `learnAutopilotDecisions`): no hosted model, no
   fine-tuning, nothing leaves your machine, and replaying the log rebuilds it exactly, since it is plain arithmetic
   in a fixed order. It is an online logistic regression with three heads (`AUTOPILOT_HEAD_OF_KIND`): `gate` (plan,
-  review, merge and your OK; approved is yes), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
+  review, merge, your OK and failed steps; approved is yes, and so is a retry with your guidance, `replied`), `finding` (fixed is yes) and `suggestion` (accepted or kept is yes).
   Messages, edits, filed tasks, priority changes and cancellations train no head. `listAutopilotFeatures` turns a
   decision into features: the kind, risk, reviewer's confidence, shape and hour band one-hot, the plan's scope and
   the findings log-scaled, the flags (urgent, watchdog, active, in your hours, the plan you always approve), the project and repository hashed into 16 buckets, and a few crosses (kind × risk, kind × confidence,
@@ -2514,29 +2551,36 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
   leaves the model call to decide alone, so a new install or a new project still works. A veto brings the gate to
   you with the estimate as the reason ("From 40 decisions like this one, Autopilot puts the chance you would
   approve it at only 12%, so it waits for you."). With no model call, the gate comes to you, as before.
-- **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review or
-  merge gate to you (`AUTOPILOT_SCORED_KINDS`), it judges it anyway, once per gate, in the background
-  (`autopilot.judge` with `shadow: true`, the prompt told it will not act, `AUTOPILOT_SHADOW_NOTE`); the answer is
+- **Its guesses and the score** (`autopilot/score.ts`). When Autopilot is on and the limits leave a plan, review,
+  merge, your OK or judged failure gate to you (`AUTOPILOT_SCORED_KINDS`; a failure is asked as it opens,
+  `syncAutopilotFailures`), it judges it anyway, once per gate, in the background
+  (`autopilot.judge` with `shadow: true`, the prompt told it will not act and to guess `act`, `revise` with the
+  follow-up you would write, `cancel` for a failure you would cancel, or `forward`, `AUTOPILOT_SHADOW_NOTE`); the answer is
   stored on the gate (`autopilot.guessed {verdict, followUp, estimate}`, `Gate.autopilotGuess`, `Gate.autopilotFollowUp`, `Gate.autopilotEstimate`) and
   acts on nothing. `estimate` is the model's estimate at that moment, the same one a live judgment reads for its
   veto, so the combined track scores exactly what Autopilot did or would have done. A gate it judged and then
   brought to you keeps that verdict as its guess, with no second call; a call no model answers records no guess.
   A merge gate held only by a merge block (you approved the review yourself, a pre-merge step, edits not pushed yet) gets no
   guess, since you nearly always merge it and it would only pad the score. Your answer is kept with the guess
-  (`AutopilotDecision.guess`, and the follow-up it would have sent as `AutopilotDecision.followUp`). Approving agrees
-  with `act`, asking for changes with `revise` or `forward`, rejecting with `forward`; questions are not scored, since
-  a reply has no yes or no. **The follow-up match** (`AutopilotProfile.followUps`, `scoreFollowUp`,
-  `resolveAutopilotFollowUpScore`): when Autopilot guessed `revise` and you asked for changes in words that name a
-  topic, it counts whether its follow-up named one of the same topics; Settings shows the share as Its follow-ups,
-  and the benchmark prints it. Guesses and decisions from before follow-ups get `followUp: null` from the
-  `follow-ups` log migration.
+  (`AutopilotDecision.guess`, and the follow-up it would have sent as `AutopilotDecision.followUp`). Approving, or
+  retrying a failed step with or without guidance, agrees with `act`; asking for changes with `revise` or `forward`;
+  rejecting or cancelling with `forward` or `cancel`, and `cancel` agrees only with your cancel
+  (`isAutopilotAgreement`), so the readiness of failures measures its cancels too. The combined verdict keeps a
+  `cancel` unless a confident model vetoes it (`isAutopilotCancelVeto`); questions are not scored, since a reply has
+  no yes or no. A failure gate counts as a decision only when Autopilot could judge it. **The follow-up match**
+  (`AutopilotProfile.followUps`, `scoreFollowUp`, `resolveAutopilotFollowUpScore`): when Autopilot guessed `revise`
+  and you asked for changes in words that name a topic, it counts whether its follow-up named one of the same
+  topics; Settings shows the share as Its follow-ups, and the benchmark prints it. Guesses and decisions from before
+  follow-ups get `followUp: null` from the `follow-ups` log migration.
 - **Four tracks** (`AutopilotProfile.tracks`, `AUTOPILOT_TRACKS`). Each decision is scored against four guessers,
   each a running agreement in which an older decision counts half as much after 50 newer ones
   (`AUTOPILOT_SCORE_LIMITS.halfLife`): `model`, the local model's guess (`p` of at least 0.5 is a yes), on every
   plan, review, merge, your OK, finding and suggested task, Autopilot on or off; `call`, the model call's guess; `combined`, the verdict
   the rule above makes from the call's guess and the estimate stored with it (`AutopilotDecision.estimate`), never
   from the fold's later `modelGuess`, which has newer weights; and `base`, always your usual answer for that head lately (`AutopilotProfile
-  .rates`, the decayed share of yes, before this decision). Each track also counts how often `base` was right on the
+  .rates`, the decayed share of yes, before this decision). The same four tracks are kept per kind
+  (`AutopilotProfile.kinds`, `AutopilotKindProfile`, each with its own `rate` for `base`), which is what Everything
+  reads. Each track also counts how often `base` was right on the
   same decisions (`baseWeight`), so its `margin` over your usual answer compares like with like, and a log loss
   (a flat verdict counts as 99% sure, `clamp`), for the benchmark. `resolveAutopilotScore` reads `combined`, what
   Autopilot does: `progress`, from 0 to 1, the lesser of how many were scored against 50 and the weighted agreement
@@ -2562,10 +2606,11 @@ gate left to you ──► shadow judge ──► autopilot.guessed ──► sc
 - **Watchdog tasks** (`watchdogTasks` gate, on by default). On a task a watchdog filed (`isWatchdogTask`), your OK
   gate on its proposal is judged like any other gate and Autopilot may give your OK, unless the plan asks for you
   (`limitProposal`). Everything after still passes its own gates under the same policy. Your OK on any other task
-  is always yours.
-- **Handled by Autopilot on Home** (`autopilot/done.ts`). Every plan, question, review and merge Autopilot answered for you
+  is yours below Everything; at Everything the `proposals` gate covers it once your OK is ready.
+- **Handled by Autopilot on Home** (`autopilot/done.ts`). Every gate Autopilot answered for you
   that you have not marked seen (`listAutopilotDone`, the last 50) is a row in Handled by Autopilot, first on Home above
-  Needs you: what it did, the task and the reason; a follow-up quotes the words it sent. Opening a row marks it seen and it leaves the section (a finished task
+  Needs you: what it did (`AutopilotDone.action`: `approved`, `replied`, `merged`, `revised`, `retried` or
+  `cancelled`, each worded and drawn on its own; a follow-up quotes the words it sent), the task and the reason. Opening a row marks it seen and it leaves the section (a finished task
   stays in Recently finished); with two or more rows, Mark all seen clears them (`autopilot.seen {gateIds}`, human-only, `Gate.autopilotSeen`; `shinsa autopilot seen`). Each notifies once when
   it happens and its notification closes when you mark it seen; none counts in the Needs you badge.
 - **Urgent merges while you are away.** With the policy on, an urgent task's open merge gate is checked every hour
@@ -5718,7 +5763,17 @@ plainly what protects what.
 - **Decisions only you make.** These are human-only:
   - closing any gate: a plan, review, merge or operation, your OK on a proposal, an agent's question or secret request,
     a failure, setup or Sign in gate, in any way (`plans *`, `reviews *`, `merges *`, `operations *`, `questions
-    answer`, `gates answer`, `command`, which can send any gate answer);
+    answer`, `gates answer`, `command`, which can send any gate answer). The one exception is Autopilot, a
+    pre-approval you give in the human-only `autopilot` setting: inside core's hard limits it may close a gate as
+    you, and since Everything it may close gates you never see, because nothing about them asks for you: a plan of
+    any size, a review or merge of any risk the reviewer is highly confident in, your OK on any task, a failed step
+    (retry or cancel the task) and the review's findings, each kind only once its own score clears the bar
+    (Process and structure → Autopilot). So "every gate is yours" now reads "every gate is yours or your
+    Autopilot's". The pre-approval never reaches what protects you: secret, Sign in, setup, operation, result and
+    post-merge gates, a failure caused by a usage or cost limit, an account, GitHub SSO or your own pause, a plan you
+    asked to see, an escalated review and the merge of a review you approved yourself always wait for you; every
+    answer it gives is `gate.answered` with its reason, in the activity and in Handled by Autopilot; and turning
+    the setting off stops it at once, since core reads the policy at every gate and every judgment;
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge, share or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `dailyUsageLimit`, `autoResume`,

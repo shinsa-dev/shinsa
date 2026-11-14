@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createAutopilotDecision } from '../../src/autopilot/profile.ts';
+import { createAutopilotDecision, listGateDecisionDrafts } from '../../src/autopilot/profile.ts';
 import {
   AUTOPILOT_PROFILE_LIMITS,
   type AutopilotDecision,
@@ -208,6 +208,47 @@ describe('the decisions Autopilot learns from', () => {
       ['suggestion', 'accepted', 'Cache it', null],
       ['suggestion', 'dismissed', 'Retry it', null],
     ]);
+  });
+});
+
+describe('the failures you decide', () => {
+  function pausedGate(harness: Harness) {
+    const taskId = createTask(harness);
+    harness.send({ type: 'task.pause', taskId });
+    return { taskId, gate: harness.openGate(taskId) };
+  }
+
+  test('a failure you paused yourself teaches nothing, since resuming it is never a judgment', () => {
+    const harness = createHarness();
+    const { gate } = pausedGate(harness);
+    expect(gate).toMatchObject({ type: 'failure', cause: 'paused' });
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    expect(decisions(harness)).toEqual([]);
+  });
+
+  test('a failed step is learned as retried, retried with guidance or cancelled', () => {
+    const harness = createHarness();
+    const { taskId, gate } = pausedGate(harness);
+    const task = harness.task(taskId);
+    const failed = { ...gate, cause: undefined };
+    const drafts = (['approve', 'reply', 'reject'] as const).map((answer) =>
+      listGateDecisionDrafts(task, { gate: failed, decision: answer, response: 'Try the other port.' })
+    );
+    expect(drafts.map((found) => found.map(({ kind, answer }) => [kind, answer]))).toEqual([
+      [['failure', 'approved']],
+      [['failure', 'replied']],
+      [['failure', 'rejected']],
+    ]);
+    const monitored = listGateDecisionDrafts(task, {
+      gate: { ...gate, cause: 'monitor' },
+      decision: 'approve',
+      response: null,
+    });
+    expect(monitored.map(({ kind }) => kind)).toEqual(['failure']);
+    for (const cause of ['budget', 'owner_account', 'github_sso'] as const)
+      expect(
+        listGateDecisionDrafts(task, { gate: { ...gate, cause }, decision: 'approve', response: null })
+      ).toEqual([]);
   });
 });
 
