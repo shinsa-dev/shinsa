@@ -29,6 +29,7 @@ export function ListRow({
   revealWhenActive = false,
   holdsLinks = false,
   size = 'md',
+  taskId,
   onClick,
 }: {
   leading?: React.ReactNode;
@@ -41,6 +42,7 @@ export function ListRow({
   revealWhenActive?: boolean;
   holdsLinks?: boolean;
   size?: keyof typeof LIST_ROW_SIZE;
+  taskId?: string;
   onClick: () => void;
 }) {
   const ref = React.useRef<HTMLButtonElement & HTMLDivElement>(null);
@@ -53,6 +55,7 @@ export function ListRow({
     'aria-current': active || undefined,
     'data-active': active,
     'data-highlight-item': '',
+    'data-task': taskId,
     className: cn(
       LIST_ROW,
       meta || summary ? LIST_ROW_LINES : LIST_ROW_SIZE[size].line,
