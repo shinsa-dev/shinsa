@@ -236,6 +236,7 @@ describe('RunSection', () => {
     const verdict = await view.findByText('No findings.');
     expect(verdict.closest('[data-speaker]')?.getAttribute('data-speaker')).toBe('reviewer');
     expect(view.getByText('Reviewer').closest('[data-speaker-header]')).not.toBeNull();
+    expect(view.container.querySelectorAll('[data-speaker-divider]')).toHaveLength(1);
     expect((await view.findByText(REPLY)).closest('[data-speaker]')).toBeNull();
     expect(view.container.querySelectorAll('[data-speaker]')).toHaveLength(1);
     expect(view.queryByText('Agent')).toBeNull();

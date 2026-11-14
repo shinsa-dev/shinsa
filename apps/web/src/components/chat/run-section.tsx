@@ -69,7 +69,8 @@ function SpeakerBlock({
   children: React.ReactNode;
 }) {
   return (
-    <div data-speaker={run.role} className='mt-2 mb-3 flex min-w-0 flex-col gap-1.5'>
+    <div data-speaker={run.role} className='mt-4 mb-3 flex min-w-0 flex-col gap-1.5'>
+      <div aria-hidden data-speaker-divider className='mx-(--chat-inset) mb-2.5 border-t border-border' />
       <SpeakerHeader run={run} headline={headline} />
       <div className={SPEAKER_BODY}>{children}</div>
     </div>

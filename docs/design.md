@@ -131,13 +131,14 @@ Only these, and they win over anything below:
      as one voice and are set apart by space alone: no role name, no model, no account. Only a run that failed
      or was stopped shows the role header, so "Failed", "Stopped" and the picker that runs it again on another
      account have a place; a run going fine reaches that picker from ⌘K. **Every other voice speaks as another sender**: the
-     reviewer, a watch check, an initiative's lead and a delegated helper. Its run opens with a sender line
+     reviewer, a watch check, an initiative's lead and a delegated helper. Its run opens on a hairline across the
+     chat's inset (`border-t border-border`, the one break between voices), then a sender line
      (`SpeakerHeader` in `components/chat/run-section.tsx`): the role's icon in a 20px round `bg-bg-a2` avatar,
      its name (from `RUN_ROLE`: Reviewer `IconShieldCheck`, Agent `IconAgent`, Planner `IconMap`, Builder
      `IconHammer`…) in `font-medium text-fg-4`, then what it did (`resolveRunHeadline`, "Reviewed the change, 3
      findings (2 blocking, 1 should fix)") in `text-fg-3`, with no model, no chevron and no fold. Its work,
      reply, cards and errors follow on the chat's own inset, flush with every other line, with no indent, card or rail:
-     the sender line alone sets it apart, the way a second person's message reads in a chat, so a review never reads as the Agent's own turn (26). When your message started the run, your bubble sits above its header, so you speak, then the agent
+     the hairline and the sender line alone set it apart, the way a second person's message reads in a chat, so a review never reads as the Agent's own turn (26). When your message started the run, your bubble sits above its header, so you speak, then the agent
      answers. A delegated agent never gets a header of its own: it is a card inside the turn of the agent that
      delegated it, with the same role mark (26). The chat renders the chat protocol (`docs/engine.md`), never a
      provider's tool names. A message you send after a run ended belongs to the run that answers it
