@@ -298,7 +298,9 @@ SHINSA_URL=http://127.0.0.1:5180 SHINSA_CLOUD_URL=http://127.0.0.1:5195 bun run 
 ```
 
 Remove `engineSource` from `~/Library/Application Support/Shinsa Dev/prefs.json` first to see the welcome page, or set
-it to `{ "kind": "cloud", "machine": null }` to open on the machine chooser. Choose Studio, add the app with its
-invite link from the sandbox's start page, and check the Dock badge and the menu bar item count only Studio's tasks;
+it to `{ "kind": "cloud", "machine": null }` to open on the machine chooser. Choose Studio, and to add the app open
+`http://127.0.0.1:5195/sandbox/enroll/studio` in a browser: it makes Studio's invite link and redirects to it, so copy
+the `/enroll#…` address the browser lands on and paste that (the `/sandbox/enroll/studio` address itself is refused as
+not an invite link). Then check the Dock badge and the menu bar item count only Studio's tasks;
 Shinsa → Engine → This Mac relaunches on the seeded engine. Put back the prefs you had when done.
 
