@@ -8,7 +8,7 @@ import {
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Duration, Effect, Layer } from 'effect';
+import { Duration, Effect, Layer, Option } from 'effect';
 import { ShellLayer } from '../../src/shell/layers.ts';
 import { TerminalPty } from '../../src/terminals/pty/service.ts';
 import {
@@ -139,7 +139,7 @@ describe('Terminals', () => {
     const again = (await createTerminals({ dataDir })).terminals;
     const restored = await runAsync(again.find(terminal.id));
     expect(restored.info).toMatchObject({ status: 'stopped', endedAt: 100 });
-    expect(await runAsync(restored.serializeScreen)).toContain('dev server on :3000');
+    expect(Option.getOrThrow(await runAsync(restored.serializeScreen))).toContain('dev server on :3000');
     expect((await runAsync(again.snapshot)).terminals).toHaveLength(1);
   });
 

@@ -1,5 +1,5 @@
 import type { TerminalServerFrame } from '@shinsa/core';
-import { Duration, Effect, Fiber } from 'effect';
+import { Duration, Effect, Fiber, Option } from 'effect';
 import { createTerminalMirror } from './mirror.ts';
 import type {
   SessionOptions,
@@ -246,7 +246,11 @@ export const createTerminalSession = Effect.fn('TerminalSession.create')(functio
     replaceColors(colors) {
       mirror.replaceColors(colors);
     },
-    serializeScreen: Effect.map(mirror.flushed, () => mirror.serializeSaved()),
+    serializeScreen: Effect.suspend(() =>
+      disposed
+        ? Effect.succeed(Option.none())
+        : Effect.map(mirror.flushed, () => (disposed ? Option.none() : Option.some(mirror.serializeSaved())))
+    ),
     readOutput: (lines) => Effect.map(mirror.flushed, () => mirror.readLines(lines)),
     hangUp() {
       running?.hangUp();

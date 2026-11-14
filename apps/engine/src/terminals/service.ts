@@ -191,8 +191,8 @@ export class Terminals extends Context.Service<
 
         const saveScreen = Effect.fn('Terminals.saveScreen')(function* (session: TerminalSession) {
           const screen = yield* session.serializeScreen;
-          if ((yield* Ref.get(sessions)).get(session.info.id) === session)
-            yield* files.writeScreen(dataDir, session.info.id, screen);
+          if (Option.isSome(screen) && (yield* Ref.get(sessions)).get(session.info.id) === session)
+            yield* files.writeScreen(dataDir, session.info.id, screen.value);
         });
 
         const scheduleScreen = Effect.fn('Terminals.scheduleScreen')(function* (session: TerminalSession) {
@@ -719,7 +719,8 @@ export class Terminals extends Context.Service<
           );
           yield* Effect.forEach(all, (session) => session.stop, { concurrency: 'unbounded', discard: true });
           for (const session of all) {
-            yield* files.writeScreen(dataDir, session.info.id, yield* session.serializeScreen);
+            const screen = yield* session.serializeScreen;
+            if (Option.isSome(screen)) yield* files.writeScreen(dataDir, session.info.id, screen.value);
             session.dispose();
           }
           yield* files.writeTerminals(

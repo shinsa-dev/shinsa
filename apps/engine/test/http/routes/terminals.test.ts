@@ -8,7 +8,7 @@ import {
   type TerminalInfo,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { Effect } from 'effect';
+import { Effect, Option } from 'effect';
 import type { ServiceRefiner, Terminals } from '../../../src/terminals/index.ts';
 import { createConfigAt } from '../../helpers/config.ts';
 import { createTempDir, until } from '../../helpers/index.ts';
@@ -74,8 +74,9 @@ describe('terminals over HTTP', () => {
       status: 'running',
     });
     await until('the command ran', async () =>
-      (await runAsync((await runAsync(terminals.find(created.terminal.id))).serializeScreen)).includes(
-        'hi-42'
+      Option.exists(
+        await runAsync((await runAsync(terminals.find(created.terminal.id))).serializeScreen),
+        (screen) => screen.includes('hi-42')
       )
     );
     expect(await read(`/api/terminals/${created.terminal.id}/foreground`)).toEqual({ program: null });

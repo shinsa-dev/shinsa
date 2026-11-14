@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'bun:test';
-import { Effect } from 'effect';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { Effect, Option } from 'effect';
 import type { TerminalSession, TerminalSpawnOptions } from '../../src/terminals/schema.ts';
 import { createTerminalSession, FLOW_LIMITS } from '../../src/terminals/session.ts';
 import { until } from '../helpers/until.ts';
@@ -119,7 +119,7 @@ describe('TerminalSession', () => {
     const { session, process } = createSession();
     process.emit('old line\r\nprompt $ ');
     session.clear();
-    const screen = await Effect.runPromise(session.serializeScreen);
+    const screen = Option.getOrThrow(await Effect.runPromise(session.serializeScreen));
     expect(screen).not.toContain('old line');
     expect(screen).toContain('prompt $');
     session.dispose();
@@ -144,7 +144,7 @@ describe('TerminalSession', () => {
     process.emit('\u001b]0;bun dev\u0007');
     await until('the title changes', () => session.info.title === 'bun dev');
     process.emit('\u001b]0;bun dev\u0007');
-    await Effect.runPromise(session.serializeScreen);
+    Option.getOrThrow(await Effect.runPromise(session.serializeScreen));
     expect(changes).toEqual(['running']);
     process.emit('\u001b]0;\u0007');
     await until('an empty title clears it', () => session.info.title === null);
@@ -164,8 +164,20 @@ describe('TerminalSession', () => {
     time.now = 60;
     Effect.runSync(session.start({ command: ['/bin/fish', '-l'], env: {}, spawn }));
     expect(session.info).toMatchObject({ status: 'running', exitCode: null, startedAt: 60, endedAt: null });
-    expect(await Effect.runPromise(session.serializeScreen)).toContain('done');
+    expect(Option.getOrThrow(await Effect.runPromise(session.serializeScreen))).toContain('done');
     session.dispose();
+  });
+
+  it('saves no screen once disposed, even when disposed while the screen is still being written', async () => {
+    const { session, process } = createSession();
+    const errors = spyOn(console, 'error');
+    process.emit('busy line\r\n'.repeat(2_000));
+    const pending = Effect.runPromise(session.serializeScreen);
+    session.dispose();
+    expect(Option.isNone(await pending)).toBe(true);
+    expect(Option.isNone(await Effect.runPromise(session.serializeScreen))).toBe(true);
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
   });
 
   it('marks the shell stopped, not exited, when Shinsa stops', async () => {
@@ -181,7 +193,7 @@ describe('TerminalSession', () => {
 
   it('shows the screen it saved, and ends its viewers and ignores late output once disposed', async () => {
     const { session, process, screens } = createSession('saved line');
-    expect(await Effect.runPromise(session.serializeScreen)).toContain('saved line');
+    expect(Option.getOrThrow(await Effect.runPromise(session.serializeScreen))).toContain('saved line');
     const viewer = createFakeViewer();
     session.attach(viewer);
     session.hangUp();
