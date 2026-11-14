@@ -35,7 +35,6 @@ import {
   AUTOPILOT_GATE_ITEMS,
   AUTOPILOT_GATE_ROWS,
   AUTOPILOT_LEVEL_DESCRIPTION,
-  AUTOPILOT_LEVEL_ITEMS,
   AUTOPILOT_OFF,
   AUTOPILOT_ROWS,
   AUTOPILOT_TITLE,
@@ -49,6 +48,8 @@ import {
   hasTeamProject,
   isAskWaiting,
   isSlackTestSent,
+  listAutopilotLevelItems,
+  listAutopilotReadinessRows,
   listContactOptions,
   listSlackWorkspaceItems,
   AUTOPILOT_SCORE_ROWS,
@@ -295,9 +296,29 @@ function ScoreBlock({ level, onUse }: { level: AutopilotLevel; onUse: (level: Au
   );
 }
 
+function ReadinessBlock() {
+  const profile = useShinsaSelector((state) => state.autopilotProfile);
+  const rows = listAutopilotReadinessRows({ autopilotProfile: profile ?? EMPTY_AUTOPILOT_PROFILE });
+  return (
+    <SettingsBlock
+      header={<BlockHeader icon={AUTOPILOT_BLOCKS.readiness.icon} title={AUTOPILOT_BLOCKS.readiness.title} />}
+    >
+      {rows.map((row) => (
+        <DescribedRow key={row.kind} title={row.title} description={row.detail}>
+          <span className={cn(TOKEN_TEXT, 'flex items-center gap-1 pr-1.5')}>
+            {row.ready && <CheckMark label='Ready for Everything' />}
+            {row.percent}
+          </span>
+        </DescribedRow>
+      ))}
+    </SettingsBlock>
+  );
+}
+
 export function AutopilotSettings({ settings }: { settings: Settings }) {
   const available = useEngineFeature('autopilot');
   const projects = useShinsaSelector((state) => state.projects);
+  const profile = useShinsaSelector((state) => state.autopilotProfile);
   const { policy, enabled } = resolveAutopilotValue(settings);
   if (!available) return null;
   const team = hasTeamProject(Object.values(projects ?? {}));
@@ -341,7 +362,10 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
             >
               <SelectField
                 label={AUTOPILOT_ROWS.level}
-                items={AUTOPILOT_LEVEL_ITEMS}
+                items={listAutopilotLevelItems(
+                  { autopilotProfile: profile ?? EMPTY_AUTOPILOT_PROFILE },
+                  policy.level
+                )}
                 value={policy.level}
                 onValueChange={(level) => updateAutopilot({ level })}
               />
@@ -413,6 +437,7 @@ export function AutopilotSettings({ settings }: { settings: Settings }) {
             onContactsChange={(contacts) => updateAutopilot({ contacts })}
           />
           <ScoreBlock level={policy.level} onUse={(level) => updateAutopilot({ level })} />
+          <ReadinessBlock />
         </>
       )}
     </SettingsGroup>
