@@ -153,12 +153,9 @@ describe('where agents work', () => {
     expect(resolveTaskWorkspace(harness.state, unbound)).toBe('worktrees');
   });
 
-  test('only the human chooses where agents work, and only from the two modes', () => {
+  test('where agents work is one of the two modes', () => {
     const harness = createHarness();
     const repoId = registerRepo(harness);
-    expect(() =>
-      harness.send({ type: 'repo.update', repoId, patch: { workspace: 'main_checkout' } }, { onBehalf: true })
-    ).toThrow('Only the human changes the repository’s workspace.');
     expect(parseCommand({ type: 'repo.update', repoId, patch: { workspace: 'main_checkout' } })).toEqual({
       type: 'repo.update',
       repoId,

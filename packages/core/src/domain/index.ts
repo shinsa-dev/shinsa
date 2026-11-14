@@ -222,7 +222,7 @@ export {
   COMPACTION_MODES,
   type CompactionMode,
   createSettings,
-  HUMAN_ONLY_REPO_FIELDS,
+  OWNER_ONLY_REPO_FIELDS,
   HUMAN_ONLY_SETTINGS,
   isEunoeCompaction,
   isFoldingCompaction,

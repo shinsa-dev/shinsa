@@ -92,7 +92,7 @@ disagrees. You built it and know why it is the way it is, so you write the expla
 
 - **check_changes**: keep the checks current as you build. When a phase adds a file, a test or a package the checks
   do not cover, add a check for it in that phase's hand-over, with a one-sentence `reason` the human reads. The
-  repository's own checks (`r1`…) are the human's. A failure your change caused comes back to you as a fix; one that
+  repository's own checks (`r1`…) run for every task: change them with `repos_update`, not here. A failure your change caused comes back to you as a fix; one that
   passes when its test files run alone, or already fails on the base branch, does not.
 
 Attach evidence with `attach_evidence` before the last phase (the `evidence` skill): for a test or a check, link the

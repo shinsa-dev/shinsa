@@ -8,10 +8,11 @@ import {
 } from '../../src/remote/local-only.ts';
 
 describe('owner-only commands', () => {
-  test('a human-only setting, a human-only repository field and choosing an account are for the owner', () => {
+  test('a human-only setting, a repository’s checks or coverage and choosing an account are for the owner', () => {
     const commands: UserCommand[] = [
       { type: 'settings.change', patch: { mergeMethod: 'squash' } },
       { type: 'repo.update', repoId: 'r', patch: { checkCommands: [] } },
+      { type: 'repo.update', repoId: 'r', patch: { coverage: { mode: 'off' } } },
       { type: 'task.bind_account', taskId: 't', account: null },
       { type: 'task.retry', taskId: 't', account: { id: 'a', email: 'a@example.com' } },
     ];

@@ -545,7 +545,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         name: 'checks',
         kind: 'list',
         description:
-          'The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. Only the human changes them.',
+          'The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each.',
       },
       {
         name: 'workspace',
@@ -559,7 +559,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         kind: 'choice',
         choices: COVERAGE_MODES,
         description:
-          'How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it.',
+          'How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off.',
       },
       {
         name: 'coverageCommand',

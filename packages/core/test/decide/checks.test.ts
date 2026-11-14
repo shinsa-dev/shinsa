@@ -186,7 +186,10 @@ describe('the agent changes its checks as it builds', () => {
       { action: 'change', id: 'c9', command: null, phases: [1] },
       'There is no check c9. The checks are c1'
     );
-    refuse({ action: 'remove', id: 'r1' }, 'r1 is the repository’s own command, `bun lint`. Only the human');
+    refuse(
+      { action: 'remove', id: 'r1' },
+      'r1 is the repository’s own command, `bun lint`. Change the repository’s checks with `repos_update` instead.'
+    );
     refuse({ command: 'bun test src/parser' }, '`bun test src/parser` is already c1, “Parser tests”.');
     refuse({ phases: [4] }, 'The plan has 3 phases, so a check cannot cover phase 4.');
     expect(harness.events).toHaveLength(before);

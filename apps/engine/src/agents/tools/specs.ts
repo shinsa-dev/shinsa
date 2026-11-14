@@ -276,7 +276,7 @@ const CHECK = {
 
 const CHECK_CHANGES = {
   type: 'array',
-  description: `Changes to your checks, when the work outgrew them: add one for new test files or a package you now touch, change a command, or remove one that no longer applies. At most ${L.checkChanges}. Shinsa runs the ones you add or change right after this hand-over. The repository's own checks (ids r1, r2…) are the human's.`,
+  description: `Changes to your checks, when the work outgrew them: add one for new test files or a package you now touch, change a command, or remove one that no longer applies. At most ${L.checkChanges}. Shinsa runs the ones you add or change right after this hand-over. The repository's own checks (ids r1, r2…) change with repos_update.`,
   maxItems: L.checkChanges,
   items: {
     type: 'object',

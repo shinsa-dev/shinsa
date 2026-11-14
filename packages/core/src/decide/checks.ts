@@ -52,8 +52,8 @@ function findAgentCheck(decider: Decider, task: Task, id: string) {
   const check = findTaskCheck(decider, task, id);
   if (check.source !== 'repo') return check;
   throw new DomainError({
-    code: 'check_human_only',
-    message: `${id} is the repository’s own command, \`${check.command}\`. Only the human changes it, in Settings → Projects.`,
+    code: 'check_repo_owned',
+    message: `${id} is the repository’s own command, \`${check.command}\`. Change the repository’s checks with \`repos_update\` instead.`,
   });
 }
 

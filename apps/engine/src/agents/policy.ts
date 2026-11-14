@@ -38,12 +38,6 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
     },
     {
       pattern:
-        /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|workspace|coverage(?:-command|-report|-format)?)(?![\w-])/,
-      reason:
-        'Only the human changes a repository’s check commands, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
-    },
-    {
-      pattern:
         /(?:^|[\s;&|(`/])(?:curl|wget|xh|https?|websocat|wscat)\s[^;&|\n]*?\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,
       reason:
         'Only the human types into their terminals and runs their services. Put the command in a ```bash run block in your question to them, and they can run it in a terminal with one press.',
