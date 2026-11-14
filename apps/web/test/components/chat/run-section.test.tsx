@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import { RunSection } from '@/components/chat/run-section.tsx';
 import {
   createEntry,
@@ -121,5 +121,84 @@ describe('RunSection', () => {
     const header = view.getByText('Agent').closest('[data-chat-line]');
     expect(header?.className.split(' ')).toContain('max-sm:h-auto');
     expect(worked?.className.split(' ')).not.toContain('max-sm:h-auto');
+  });
+
+  it('folds what the run loaded and its folded turns into Worked for once the turn ended', async () => {
+    pushState(createShinsaState({ tasks: [task], runs: [run] }));
+    pushTranscript('run-fix', [
+      createEntry(
+        {
+          type: 'notice',
+          notice: {
+            kind: 'extensions',
+            servers: [{ name: 'linear', tokens: 4_200 }],
+            skills: [],
+            plugins: [],
+          },
+        },
+        'x1',
+        STARTED
+      ),
+      createEntry(
+        { type: 'tool_call', callId: 'r1', tool: { kind: 'read', path: 'a.ts', range: null } },
+        'r1',
+        STARTED + 500
+      ),
+      createEntry(
+        {
+          type: 'notice',
+          notice: { kind: 'compaction', trigger: 'fold', preTokens: null, summary: null, by: 'eunoe' },
+        },
+        'f1',
+        STARTED + 1000
+      ),
+      createEntry({ type: 'agent', phase: 'final', text: REPLY }, 'a2', STARTED + 2000),
+    ]);
+    const view = render(
+      <TooltipProvider>
+        <RunSection run={run} task={task} messages={[]} waiting={false} />
+      </TooltipProvider>
+    );
+    const worked = await view.findByRole('button', { name: /^Worked for/ });
+    expect(view.getByText(REPLY)).toBeTruthy();
+    expect(view.queryByRole('button', { name: /^Loaded 1 MCP/ })).toBeNull();
+    fireEvent.click(worked);
+    const loaded = view.getByRole('button', { name: /^Loaded 1 MCP/ });
+    expect(worked.compareDocumentPosition(loaded) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      view.getAllByRole('button').some((row) => row.textContent?.startsWith('Finished turns folded'))
+    ).toBe(true);
+  });
+
+  it('keeps what a live run loaded in view above its live card', async () => {
+    const live = createRun({ id: 'run-live', taskId: 'task-1', startedAt: STARTED });
+    pushState(createShinsaState({ tasks: [task], runs: [live] }));
+    pushTranscript('run-live', [
+      createEntry(
+        {
+          type: 'notice',
+          notice: {
+            kind: 'extensions',
+            servers: [{ name: 'linear', tokens: 4_200 }],
+            skills: [],
+            plugins: [],
+          },
+        },
+        'x1',
+        STARTED
+      ),
+      createEntry(
+        { type: 'tool_call', callId: 'r1', tool: { kind: 'read', path: 'a.ts', range: null } },
+        'r1',
+        STARTED + 500
+      ),
+    ]);
+    const view = render(
+      <TooltipProvider>
+        <RunSection run={live} task={task} messages={[]} waiting={false} />
+      </TooltipProvider>
+    );
+    expect(await view.findByRole('button', { name: /^Loaded 1 MCP/ })).toBeTruthy();
+    expect(view.queryByRole('button', { name: /^Worked for/ })).toBeNull();
   });
 });

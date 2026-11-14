@@ -1,6 +1,7 @@
 import { describeCount, type Run } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { ExpandRow } from '@/components/chat/chat-line.tsx';
+import { NoticeLine } from '@/components/chat/notice-line.tsx';
 import { ToolGroup } from '@/components/chat/tool-group.tsx';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
@@ -48,6 +49,8 @@ function DetailItem({ item, live }: { item: WorkItem; live: boolean }) {
       return <Markdown text={item.text} className='prose-chat' />;
     case 'tools':
       return <ToolGroup persistId={persistId} calls={item.calls} live={live} />;
+    default:
+      return <NoticeLine item={item} />;
   }
 }
 
