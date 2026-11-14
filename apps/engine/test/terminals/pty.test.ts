@@ -241,6 +241,15 @@ describe('TerminalPty.pickPort', () => {
     holder.stop(true);
   });
 
+  it('tells a port something listens on from one nothing answers on', async () => {
+    const holder = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: PORT_PROBE_SOCKET });
+    const isAnswering = (port: number) =>
+      Effect.runPromise(TerminalPty.use((pty) => pty.isAnswering(port)).pipe(Effect.provide(PTY)));
+    expect(await isAnswering(holder.port)).toBe(true);
+    holder.stop(true);
+    expect(await isAnswering(holder.port)).toBe(false);
+  });
+
   it('hangs up on anything that connects to the port while it checks it', () => {
     let ended = false;
     PORT_PROBE_SOCKET.data({ end: () => (ended = true) });

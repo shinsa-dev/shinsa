@@ -1,7 +1,10 @@
+import { BunSocket } from '@effect/platform-bun';
 import { Context, Deferred, Effect, Exit, Layer, Schedule, Scope } from 'effect';
 import { constNull } from 'effect/Function';
 import { Shell } from '../../shell/service.ts';
 import {
+  ANSWER_HOSTS,
+  ANSWER_TIMEOUT,
   FOREGROUND_TIMEOUT,
   GROUP_POLL_SCHEDULE,
   HANG_UP_GRACE,
@@ -31,6 +34,7 @@ export class TerminalPty extends Context.Service<
       taken: ReadonlySet<number>,
       listen: PortListener
     ): Effect.Effect<number, PortUnavailable>;
+    isAnswering(port: number): Effect.Effect<boolean>;
   }
 >()('shinsa/engine/terminals/pty/TerminalPty') {
   static readonly layer = Layer.effect(
@@ -142,7 +146,19 @@ export class TerminalPty extends Context.Service<
         );
       });
 
-      return TerminalPty.of({ spawn, readForeground, pickPort });
+      const connects = (host: string, port: number) =>
+        BunSocket.makeNet({ host, port, openTimeout: ANSWER_TIMEOUT }).pipe(
+          Effect.flatMap((socket) => Effect.scoped(socket.reader)),
+          Effect.as(true),
+          Effect.orElseSucceed(() => false)
+        );
+
+      const isAnswering = Effect.fn('TerminalPty.isAnswering')(function* (port: number) {
+        for (const host of ANSWER_HOSTS) if (yield* connects(host, port)) return true;
+        return false;
+      });
+
+      return TerminalPty.of({ spawn, readForeground, pickPort, isAnswering });
     })
   );
 }

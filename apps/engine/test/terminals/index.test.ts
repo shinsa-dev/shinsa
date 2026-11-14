@@ -386,6 +386,69 @@ describe('Terminals services', () => {
     ]);
   });
 
+  it('keeps a service with a preview starting until its port answers, then shows it running', async () => {
+    const probed: number[] = [];
+    const { terminals } = await createTerminals({
+      pty: { isAnswering: (port) => Effect.sync(() => probed.push(port) > 3) },
+    });
+    const service = await runAsync(
+      terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' })
+    );
+    const started = await runAsync(terminals.startService(service.id, main('repository')));
+    expect(started.answering).toBe(false);
+    await Bun.sleep(40);
+    const [terminal] = (await runAsync(terminals.snapshot)).terminals;
+    expect(terminal?.answering).toBe(true);
+    expect(new Set(probed)).toEqual(new Set([started.port ?? 0]));
+    expect(probed).toHaveLength(4);
+  });
+
+  it('shows a service running again when its port never answers within the limit', async () => {
+    const { terminals } = await createTerminals({ pty: { isAnswering: () => Effect.succeed(false) } });
+    const service = await runAsync(
+      terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' })
+    );
+    await runAsync(terminals.startService(service.id, main('repository')));
+    await Bun.sleep(150);
+    expect((await runAsync(terminals.snapshot)).terminals[0]?.answering).toBe(true);
+  });
+
+  it('stops asking once the service ends, and starts asking afresh when it runs again', async () => {
+    let probes = 0;
+    const { terminals, fake } = await createTerminals({
+      pty: { isAnswering: () => Effect.sync(() => ++probes > 1_000) },
+    });
+    const service = await runAsync(
+      terminals.addService('p1', { ...SERVICE, previewUrl: 'http://localhost:{port}/' })
+    );
+    await runAsync(terminals.startService(service.id, main('repository')));
+    fake.spawned[0]?.exit(1);
+    await Bun.sleep(20);
+    const asked = probes;
+    await Bun.sleep(20);
+    expect(probes).toBe(asked);
+    expect((await runAsync(terminals.snapshot)).terminals[0]).toMatchObject({
+      status: 'exited',
+      answering: false,
+    });
+    const again = await runAsync(terminals.startService(service.id, main('repository')));
+    expect(again).toMatchObject({ status: 'running', answering: false });
+    await Bun.sleep(20);
+    expect(probes).toBeGreaterThan(asked);
+  });
+
+  it('never asks a service without a preview whether its port answers', async () => {
+    let probes = 0;
+    const { terminals } = await createTerminals({
+      pty: { isAnswering: () => Effect.sync(() => ++probes > 0) },
+    });
+    const service = await runAsync(terminals.addService('p1', SERVICE));
+    const started = await runAsync(terminals.startService(service.id, main('repository')));
+    await Bun.sleep(20);
+    expect('answering' in started).toBe(false);
+    expect(probes).toBe(0);
+  });
+
   it('runs a service for a task beside its main run, each in a tab of its own', async () => {
     const { terminals, fake } = await createTerminals();
     const service = await runAsync(terminals.addService('p1', SERVICE));
@@ -745,7 +808,9 @@ describe('the terminals’ defaults', () => {
         return { timings: yield* TerminalTimings, id: yield* yield* TerminalIds };
       })
     );
-    expect([timings.notify, timings.screen].map(Duration.toMillis)).toEqual([50, 2_000]);
+    expect(
+      [timings.notify, timings.screen, timings.answer, timings.answerLimit].map(Duration.toMillis)
+    ).toEqual([50, 2_000, 500, 600_000]);
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 });

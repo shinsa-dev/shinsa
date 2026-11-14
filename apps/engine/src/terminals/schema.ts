@@ -172,8 +172,15 @@ export interface TerminalsInput {
 export const TerminalTimings = Context.Reference<{
   readonly notify: Duration.Duration;
   readonly screen: Duration.Duration;
+  readonly answer: Duration.Duration;
+  readonly answerLimit: Duration.Duration;
 }>('shinsa/engine/terminals/TerminalTimings', {
-  defaultValue: () => ({ notify: Duration.millis(50), screen: Duration.seconds(2) }),
+  defaultValue: () => ({
+    notify: Duration.millis(50),
+    screen: Duration.seconds(2),
+    answer: Duration.millis(500),
+    answerLimit: Duration.minutes(10),
+  }),
 });
 
 export const TerminalIds = Context.Reference<Effect.Effect<string>>('shinsa/engine/terminals/TerminalIds', {
@@ -255,6 +262,10 @@ export const HANG_UP_GRACE = Duration.seconds(3);
 const GROUP_POLL = Duration.millis(50);
 
 export const GROUP_POLL_SCHEDULE = Schedule.spaced(GROUP_POLL);
+
+export const ANSWER_HOSTS = ['127.0.0.1', '::1'];
+
+export const ANSWER_TIMEOUT = Duration.millis(250);
 
 export const FOREGROUND_TIMEOUT = Duration.seconds(5);
 

@@ -47,6 +47,7 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
   const pty = TerminalPty.of({
     spawn: (command, spawnOptions) => Effect.sync(() => fake.spawn(command, spawnOptions)),
     readForeground: () => Effect.succeed('vim'),
+    isAnswering: () => Effect.succeed(true),
     pickPort: (preferred, taken) =>
       Effect.sync(() => {
         if (preferred !== null && !taken.has(preferred)) return preferred;
@@ -74,7 +75,12 @@ function createTerminalsLayer(options: TerminalsHarnessOptions = {}) {
           TerminalIds,
           Effect.sync(() => `${options.idPrefix ?? 'term'}-${++id}`)
         ),
-        Layer.succeed(TerminalTimings, { notify: Duration.millis(1), screen: Duration.millis(1) }),
+        Layer.succeed(TerminalTimings, {
+          notify: Duration.millis(1),
+          screen: Duration.millis(1),
+          answer: Duration.millis(1),
+          answerLimit: Duration.millis(50),
+        }),
         Layer.succeed(Clock.Clock, createFixedClock(typeof now === 'function' ? now : () => now)),
         options.tasks
           ? Layer.succeed(
