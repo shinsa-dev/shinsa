@@ -379,25 +379,22 @@ describe('the Services popover', () => {
     const row = within(shop).getByText('web').closest('[data-highlight-item]')
       ?.firstElementChild as HTMLElement;
     expect(row.className).toMatch(/(^| )pe-1( |$)/);
-    expect(row.lastElementChild?.className).toBe('size-3.5 shrink-0');
-    const chevron = header.querySelector('[data-disclosure-chevron]') as HTMLElement;
-    expect(chevron.className).toContain('group-hover/disclosure:opacity-100');
-    expect(chevron.className).toContain('size-3.5');
     const play = within(shop).getByRole('button', { name: 'Start all services in Shop' });
-    expect(play.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(header.lastElementChild).toBe(chevron);
+    const start = within(shop).getByRole('button', { name: 'Start web' });
+    expect(play.className).toBe(start.className);
+    expect(row.lastElementChild?.lastElementChild).toBe(start);
+    expect(header.lastElementChild?.contains(play)).toBe(true);
     expect(within(shop).getByText('1 running').closest('[data-disclosure-header]')).toBe(header);
   });
 
-  it('puts the chevron at the end of a project’s header in the Services popover, and right after the counts in the queue', () => {
+  it('puts the chevron right after the counts, in the Services popover as in the queue', () => {
     renderPanel([{ project: SHOP, views: [running('api'), stopped('web')] }]);
     const shop = screen.getByText('Shop').closest('section') as HTMLElement;
-    const header = shop.querySelector('[data-disclosure-header]') as HTMLElement;
-    const chevron = header.querySelector('[data-disclosure-chevron]') as HTMLElement;
-    expect(header.lastElementChild).toBe(chevron);
-    expect(
-      within(shop).getByText('1 running').parentElement?.querySelector('[data-disclosure-chevron]')
-    ).toBeNull();
+    const chevron = within(shop)
+      .getByText('1 running')
+      .parentElement?.querySelector('[data-disclosure-chevron]') as HTMLElement;
+    expect(chevron.parentElement?.lastElementChild).toBe(chevron);
+    expect(chevron.className).toContain('group-hover/disclosure:opacity-100');
     const { container } = render(
       <TooltipProvider>
         <TaskQueue state={QUEUE} variant='compact' />
@@ -432,6 +429,8 @@ describe('the Services popover', () => {
     const first = renderPanel(groups);
     const toggle = screen.getByRole('button', { name: 'Expand api' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.hasAttribute('data-disclosure-chevron')).toBe(true);
+    expect(toggle.previousElementSibling?.textContent).toMatch(/^Running/);
     expect(screen.queryByText('SH-4 Fix the cart')).toBeNull();
     fireEvent.click(toggle);
     expect(screen.getByText('SH-4 Fix the cart')).toBeTruthy();

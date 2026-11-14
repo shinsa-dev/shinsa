@@ -7,7 +7,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { LIST_ROW, LIST_ROW_LINES, LIST_ROW_META, LIST_ROW_TITLE } from '@/components/layout/list-row.tsx';
 import { ICON_SLOT } from '@/components/layout/surface/card.ts';
-import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
+import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -125,9 +125,7 @@ export function ServiceRunButtons({
 
 const ROW = cn(LIST_ROW, 'h-7 min-w-0 flex-1 items-center ps-1.5 pe-1');
 
-const CHEVRON_SLOT = 'size-3.5 shrink-0';
-
-function ServiceRowTitle({ view, now }: { view: ServiceView; now: number }) {
+function ServiceRowTitle({ view, now, chevron }: { view: ServiceView; now: number; chevron: boolean }) {
   const glyph = SERVICE_GLYPHS[view.state];
   const state = describeServiceState(view, now);
   return (
@@ -141,6 +139,7 @@ function ServiceRowTitle({ view, now }: { view: ServiceView; now: number }) {
       >
         {state}
       </span>
+      {chevron && <DisclosureChevron className={REVEAL} />}
     </>
   );
 }
@@ -225,17 +224,14 @@ export function ServiceRow({
             disclosure={disclosure}
             label={view.service.name}
             action={actions}
-            chevron='glyph'
-            chevronClassName={REVEAL}
             className={ROW}
           >
-            <ServiceRowTitle view={view} now={now} />
+            <ServiceRowTitle view={view} now={now} chevron />
           </DisclosureHeader>
         ) : (
           <div className={cn(ROW, 'cursor-default')}>
-            <ServiceRowTitle view={view} now={now} />
+            <ServiceRowTitle view={view} now={now} chevron={false} />
             {actions}
-            <span aria-hidden className={CHEVRON_SLOT} />
           </div>
         )}
       </div>
@@ -369,7 +365,6 @@ function TaskRunRow({
         </span>
       </button>
       <RunButtons view={view} label={label} handlers={handlers} />
-      <span aria-hidden className={CHEVRON_SLOT} />
     </div>
   );
 }
