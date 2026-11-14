@@ -1086,8 +1086,10 @@ Only these, and they win over anything below:
 16. **All tasks.** `routes/tasks.tsx` (rows in `components/tasks/`) lists every task in
     to-do order, grouped by `resolveTaskGroup` (`lib/tasks/groups.ts`): Ready to merge, Changes to review, Plan to
     approve, Needs your answer, Answered, Paused, In progress, Backlog, Done and Cancelled
-    (both collapsed). There is no section for waiting: a task waiting on another task is filed in the section of the
-    task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
+    (both collapsed). A task you approved to merge files under Done while GitHub merges it or holds it in the merge
+    queue (`isMergeInFlight`), its status Merging in green with the merged icon; a merge that fails opens its failure
+    gate and moves it to Paused. There is no section for waiting: a task waiting on another task is filed in the
+    section of the task it waits on (the first by to-do order when it waits on several) and sits nested right under it, and so does
     a task stacked on others, so a bundle reads from its lead, each task nested under the tasks it stacks on. Each
     section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.

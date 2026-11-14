@@ -550,3 +550,22 @@ describe('a task in a bundle', () => {
     expect(resolveTaskStatus(state, merging)).toEqual({ label: 'Merging with its bundle', tone: 'green' });
   });
 });
+
+describe('a task whose merge you approved', () => {
+  const merging = createTask({ id: 't', stage: 'awaiting_merge' });
+  const state = createShinsaState({ tasks: [merging] });
+
+  it('reads Merging in green with the merged icon', () => {
+    expect(resolveTaskStatus(state, merging)).toEqual({ label: 'Merging', tone: 'green' });
+    expect(resolveTaskStatusIcon(state, merging)).toBe('IconMerged');
+    expect(resolveTaskGlyph(state, merging)).toEqual({ icon: 'IconMerged', tone: 'purple' });
+  });
+
+  it('reads Ready to merge while the merge gate is open', () => {
+    const open = createShinsaState({
+      tasks: [merging],
+      gates: [createGate({ id: 'g', taskId: 't', type: 'merge' })],
+    });
+    expect(resolveTaskStatus(open, merging).label).toBe('Ready to merge');
+  });
+});
