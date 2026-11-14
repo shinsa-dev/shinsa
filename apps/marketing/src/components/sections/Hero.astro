@@ -1,7 +1,8 @@
 ---
 import { resolveGreeting } from '@/lib/home.ts';
-import { hero } from '../../lib/content';
-import { site } from '../../lib/site';
+import { Icon } from '@shinsa/ui/components/icon';
+import { hero, koe } from '../../lib/content';
+import { koeSite, site } from '../../lib/site';
 import Button from '../ui/Button.astro';
 
 const greetings = Array.from({ length: 24 }, (_, hour) =>
@@ -11,6 +12,15 @@ const greetings = Array.from({ length: 24 }, (_, hour) =>
 
 <section id='top' data-scene='top' class='flex flex-col px-6 pt-16 pb-6 md:pt-24 md:pb-10'>
   <div class='mx-auto flex max-w-2xl flex-col items-center gap-5 text-center'>
+    <a
+      href={koeSite.path}
+      class='flex h-7 items-center gap-2 rounded-full bg-background ps-1 pe-2.5 text-fg-3 text-sm ring-1 ring-bg-3 transition-colors duration-150 hover:bg-bg-a1 hover:text-fg-4'
+    >
+      <span class='rounded-full bg-primary-a2 px-2 py-0.5 font-medium text-primary text-xs'>{koe.launchTag}</span>
+      <img src='/koe/koe.svg' alt='' width='16' height='16' class='size-4' />
+      {koe.launchText}
+      <Icon name='IconChevronRightMedium' size='sm' className='text-fg-2' />
+    </a>
     <h1 class='font-medium text-4xl leading-[1.08] tracking-tight text-balance md:text-5xl'>
       <span class='text-fg-4'>{hero.headline}</span>{' '}<span class='text-fg-2'>{hero.headlineRest}</span>
     </h1>

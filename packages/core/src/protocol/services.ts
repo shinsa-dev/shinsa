@@ -100,6 +100,7 @@ export function resolveServiceUrl(
 
 export function resolveServiceState(terminal: TerminalInfo | null, now: number): ServiceView['state'] {
   if (!terminal) return 'stopped';
+  if (terminal.status === 'running' && terminal.answering === false) return 'starting';
   if (terminal.status === 'running')
     return now - terminal.startedAt < SERVICE_LIMITS.startingMs ? 'starting' : 'running';
   if (terminal.status === 'stopped') return 'stopped';
