@@ -91,6 +91,7 @@ import {
 } from './leads.ts';
 import { enforceLiveness } from './liveness.ts';
 import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
+import { keepMergeGate, mergeOnceTicked } from './merge-ahead.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
 import {
   dropMessage,
@@ -283,6 +284,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return completeTask(decider, command);
     case 'task.pause':
       return pauseTask(decider, command);
+    case 'task.keep_merge_gate':
+      return keepMergeGate(decider, command);
     case 'task.retry':
       return retryTaskCommand(decider, command);
     case 'task.message':
@@ -310,9 +313,11 @@ function apply(decider: Decider, command: ShinsaCommand) {
         ...(command.verdicts === undefined ? {} : { verdicts: command.verdicts }),
         ...(command.comments === undefined ? {} : { comments: command.comments }),
         ...(command.thenApprove === undefined ? {} : { thenApprove: command.thenApprove }),
+        ...(command.thenMerge === undefined ? {} : { thenMerge: command.thenMerge }),
       });
     case 'merge_step.tick':
-      return tickMergeStep(decider, command);
+      tickMergeStep(decider, command);
+      return mergeOnceTicked(decider, command.taskId);
     case 'suggestion.accept':
       return acceptSuggestion(decider, command);
     case 'suggestion.dismiss':

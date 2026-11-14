@@ -34,6 +34,7 @@ interface AnswerOptions {
   verdicts?: FindingVerdict[];
   comments?: ReviewComment[];
   thenApprove?: boolean;
+  thenMerge?: boolean;
 }
 
 function describePlanChange(decider: Decider, gate: Gate) {
@@ -145,6 +146,21 @@ function assertThenApprove(gate: Gate, decision: GateDecision, thenApprove?: boo
   }
 }
 
+function assertThenMerge(gate: Gate, decision: GateDecision, options: AnswerOptions) {
+  if (!options.thenMerge) return;
+  if (gate.type !== 'review') {
+    throw new DomainError({
+      code: 'then_merge_invalid',
+      message: 'Only a review approves and then merges once the pull request is ready.',
+    });
+  }
+  if (decision === 'approve' || (decision === 'revise' && options.thenApprove)) return;
+  throw new DomainError({
+    code: 'then_merge_conflict',
+    message: 'Approve, or ask for changes and to approve after the fix, to merge once ready.',
+  });
+}
+
 function assertComments(gate: Gate, decision: GateDecision, comments?: ReviewComment[]) {
   if (!comments || comments.length === 0) return;
   if (gate.type !== 'review' && gate.type !== 'merge') {
@@ -202,6 +218,12 @@ export function approveReviewAhead(
   });
   decider.requestBriefing(gate.taskId);
   approveReview(decider, gate.taskId);
+}
+
+export function approveMergeAhead(decider: Decider, gate: Gate) {
+  decider.emit({ type: 'gate.answered', gateId: gate.id, decision: 'approve', response: null, ahead: true });
+  decider.requestBriefing(gate.taskId);
+  approveMerge(decider, gate);
 }
 
 function approveMerge(decider: Decider, gate: Gate) {
@@ -298,11 +320,13 @@ export function answerGate(
   assertVerdicts(decider, gate, decision, options.verdicts);
   assertComments(gate, decision, options.comments);
   assertThenApprove(gate, decision, options.thenApprove);
+  assertThenMerge(gate, decision, options);
   assertMergeStepsDone(decider, gate, decision);
   assertConfigurationReply(decider, gate, decision, response);
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
   const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
   const thenApprove = options.thenApprove ? { thenApprove: true } : {};
+  const thenMerge = options.thenMerge ? { thenMerge: true } : {};
   learnFromAnswer(decider, { gate, decision, response, verdicts: options.verdicts ?? [] });
   decider.emit({
     type: 'gate.answered',
@@ -312,6 +336,7 @@ export function answerGate(
     ...verdicts,
     ...comments,
     ...thenApprove,
+    ...thenMerge,
   });
   decider.requestBriefing(gate.taskId);
   // oxlint-disable-next-line typescript/switch-exhaustiveness-check -- a Post-merge gate takes no decision, so assertDecision refuses it before this switch

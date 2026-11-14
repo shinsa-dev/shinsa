@@ -8,7 +8,7 @@ import {
 import { Effect } from 'effect';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
-import { findMergeStep, findOpenGate } from './resolve.ts';
+import { findMergeStep, findOpenGate, findTaskId } from './resolve.ts';
 import { defineAction, defineCommand, readValue, type SurfaceSpec } from './spec.ts';
 import { TASK_FIELD } from './tasks.ts';
 
@@ -207,6 +207,20 @@ export const GATE_SPECS: SurfaceSpec[] = [
   }),
   defineGateShortcut(['merges', 'approve'], 'Merge the pull request of a task.', MERGE, 'approve'),
   defineGateShortcut(['merges', 'reject'], 'Do not merge; cancel the task.', MERGE, 'reject'),
+  defineCommand({
+    path: ['merges', 'keep-gate'],
+    summary:
+      'Undo Approve and merge: the pull request no longer merges once ready and waits for you at the merge gate.',
+    command: 'task.keep_merge_gate',
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: Effect.fn('Surface.keepMergeGate')(function* (values, client) {
+      const taskId = yield* findTaskId(client, readValue(values, 'task'));
+      const command: UserCommand = { type: 'task.keep_merge_gate', taskId };
+      return command;
+    }),
+    done: () => 'The merge waits for you again.',
+  }),
   defineCommand({
     path: ['merges', 'tick'],
     summary:

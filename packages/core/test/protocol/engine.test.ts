@@ -126,6 +126,7 @@ const GATED_COMMANDS: EngineCommand[] = [
   'task.stack_on_tasks',
   'task.move_to_repository',
   'task.pause',
+  'task.keep_merge_gate',
   'initiative.write',
   'initiative.adopt_task',
   'initiative.add_to_team',

@@ -559,6 +559,7 @@ export interface Task {
   planHistory?: PlanRevision[];
   dismissedFindings?: ReviewFinding[];
   approveAfterFix?: boolean;
+  mergeAhead?: boolean;
   reviewDisagreements?: ReviewDisagreement[];
   reviewRatings?: ReviewRatings | null;
   priorityOnBehalf?: boolean;

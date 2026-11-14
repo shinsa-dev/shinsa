@@ -253,6 +253,7 @@ type EventBody =
   | { type: 'task.overlaps_told'; taskId: string }
   | { type: 'task.edits_committed'; taskId: string }
   | { type: 'task.edits_approved'; taskId: string; gate: EditsApproval | null }
+  | { type: 'task.merge_gate_kept'; taskId: string }
   | { type: 'plan.proposed'; taskId: string; body: string; document: PlanDocument | null }
   | { type: 'plan.answered'; taskId: string; answers: string }
   | { type: 'phase.updated'; taskId: string; index: number; status: PhaseStatus }
@@ -291,6 +292,7 @@ type EventBody =
       verdicts?: FindingVerdict[];
       comments?: ReviewComment[];
       thenApprove?: boolean;
+      thenMerge?: boolean;
       ahead?: boolean;
       autopilot?: string;
     }

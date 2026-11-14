@@ -191,6 +191,7 @@ export const UserCommand = Schema.Union([
   Command('task.clear_duplicate', { taskId: TaskId }),
   Command('task.complete', { taskId: TaskId }),
   Command('task.pause', { taskId: TaskId }),
+  Command('task.keep_merge_gate', { taskId: TaskId }),
   Command('task.retry', { taskId: TaskId, account: Optional(NamedAccount, FIELD_MESSAGES.object) }),
   Command('task.message', {
     taskId: TaskId,
@@ -214,6 +215,7 @@ export const UserCommand = Schema.Union([
     verdicts: Optional(List(FindingVerdict, 50), FIELD_MESSAGES.list),
     comments: Optional(List(ReviewComment, 100), FIELD_MESSAGES.list),
     thenApprove: Optional(Bool, FIELD_MESSAGES.boolean),
+    thenMerge: Optional(Bool, FIELD_MESSAGES.boolean),
   }),
   Command('merge_step.tick', { taskId: TaskId, key: Id(120), done: Bool }),
   Command('suggestion.accept', {
