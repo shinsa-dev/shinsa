@@ -1,6 +1,13 @@
 import { TASK_SHAPES, type TaskShape } from '../../domain/shapes.ts';
 import type { ReviewRating } from '../../report/types.ts';
 import type { AutopilotDecision } from '../schema.ts';
+import {
+  AUTOPILOT_WORK_LIMITS,
+  AUTOPILOT_WORK_NOVELTIES,
+  AUTOPILOT_WORK_SIZES,
+  AUTOPILOT_WORK_SURFACES,
+  type AutopilotWorkFacts,
+} from '../work/schema.ts';
 import { AUTOPILOT_HEAD_OF_KIND, AUTOPILOT_MODEL_LIMITS, type AutopilotFeature } from './schema.ts';
 
 const HEAD_KINDS = Object.keys(AUTOPILOT_HEAD_OF_KIND);
@@ -34,6 +41,16 @@ const BLOCK_SIZES = {
   kindConfidence: HEAD_KINDS.length * RATINGS.length,
   riskFiles: RATINGS.length,
   watchdogAway: 1,
+  area: AUTOPILOT_MODEL_LIMITS.hashBuckets,
+  surface: AUTOPILOT_WORK_SURFACES.length,
+  novelty: AUTOPILOT_WORK_NOVELTIES.length,
+  size: AUTOPILOT_WORK_SIZES.length,
+  terms: AUTOPILOT_WORK_LIMITS.termBuckets,
+  kindArea: HEAD_KINDS.length * AUTOPILOT_MODEL_LIMITS.hashBuckets,
+  kindSurface: HEAD_KINDS.length * AUTOPILOT_WORK_SURFACES.length,
+  kindNovelty: HEAD_KINDS.length * AUTOPILOT_WORK_NOVELTIES.length,
+  noveltySize: AUTOPILOT_WORK_NOVELTIES.length * AUTOPILOT_WORK_SIZES.length,
+  surfaceNovelty: AUTOPILOT_WORK_SURFACES.length * AUTOPILOT_WORK_NOVELTIES.length,
 } as const;
 
 type Block = keyof typeof BLOCK_SIZES;
@@ -98,6 +115,33 @@ function resolveFlags(decision: AutopilotDecision): Record<Flag, boolean> {
   };
 }
 
+function indexOf<T>(values: readonly T[], value: T | null) {
+  return value === null ? -1 : values.indexOf(value);
+}
+
+function addWorkFeatures(
+  add: (block: Block, slot: number, value?: number) => void,
+  kind: number,
+  work: AutopilotWorkFacts
+) {
+  const area = work.area === null ? -1 : resolveFeatureHash(work.area);
+  const surface = indexOf(AUTOPILOT_WORK_SURFACES, work.surface);
+  const novelty = indexOf(AUTOPILOT_WORK_NOVELTIES, work.novelty);
+  const size = indexOf(AUTOPILOT_WORK_SIZES, work.size);
+  add('area', area);
+  add('surface', surface);
+  add('novelty', novelty);
+  add('size', size);
+  const termWeight = work.terms.length === 0 ? 0 : 1 / Math.sqrt(work.terms.length);
+  for (const term of work.terms) add('terms', term, termWeight);
+  if (kind >= 0 && area >= 0) add('kindArea', kind * AUTOPILOT_MODEL_LIMITS.hashBuckets + area);
+  if (kind >= 0 && surface >= 0) add('kindSurface', kind * AUTOPILOT_WORK_SURFACES.length + surface);
+  if (kind >= 0 && novelty >= 0) add('kindNovelty', kind * AUTOPILOT_WORK_NOVELTIES.length + novelty);
+  if (novelty >= 0 && size >= 0) add('noveltySize', novelty * AUTOPILOT_WORK_SIZES.length + size);
+  if (surface >= 0 && novelty >= 0)
+    add('surfaceNovelty', surface * AUTOPILOT_WORK_NOVELTIES.length + novelty);
+}
+
 export function listAutopilotFeatures(decision: AutopilotDecision): AutopilotFeature[] {
   const { offsets } = LAYOUT;
   const features: AutopilotFeature[] = [{ index: offsets.bias, value: 1 }];
@@ -126,5 +170,6 @@ export function listAutopilotFeatures(decision: AutopilotDecision): AutopilotFea
   }
   add('riskFiles', risk, numbers.files);
   add('watchdogAway', 0, decision.watchdog && !flags.active ? 1 : 0);
+  if (decision.facts?.work) addWorkFeatures(add, kind, decision.facts.work);
   return features;
 }

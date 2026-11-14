@@ -1,12 +1,12 @@
-const AUTOPILOT_WORK_SURFACES = ['ui', 'logic', 'mixed', 'docs'] as const;
+export const AUTOPILOT_WORK_SURFACES = ['ui', 'logic', 'mixed', 'docs'] as const;
 
 export type AutopilotWorkSurface = (typeof AUTOPILOT_WORK_SURFACES)[number];
 
-const AUTOPILOT_WORK_NOVELTIES = ['new', 'tweak'] as const;
+export const AUTOPILOT_WORK_NOVELTIES = ['new', 'tweak'] as const;
 
 export type AutopilotWorkNovelty = (typeof AUTOPILOT_WORK_NOVELTIES)[number];
 
-const AUTOPILOT_WORK_SIZES = ['small', 'medium', 'large'] as const;
+export const AUTOPILOT_WORK_SIZES = ['small', 'medium', 'large'] as const;
 
 export type AutopilotWorkSize = (typeof AUTOPILOT_WORK_SIZES)[number];
 

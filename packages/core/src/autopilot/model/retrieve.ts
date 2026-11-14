@@ -30,11 +30,15 @@ function resolveCosine(a: readonly AutopilotFeature[], b: readonly AutopilotFeat
   return norm === 0 ? 0 : dot / norm;
 }
 
-function resolveOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>) {
+function resolveOverlap<T>(a: ReadonlySet<T>, b: ReadonlySet<T>) {
   if (a.size === 0 || b.size === 0) return 0;
   let shared = 0;
   for (const word of a) if (b.has(word)) shared += 1;
   return shared / (a.size + b.size - shared);
+}
+
+function listDecisionTerms(decision: AutopilotDecision): Set<number> {
+  return new Set(decision.facts?.work?.terms ?? []);
 }
 
 export function listAutopilotNeighbours(
@@ -46,6 +50,7 @@ export function listAutopilotNeighbours(
   const { weights, halfLife, examples } = AUTOPILOT_RETRIEVAL_LIMITS;
   const features = listAutopilotFeatures(probe);
   const words = listAutopilotWords(probeText);
+  const terms = listDecisionTerms(probe);
   const candidates = history.filter(
     (decision) => decision.kind === probe.kind && decision.gateId !== probe.gateId
   );
@@ -55,6 +60,7 @@ export function listAutopilotNeighbours(
       const similarity =
         weights.features * resolveCosine(features, listAutopilotFeatures(decision)) +
         weights.words * resolveOverlap(words, listAutopilotWords(resolveText(decision))) +
+        weights.terms * resolveOverlap(terms, listDecisionTerms(decision)) +
         weights.recency * 0.5 ** (age / halfLife);
       return { decision, similarity, age };
     })
