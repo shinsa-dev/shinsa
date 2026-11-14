@@ -5831,7 +5831,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Why.** The setting's name and its options are the whole message; descriptions under every row turned Settings into reading.
 
-**Do** name a setting so its options explain it ("Setup steps" with Run setup again). **Don't** add a grey sentence under a setting row.
+**Do** name a setting so its options explain it ("Merge with" with Squash, Merge commit and Rebase). **Don't** add a grey sentence under a setting row.
 
 **Example.** Settings → Projects: one block per project, 6px apart: the colour dot, the name, the key as a mono `Badge`, then a `secondary` `xs` Add and the `•••`; the shelf lists each repository and folder as a path row with ghost `sm` selects.
 
@@ -6971,7 +6971,7 @@ Example: "Agent · 3 runs", under it "↳ Builder · Add the guard · Finished".
 - Settings is split into tabs, each its own pane, not one long scroll with a table of contents (the main use is a floating tablet-sized window). Links to a section open its tab and scroll to it.
 - Path rows: a 14px icon 8px from the name, the path after it in `text-2xs fg-2`, then ghost `sm` selects and a remove ×.
 
-Example: Settings → General → Appearance: "Theme" with a select, "Layout" with Desk and Shelf, each option's hint in its tooltip.
+Example: Settings → Agents → Engine: "Merge with" with a select, each option's hint in its tooltip.
 
 #### Composers
 

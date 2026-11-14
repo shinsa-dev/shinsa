@@ -848,7 +848,7 @@ Only these, and they win over anything below:
       their decisions stay out of the root and match only while typing. **Settings** offers Jump to (each section,
       with the tab that holds it as its hint, from anywhere: it opens that tab and scrolls the section into view;
       `openSettingsSection` in `lib/command/settings.ts`), Change a setting (every setting's select as a choice; a project's own controls stay on the
-      page) and Setup (Run setup again). **All tasks** offers Filter by
+      page). **All tasks** offers Filter by
       status, Clear filters and "Search all tasks for …"; the filter and search live in the URL
       (`?status=&q=`), and an active status shows as a removable button beside the search.
     - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, as the rail's and the
