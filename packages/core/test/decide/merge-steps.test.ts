@@ -344,6 +344,24 @@ describe('the steps around the merge', () => {
     expect(harness.task(taskId).stageReason).toBe('merging');
   });
 
+  test('a step ticked before a later round started stays ticked once that round closes', () => {
+    const { harness, taskId } = reachMergeGate();
+    tick(harness, taskId, SECRET);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Why is the export slow?',
+      kind: 'new_round',
+      title: 'Why the export is slow',
+      shape: 'fix',
+    });
+    closeLookingRound(harness, taskId);
+    expect(listMergeSteps(harness.task(taskId)).map((step) => [step.title, step.done])).toEqual([
+      ['Set STRIPE_WEBHOOK_SECRET', true],
+      ['Run the migration', false],
+    ]);
+  });
+
   test('a step carried from an earlier merge and ticked while a later round looked stays ticked once it closes', () => {
     const { harness, taskId } = reachMergeGate([MIGRATION]);
     approve(harness, taskId);

@@ -284,6 +284,16 @@ describe('a task is a conversation of rounds', () => {
     ]);
   });
 
+  test('a round that closes onto a round with no pull request names that round', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const state = replayEventLog([
+      ...harness.events,
+      { type: 'round.closed', taskId, number: 2, to: 1, seq: 9_999, at: 9_999 },
+    ]).state;
+    expect(state.tasks[taskId]?.activity.at(-1)?.text).toBe('Closed round 2, back to round 1');
+  });
+
   test('a round that closes onto a missing round changes nothing', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
