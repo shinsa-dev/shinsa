@@ -42,7 +42,7 @@ A stage reason says what is happening to the task now. A gate says what is being
 - **Agent** for whatever is working, and the name of a round's own agent, which plans, builds, fixes and runs the operation in one conversation; the other roles (reviewer, answerer, investigator, researcher, and planner or builder for a delegated agent) only where the role matters ("The reviewer paused").
 - **Waiting on another task** for the tasks a task waits on ("Waits on"), "waiting for “Title” to finish" in a stage reason. Titles are quoted with curly quotes.
 - **You** for the human in product copy and activity; **the human** in agent prompts.
-- Never playful labels, never "magic", never exclamation marks. The two layout names (`LAYOUT_NAMES`: Desk and Shelf) are names chosen on purpose, each with a plain hint line.
+- Never playful labels, never "magic", never exclamation marks.
 
 ## Per kind of string
 

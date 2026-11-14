@@ -2087,7 +2087,7 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 - **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
   doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
   of the current window, `countWindowChecks`, so a window that starts again backs off from the start), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
-  leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
+  leaves out comes from three settings (Settings → Automations → Watchdogs, `settings.change`): `watchdogHours` (72 by
   default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
   read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
 - **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
@@ -3199,7 +3199,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   the channels the bot is in, in the workspaces linked to this machine, a private one only when a person linked
   to this machine is a member of it (`Slack.channels`, `GET /__remote/slack/channels`). It refuses with what
   to do: remote access off (`SLACK_NOT_CONNECTED`), no channel at all, which is Slack not linked or @Shinsa
-  invited nowhere ("Connect Slack in Settings → Connections → Slack if it is not connected yet, invite @Shinsa
+  invited nowhere ("Connect Slack in Settings → Cloud → Slack if it is not connected yet, invite @Shinsa
   to #alerts in Slack"), the bot not in the channel ("Invite @Shinsa to the channel in Slack, then set the automation again."), or a name that
   is in several linked workspaces ("Name the workspace too."). `slack_updates` (`--no-slack-updates` or
   `--slack-updates=false` on the command line, whose boolean flags take no separate value), which
@@ -4110,7 +4110,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
 - **Pausing and removing**: `shinsa remote disable` closes the relay socket, marks the instance offline and closes every
   channel, keeping the pairing; `enable` starts it again; `remove` tells app.shinsa.dev (a failure there is only
   logged) and forgets the credentials and every device. Each needs a paired machine (`remote_not_paired`).
-- **Settings → Connections → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
+- **Settings → Cloud → Remote access** (`components/settings/remote-access.tsx`, `lib/remote-access.ts`,
   `lib/connection/remote-access.ts`): This machine with its name and status (Off, Waiting for sign-in with the code and Open
   sign-in, Connecting, Connected, Not connected when it is on and its relay socket is not open, Reconnecting, Paused,
   Removed) with Turn on, Cancel, Pause, Resume and Remove, the
@@ -4230,7 +4230,7 @@ each machine it may reach, running nothing. The machine side is `apps/engine/src
   no longer spins. Opening the link again on a device that already asked picks up that one request with its key and
   name instead of asking again, and on a device already added says so with Open Shinsa, unless the account no longer has that machine (a member removed), when it asks again with a new key. A device that left while it waited shows Waiting for an answer
   in the dashboard and in Settings → Machines until the machine accepts it, which opens it there, or declines it,
-  which forgets its key. Settings → Connections → Machines lists every machine in rows like
+  which forgets its key. Settings → Cloud → Machines lists every machine in rows like
   Remote access's: its name with its status beside it (online or last seen), whether it is in this dashboard, and
   Remove, or for a machine shared with you "Shared by <owner>" (otherwise it looks like every other machine) and Leave, which also forgets this
   browser's key for it; machines in the dashboard also show their open
@@ -4420,7 +4420,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   ends every open link at once, and that link never works again: sharing the task again makes a new link with a new
   id and key.
 - **How long it is shared.** `TaskShare.limit` is `until_done` (the default), `hour`, `day`, `week` or `none` (until you
-  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → Connections → Sharing, human-only,
+  stop it), picked in Share task and defaulting to the `shareLimit` setting (Settings → Cloud → Sharing, human-only,
   so an agent cannot widen it); `endsAt` is when a time limit runs out. A shared task that settles (done, merged or
   cancelled) with `until_done` stops sharing in the same decision (`syncShares`, `task.unshared` with `reason: 'done'`);
   a time limit is ended by `ShareClock` (`apps/engine/src/remote/share-clock/service.ts`, a clock on `makeEngineClock`) with `share.expire`
@@ -4443,7 +4443,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   `resolveShareScopes` adds it and puts the list in order). The presets are scope lists in `SHARE_PRESET_SCOPES`
   (`share/presets.ts`, from `ACCESS_PRESETS`): Status is identity, description and progress; Standard (the default)
   every scope but messages; Full access every scope. `task.share` takes `preset` (a name; the `sharePreset` setting,
-  Settings → Connections → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
+  Settings → Cloud → Sharing, human-only, when left out) or `scopes` (any list), and stores only the resolved list.
   A preset's name is never kept: a share's label is worked out from its list (`resolveShareScopesPreset`, through
   `resolvePreset`), Status, Standard, Full access, or Custom for any other list.
 - **Custom in Share task.** Share as lists Status, Standard, Full access and Custom, then Hand off. A preset shows
@@ -4566,7 +4566,7 @@ projection and channel serve teams, always at Standard (Teams, below).
   ("Remote access on the machine that shares this task was turned off."). A machine that is offline, asleep or
   paused shows nothing new: the page says the machine is offline and opens the channel again on its own (1, 2, 5,
   then every 10 seconds), keeping what it already showed.
-- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → Connections to share this
+- **Failures.** Not paired fails `share.link` at once with "Turn on remote access in Settings → Cloud to share this
   task…" (`SHARE_NOT_PAIRED`) and `share.fail` keeps it on `TaskShare.failure` for Share task to show with Try again
   (`task.share` again asks for a link); it opens no failure gate, since nothing in the task waits on it. Once the
   machine is paired as another instance, each shared task's link is marked failed with "This machine was paired with
@@ -5015,7 +5015,7 @@ hand it to them, under Teams → Teammates act on team tasks.
   `task.handed_off` (`TaskHandoff`: `at`, `url` null, `guest` null) and queues `handoff.link`; again on a failed link it
   asks for the link once more, and otherwise does nothing.
 - **The link** (`apps/engine/src/remote/handoffs/service.ts`, `Remote.createHandoff`). Remote access must be on (else the link
-  fails at once with "Turn on remote access in Settings → Connections to hand off this task…", kept on
+  fails at once with "Turn on remote access in Settings → Cloud to hand off this task…", kept on
   `TaskHandoff.failure` for Share task's Try again). The engine asks app.shinsa.dev for a hand-off token
   (`POST /__remote/machine/handoffs`, `apps/cloud/CLAUDE.md` → Guests), makes a secret, keeps both with the task's id in
   `remote.json` (`handoffs`), and records the URL with `handoff.record`. It is the enroll link's fragment with a
@@ -5305,7 +5305,7 @@ engine ──its watched channels, on every change──►
          app.shinsa.dev /__remote/slack/watches
 ```
 
-- **Connecting** (Settings → Connections → Slack, `components/settings/slack.tsx`): with remote access on, Connect
+- **Connecting** (Settings → Cloud → Slack, `components/settings/slack.tsx`): with remote access on, Connect
   Slack opens `https://app.shinsa.dev/slack/connect?instance=<this machine>` (`resolveSlackConnectUrl`). You sign in
   with GitHub there if you are not, then with Slack (OAuth v2, `oauth.v2.access`), which asks for your own
   read-only user scopes `channels:history`, `groups:history`, `channels:read` and `groups:read` (`SLACK_USER_SCOPES`)
@@ -6629,7 +6629,7 @@ Claude to Codex and back alike (The agent loop, below).
 
 ### Versions and updates
 
-Settings → About → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
+Settings → General → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
 (`apps/engine/src/versions/`, after Kanna's `provider-auth.ts`, its latest-version check at 539-586 and its install at
 592-668, and `claude-executable.ts:13-16`, 59-65). A newer Claude Code or Codex brings new features, and the Agent
 SDK is built against one Claude Code (`claudeCodeVersion`; SDK 0.3.N pairs with Claude Code 2.1.N), so the program
@@ -6688,7 +6688,7 @@ update (`apps/web/src/lib/changelog.ts`, `components/changelog/dialog.tsx`).
   (`resolveWhatsNew`: released versions above the seen one, up to the engine's). Its hint names the version you
   last saw. It never opens a dialog by itself.
 - **The dialog** lists those releases, each a card with its version and date and its entries under New, Improved
-  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → About → Updates → Changelog, records the
+  and Fixed. Opening it, from the button, ⌘K's "What's new in Shinsa" or Settings → General → Updates → Changelog, records the
   engine's version as seen, so the button goes away. From ⌘K or Settings it lists every release.
 
 ## MCP servers, plugins and skills
@@ -6954,7 +6954,7 @@ you: Settings → Browser ─────────┤
   and a guest or a teammate cannot answer it (`KEYBOARD_GATES`). The evidence skill tells agents to open the page
   first, to use the repository's own test users where it has them, never to launch a browser of their own to sign in,
   and for a local dev server to ask with the exact address of the run they screenshot and keep that run.
-- **Settings → Projects → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
+- **Settings → Browser** lists each project with the sites its browser is signed in to (asked of its Chrome,
   started headless if needed, or read from the profile's cookie file when Chrome cannot run; nothing for a project
   never signed in), each with its favicon (loaded from the site itself, the globe when it has none) and a remove
   button that signs the browser out of that one site (`sites/remove {site}`: every cookie on the site set to expire
@@ -7101,7 +7101,7 @@ the build, fix and operate runs and the investigator are not, and each resumes t
 **Executable discovery** (`executable.ts`). Runs use the user's `claude`, never the SDK's bundled copy:
 `CLAUDE_EXECUTABLE` (with `~` expanded) wins and is trusted as is; otherwise `claude` on the `PATH`, whose
 `--version` is read once per binary and again only when the file changes. A `claude` older than the SDK's
-`claudeCodeVersion` is refused with "Update it from Settings → About, or run `claude update`" (the Update there
+`claudeCodeVersion` is refused with "Update it from Settings → General, or run `claude update`" (the Update there
 is Versions and updates, below); an unreadable version is let through. Finding the binary (`locateClaude`, and
 `locateCodex` for Codex) is `locateProgram` in `providers/versions.ts`, which the updates read too.
 
@@ -7156,7 +7156,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   session reports for `run.meter` (cached input as cache reads, written cache as cache writes, the rest as input,
   priced by `CodexMeter`; Cost, above) and the last request's tokens and the model's window for the `context` notice.
   The prompt cache of a Codex thread lasts 5 minutes after its last request, 30 for GPT-5.6 and later
-  (`resolveCacheLifetimeMs`), which idle compaction reads. Compaction follows Settings → Autopilot → Context, Compaction: with
+  (`resolveCacheLifetimeMs`), which idle compaction reads. Compaction follows Settings → Agents → Context, Compaction: with
   Off the thread gets `model_auto_compact_token_limit` set past any window, so Codex never summarises and a full
   context fails the turn as `context_window_full` (a fresh session with the handoff, as for Claude); with any other
   choice Codex summarises on its own at its limit, since eunoe sits in front of the Anthropic API only. An idle
@@ -7166,7 +7166,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 - **Executable discovery** (`executable.ts`): `CODEX_EXECUTABLE` (with `~` expanded), else `codex` on the `PATH`; its
   `--version` (`codex-cli 0.153.4`) is read once per binary and again when the file changes. Older than
   `CODEX_MINIMUM_VERSION` (0.153.0, the version this adapter was built and checked against: `turn/steer`,
-  `outputSchema` and thread `config` overrides) is refused with "Update it from Settings → About, or run `codex
+  `outputSchema` and thread `config` overrides) is refused with "Update it from Settings → General, or run `codex
   update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
@@ -7247,7 +7247,7 @@ bucket that result wrote (`resolveCacheExpiry` reads `cache_creation.ephemeral_1
 the lifetime is unknown). When the Agent, an answerer, investigator or
 researcher finishes near its context limit (at least 80% of its window, `COMPACTION_NEAR_LIMIT`, from the
 context usage Claude reports at the end of the turn), `IdleCompaction` (`agents/compaction/service.ts`)
-sends `/compact` to that session 2 minutes before the cache expires (Settings → Autopilot → Context, Compact idle
+sends `/compact` to that session 2 minutes before the cache expires (Settings → Agents → Context, Compact idle
 sessions: never, the default, or 1 to 30 minutes before), so the next step resumes a small context instead of
 re-reading a cold large one. It exists only where the provider summarises itself (`hasNativeCompaction`,
 `resolveIdleCompaction(settings, providers)`): for Claude only with provider compaction, since `/compact` is
@@ -7263,7 +7263,7 @@ for it, so its `claude` never outlives the server.
 
 **Compaction and fast mode.** Shinsa does not use a provider's own summary by default: eunoe's core
 (`@chroxify/eunoe`, a library, served inside the engine between Claude Code and the Anthropic API) folds and
-compacts instead. Settings → Autopilot → Context, Management ("Context management" in ⌘K; `settings.compaction`, a `settings.change`
+compacts instead. Settings → Agents → Context, Management ("Context management" in ⌘K; `settings.compaction`, a `settings.change`
 event because replay must reproduce it):
 
 | Setting | What happens |
@@ -8490,8 +8490,8 @@ have reached.
   came from, the projects as you changed them in words, and the help task), so a
   reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
   wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
-- **Run setup again** (`{ type: 'restart' }`, what Settings → About → Setup and ⌘K's Run setup again send before
-  opening `/onboarding`) starts a new run. When setup was done before, the run is a revisit (`revisit: true`): every
+- **Run setup again** (`{ type: 'restart' }`; the app no longer offers it, so only a direct call to
+  `/api/onboarding/flow` sends it) starts a new run. When setup was done before, the run is a revisit (`revisit: true`): every
   step is reached and shows the current settings `chosen`, so you can open any of them, and the web offers Close
   setup.
 

@@ -1,4 +1,4 @@
 ---
 kind: improved
 ---
-Settings is split into ten tabs, so General and Agents no longer hold almost everything, and the heading and tab bar stay in place while you scroll. Home now shows up to 10 recently finished tasks instead of 5.
+Settings has ten clearer tabs, its heading, tab bar and integrations search stay put while you scroll, and project rows fold their settings away. Layout, Decisions up now and Run setup again are gone. Home shows up to 10 recently finished tasks.

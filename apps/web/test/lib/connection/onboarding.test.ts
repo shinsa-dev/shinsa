@@ -7,11 +7,9 @@ import {
   requestPrivacySettings,
   requestRootSuggestions,
   resetOnboardingStatus,
-  restartOnboarding,
   updateRoots,
   useOnboardingStatus,
 } from '@/lib/connection/onboarding.ts';
-import { useRoute } from '@/router.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import {
   createFlow,
@@ -116,23 +114,6 @@ describe('the setup requests', () => {
     fake = startFakeOnboarding({});
     globalThis.fetch = (async () => new Response('gateway down', { status: 502 })) as unknown as typeof fetch;
     await expect(requestOnboardingFlow()).rejects.toThrow('Shinsa answered with status 502.');
-  });
-
-  it('starts setup again and opens it, or says why it could not', async () => {
-    fake = startFakeOnboarding({
-      'POST /api/onboarding/flow': { answer: createFlow(createStep()) },
-      'GET /api/onboarding': { answer: createOnboardingStatus() },
-    });
-    const route = renderHook(() => useRoute());
-    await act(() => restartOnboarding());
-    expect(fake.requests[0]).toMatchObject({ method: 'POST', body: { type: 'restart' } });
-    await waitFor(() => expect(route.result.current).toEqual({ name: 'onboarding' }));
-    fake.stop();
-    fake = startFakeOnboarding({
-      'POST /api/onboarding/flow': { status: 400, answer: { error: { message: 'Busy.' } } },
-    });
-    await restartOnboarding();
-    expect(toasts.error).toHaveBeenCalledWith('Busy.');
   });
 });
 

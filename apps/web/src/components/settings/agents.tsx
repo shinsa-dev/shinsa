@@ -275,18 +275,23 @@ export function AgentSettings({ settings, automatic }: { settings: Settings; aut
           />
         </SettingRow>
       </SettingsGroup>
-      <SettingsGroup title={WATCHDOG_SETTINGS_TITLE}>
-        {WATCHDOG_SETTING_FIELDS.map((field) => (
-          <SettingRow key={field.key} title={field.title}>
-            <SelectField
-              label={field.title}
-              items={listWatchdogSettingItems(field, settings)}
-              value={resolveWatchdogSettingValue(field, settings)}
-              onValueChange={(value) => void updateSettings({ [field.key]: Number(value) })}
-            />
-          </SettingRow>
-        ))}
-      </SettingsGroup>
     </>
+  );
+}
+
+export function WatchdogSettings({ settings }: { settings: Settings }) {
+  return (
+    <SettingsGroup title={WATCHDOG_SETTINGS_TITLE}>
+      {WATCHDOG_SETTING_FIELDS.map((field) => (
+        <SettingRow key={field.key} title={field.title}>
+          <SelectField
+            label={field.title}
+            items={listWatchdogSettingItems(field, settings)}
+            value={resolveWatchdogSettingValue(field, settings)}
+            onValueChange={(value) => void updateSettings({ [field.key]: Number(value) })}
+          />
+        </SettingRow>
+      ))}
+    </SettingsGroup>
   );
 }

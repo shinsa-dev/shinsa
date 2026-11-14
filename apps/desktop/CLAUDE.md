@@ -184,7 +184,7 @@ when you quit, or at once from Shinsa → Restart to Update. Quitting never stop
 interrupts an agent. Everything that waits happens before Restart is offered, so the click only quits and the swap
 and relaunch follow: the updater goes `downloading` (with its percent) → `preparing` (electron-updater has the zip,
 Squirrel.Mac pulls it from electron-updater's local proxy, unpacks and verifies it and stages ShipIt; about 10 s) →
-`ready` only on Squirrel.Mac's own `update-downloaded` → `installing` after the click. The menu, Settings → About →
+`ready` only on Squirrel.Mac's own `update-downloaded` → `installing` after the click. The menu, Settings → General →
 Updates and the page's bridge (`DesktopUpdate`) show each state, and Restart appears only at `ready`.
 `quitAndInstall()` closes every window before `before-quit`, so `Updater` marks the window quitting before it calls it and on the built-in
 updater's `before-quit-for-update`; without it the close would hide the window, cancel the quit and leave ShipIt
@@ -210,7 +210,7 @@ downloading or staged discards it (the download is cancelled; Squirrel.Mac's Shi
 offers. The channel is the app's, not the engine's: it lives in `userData/prefs.json` (`updateChannel`), since the
 updater runs before any page loads and while the engine is down, and a browser tab has no updater; a new install
 starts on the channel of its own version, and a stored channel the app does not offer is ignored. The page shows and
-switches it through the bridge (`channel`, `applyUpdateChannel`; Settings → About → Updates), and switching checks
+switches it through the bridge (`channel`, `applyUpdateChannel`; Settings → General → Updates), and switching checks
 again at once. The About panel and the manual check's answer name the channel. Releasing is
 Actions → Release (`.github/workflows/release.yml`, `docs/release.md`): channel stable or beta, bump patch, minor or
 major, and a canary of every merge to `main` that passes Test; it builds `Shinsa-mac-arm64.dmg` and `.zip` with that version in the app and its engine, signs, then notarizes

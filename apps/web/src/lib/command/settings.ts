@@ -33,7 +33,6 @@ import { ACTIVE_HOURS_LABEL } from '@/lib/active-hours.ts';
 import { AUTOPILOT_TITLE } from '@/lib/autopilot.ts';
 import { BROWSER_SECTION } from '@/lib/browser.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
-import { restartOnboarding } from '@/lib/connection/onboarding.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { applyDesktopChannel, type UpdateChannel } from '@/lib/desktop.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
@@ -67,7 +66,6 @@ import {
   FIX_ROUND_ITEMS,
   FOLDERS_TITLE,
   listAgentModelItems,
-  listAttentionItems,
   listBudgetItems,
   listCompactionItems,
   listDelegationLimitItems,
@@ -88,7 +86,6 @@ import {
   resolveAgentModelPatch,
   resolveAgentModelValue,
   resolveAgentSpeedPatch,
-  resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
   resolveDailyLimitValue,
@@ -119,7 +116,6 @@ import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/work
 import { navigate, stripRouteBase } from '@/router.ts';
 
 const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] = [
-  { title: 'Attention', icon: 'IconInboxEmpty', keywords: ['decisions', 'queue'] },
   { title: 'Notifications', icon: 'IconBell', keywords: ['sound', 'chime', 'alert', 'badge'] },
   {
     title: MODELS_TITLE,
@@ -244,8 +240,7 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     icon: 'IconGlobe',
     keywords: ['browser', 'chrome', 'sign in', 'cookies', 'session', 'dia', 'playwright'],
   },
-  { title: 'Appearance', icon: 'IconSun', keywords: ['theme', 'layout', 'dark', 'light'] },
-  { title: 'Setup', icon: 'IconArrowRotateClockwise', keywords: ['onboarding', 'setup steps'] },
+  { title: 'Appearance', icon: 'IconSun', keywords: ['theme', 'dark', 'light', 'file list'] },
 ];
 
 const SAVED = 'Saved.';
@@ -315,15 +310,8 @@ function listJumpCommands(): Command[] {
     }));
 }
 
-function listAttentionChoices(settings: Settings, notifications: NotificationPreferences): Command[] {
+function listNotificationChoices(notifications: NotificationPreferences): Command[] {
   return [
-    settingChoice(
-      'attention',
-      'Decisions up now',
-      listAttentionItems(settings),
-      resolveAttentionValue(settings),
-      (value) => patchSettings({ attentionLimit: Number(value) })
-    ),
     settingChoice(
       'sound',
       'Play a sound',
@@ -559,7 +547,7 @@ export function listSettingsSections(
       heading: 'Change a setting',
       rank: RANK.context + 1,
       commands: [
-        ...listAttentionChoices(settings, notifications),
+        ...listNotificationChoices(notifications),
         ...listWorkflowChoices(settings),
         ...listGroupChoices(settings, providers, snapshot, automatic),
         ...listRoleChoices(settings, providers, snapshot, automatic),
@@ -569,21 +557,6 @@ export function listSettingsSections(
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),
         ...listChannelChoices(updateChannel),
-      ],
-    },
-    {
-      id: 'settings.setup',
-      heading: 'Setup',
-      rank: RANK.context + 2,
-      commands: [
-        {
-          kind: 'run',
-          id: 'settings.setup.restart',
-          label: 'Run setup again',
-          icon: 'IconArrowRotateClockwise',
-          keywords: ['onboarding', 'setup steps', 'folders', 'start over'],
-          run: () => void restartOnboarding(),
-        },
       ],
     },
   ];

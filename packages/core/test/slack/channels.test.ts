@@ -139,7 +139,7 @@ describe('naming a Slack channel for an automation', () => {
     ).toEqual({
       trigger: null,
       problem:
-        'Shinsa is in no channel of a Slack workspace connected to this machine. Connect Slack in Settings → Connections → Slack if it is not connected yet, invite @Shinsa to #alerts in Slack, then set the automation again.',
+        'Shinsa is in no channel of a Slack workspace connected to this machine. Connect Slack in Settings → Cloud → Slack if it is not connected yet, invite @Shinsa to #alerts in Slack, then set the automation again.',
     });
   });
 });

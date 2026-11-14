@@ -20,7 +20,6 @@ import {
   FAST_MODE_UNAVAILABLE,
   FIX_ROUND_ITEMS,
   listAgentModelItems,
-  listAttentionItems,
   listBudgetItems,
   listCompactionItems,
   listDelegationLimitItems,
@@ -45,7 +44,6 @@ import {
   resolveAgentModelPatch,
   resolveAgentModelValue,
   resolveAgentSpeedPatch,
-  resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
   resolveDelegationLimitValue,
@@ -100,18 +98,7 @@ describe('setting choices', () => {
     }
   });
 
-  it('adds a stored attention limit that is not one of the usual choices, so the select shows it', () => {
-    const items = listAttentionItems(settings({ attentionLimit: 4 }));
-    expect(items.map((item) => item.value)).toEqual(['1', '2', '3', '4', '5']);
-  });
-
-  it('labels attention limits and fix rounds agreeing with their number', () => {
-    expect(listAttentionItems(settings()).map((item) => item.label)).toEqual([
-      'One at a time',
-      '2 at a time',
-      '3 at a time',
-      '5 at a time',
-    ]);
+  it('labels fix rounds agreeing with their number', () => {
     expect(FIX_ROUND_ITEMS.map((item) => item.label)).toEqual([
       'Until clean',
       '1 round',
@@ -161,11 +148,6 @@ describe('setting choices', () => {
 });
 
 describe('setting values', () => {
-  it('reads the attention limit as a choice', () => {
-    expect(resolveAttentionValue(settings({ attentionLimit: 3 }))).toBe('3');
-    expect(resolveAttentionValue(settings({ attentionLimit: 0 }))).toBe('1');
-  });
-
   it('reads which plans need approval, when you ask by default', () => {
     expect(resolvePlanValue(settings({ approvePlans: 'large' }))).toBe('large');
     expect(resolvePlanValue(settings({ approvePlans: 'always' }))).toBe('always');

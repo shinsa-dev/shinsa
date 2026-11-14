@@ -17,7 +17,7 @@ export const TEAM_DOMAIN_ERRORS = {
   gone: { code: 'team_not_found', message: 'This machine is not in that team.' },
   notPaired: {
     code: 'remote_not_paired',
-    message: 'Turn on remote access in Settings → Connections first. Teams reach your teammates through it.',
+    message: 'Turn on remote access in Settings → Cloud first. Teams reach your teammates through it.',
   },
   nameInvalid: { code: 'name_invalid', message: 'Give the team a name.' },
   teamsFull: { code: 'teams_full', message: 'You own as many teams as you can. Remove one first.' },

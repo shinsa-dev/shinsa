@@ -41,7 +41,7 @@ async function choose(label: string, option: string | RegExp) {
   await settle();
 }
 
-describe('Settings → Autopilot → Context', () => {
+describe('Settings → Agents → Context', () => {
   it('folds by default and leaves idle compaction to provider compaction', async () => {
     renderContext();
     expect(screen.getByRole('combobox', { name: 'Management' }).textContent).toBe('Default');

@@ -276,7 +276,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
         <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('projects'))}>
           {projects.length === 0 ? 'Create a project…' : 'Edit projects…'}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('connections', TEAMS_SECTION))}>
+        <DropdownMenuItem onClick={() => navigate(resolveSettingsPath('cloud', TEAMS_SECTION))}>
           {teams.length === 0 ? 'Create or join a team…' : 'Edit teams…'}
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -109,7 +109,7 @@ describe('the Focus menu', () => {
     renderFocus(null);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Create or join a team…' }));
     expect(location.pathname).toBe('/settings');
-    expect(location.search).toBe('?tab=connections');
+    expect(location.search).toBe('?tab=cloud');
     expect(location.hash).toBe('#teams');
   });
 });

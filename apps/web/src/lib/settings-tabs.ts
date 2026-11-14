@@ -26,13 +26,13 @@ export type SettingsTabId =
   | 'general'
   | 'agents'
   | 'autopilot'
-  | 'connections'
+  | 'cloud'
   | 'usage'
   | 'statistics'
   | 'projects'
+  | 'browser'
   | 'integrations'
-  | 'automations'
-  | 'about';
+  | 'automations';
 
 interface SettingsTab {
   id: SettingsTabId;
@@ -50,21 +50,21 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   general: {
     id: 'general',
     label: 'General',
-    sections: ['Appearance', 'Attention', 'Notifications'],
+    sections: ['Appearance', 'Notifications', UPDATES_SECTION, VERSIONS_SECTION],
   },
   agents: {
     id: 'agents',
     label: 'Agents',
-    sections: [MODELS_TITLE, 'Engine', WATCHDOG_SETTINGS_TITLE, 'Memory'],
+    sections: [MODELS_TITLE, 'Engine', 'Context', 'Memory'],
   },
   autopilot: {
     id: 'autopilot',
     label: AUTOPILOT_TITLE,
-    sections: [AUTOPILOT_TITLE, ACTIVE_HOURS_LABEL.title, 'Context'],
+    sections: [AUTOPILOT_TITLE, ACTIVE_HOURS_LABEL.title],
   },
-  connections: {
-    id: 'connections',
-    label: 'Connections',
+  cloud: {
+    id: 'cloud',
+    label: 'Cloud',
     sections: listConnectionSections(isRemoteBuild()),
   },
   usage: {
@@ -80,7 +80,12 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   projects: {
     id: 'projects',
     label: 'Projects',
-    sections: [FOLDERS_TITLE, WORKTREES_TITLE, 'Projects', BROWSER_SECTION],
+    sections: [FOLDERS_TITLE, WORKTREES_TITLE, 'Projects'],
+  },
+  browser: {
+    id: 'browser',
+    label: BROWSER_SECTION,
+    sections: [BROWSER_SECTION],
   },
   integrations: {
     id: 'integrations',
@@ -90,12 +95,7 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
   automations: {
     id: 'automations',
     label: 'Automations',
-    sections: ['Schedules'],
-  },
-  about: {
-    id: 'about',
-    label: 'About',
-    sections: [UPDATES_SECTION, VERSIONS_SECTION, 'Setup'],
+    sections: ['Schedules', WATCHDOG_SETTINGS_TITLE],
   },
 };
 

@@ -36,7 +36,7 @@ const SETTINGS_REPLY_REPORT: AgentReply = {
     {
       ask: 'Move Slack from Integrations to where Remote access is',
       outcome: 'done',
-      note: 'Settings → Connections, right below Remote access.',
+      note: 'Settings → Cloud, right below Remote access.',
     },
     {
       ask: 'Guide me through testing it end to end',

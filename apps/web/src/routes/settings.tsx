@@ -7,14 +7,13 @@ import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { AccountSettings } from '@/components/settings/accounts.tsx';
 import { ActiveHoursSettings } from '@/components/settings/active-hours.tsx';
-import { AgentSettings, useAutomaticModel } from '@/components/settings/agents.tsx';
+import { AgentSettings, useAutomaticModel, WatchdogSettings } from '@/components/settings/agents.tsx';
 import { AppearanceSettings } from '@/components/settings/appearance.tsx';
-import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { AutoPaceSettings } from '@/components/settings/auto-pace.tsx';
 import { AutopilotSettings } from '@/components/settings/autopilot.tsx';
 import { BrowserSettings } from '@/components/settings/browser.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
-import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
+import { FolderSettings } from '@/components/settings/folders.tsx';
 import { ForecastSettings } from '@/components/settings/forecast.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
 import { MachinesSettings } from '@/components/settings/machines.tsx';
@@ -85,14 +84,16 @@ function TabSections({
       return (
         <>
           <AppearanceSettings />
-          <AttentionSettings settings={state.settings} />
           <NotificationSettings />
+          <UpdateSettings />
+          <VersionSettings />
         </>
       );
     case 'agents':
       return (
         <>
           <AgentSettings settings={state.settings} automatic={automatic} />
+          <ContextSettings settings={state.settings} />
           <MemorySettings state={state} />
         </>
       );
@@ -101,10 +102,9 @@ function TabSections({
         <>
           <AutopilotSettings settings={state.settings} />
           <ActiveHoursSettings state={state} />
-          <ContextSettings settings={state.settings} />
         </>
       );
-    case 'connections':
+    case 'cloud':
       return (
         <>
           {isRemoteBuild() ? (
@@ -140,19 +140,17 @@ function TabSections({
           <FolderSettings />
           <WorktreeSettings />
           <ProjectSettings state={state} />
-          <BrowserSettings state={state} />
         </>
       );
+    case 'browser':
+      return <BrowserSettings state={state} />;
     case 'integrations':
       return <IntegrationSettings state={state} />;
     case 'automations':
-      return <ScheduleSettings state={state} />;
-    case 'about':
       return (
         <>
-          <UpdateSettings />
-          <VersionSettings />
-          <SetupSettings />
+          <ScheduleSettings state={state} />
+          <WatchdogSettings settings={state.settings} />
         </>
       );
   }

@@ -45,15 +45,17 @@ export function IntegrationSettings({ state }: { state: ShinsaState }) {
   const { searching } = matches;
   return (
     <>
-      <Input
-        type='search'
-        value={query}
-        onChange={(event) =>
-          updateSearchParams({ [SEARCH_PARAM]: event.target.value || null }, { replace: true })
-        }
-        placeholder={EXTENSION_LABEL.search}
-        aria-label={EXTENSION_LABEL.search}
-      />
+      <div data-slot='integrations-search' className='sticky top-0 z-10 -mt-3 -mb-3 bg-background py-3'>
+        <Input
+          type='search'
+          value={query}
+          onChange={(event) =>
+            updateSearchParams({ [SEARCH_PARAM]: event.target.value || null }, { replace: true })
+          }
+          placeholder={EXTENSION_LABEL.search}
+          aria-label={EXTENSION_LABEL.search}
+        />
+      </div>
       {searching && isEmptyMatch(matches) && (
         <p className='px-1 text-xs text-fg-2'>{EXTENSION_LABEL.nothingMatches}</p>
       )}

@@ -5674,7 +5674,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Do** put a page's parts behind a segmented tab bar under its heading. **Don't** add a table of contents, a scroll-spy or a list of section links beside the column.
 
-**Example.** Settings is six panes (General, Agents, Agent usage, Projects, Integrations, Automations) behind a segmented `Choice` under the heading, the tab in the URL (`?tab=agents`, General is bare `/settings`). The heading reads the open tab's name ("Agents"), never "Settings", and switching tabs swaps only the pane under the bar.
+**Example.** Settings is ten panes (General, Agents, Autopilot, Cloud, Usage, Statistics, Projects, Browser, Integrations, Automations) behind a segmented `Choice` under the heading, which stays put while the pane scrolls, the tab in the URL (`?tab=agents`, General is bare `/settings`). The heading reads the open tab's name ("Agents"), never "Settings", and switching tabs swaps only the pane under the bar.
 
 #### Page heading
 
@@ -6362,11 +6362,7 @@ Example: the Home section card, the Overview panel, the chat's hand-over card an
 
 #### Two layouts, one frame
 
-- The app has two layouts, chosen in Settings, both rendered by one frame around one `main`. Switching adds or removes the top bar and the side rail; it never remounts the pages inside, so scroll and state survive.
-- Each layout has a display name, a one-line hint and an icon, kept in one constant. Code, URL params and docs keep the internal ids (`cards`, `sidebar`); the screen shows the names. Renaming is a one-constant change.
-  - Desk (`cards`, the default): "Pages sit centred with nothing at the sides, and a button at the top opens what needs you."
-  - Shelf (`sidebar`): "A rail at the side lists every task and stays open, so each one is a click away."
-  - The hint shows as the tooltip of each layout's option in Settings and as the hint of the command menu's Switch layout.
+- The app has two layouts, both rendered by one frame around one `main`, but only Desk (`cards`) is offered: Settings and the command menu have no switch, and every start opens Desk. Shelf (`sidebar`) stays in the code and opens only from the `?layout=sidebar` address, for that load. Adding or removing the top bar and the side rail never remounts the pages inside, so scroll and state survive.
 - Desk: no rail. A top bar holds navigation at the left (logo, Home button in the Mac app, Tasks, Services, then the "3 need you" queue button) and Update, Settings, Agent usage and Focus at the right. Pages are centred on the same axis as Home. The queue button sits after Services so that nothing on the right moves when it appears or disappears; it shows on every task page at every width and is Desk's only queue outside Home.
 - Shelf: a permanent rail with the queue that never hides. From `md` (768px) up it sits beside the page; below 768px it opens as a sheet. Its nav names the same places in the same words as Desk's bar (New task, Tasks, Services, Settings), each showing its filled icon on its own page.
 - Nav buttons: `Button` `variant='secondary'`, `size='sm'` with icon and label, or `size='icon-sm'` with the icon alone (Settings: the cog only, tooltip "Settings"). Inactive `text-fg-3`; on its own page `text-fg-4`, the filled twin of the icon, and `aria-current="page"`.
@@ -7513,8 +7509,7 @@ style of its own.
   queue, no usage glance, no Focus, and the command menu is not mounted (and is closed on the way in). The page is
   `flex h-dvh flex-col overflow-hidden bg-background text-fg-3`.
 - **Locked until done**: while setup is not complete every route replaces itself with setup, so a link, the address
-  bar, Back or the app's menu all land there. A run started again from Settings is not locked: every step's footer
-  then has "Close setup" (`secondary`), which goes to Settings. Opening setup once it is finished goes to the welcome task, or Home on a run again.
+  bar, Back or the app's menu all land there. Nothing in the app starts setup again once it is complete. Opening setup once it is finished goes to the welcome task, or Home on a run again.
 - **Column**: `mx-auto flex w-full max-w-xl flex-col gap-6 px-6` + `pt-6 pb-16 md:pt-12` (48px from the top from
   `md` up). Everything starts on the column's left edge. The header, the step and its footer are 24px apart.
 - **Setup reads as the first task**: above the step, the page's own heading ("Set up Shinsa", one line under it),
@@ -7799,7 +7794,7 @@ Structure that only matters once there is more than one of something stays invis
 - A search with no match shows "Nothing matches." alone (`px-1 text-fg-2 text-xs`), with every non-matching section
   hidden.
 - An empty state that is good news says so ("Agents used everything turned on here.").
-- Example: Settings → About → Versions before the first read.
+- Example: Settings → General → Versions before the first read.
 
 #### Settings search
 

@@ -1,9 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { type AgentProviderInfo, createSettings, KNOWN_CODEX_MODELS, type Settings } from '@shinsa/core';
 import { waitFor } from '@testing-library/react';
 import type { Command, CommandSection } from '@/lib/command/registry.ts';
 import { listSettingsSections, openSettingsSection } from '@/lib/command/settings.ts';
-import * as onboarding from '@/lib/connection/onboarding.ts';
 import { DEFAULT_PREFERENCES, readNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
@@ -52,17 +51,16 @@ describe('Jump to', () => {
     expect(jump?.heading).toBe('Jump to');
     expect(jump?.commands.map((command) => [command.label, command.hint])).toEqual([
       ['Appearance', 'General'],
-      ['Attention', 'General'],
       ['Notifications', 'General'],
+      ['Versions', 'General'],
       ['Models', 'Agents'],
       ['Engine', 'Agents'],
-      ['Watchdogs', 'Agents'],
+      ['Context', 'Agents'],
       ['Memory', 'Agents'],
       ['Autopilot', 'Autopilot'],
       ['Your hours', 'Autopilot'],
-      ['Context', 'Autopilot'],
-      ['Teams', 'Connections'],
-      ['Sharing', 'Connections'],
+      ['Teams', 'Cloud'],
+      ['Sharing', 'Cloud'],
       ['Accounts', 'Usage'],
       ['Auto pace', 'Usage'],
       ['Forecast', 'Usage'],
@@ -70,13 +68,12 @@ describe('Jump to', () => {
       ['Repository folders', 'Projects'],
       ['Worktrees', 'Projects'],
       ['Projects', 'Projects'],
-      ['Browser', 'Projects'],
+      ['Browser', 'Browser'],
       ['MCPs', 'Integrations'],
       ['Plugins', 'Integrations'],
       ['Skills', 'Integrations'],
       ['Schedules', 'Automations'],
-      ['Versions', 'About'],
-      ['Setup', 'About'],
+      ['Watchdogs', 'Automations'],
     ]);
   });
 
@@ -104,7 +101,6 @@ describe('Change a setting', () => {
   it('offers every setting as a choice on its current value', () => {
     const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES);
     expect(sections[1]?.commands.map((command) => [command.label, command.hint])).toEqual([
-      ['Decisions up now', 'One at a time'],
       ['Play a sound', 'When Shinsa is in the background'],
       ['Sound', 'Chime'],
       ['Show a notification', 'Never'],
@@ -299,12 +295,6 @@ describe('Change a setting', () => {
     ]);
   });
 
-  it('shows a stored attention limit the usual choices do not offer', () => {
-    const settings: Settings = { ...createSettings(), attentionLimit: 4 };
-    const attention = find(listSettingsSections(settings, MODELS, DEFAULT_PREFERENCES), 'settings.attention');
-    expect(attention).toMatchObject({ value: '4', hint: '4 at a time', icon: 'IconInboxEmpty' });
-  });
-
   it('saves each change as a settings patch', () => {
     const settings: Settings = {
       ...createSettings(),
@@ -313,7 +303,6 @@ describe('Change a setting', () => {
       compaction: 'provider',
     };
     const sections = listSettingsSections({ ...settings, taskBudgetUsd: 2 }, MODELS, DEFAULT_PREFERENCES);
-    pick(sections, 'settings.attention', '3');
     pick(sections, 'settings.plans', 'large');
     pick(sections, 'settings.plans', 'always');
     pick(sections, 'settings.plans', 'when_asked');
@@ -339,7 +328,6 @@ describe('Change a setting', () => {
     pick(sections, 'settings.speed.task', 'on');
     pick(sections, 'settings.speed.agent', 'off');
     expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
-      [{ type: 'settings.change', patch: { attentionLimit: 3 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { approvePlans: 'large' } }, 'Saved.'],
       [{ type: 'settings.change', patch: { approvePlans: 'always' } }, 'Saved.'],
       [{ type: 'settings.change', patch: { approvePlans: 'when_asked' } }, 'Saved.'],
@@ -467,22 +455,8 @@ describe('openSettingsSection', () => {
     openSettingsSection('Repository folders');
     expect(`${location.search}${location.hash}`).toBe('?tab=projects#repository-folders');
     history.replaceState(null, '', '/tasks');
-    openSettingsSection('Attention');
-    expect(`${location.pathname}${location.search}${location.hash}`).toBe('/settings#attention');
-  });
-});
-
-describe('Setup', () => {
-  it('runs setup again from ⌘K', () => {
-    const restart = spyOn(onboarding, 'restartOnboarding').mockResolvedValue(undefined);
-    const command = find(
-      listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES),
-      'settings.setup.restart'
-    );
-    expect(command).toMatchObject({ label: 'Run setup again', icon: 'IconArrowRotateClockwise' });
-    if (command.kind === 'run') command.run();
-    expect(restart).toHaveBeenCalledTimes(1);
-    restart.mockRestore();
+    openSettingsSection('Notifications');
+    expect(`${location.pathname}${location.search}${location.hash}`).toBe('/settings#notifications');
   });
 });
 

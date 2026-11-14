@@ -32,7 +32,7 @@ function renderGroup(current: SlackSnapshot | null, failure: string | null = nul
   return actions;
 }
 
-describe('Settings → Connections → Slack', () => {
+describe('Settings → Cloud → Slack', () => {
   it('waits for the snapshot, or says why it could not read it', () => {
     renderGroup(null);
     expect(screen.getByText('Reading Slack…')).toBeTruthy();

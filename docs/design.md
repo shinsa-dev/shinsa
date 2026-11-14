@@ -423,13 +423,11 @@ Only these, and they win over anything below:
    chat, since keeping sends it again as your message.
    Several messages sent while one is read reach the agent together, as one message (`docs/engine.md` → Rounds,
    Queued messages).
-10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
-    constant, `LAYOUT_NAMES` (`lib/preferences/layout.ts`: label, a one-line hint and the icon, read by Settings
-    → Appearance, where each layout's choice shows its hint as a tooltip, and by ⌘K's Switch layout): **Desk** for
-    Cards ("Pages sit centred with nothing at the sides, and a button at the top opens what needs you.") and
-    **Shelf** for Sidebar ("A rail at the side lists every task and stays open, so each one is a click away.").
-    Desk is the default. Renaming them is that one constant; the code, the `?layout=` param and this file keep
-    `cards` and `sidebar`. Both are one frame, `AppFrame` (`components/layout/frame.tsx`), around one `main`:
+10. **One layout on screen, Desk.** Cards is the only layout you can use: Settings and ⌘K offer no switch, and
+    every start opens Cards (`applyLayoutParam` in `lib/preferences/layout.ts` writes `cards` unless the address
+    asks otherwise). Sidebar (Shelf) stays in the code for a later return: `?layout=sidebar` opens it for that load
+    only, which the tests and screenshots use. The code, the `?layout=` param and this file keep `cards` and
+    `sidebar`. Both are one frame, `AppFrame` (`components/layout/frame.tsx`), around one `main`:
     switching adds or drops the top bar and the rail and never remounts the pages inside.
     Cards (the default) has no rail: a top
     bar with the navigation on the left (the Home button, 31; Tasks; Services, 37;
@@ -730,8 +728,7 @@ Only these, and they win over anything below:
       and the agent review pass"; its two halves keep their size when pressed and the chevron keeps its hover fill while
       its menu is open), Update ("Shinsa 0.7.0 is ready. The app restarts, then the engine follows on its
       own and agents pick up where they were."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
-      notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
-      item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
+      notification" once notifications are allowed) and a **disabled** control whose reason is not on screen (Approve changes while line comments
       are drafted: "Send your line comments to the agent or remove them first").
     - **A delayed tooltip** wherever else hovering has more to tell:
       - **Icon-only buttons** whose meaning isn't plain from the glyph, through `Hint`
@@ -858,7 +855,7 @@ Only these, and they win over anything below:
       More sheet's New task do, and
       Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings), Focus (Switch
       focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
-      typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens
+      typing), Appearance (Change theme), Accounts (Add a Claude account, Agent usage, which opens
       Settings → Usage → Accounts, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
       by name while typing; only while there is one; 27), and Integrations (Add an MCP, MCPs, Plugins
       and Skills, and while typing each MCP, plugin and skill by name; 29), and Versions (Update Claude Code and
@@ -932,12 +929,14 @@ Only these, and they win over anything below:
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`), each named for what
-      you do there, so no tab holds most of the page: General (Appearance, Attention, Notifications), Agents
-      (Models, Engine, Watchdogs, Memory), Autopilot (Autopilot, Your hours, Context), Connections (Remote access,
-      Teams, Sharing, Slack; on the hosted page Machines, Teams and Sharing), Usage (Accounts, Auto pace, Forecast,
-      Limits), Statistics (Shipping, Token usage), Projects (Repository folders, then Worktrees, Projects and
-      Browser: triage looks for repositories in those folders, so they come first), Integrations (Context
-      optimizer, MCPs, Plugins, Skills; 29), Automations (Schedules) and About (Updates, Versions, Setup). Each is
+      you do there, so no tab holds most of the page: General (Appearance, Notifications, Updates, Versions), Agents
+      (Models, Engine, Context, Memory), Autopilot (Autopilot, Your hours), Cloud (Remote access, Teams, Sharing,
+      Slack; on the hosted page Machines, Teams and Sharing), Usage (Accounts, Auto pace, Forecast, Limits),
+      Statistics (Shipping, Token usage), Projects (Repository folders, then Worktrees and Projects: triage looks
+      for repositories in those folders, so they come first), Browser, Integrations (Context optimizer, MCPs,
+      Plugins, Skills; 29, its search pinned at the top while the lists scroll under it) and Automations
+      (Schedules, Watchdogs). A project's repository row is its name and path: what always runs before review,
+      its test coverage and where agents work fold under its gear button, closed by default. Each is
       its own pane, not a scroll position: the main use is a floating, tablet-sized window, where one long page
       meant scrolling past everything to reach anything, and a scroll-spy table of contents would have kept that
       page. The tab is in the URL (`?tab=agents`; General is the bare `/settings`), and a link to a section
@@ -952,12 +951,11 @@ Only these, and they win over anything below:
       tab's name ("General", "Agents"), never "Settings".
     - **Settings is titles only**: the group label and each row's title with its control (a 40px
       row). There are no section or row descriptions (`SettingsGroup` and `SettingRow` take none), so a
-      title and its options must say what a setting does on their own ("Setup steps" with Run setup again).
+      title and its options must say what a setting does on their own.
       The one exception is Agents → Models, whose agent groups and roles each carry a one-sentence line, since
       "Task agents" or "Researcher" cannot say on its own which work it covers (26).
       A row may still show data under or beside its name (an account's reset time, a schedule's summary, a
-      path); the two layout names keep their hint lines as tooltips on Desk and Shelf (`Choice` items take a
-      `hint`, 13; ⌘K's Switch layout shows the same line). Model selects show
+      path). Model selects show
       the display name ("Opus 5.5") from the first paint (`KNOWN_AGENT_MODELS`, refined by the live
       catalog), never the raw alias.
       Section → section is 24px (`gap-6`) on every page.
@@ -1294,9 +1292,8 @@ Only these, and they win over anything below:
     rail, no queue, no usage glance, no Focus, and ⌘K is not mounted (the menu is closed on the way in). While
     `GET /api/onboarding` says setup is not complete, every route but `/onboarding` replaces itself with `/onboarding`
     (`resolveOnboardingRedirect`, in `root.tsx`), so a link, the address bar, the back button or the app's menu all
-    land on setup. A run you started again from Settings (Settings → Setup, ⌘K's Run setup again, `restartOnboarding`)
-    is not locked: setup is already complete, and each step's footer has Close setup beside its button, which goes to
-    Settings.
+    land on setup. Nothing in the app starts setup again once it is complete: Settings has no Setup section and ⌘K
+    no Run setup again.
     - **Setup reads as your first task** (`OnboardingHeader`): above the steps, the page's own `PageHeading`, "Set up
       Shinsa", with "Your first task. Pass each step below and Shinsa is ready for real work." under it ("Open any
       step to change it…" on a run again), then the steps as the task page's path of gates (`OnboardingPath`, items
@@ -1665,7 +1662,7 @@ Only these, and they win over anything below:
       `agentFastModes` per role). ⌘K has the group choices ("Model for task agents", every provider's models in
       one list, and "Speed for task agents") and, while typing, the per-role ones ("Agent model", "Agent
       speed", "Reviewer model"…). /ui shows the card folded on the defaults and opened with the roles set apart.
-    - **Settings → About → Versions** (`components/settings/versions.tsx`, `lib/versions.ts` for the rows and
+    - **Settings → General → Versions** (`components/settings/versions.tsx`, `lib/versions.ts` for the rows and
       labels, `lib/connection/versions.ts` reads `GET /api/versions` while the tab is open and runs the updates;
       `docs/engine.md` → Versions and updates) is the last group of the Agents tab. Its header has a secondary icon
       refresh button, "Check for updates", which looks up the latest versions again. One row per agent program and
@@ -1921,14 +1918,14 @@ Only these, and they win over anything below:
       and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update
       Shinsa, or "Restart Shinsa’s engine to finish updating to 0.5.0." and the reason when the restart failed. An
       engine older than the app is restarted at once, without a banner (the page asks for `when: now`, working
-      agents pick up where they were); while it moves, Settings → About → Updates says so in its Engine row. No dismiss: it
+      agents pick up where they were); while it moves, Settings → General → Updates says so in its Engine row. No dismiss: it
       goes when the versions match. `/ui` shows `EngineCard` in its two states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
       scales in (`fade-in-0 zoom-in-95`, 200 ms), its tooltip names the version and says the app restarts for a
       moment and agents keep working (13), and a click installs and relaunches the app. Nothing shows in a browser or
       while the update downloads.
-    - **Settings → About → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
+    - **Settings → General → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
       `apps/desktop`'s, `docs/release.md` → Channels and updates) is the first group of About. In the app: a
       secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
       dialog), then 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`)
@@ -4845,7 +4842,7 @@ Settings tabs and Appearance's choices, a finding's Fix / Dismiss, the
 terminal tabs and the `/ui` specimens. The selected pill (or the underline's
 line) slides on the movement clock, 200ms `cubic-bezier(0.22, 1, 0.36, 1)`
 (`INDICATOR_TRANSITION`), and the tab colours change at once. Every one
-slides, Settings → Appearance's Layout included: Desk and Shelf are one frame
+slides. Desk and Shelf are one frame
 (`AppFrame`, `components/layout/frame.tsx`) that adds or drops the top bar and
 the rail around the same `main`, so switching keeps the page under it mounted,
 with its tab bar, its scroll and the focused tab. The indicator

@@ -8,7 +8,7 @@ at it. A release is a GitHub release of `shinsa-dev/shinsa`
 made by the Release workflow (`.github/workflows/release.yml`); nothing is bumped by hand, since the version lives
 in the tag. There are three channels: **Stable** and **Beta**, cut by hand, and **Canary**, built from every merge to
 `main` that passes the tests. All three are builds of the same app, Shinsa (`studio.overclock.shinsa`), so you switch
-between them in Settings → About → Updates and Shinsa updates itself in place, with the same data and engine.
+between them in Settings → General → Updates and Shinsa updates itself in place, with the same data and engine.
 
 ## Running a release
 
@@ -234,7 +234,7 @@ and never run out.
 - `allowDowngrade` is false (electron-updater turns it on whenever `channel` is set, so the app sets it back), with
   one exception: going back from a beta or a canary when you switch to a channel below it. A version's channel is its pre-release word
   (`resolveReleaseChannel` in `packages/core`). Switching from Beta to Stable on a beta newer than the latest stable
-  (on `1.3.0-beta.2` with `1.2.0` the latest stable) offers to go back: Settings → About → Updates shows "Go back
+  (on `1.3.0-beta.2` with `1.2.0` the latest stable) offers to go back: Settings → General → Updates shows "Go back
   to 1.2.0 (stable)?" with Download and install and Stay on this beta, and the app asks the same once in a dialog
   right after the switch. Download and install turns `allowDowngrade` on for that one check, downloads the version and
   installs it when you quit, like any update. Stay keeps the version until the channel passes it, and the app stops
@@ -254,7 +254,7 @@ and never run out.
   before the move to shinsa.dev still reads them from GitHub; `scripts/release-upload.ts` copies them to R2 with the
   zip's path rewritten.
 - A new install starts on the channel of its own version (Canary for a canary, Beta for a beta, Stable otherwise);
-  the choice is the app's own (Settings → About → Updates, ⌘K's Update channel), switching checks again at once,
+  the choice is the app's own (Settings → General → Updates, ⌘K's Update channel), switching checks again at once,
   and every channel is offered. An old Shinsa Canary app (`studio.overclock.shinsa.canary`, from before canaries were
   a channel) is not updated any more: delete it and its `~/.config/shinsa-canary`, and pick Canary in Shinsa.
 
@@ -432,7 +432,7 @@ must check against too. Without either the workflow passes with a warning.
 1. Set the five secrets (or knowingly ship unsigned betas that will not update themselves).
 2. Run a beta: `channel=beta`, `bump=major` gives `1.0.0-beta.1` while nothing is tagged. Install it from
    `shinsa.dev/download/beta` (once the site is deployed) and check that the app opens, starts its engine and shows
-   Beta in Settings → About → Updates.
+   Beta in Settings → General → Updates.
 3. Run another beta and see the first one update itself (signed builds only).
 4. Run `channel=stable` with the same bump, `major`: `1.0.0`, marked latest; `shinsa.dev/download` serves it.
    Later releases bump from `1.0.0` (`minor` for features, `patch` for fixes).

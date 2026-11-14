@@ -92,11 +92,11 @@ describe('who an escalation reaches', () => {
     );
     const off = { ...SNAPSHOT, remote: false };
     expect(resolveSlackUnavailable(true, { snapshot: off, failure: null })).toBe(
-      'Connect Slack in Settings → Connections first'
+      'Connect Slack in Settings → Cloud first'
     );
     const unlinked = { ...SNAPSHOT, links: [] };
     expect(resolveSlackUnavailable(true, { snapshot: unlinked, failure: null })).toBe(
-      'Connect Slack in Settings → Connections first'
+      'Connect Slack in Settings → Cloud first'
     );
     expect(resolveSlackUnavailable(true, { snapshot: SNAPSHOT, failure: null })).toBeNull();
   });

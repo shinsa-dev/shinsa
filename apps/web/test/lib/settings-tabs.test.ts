@@ -16,13 +16,13 @@ describe('settings tabs', () => {
       'General',
       'Agents',
       'Autopilot',
-      'Connections',
+      'Cloud',
       'Usage',
       'Statistics',
       'Projects',
+      'Browser',
       'Integrations',
       'Automations',
-      'About',
     ]);
   });
 
@@ -32,19 +32,20 @@ describe('settings tabs', () => {
   });
 
   it('gives each tab its own sections', () => {
-    expect(findSettingsTab('general').sections).toEqual(['Appearance', 'Attention', 'Notifications']);
-    expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Watchdogs', 'Memory']);
-    expect(findSettingsTab('autopilot').sections).toEqual(['Autopilot', 'Your hours', 'Context']);
-    expect(findSettingsTab('connections').sections).toEqual(['Remote access', 'Teams', 'Sharing', 'Slack']);
+    expect(findSettingsTab('general').sections).toEqual([
+      'Appearance',
+      'Notifications',
+      'Updates',
+      'Versions',
+    ]);
+    expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Context', 'Memory']);
+    expect(findSettingsTab('autopilot').sections).toEqual(['Autopilot', 'Your hours']);
+    expect(findSettingsTab('cloud').sections).toEqual(['Remote access', 'Teams', 'Sharing', 'Slack']);
     expect(findSettingsTab('usage').sections).toEqual(['Accounts', 'Auto pace', 'Forecast', 'Limits']);
     expect(findSettingsTab('statistics').sections).toEqual(['Shipping', 'Token usage']);
-    expect(findSettingsTab('projects').sections).toEqual([
-      'Repository folders',
-      'Worktrees',
-      'Projects',
-      'Browser',
-    ]);
-    expect(findSettingsTab('about').sections).toEqual(['Updates', 'Versions', 'Setup']);
+    expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Worktrees', 'Projects']);
+    expect(findSettingsTab('browser').sections).toEqual(['Browser']);
+    expect(findSettingsTab('automations').sections).toEqual(['Schedules', 'Watchdogs']);
   });
 
   it('opens Integrations for a link to the context optimizer', () => {
@@ -68,29 +69,30 @@ describe('settings tabs', () => {
     expect(resolveSettingsTab('accounts')).toBe('general');
   });
 
-  it('opens the tab that now holds a section moved out of General or Agents', () => {
-    expect(resolveSettingsTab(null, '#updates')).toBe('about');
-    expect(resolveSettingsTab(null, '#setup')).toBe('about');
-    expect(resolveSettingsTab(null, '#versions')).toBe('about');
-    expect(resolveSettingsTab(null, '#remote-access')).toBe('connections');
-    expect(resolveSettingsTab(null, '#teams')).toBe('connections');
-    expect(resolveSettingsTab(null, '#sharing')).toBe('connections');
-    expect(resolveSettingsTab(null, '#slack')).toBe('connections');
-    expect(resolveSettingsTab('nonsense', '#context')).toBe('autopilot');
+  it('opens the tab that now holds a section moved to another tab', () => {
+    expect(resolveSettingsTab(null, '#updates')).toBe('general');
+    expect(resolveSettingsTab(null, '#versions')).toBe('general');
+    expect(resolveSettingsTab('about', '#updates')).toBe('general');
+    expect(resolveSettingsTab(null, '#remote-access')).toBe('cloud');
+    expect(resolveSettingsTab(null, '#teams')).toBe('cloud');
+    expect(resolveSettingsTab(null, '#sharing')).toBe('cloud');
+    expect(resolveSettingsTab('connections', '#slack')).toBe('cloud');
+    expect(resolveSettingsTab('nonsense', '#context')).toBe('agents');
     expect(resolveSettingsTab(null, '#autopilot')).toBe('autopilot');
     expect(resolveSettingsTab(null, '#your-hours')).toBe('autopilot');
-    expect(resolveSettingsTab(null, '#watchdogs')).toBe('agents');
+    expect(resolveSettingsTab(null, '#watchdogs')).toBe('automations');
+    expect(resolveSettingsTab(null, '#browser')).toBe('browser');
     expect(resolveSettingsTab(null, '#auto-pace')).toBe('usage');
     expect(resolveSettingsTab(null, '#forecast')).toBe('usage');
   });
 
   it('knows which tab holds a section, and orders sections the way the tabs show them', () => {
     expect(resolveSectionTab('Schedules')).toBe('automations');
-    expect(resolveSectionTab('Context')).toBe('autopilot');
+    expect(resolveSectionTab('Context')).toBe('agents');
     expect(resolveSectionTab('Notifications')).toBe('general');
     expect(resolveSectionTab('Somewhere else')).toBe('general');
     expect(resolveSectionRank('Appearance')).toBe(0);
-    expect(resolveSectionRank('Setup')).toBeGreaterThan(resolveSectionRank('Schedules'));
+    expect(resolveSectionRank('Watchdogs')).toBeGreaterThan(resolveSectionRank('Schedules'));
     expect(resolveSectionRank('Somewhere else')).toBe(Number.POSITIVE_INFINITY);
   });
 

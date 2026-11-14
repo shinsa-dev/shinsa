@@ -252,7 +252,7 @@ export function resolveSlackUnavailable(
 ) {
   if (!available) return 'Update Shinsa on this machine first';
   if (!snapshot) return failure ? 'Slack could not be checked' : SLACK_CHECKING;
-  if (!snapshot.remote || snapshot.links.length === 0) return 'Connect Slack in Settings → Connections first';
+  if (!snapshot.remote || snapshot.links.length === 0) return 'Connect Slack in Settings → Cloud first';
   return null;
 }
 
