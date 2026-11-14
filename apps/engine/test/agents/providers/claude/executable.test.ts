@@ -100,7 +100,7 @@ describe('resolveClaudeExecutable', () => {
       ok: false,
       reason: 'outdated',
       message:
-        'Claude Code 2.1.100 is older than Shinsa needs (2.1.280 or newer). Update it from Settings → Agents, or run `claude update`.',
+        'Claude Code 2.1.100 is older than Shinsa needs (2.1.280 or newer). Update it from Settings → About, or run `claude update`.',
     });
   });
 

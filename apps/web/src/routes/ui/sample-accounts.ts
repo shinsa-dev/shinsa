@@ -208,7 +208,7 @@ export function createSampleProviderLogins(now = Date.now()): ProviderLogin[] {
       status: 'outdated',
       version: '0.120.0',
       detail:
-        'Codex 0.120.0 is older than Shinsa needs (0.153.0 or newer). Update it from Settings → Agents, or run `codex update`.',
+        'Codex 0.120.0 is older than Shinsa needs (0.153.0 or newer). Update it from Settings → About, or run `codex update`.',
     },
   ];
 }

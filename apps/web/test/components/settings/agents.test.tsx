@@ -264,7 +264,7 @@ describe('Settings → Agents → Engine', () => {
   });
 });
 
-describe('Settings → Agents → Autopilot', () => {
+describe('Settings → Autopilot', () => {
   const ESCALATING: Settings = {
     ...createSettings(),
     autopilot: { ...AUTOPILOT_DEFAULTS, enabled: true },

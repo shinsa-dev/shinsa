@@ -737,7 +737,7 @@ export const SLACK_ESCALATION_TEST_NOTE = 'A test from Shinsa’s Autopilot sett
 
 export function serializeSlackEscalationTest(settingsUrl: string, now: number) {
   return serializeSlackEscalationView(
-    { label: 'Settings → Agents → Autopilot', url: settingsUrl, pullRequest: null },
+    { label: 'Settings → Autopilot', url: settingsUrl, pullRequest: null },
     {
       title: 'Fix the checkout timeout',
       why: 'It is urgent and ready to merge.',

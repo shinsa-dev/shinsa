@@ -5709,7 +5709,7 @@ These are the general layout and component patterns, in Shinsa's values. The acc
 
 **Do** put "Add account" on the Accounts section label. **Don't** put it in the page heading.
 
-**Example.** Settings → Agent usage puts Refresh and Add account as the Accounts `SectionLabel`'s action, 2px apart (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns).
+**Example.** Settings → Usage puts Refresh and Add account as the Accounts `SectionLabel`'s action, 2px apart (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns).
 
 #### A short flow is an overlay, not a page
 
@@ -7354,7 +7354,7 @@ readings on a shelf.
   ("Signed in with ChatGPT", "Not signed in", "Not installed", "Too old for Shinsa"), and, on its shelf when there
   is something to do, a row with the fix as inline markdown and a `CopyButton` for its command. Its menu offers only
   what makes sense (Copy the sign-in command, Check the sign-in again); no version is shown.
-- Example: Settings → Agent usage → Accounts.
+- Example: Settings → Usage → Accounts.
 
 #### Status words appear only when something is wrong
 
@@ -7799,7 +7799,7 @@ Structure that only matters once there is more than one of something stays invis
 - A search with no match shows "Nothing matches." alone (`px-1 text-fg-2 text-xs`), with every non-matching section
   hidden.
 - An empty state that is good news says so ("Agents used everything turned on here.").
-- Example: Settings → Agents → Versions before the first read.
+- Example: Settings → About → Versions before the first read.
 
 #### Settings search
 
@@ -9062,7 +9062,7 @@ Rules that sit behind the table:
 | `·` (U+00B7), spaced | Separator between facts on one line: "Building · Round 2", "Claude · a@b.com" | `•`, `|`, ` - ` |
 | `–` (U+2013), no spaces around it, in a number range | Ranges: "lines 4–9" | `-` |
 | `−` (U+2212) | The minus of a diff count: "+12 −3" | `-` |
-| `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Agent usage" | `->` |
+| `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Usage" | `->` |
 | `⌘ ⇧ ⌥` | Key names, joined with no space: "⌘K", "⇧⌘H", "⇧⌘F"; Ctrl spelled out with a space elsewhere: "Ctrl K" | "Cmd+K" |
 | `—` (em dash) | Never in a UI string. Use a colon, a comma or a second sentence | |
 | `!` | Never | |

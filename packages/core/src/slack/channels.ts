@@ -10,7 +10,7 @@ export type SlackChannelResolution =
   | { trigger: null; problem: string };
 
 export const SLACK_NOT_CONNECTED =
-  'Slack is not connected to this machine. Turn on remote access and connect Slack in Settings → General → Slack, invite @Shinsa to the channel, then set the automation again.';
+  'Slack is not connected to this machine. Turn on remote access and connect Slack in Settings → Connections → Slack, invite @Shinsa to the channel, then set the automation again.';
 
 function isNamed(value: string, id: string, name: string) {
   return value === id.toLowerCase() || value === name.toLowerCase();
@@ -24,7 +24,7 @@ export function resolveSlackChannelTrigger(
   if (channels.length === 0)
     return {
       trigger: null,
-      problem: `Shinsa is in no channel of a Slack workspace connected to this machine. Connect Slack in Settings → General → Slack if it is not connected yet, invite @Shinsa to #${choice.channel} in Slack, then set the automation again.`,
+      problem: `Shinsa is in no channel of a Slack workspace connected to this machine. Connect Slack in Settings → Connections → Slack if it is not connected yet, invite @Shinsa to #${choice.channel} in Slack, then set the automation again.`,
     };
   const channel = choice.channel.toLowerCase();
   const workspace = choice.workspace?.toLowerCase() ?? null;

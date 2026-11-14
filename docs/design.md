@@ -286,7 +286,7 @@ Only these, and they win over anything below:
    these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
    the greeting, the guide and the composer, then Needs you, In progress, Recently finished
-   (merged or done in the last 24 hours, five at most), Recent conversations (the latest agent message
+   (merged or done in the last 24 hours, ten at most), Recent conversations (the latest agent message
    of five tasks, opening their chat) and Waiting on another task. Recently
    finished is closure news, so it follows the work still moving; Recent conversations is how you
    jump back into a chat, a step after the news; Waiting, the section that starts collapsed in the
@@ -859,7 +859,7 @@ Only these, and they win over anything below:
       Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings), Focus (Switch
       focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
       typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens
-      Settings → Agent usage → Accounts, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
+      Settings → Usage → Accounts, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
       by name while typing; only while there is one; 27), and Integrations (Add an MCP, MCPs, Plugins
       and Skills, and while typing each MCP, plugin and skill by name; 29), and Versions (Update Claude Code and
       Update Codex; 26). With an empty query, Recent lists the
@@ -931,19 +931,25 @@ Only these, and they win over anything below:
       whole header becomes one button with the label, the count and a 14px chevron right after them (turned when
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
-    - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Updates, Setup), Statistics (Shipping, Token usage), Agents (Models, Engine, Memory, Versions), Agent Usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
-      folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
-      tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
-      floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
-      scroll-spy table of contents would have kept that page. The tab is in the URL (`?tab=agents`; General is
-      the bare `/settings`), and a link to a section (`/settings#limits`, the old `#agent-usage`, `#usage`, `#codex`
-      and `#agents` too) opens its tab and scrolls to it. A card never repeats its page's name: the Agents tab's
-      model card is Models and Agent Usage's account card is Accounts; Projects keeps its Projects card, the
-      list of projects themselves. The tabs are the segmented `Choice` under the heading, the task page's tab
-      control, at every width: there is no rail of tabs beside the column, however wide the window (Layout, No
-      sidebars). The column stays on Home's axis (`PAGE_COLUMN`) and the bar scrolls with the page; switching tabs
-      keeps the heading and the bar where they are and swaps only the pane under them. The page heading is the open tab's name ("General", "Agents"), never "Settings".
+    - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`), each named for what
+      you do there, so no tab holds most of the page: General (Appearance, Attention, Notifications), Agents
+      (Models, Engine, Watchdogs, Memory), Autopilot (Autopilot, Your hours, Context), Connections (Remote access,
+      Teams, Sharing, Slack; on the hosted page Machines, Teams and Sharing), Usage (Accounts, Auto pace, Forecast,
+      Limits), Statistics (Shipping, Token usage), Projects (Repository folders, then Worktrees, Projects and
+      Browser: triage looks for repositories in those folders, so they come first), Integrations (Context
+      optimizer, MCPs, Plugins, Skills; 29), Automations (Schedules) and About (Updates, Versions, Setup). Each is
+      its own pane, not a scroll position: the main use is a floating, tablet-sized window, where one long page
+      meant scrolling past everything to reach anything, and a scroll-spy table of contents would have kept that
+      page. The tab is in the URL (`?tab=agents`; General is the bare `/settings`), and a link to a section
+      (`/settings#updates`, `#limits`, the old `#agent-usage`, `#usage`, `#codex` and `#agents` too) opens the tab
+      that holds it and scrolls to it. A card never repeats its page's name: the Agents tab's model card is Models,
+      Usage's account card is Accounts and Autopilot's own card keeps its name only because the tab is named for
+      it; Projects keeps its Projects card, the list of projects themselves. The tabs are the segmented `Choice`
+      under the heading, the task page's tab control, at every width: there is no rail of tabs beside the column,
+      however wide the window (Layout, No sidebars). **The heading and the tab bar stay put**: they sit in a
+      `header` above the page's `PageScroll`, on Home's axis (`PAGE_COLUMN`), so scrolling a tab moves only its
+      sections, which fade under the bar, and switching tabs swaps only the pane. The page heading is the open
+      tab's name ("General", "Agents"), never "Settings".
     - **Settings is titles only**: the group label and each row's title with its control (a 40px
       row). There are no section or row descriptions (`SettingsGroup` and `SettingRow` take none), so a
       title and its options must say what a setting does on their own ("Setup steps" with Run setup again).
@@ -1555,7 +1561,7 @@ Only these, and they win over anything below:
       tasks, Home or the rail, an activity entry, the Review tab, a preview card or ⌘K. The control is the unit's
       icon and the amount ("$18.55", or "1.8%" of the weekly limit on a subscription), and hovering it opens the
       popover with the heading, the tokens and the split by step and by phase. The
-      account's usage (the top bar's usage menu, Settings → Agent usage) is not a task's cost and stays where it is;
+      account's usage (the top bar's usage menu, Settings → Usage) is not a task's cost and stays where it is;
       the limits (Settings → Limits, the paused card and its Allow another) keep working and name the limit, never
       what the task spent.
     - **Cost** is in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
@@ -1585,7 +1591,7 @@ Only these, and they win over anything below:
     sign-in dialog's own sentences aside; the socket holds the `accounts` snapshot it pushes and every
     POST to `/api/accounts/*` answers, and `lib/connection/accounts.ts` reads it (`useAccounts`) and
     sends the changes; pieces in `components/accounts/`):
-    - **Settings → Agent usage → Accounts** (the tab is Agent usage, as in the top bar; its first card is Accounts,
+    - **Settings → Usage → Accounts** (the tab is Usage, the top bar's Agent usage; its first card is Accounts,
       so the card does not repeat the page's name, `ACCOUNT_LABEL.section`) is one section for every login agents
       run on, whatever the provider (`components/settings/accounts.tsx`; the old `#agent-usage`, `#usage` and
       `#codex` links land on it). Its header has a secondary icon button "Refresh usage" (it
@@ -1659,7 +1665,7 @@ Only these, and they win over anything below:
       `agentFastModes` per role). ⌘K has the group choices ("Model for task agents", every provider's models in
       one list, and "Speed for task agents") and, while typing, the per-role ones ("Agent model", "Agent
       speed", "Reviewer model"…). /ui shows the card folded on the defaults and opened with the roles set apart.
-    - **Settings → Agents → Versions** (`components/settings/versions.tsx`, `lib/versions.ts` for the rows and
+    - **Settings → About → Versions** (`components/settings/versions.tsx`, `lib/versions.ts` for the rows and
       labels, `lib/connection/versions.ts` reads `GET /api/versions` while the tab is open and runs the updates;
       `docs/engine.md` → Versions and updates) is the last group of the Agents tab. Its header has a secondary icon
       refresh button, "Check for updates", which looks up the latest versions again. One row per agent program and
@@ -1749,9 +1755,9 @@ Only these, and they win over anything below:
       glance window (the same pick) as a bar and its reset, or its status when it is out of usage or signed out. The account the
       next turn uses (`isNextAccount`, `isNextProvider` over the glance) carries a 6px blue dot (`TONE_FILL.blue`)
       right after its name, "Used for the next turn" in its tooltip and `aria-label`. A click goes to Settings →
-      Agent usage → Accounts. Hidden without accounts or a provider reading.
+      Usage → Accounts. Hidden without accounts or a provider reading.
     - **Usage re-checks itself while you look at it** (`lib/accounts/recheck.ts`, `useUsageRecheck`). Settings →
-      Agent usage and the usage menu's popover each read the accounts again when they open (unless a read finished
+      Usage and the usage menu's popover each read the accounts again when they open (unless a read finished
       in the last 5 seconds) and then every 60 seconds while they stay open, and stop when they close or the page is
       hidden; a hidden page that comes back reads again when the last read is a minute old. These automatic reads
       ask for usage only (`{ scope: 'usage' }`: readings over a minute old, no sign-in checks); Refresh usage reads
@@ -1760,7 +1766,7 @@ Only these, and they win over anything below:
       sent twice. A failed automatic read says nothing; Refresh usage shows its toast. A run that finds an account out
       of usage or signed out changes the account the moment it fails, without any read (`docs/engine.md` → A run's
       failure shows on its account at once).
-    - **Every account names its provider.** Wherever an account is listed with its usage (Settings → Agent usage, the
+    - **Every account names its provider.** Wherever an account is listed with its usage (Settings → Usage, the
       usage popover) it reads "Claude · a@b.com" or "Codex · a@b.com" ("Codex" alone without an email) after the
       provider's icon (`IconClaudeai`, `IconOpenaiCodex`; `IconRobot` for one Shinsa does not know): one helper,
       `resolveAccountProvider` in `lib/accounts/account.ts` (on core's `resolveProviderLabel` and the
@@ -1861,7 +1867,7 @@ Only these, and they win over anything below:
       that its URL stops working). A schedule whose task is gone reads "Its task is gone" in `fg-2`.
       Without schedules the card holds one sentence.
     - **Fast mode** is the speed select of each agent group and role in Settings → Agents (26). **Settings →
-      General** holds the **Context** group (`components/settings/context.tsx`):
+      Autopilot** holds the **Context** group (`components/settings/context.tsx`):
       **Management** ("Context management" in ⌘K; Default, `IconLayersTwo`; Compaction only, `IconMinimize`; Provider compaction,
       `IconBubbleText`; Off, `IconPause`; each with a one-line hint in the menu, never naming one provider's
       product), then **Compact idle sessions** (Never, the default, or 1, 2, 5 or 10 minutes before the cache
@@ -1915,15 +1921,15 @@ Only these, and they win over anything below:
       and "This app is older than Shinsa’s engine. Update Shinsa to keep working." with a `primary` `sm` Update
       Shinsa, or "Restart Shinsa’s engine to finish updating to 0.5.0." and the reason when the restart failed. An
       engine older than the app is restarted at once, without a banner (the page asks for `when: now`, working
-      agents pick up where they were); while it moves, Settings → Updates says so in its Engine row. No dismiss: it
+      agents pick up where they were); while it moves, Settings → About → Updates says so in its Engine row. No dismiss: it
       goes when the versions match. `/ui` shows `EngineCard` in its two states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
       scales in (`fade-in-0 zoom-in-95`, 200 ms), its tooltip names the version and says the app restarts for a
       moment and agents keep working (13), and a click installs and relaunches the app. Nothing shows in a browser or
       while the update downloads.
-    - **Settings → General → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
-      `apps/desktop`'s, `docs/release.md` → Channels and updates) is the last group of General. In the app: a
+    - **Settings → About → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
+      `apps/desktop`'s, `docs/release.md` → Channels and updates) is the first group of About. In the app: a
       secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
       dialog), then 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`)
       and, once the updater has something to say, its status ("Checking for updates…", "Up to date", "Downloading
@@ -3445,7 +3451,7 @@ the string. Product copy is US English ("organization", "canceled", "color").
 ### Case
 
 - **Sentence case everywhere:** page titles, headings, card titles, buttons,
-  tabs (except the Settings tabs, which are title case: "Agent Usage"), menu and select items, field labels, placeholders, table headers,
+  tabs, menu and select items, field labels, placeholders, table headers,
   metric names, badges, tooltips, toasts, empty states and dialog titles.
   Capitalize the first word and proper nouns only — "All campaigns", "Main
   events", "Total proceeds", "Add product".

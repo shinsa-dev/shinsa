@@ -206,7 +206,7 @@ not chat text.
   production. The agent sets each one's schedule from what the change needs; Settings → Agents → Watchdogs holds the
   defaults. When no server has the data, it asks you for one with what the code sends where and the servers worth
   connecting (`docs/engine.md` → Watchdogs).
-- **Autopilot, when you turn it on.** The reviewer rates every change for confidence and risk. Settings → Agents →
+- **Autopilot, when you turn it on.** The reviewer rates every change for confidence and risk. Settings →
   Autopilot (off by default, yours alone) makes Autopilot your delegate: at each plan, agent question, review and
   merge it weighs the scope, the ratings, urgency, whether a watchdog filed it and whether you are around, and acts
   for you only within hard limits you set (Ask me first, Balanced or Most things, the gates it may act on, Auto
@@ -220,7 +220,7 @@ not chat text.
   Needs you, and to Slack channels and on-call teammates you choose, up to five; never while you are active. The
   activity says why it acted (`docs/engine.md` → Autopilot).
 - **Your hours.** Shinsa learns when you are usually active, per weekday on your own clock, from when you are away,
-  when you use your Mac and what you do in Shinsa, and shows it in Settings → Agents → Your hours as a week
+  when you use your Mac and what you do in Shinsa, and shows it in Settings → Autopilot → Your hours as a week
   timeline, where you can set it by hand. Autopilot and Auto pace read it (`docs/engine.md` → Your hours).
 - **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
   agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
@@ -338,7 +338,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   Agents report what in Shinsa got in their way with `report_feedback`; a report waits in the same popover, marked as
   from an agent and linked to its task. Only you open an issue (Open issue, with your GitHub login); an opened
   issue's row shows who sent it and, once it is closed on GitHub, Closed. The button's count is what waits for you (`docs/engine.md` → Feedback).
-- **Setup.** Your first task, on first run (and from Settings → General → Setup later), with a fixed list of
+- **Setup.** Your first task, on first run (and from Settings → About → Setup later), with a fixed list of
   steps you pass like gates: the folders that hold your repositories (found on this machine, with their
   repository counts), the projects for them, the default model, the merge method and plan approval, signing in
   with Claude, and the tools Shinsa needs, each installed with one click. It can never add, skip or reorder a
@@ -361,7 +361,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   everything else the same way: every command the web sends, plus reads, accounts, folders and the
   health check, each with `--help` and `--json`. Shaped like Tailscale's and Docker's
   (`docs/cli.md`). Agents in your own terminal can use it too.
-- **Claude accounts.** Shinsa runs agents on several Claude logins of its own (Settings → Agent usage:
+- **Claude accounts.** Shinsa runs agents on several Claude logins of its own (Settings → Usage:
   sign in to each, claude-swap's accounts included, default, order, per-account
   switch threshold). Each run uses the account with room (a task can be pinned to one, and a step
   rerun on the account you choose); a turn the limit rejects moves to another account, and when
@@ -457,7 +457,7 @@ arm64 and Apple Silicon: `curl -fsSL https://shinsa.dev/install | sh` or `npm i 
 engine on its own).
 Planned, not built: signing with a Developer ID, other providers (Cursor), and dev-server and
 simulator previews per worktree.
-Remote access: Settings → General → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds
+Remote access: Settings → Connections → Remote access pairs this machine with app.shinsa.dev through GitHub sign-in and adds
 the devices (browsers and phones) that may reach it; app.shinsa.dev is one dashboard over every machine a device was added to, each
 task showing its machine, and with several machines New task places each task automatically (its project's machine, a
 where a router reads your plain-English policies, each machine's projects and how busy it is, and sends it, else the one with the most room under its task capacity) or on the machine you pick (`docs/engine.md` → Remote access; what is still to come is
@@ -470,9 +470,9 @@ live output and tool calls but never your messages to them, and it changes the m
 what it shows: Status (an anonymous status card of the title, a short description an agent writes when sharing
 starts, a customer timeline (planning, in progress, in review, deploying, live) and a plain update for customers, such as in progress, deploying or live, which says live only
 once the change is out), Standard (that page) or Full access (Standard and your own chat messages); it defaults to
-Settings → General → Sharing, and Manage on the banner changes it and how long while the link stays; the machine reads
+Settings → Connections → Sharing, and Manage on the banner changes it and how long while the link stays; the machine reads
 nothing back, and app.shinsa.dev stores nothing. A share lasts until the task is done by default, or for an hour, a day,
-a week or until you stop it (Settings → General → Sharing, and in Share task before you share); the task's page shows a banner that
+a week or until you stop it (Settings → Connections → Sharing, and in Share task before you share); the task's page shows a banner that
 cannot be dismissed while it lasts, its title carries a share mark in the task list, on Home and in Needs you, and Stop sharing, which asks first, ends every open link at once
 (`docs/engine.md` → Sharing a task).
 Teams: Settings → Teams makes a team, a teammate joins with its link, and you pick which of your projects it sees; every
@@ -513,7 +513,7 @@ that is not work gets "Not a task" once and no task: Shinsa never chats), or mes
 a review, a merge, a proposal or an operation, retry a failure, answer a question, close a result or request changes in a Slack form,
 pressed only by the owner or a member of the machine; the result and the end of the task show on the card, and only the merge and a watchdog that found a problem post a new message.
 Secrets, sign-in and cancelling stay in Shinsa. One bot for everyone through app.shinsa.dev, each person connecting their Slack user to their
-own machine in Settings → General → Slack (`docs/engine.md` → Slack).
+own machine in Settings → Connections → Slack (`docs/engine.md` → Slack).
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -523,7 +523,7 @@ own machine in Settings → General → Slack (`docs/engine.md` → Slack).
   normalization into one chat protocol, quick-model calls, account handling. Two providers exist,
   Claude (the Agent SDK) and Codex (`codex app-server`), each role choosing its own in Settings →
   Agents; Kanna is MIT, and we take the engine, not the UI or its chat-first model.
-- **The agent programs stay current.** Settings → Agents → Versions shows the installed Claude Code and Codex,
+- **The agent programs stay current.** Settings → About → Versions shows the installed Claude Code and Codex,
   the latest of each and the minimum Shinsa needs (Claude Code's is the one its Agent SDK pairs with), and updates
   either with its own updater, its output streamed into a toast (⌘K: Update Claude Code). The Agent SDK's version
   is shown too; Shinsa takes a newer one in its own release (`docs/engine.md` → Versions and updates).
@@ -721,12 +721,12 @@ lives; `docs/engine.md` has the behaviour.
 
 **WS2 Accounts and limits** (`docs/engine.md` → Accounts and usage limits):
 
-- Shinsa signs in and imports Claude accounts of its own (Settings → Agent usage), runs each turn on
+- Shinsa signs in and imports Claude accounts of its own (Settings → Usage), runs each turn on
   the account with room, moves a rejected turn to another account, waits for the reset when every
   account is spent and carries on by itself, and asks you to sign in again instead of failing.
 - A task, or a single run, can be bound to an account, and a step can be rerun on an account you
   choose.
-- Usage per account and per provider (Codex) in Settings → Agent usage and at a glance in the top
+- Usage per account and per provider (Codex) in Settings → Usage and at a glance in the top
   bar, which names it Agent usage.
 
 **WS3 Process and structure**: the fourth pass above, plus:
@@ -791,7 +791,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   on this machine and refuses requests from other websites.
 - **Idle sessions let go.** A session left waiting on you is stopped and your answer resumes it.
   With provider compaction picked, a finished session near its context limit can also be
-  compacted just before its prompt cache expires (Settings → General → Context, off by default).
+  compacted just before its prompt cache expires (Settings → Autopilot → Context, off by default).
 - **Shinsa tells you when something needs you**: the tab title counts it ("[3] Shinsa"), a sound
   plays (by default only when Shinsa is in the background) and, if you allow it, a browser
   notification names the task and the question. Only what the focus project lets through counts, and
@@ -833,7 +833,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Watchdog checks have a session of their own.** A check reads logs after the merge in a watch
   session that starts with the brief and is resumed by the next check; the Agent's own session never
   carries a check's output, and a check never carries the Agent's build.
-- **Context management is a setting.** Settings → General → Context, Management: Default
+- **Context management is a setting.** Settings → Autopilot → Context, Management: Default
   (folds at each step and compacts near the limit), Compaction only (eunoe near the limit, no folds
   between steps), Provider compaction (Claude Code's or Codex's own) or Off.
 - **Bots don't wake the Agent for notices.** A bot's comment on the pull request conversation (a
@@ -845,7 +845,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **eunoe compacts, not Claude Code.** Claude sessions go through eunoe, served by Shinsa itself
   (since 2026-10-31, inside the engine), in its own folder: at the context limit it folds the finished turns
   to your messages, the output that mattered and the replies, so nothing is summarised away and the
-  full transcript stays searchable. Settings → General → Context picks how (Management,
+  full transcript stays searchable. Settings → Autopilot → Context picks how (Management,
   since 2026-10-31). Each fold shows as a quiet line in the chat.
 - **A missing eunoe never stops work.** When eunoe cannot start, the run talks to Claude directly
   with Claude Code's compaction and the chat says why. Shinsa's eunoe is its own: its own port and

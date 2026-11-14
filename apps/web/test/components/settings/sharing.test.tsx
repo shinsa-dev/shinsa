@@ -33,7 +33,7 @@ async function choose(label: string, option: string | RegExp) {
   await settle();
 }
 
-describe('Settings → General → Sharing', () => {
+describe('Settings → Connections → Sharing', () => {
   it('shares as Standard by default, and saves the preset you pick', async () => {
     render(
       <TooltipProvider>

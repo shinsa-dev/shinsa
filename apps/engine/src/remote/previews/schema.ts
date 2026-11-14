@@ -10,7 +10,7 @@ import type { EffectAttempt } from '../../runtime/engine/schema.ts';
 import type { EffectFailed } from '../../runtime/failures/schema.ts';
 
 export const PREVIEW_NOT_PAIRED =
-  'Turn on remote access in Settings → General to share this preview. Its link works once this machine is paired.';
+  'Turn on remote access in Settings → Connections to share this preview. Its link works once this machine is paired.';
 
 export const PREVIEW_LINK_LOST =
   'This machine was paired with remote access again, so the old link no longer reaches it. Share this preview again for a new link.';

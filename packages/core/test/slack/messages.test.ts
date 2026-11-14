@@ -1093,7 +1093,7 @@ describe('the escalation message', () => {
 
   test('sends a test that looks like a real escalation and says nothing needs anyone', () => {
     const message = serializeSlackEscalationTest(URL, AT);
-    expect(message.text).toBe('Settings → Agents → Autopilot is urgent and needs a review.');
+    expect(message.text).toBe('Settings → Autopilot is urgent and needs a review.');
     expect(readText(message)).toStartWith(`${SLACK_ESCALATION_TEST_NOTE}\nUrgent change needs a review\n`);
     expect(readText(message)).toContain('*Fix the checkout timeout*');
   });
