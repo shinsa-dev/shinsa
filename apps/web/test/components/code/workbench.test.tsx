@@ -195,6 +195,11 @@ async function findLine(text: string) {
   });
 }
 
+async function openFileOptions() {
+  fireEvent.click(screen.getByRole('button', { name: 'File options' }));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+}
+
 describe('notes in the code', () => {
   it('opens the first changed file as a diff, and shows an agent finding as a rich note under its line', async () => {
     renderCode(
@@ -477,11 +482,12 @@ describe('search and quick open', () => {
     ).not.toContain('beta.txtdocs');
   });
 
-  it('offers Go to file in the empty editor', async () => {
+  it('keeps the empty editor to its hint, with Go to file in the file list', async () => {
     renderCode(nextTask(), '&mode=files');
     await screen.findByText('Open a file');
     const buttons = screen.getAllByRole('button', { name: 'Go to file' });
-    fireEvent.click(buttons.at(-1) as HTMLElement);
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0] as HTMLElement);
     expect(await screen.findByPlaceholderText('Go to file')).toBeDefined();
   });
 
@@ -493,9 +499,12 @@ describe('search and quick open', () => {
     });
     renderCode(nextTask(), '&file=docs%2Falpha.txt&diff=1');
     await findLine('two');
-    fireEvent.click(screen.getByRole('button', { name: 'Copy path' }));
+    expect(screen.queryByRole('button', { name: 'Copy path' })).toBeNull();
+    await openFileOptions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy path' }));
     await waitFor(() => expect(written).toEqual(['docs/alpha.txt']));
-    fireEvent.click(screen.getByRole('button', { name: 'Show in Files' }));
+    await openFileOptions();
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Show in Files' }));
     expect(params().get('mode')).toBe('files');
     expect(params().get('file')).toBe('docs/alpha.txt');
     const tree = await screen.findByRole('tree', { name: 'Files' });

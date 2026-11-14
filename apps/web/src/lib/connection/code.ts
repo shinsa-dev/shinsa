@@ -382,21 +382,19 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
       view: { loaded: holdLoaded(current.view.loaded, LOADING), searching: true },
     }));
     const { taskId, params } = readCodeKey(key);
-    const searched = Effect.promise(() =>
-      requestCodeSearch(taskId, Object.fromEntries(params), (line) => {
-        if (line.kind === 'failed') {
-          failure = line.message;
-          return;
-        }
-        result = applySearchLine(result, line);
-        if (line.kind === 'done' || frame !== null) return;
-        frame = requestAnimationFrame(() => {
-          frame = null;
-          show(true);
-        });
-      })
-    );
-    forkApp(
+    const searched = requestCodeSearch(taskId, Object.fromEntries(params), (line) => {
+      if (line.kind === 'failed') {
+        failure = line.message;
+        return;
+      }
+      result = applySearchLine(result, line);
+      if (line.kind === 'done' || frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        show(true);
+      });
+    });
+    const fiber = forkApp(
       Effect.exit(searched).pipe(
         Effect.flatMap((exit) =>
           Effect.sync(() => {
@@ -417,6 +415,8 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
     );
     return () => {
       alive = false;
+      if (frame !== null) cancelAnimationFrame(frame);
+      fiber.interruptUnsafe();
     };
   }, [key, ref]);
   if (key === null) return { loaded: IDLE, searching: false };

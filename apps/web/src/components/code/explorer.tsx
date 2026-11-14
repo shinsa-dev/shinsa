@@ -153,7 +153,7 @@ export function Explorer(props: ExplorerProps) {
             <Button
               variant='secondary'
               size='icon-sm'
-              icon='IconFileText'
+              icon='IconPageSearch'
               aria-label='Go to file'
               onClick={props.onQuickOpen}
             />

@@ -23,7 +23,7 @@ import {
 import { type CodeSearch, useRepoSearch } from '@/lib/connection/code.ts';
 import { notPersisted, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
 
-const SEARCH_DELAY_MS = 250;
+const SEARCH_DELAY_MS = 150;
 
 function useDelayedSearch(search: CodeSearch) {
   const [delayed, setDelayed] = React.useState(search);

@@ -75,12 +75,15 @@ export function QuickOpenDialog({
   const [query, setQuery] = React.useState('');
   const paths = loaded.status === 'ready' ? loaded.value.paths : null;
   const recentKey = recent.join('\n');
+  const ranking = React.useDeferredValue(query);
   const ranked = React.useMemo(
     () =>
-      open && paths ? rankPaths(paths, query, QUICK_OPEN_LIMIT, recentKey ? recentKey.split('\n') : []) : [],
-    [open, paths, query, recentKey]
+      open && paths
+        ? rankPaths(paths, ranking, QUICK_OPEN_LIMIT, recentKey ? recentKey.split('\n') : [])
+        : [],
+    [open, paths, ranking, recentKey]
   );
-  const { recentRows, otherRows } = splitRecentRows(ranked, recent, query);
+  const { recentRows, otherRows } = splitRecentRows(ranked, recent, ranking);
   const first = ranked[0]?.path ?? null;
   const latestPrefetch = React.useRef(onPrefetch);
   latestPrefetch.current = onPrefetch;

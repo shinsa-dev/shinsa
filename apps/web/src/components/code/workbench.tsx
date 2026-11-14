@@ -264,7 +264,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
         <Button
           variant='secondary'
           size='icon-sm'
-          icon='IconFileText'
+          icon='IconPageSearch'
           aria-label='Go to file'
           onClick={run['quick-open']}
         />
@@ -334,11 +334,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
               icon='IconFiles'
               title='Open a file'
               description={`Pick one in the list, or press ${describeCodeKey('quick-open', mac)} to open any file of the project by name.`}
-            >
-              <Button variant='secondary' size='sm' icon='IconFileText' onClick={run['quick-open']}>
-                Go to file
-              </Button>
-            </EmptyState>
+            />
           </div>
         )}
         <CommentsBar task={task} />

@@ -1,5 +1,6 @@
 import { type FileContent, type Task, type TaskRefs, WORKING_REF } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -13,8 +14,8 @@ import type {
 } from '@/components/code/editor/code-editor.tsx';
 import { MarkdownPreview } from '@/components/code/markdown-preview.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
-import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { HintButton } from '@/components/controls/hint-button.tsx';
+import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
@@ -44,6 +45,7 @@ import {
 } from '@/lib/code/pane.ts';
 import { type FileSource, hasOneSide } from '@/lib/code/source.ts';
 import { resolveRawUrl, useFileContent } from '@/lib/connection/code.ts';
+import { copyText } from '@/lib/connection/commands.ts';
 import { useMediaUrl } from '@/lib/connection/socket.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
@@ -233,10 +235,19 @@ function PaneToolbar({
       <SaveStatusLabel status={status} />
       {showLayout && onSplit && <LayoutToggle split={split} onToggle={onSplit} />}
       {preview !== null && <PreviewToggle preview={preview} onToggle={onPreview} />}
-      <CopyButton text={path} label='Copy path' size='icon-sm' />
-      {onShowInFiles && (
-        <HintButton label='Show in Files' size='icon-sm' icon='IconFolderOpen' onClick={onShowInFiles} />
-      )}
+      <DropdownMenu>
+        <OptionsTrigger label='File options' />
+        <DropdownMenuContent align='end' className='min-w-44'>
+          <DropdownMenuItem icon='IconClipboard2' onClick={() => void copyText(path)}>
+            Copy path
+          </DropdownMenuItem>
+          {onShowInFiles && (
+            <DropdownMenuItem icon='IconFolderOpen' onClick={onShowInFiles}>
+              Show in Files
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Toolbar>
   );
 }

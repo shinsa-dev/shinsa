@@ -2257,13 +2257,14 @@ Only these, and they win over anything below:
       least the handle allows, so the search button never covers a tab, whatever the modes or the font; below `md` it is a sheet opened from the toolbar's
       Show the files, closed by picking a file, Escape or a click outside) and the editor on the right: the 36px
       `Toolbar` (the file's icon, its path and diff counts, the edit state, on a Markdown file the Preview / Source
-      toggle, on a diff the layout toggle, then Copy path and Show in Files, which switches to Files and reveals the
-      file in the tree, opening its folders and scrolling to it; ⌘K has both), then the code. The toolbar has no Open in editor: Shinsa is where you read and edit the code
+      toggle, on a diff the layout toggle, then File options, the `OptionsTrigger` menu with Copy path and Show in
+      Files, which switches to Files and reveals the file in the tree, opening its folders and scrolling to it; ⌘K has
+      both), then the code. The toolbar has no Open in editor: Shinsa is where you read and edit the code
       (the task's ⌘K and its menu still open the checkout in your editor). There are no editor
       tabs: one file is open at a time, and you switch from the file list, the review, a search result or ⌘P. The
       column's header is the mode `Choice` (Changes, Files; one mode shows as its plain label), the
-      Go to file button (`IconFileText`, ⌘P in its hint; in every mode, so any file of the project
-      opens without finding Files first, and in the empty editor and the narrow toolbar too), the
+      Go to file button (`IconPageSearch`, ⌘P in its hint; in every mode, so any file of the project
+      opens without finding Files first, and in the narrow toolbar too; the empty editor only names ⌘P), the
       search button (`icon-sm`, pressed while Search is open) and the ref picker under them: a `SelectField`
       (`sm`, full width) with Head of the branch (or the default branch's name), Working copy (while the worktree
       exists; its hint says whether there are uncommitted edits), Base, and every earlier commit by its subject, each
@@ -2316,7 +2317,9 @@ Only these, and they win over anything below:
       4 files." and whether it stopped early) and the matches grouped under a collapsible row per file, the match
       marked in `amber-a2`; a result opens its file at its line. Before you type it says what it does ("Search every
       file"), and when nothing matches it says what to loosen: the Files to include pattern first, then whichever
-      toggle is on, otherwise the spelling (`describeSearchEmpty`, `lib/code/search.ts`).
+      toggle is on, otherwise the spelling (`describeSearchEmpty`, `lib/code/search.ts`). It searches 150ms after
+      you stop typing, streams matches in as they come, and a newer query cancels the one still running
+      (`useRepoSearch` interrupts its fiber, which aborts the request), so only the latest search is ever read.
     - **Tree rows are compact, like VS Code** (`components/code/tree-row.tsx`, `TREE_LIST`): 22px, `text-2xs`,
       indented 8px a level, then a 14px chevron slot (empty for a file, so a level's icons share one column), the
       14px file or folder icon and the name, 6px after it. Hover is `bg-bg-a2`, the open file `primary-a1` with
@@ -2348,7 +2351,9 @@ Only these, and they win over anything below:
       blue, tests green, docs azure, `scripts`/`bin` gold, assets purple, `.git`/`.github`/`.husky` coral.
     - ⌘P (Go to file) opens any file of the repository by name: Buzzkit's command dialog over every path at the
       ref, ranked by `rankPaths` (a name that contains what you typed first, then word starts and consecutive
-      letters), the matched letters in `primary-text`, the folder as the hint. With no query it lists the files you
+      letters), the matched letters in `primary-text`, the folder as the hint. It stays quick on a large repository:
+      the paths are lowercased once per list, only the best 50 are kept as it scores (never a sort of every match),
+      and the ranking follows the query through `useDeferredValue`, so typing never waits for it. With no query it lists the files you
       opened in this task, newest first (up to 10, `shinsa.code-recent.<task id>`, `lib/code/recent.ts`), under
       Recently opened, then the rest; the open file is left out of it.
     - **Markdown opens rendered** (`components/code/markdown-preview.tsx`, `lib/code/markdown.ts`). A `.md`, `.mdx` or
