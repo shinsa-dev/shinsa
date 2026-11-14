@@ -4,6 +4,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { RefreshButton } from '@/components/accounts/refresh-button.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
+import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { CHANGELOG_COPY, CHANGELOG_ICON, openChangelog, useChangelogAvailable } from '@/lib/changelog.ts';
 import {
   type AppUpdatesActions,
@@ -232,7 +233,11 @@ function MachineRows({
     case 'outdated':
       return <SettingsEmpty>{UPDATES_LABEL.outdated}</SettingsEmpty>;
     case 'reading':
-      return <SettingsEmpty>{UPDATES_LABEL.reading}</SettingsEmpty>;
+      return (
+        <div className={SETTING_ROW}>
+          <LoadingLine label={UPDATES_LABEL.reading} className='text-xs' />
+        </div>
+      );
     case 'failed':
       return <SettingsEmpty>{updates.message}</SettingsEmpty>;
     case 'standalone':
