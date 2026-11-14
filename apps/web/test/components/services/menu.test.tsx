@@ -163,7 +163,7 @@ function renderPanel(
   const { calls, handlers } = createHandlers();
   const panel = createActions(suggestions, refine);
   const created = mock(() => undefined);
-  render(
+  const view = render(
     <TooltipProvider>
       <Harness
         groups={groups}
@@ -175,7 +175,7 @@ function renderPanel(
       />
     </TooltipProvider>
   );
-  return { calls, created, sent: panel.calls };
+  return { calls, created, sent: panel.calls, unmount: view.unmount };
 }
 
 afterEach(() => {
@@ -337,6 +337,8 @@ describe('the Services popover', () => {
         },
       },
     ]);
+    expect(screen.queryByText('SH-4 Fix the cart')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand api' }));
     expect(screen.getByText('SH-4 Fix the cart')).toBeTruthy();
     expect(screen.getByText('Failed with code 1')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of api for SH-4 Fix the cart' }));
@@ -348,8 +350,8 @@ describe('the Services popover', () => {
       (screen.getByText(label).closest('[data-highlight-item]') as HTMLElement).querySelector('span');
     expect(guide('SH-4 Fix the cart')?.className).toContain('bottom-0');
     expect(guide('SH-7 Show the total')?.className).toContain('h-1/2');
-    const parent = screen.getByText('api').closest('[data-highlight-item]') as HTMLElement;
-    expect(parent.querySelector(':scope > span[aria-hidden]')?.className).toContain('top-7.5');
+    const parent = screen.getByText('api').closest('[data-service-row]') as HTMLElement;
+    expect(parent.querySelector(':scope > span[aria-hidden]')?.className).toContain('top-7');
     const shop = screen.getByText('Shop').closest('section') as HTMLElement;
     expect(shop.hasAttribute('data-folded')).toBe(false);
     fireEvent.click(shop.querySelector('[data-disclosure-header]') as HTMLElement);
@@ -374,21 +376,25 @@ describe('the Services popover', () => {
     expect(classes(header)).toEqual(expect.arrayContaining(shared));
     expect(classes(header.children[1] ?? null)).toEqual(classes(queueHeader.children[1] ?? null));
     expect(header.className).toMatch(/(^| )pe-1( |$)/);
-    const row = within(shop).getByText('api').closest('[data-highlight-item]') as HTMLElement;
+    const row = within(shop).getByText('web').closest('[data-highlight-item]')
+      ?.firstElementChild as HTMLElement;
     expect(row.className).toMatch(/(^| )pe-1( |$)/);
-    const chevron = header.querySelector('[data-disclosure-chevron]') as HTMLElement;
-    expect(chevron.className).toContain('group-hover/disclosure:opacity-100');
     const play = within(shop).getByRole('button', { name: 'Start all services in Shop' });
-    expect(chevron.compareDocumentPosition(play) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const start = within(shop).getByRole('button', { name: 'Start web' });
+    expect(play.className).toBe(start.className);
+    expect(row.lastElementChild?.lastElementChild).toBe(start);
+    expect(header.lastElementChild?.contains(play)).toBe(true);
     expect(within(shop).getByText('1 running').closest('[data-disclosure-header]')).toBe(header);
   });
 
-  it('puts a section header’s chevron right after its counts, in the Services popover and the queue alike', () => {
+  it('puts the chevron right after the counts, in the Services popover as in the queue', () => {
     renderPanel([{ project: SHOP, views: [running('api'), stopped('web')] }]);
     const shop = screen.getByText('Shop').closest('section') as HTMLElement;
-    const chevron = shop.querySelector('[data-disclosure-chevron]') as HTMLElement;
-    expect(chevron.previousElementSibling?.textContent).toBe('1 running');
-    expect(chevron.parentElement?.className).not.toContain('flex-1');
+    const chevron = within(shop)
+      .getByText('1 running')
+      .parentElement?.querySelector('[data-disclosure-chevron]') as HTMLElement;
+    expect(chevron.parentElement?.lastElementChild).toBe(chevron);
+    expect(chevron.className).toContain('group-hover/disclosure:opacity-100');
     const { container } = render(
       <TooltipProvider>
         <TaskQueue state={QUEUE} variant='compact' />
@@ -397,26 +403,75 @@ describe('the Services popover', () => {
     const queueChevron = container.querySelector('[data-disclosure-chevron]') as HTMLElement;
     expect(queueChevron.parentElement?.textContent).toBe('1');
     expect(queueChevron.parentElement?.lastElementChild).toBe(queueChevron);
-    expect(queueChevron.parentElement?.className).toBe(chevron.parentElement?.className);
   });
 
-  it('keeps a running row’s Restart and Stop 1px apart, as the Terminal page’s pair is', () => {
-    renderPanel([{ project: SHOP, views: [running('api')] }]);
-    const restart = screen.getByRole('button', { name: 'Restart api' });
-    const stop = screen.getByRole('button', { name: 'Stop api' });
+  it('shows each service as one short line without its command, Restart and Stop on the line itself', () => {
+    const { calls } = renderPanel([{ project: SHOP, views: [running('api')] }]);
+    const row = screen.getByText('api').closest('[data-highlight-item]') as HTMLElement;
+    expect(row.firstElementChild?.className).toContain('h-7');
+    expect(screen.queryByText('bun run dev')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand api' })).toBeNull();
+    const restart = within(row).getByRole('button', { name: 'Restart api' });
+    const stop = within(row).getByRole('button', { name: 'Stop api' });
     expect(restart.parentElement).toBe(stop.parentElement);
-    expect(restart.parentElement?.className.split(' ')).toContain('gap-px');
+    expect(restart.parentElement?.className).toContain('group-data-hovered/service:opacity-100');
+    fireEvent.click(restart);
+    fireEvent.click(stop);
+    expect(calls).toEqual(['restart api', 'stop api']);
   });
 
-  it('starts a stopped service, restarts or stops a running one and opens its terminal from the row', () => {
+  it('expands a service with runs in tasks, and keeps it expanded across openings of the popover', () => {
+    const run = {
+      view: resolveServiceView(createService({ id: 'api' }), null, NOW, 'cart'),
+      label: 'SH-4 Fix the cart',
+    };
+    const groups = [{ project: SHOP, views: [running('api')], runs: { api: [run] } }];
+    const first = renderPanel(groups);
+    const toggle = screen.getByRole('button', { name: 'Expand api' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.hasAttribute('data-disclosure-chevron')).toBe(true);
+    expect(toggle.previousElementSibling?.textContent).toMatch(/^Running/);
+    expect(screen.queryByText('SH-4 Fix the cart')).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByText('SH-4 Fix the cart')).toBeTruthy();
+    first.unmount();
+    renderPanel(groups);
+    expect(screen.getByRole('button', { name: 'Collapse api' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse api' }));
+    expect(screen.queryByText('SH-4 Fix the cart')).toBeNull();
+  });
+
+  it('starts a stopped service and opens a running one’s terminal from its row', () => {
     const { calls } = renderPanel([{ project: SHOP, views: [running('api'), stopped('web')] }]);
     fireEvent.click(screen.getByRole('button', { name: 'Start web' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Restart api' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Stop api' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of api' }));
-    expect(screen.getByRole('button', { name: 'web' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Open the terminal of web' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^More for/ })).toBeNull();
-    expect(calls).toEqual(['start web', 'restart api', 'stop api', 'open api']);
+    expect(calls).toEqual(['start web', 'open api']);
+  });
+
+  it('keeps the Terminal button in its column when a running service has no preview to open', () => {
+    const web = resolveServiceView(
+      createService({ id: 'web', previewUrl: 'http://localhost:{port}/' }),
+      createTerminal({ id: 't-web', serviceId: 'web', port: 4123, startedAt: NOW }),
+      LATER
+    );
+    const api = resolveServiceView(
+      createService({ id: 'api', previewUrl: null }),
+      createTerminal({ id: 't-api', serviceId: 'api', startedAt: NOW }),
+      LATER
+    );
+    renderPanel([{ project: SHOP, views: [web, api] }]);
+    const right = (name: string) => {
+      const button = screen.getByRole('button', { name });
+      const slot = button.closest('span.ms-auto') as HTMLElement;
+      return (
+        Array.from(slot.children).indexOf(button.closest('span.ms-auto > *') as Element) -
+        slot.children.length
+      );
+    };
+    expect(screen.queryByRole('button', { name: 'Open api' })).toBeNull();
+    expect(right('Open the terminal of api')).toBe(right('Open the terminal of web'));
   });
 
   it('adds the ticked services found, inline, the recommended ones ticked and Select all in the list', async () => {

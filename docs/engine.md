@@ -1640,7 +1640,8 @@ it on the lead task's Overview (`components/initiatives/`, `lib/initiatives/`).
   initiative (`initiative.milestones_queued`, the last 40) and emits an `initiative.wake` effect. The engine's
   `LeadWakes` debounces it per initiative (30 s, `LeadWakeDebounce`, one waiting fiber per initiative), then sends
   `initiative.wake_lead`, which starts a turn only when the lead rests idle in `leading`; a lead that is busy gets
-  the queue on the wake its next report asks for, and on start the engine reschedules every initiative with milestones queued. The
+  the queue on the wake its next report asks for, a lead whose failed run waits on its automatic retry
+  (`isRetryArmed`) gets it on the turn that retry starts, so member milestones never spend its retries early, and on start the engine reschedules every initiative with milestones queued. The
   turn's prompt carries the digest of the sheet and the milestones since the last turn at the tail of the user turn,
   and `initiative.lead_woken` empties the queue, so the session's cached prefix never changes (Caching). A message to
   the lead, yours or a member's (`tasks_message`), starts a turn straight away (`answering your message`, or

@@ -13,6 +13,7 @@ import {
   describeServiceGroup,
   describeServicePreview,
   describeServiceState,
+  describeServiceTerminal,
   describeServicesAdded,
   describeServicesEmpty,
   describeServicesRemove,
@@ -36,6 +37,7 @@ import {
   resolveActiveService,
   resolveServiceForm,
   resolveServiceGroupId,
+  resolveServiceRowId,
   resolveServiceLink,
   resolveServicesAddTarget,
   resolveServicesProjects,
@@ -257,6 +259,13 @@ describe('a project’s services in the menu', () => {
 
   it('keeps each project’s fold apart', () => {
     expect(String(resolveServiceGroupId('shop'))).toBe('services:project:shop');
+  });
+
+  it('keeps each service’s fold apart, and names its terminal button', () => {
+    expect(String(resolveServiceRowId('api'))).toBe('services:service:api');
+    expect(describeServiceTerminal({ service: createService({ id: 'api' }) })).toBe(
+      'Open the terminal of api'
+    );
   });
 
   it('says what a service is when there are none, naming the project in view', () => {
