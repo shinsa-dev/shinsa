@@ -200,6 +200,42 @@ describe('what Autopilot may do on its own', () => {
   });
 });
 
+describe('acting while you are at your machine', () => {
+  const HERE = { inHours: true, active: true, awayMinutes: 0 } as const;
+  const GATES = ['plan', 'question', 'review', 'merge', 'proposal', 'failure'] as const;
+  const EVERYTHING: Partial<AutopilotPolicy> = { level: 'everything', autoMerge: 'approved' };
+
+  test('never holds an act or a follow-up, at any gate or level', () => {
+    for (const gate of GATES) {
+      for (const level of ['ask_first', 'balanced', 'most', 'everything'] as const) {
+        const facts: AutopilotFacts = { ...FACTS, gate, urgent: false, risk: 'low', ready: true };
+        const policy = { ...ON, ...EVERYTHING, level };
+        const here = resolveAutopilotLimits({ ...facts, presence: HERE }, policy);
+        const away = resolveAutopilotLimits({ ...facts, presence: AWAY }, policy);
+        expect([here.act, here.revise]).toEqual([away.act, away.revise]);
+      }
+      expect(
+        resolveAutopilotLimits(
+          { ...FACTS, gate, urgent: false, risk: 'low', ready: true, presence: HERE },
+          {
+            ...ON,
+            ...EVERYTHING,
+          }
+        ).act.allowed
+      ).toBe(true);
+    }
+  });
+
+  test('holds only escalating to your team', () => {
+    expect(escalate({ presence: HERE })).toEqual({
+      allowed: false,
+      reason: 'You are active, so it stays with you.',
+      setting: false,
+    });
+    expect(escalate({ presence: AWAY }).allowed).toBe(true);
+  });
+});
+
 describe('when Autopilot may contact your team', () => {
   test('only for an urgent, high-risk change after you have been away an hour', () => {
     expect(escalate({})).toEqual({ allowed: true });
