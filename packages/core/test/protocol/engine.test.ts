@@ -124,6 +124,7 @@ const GATED_COMMANDS: EngineCommand[] = [
   'away.record',
   'autopilot.seen',
   'task.stack_on_tasks',
+  'task.move_to_repository',
   'task.pause',
   'initiative.write',
   'initiative.adopt_task',
