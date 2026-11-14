@@ -7,13 +7,13 @@ import {
 } from '@shinsa/core';
 import {
   hasHandOverWalkthrough,
+  isCurrentReview,
   readHandOverReply,
   readHandOverSpots,
   readPlanParameters,
   readProposedChange,
   resolveAskAnswer,
   resolveAskMeta,
-  resolveDeliveryMeta,
   resolveSummaryMeta,
 } from '@/lib/chat/handover.ts';
 import { createToolCall, shinsaTool } from '../../support/chat.ts';
@@ -92,15 +92,6 @@ describe('resolveSummaryMeta', () => {
   it('says nothing when there are neither', () => {
     expect(resolveSummaryMeta({ spots: [], judgement_calls: [] })).toBeNull();
     expect(resolveSummaryMeta({})).toBeNull();
-  });
-});
-
-describe('resolveDeliveryMeta', () => {
-  it('says when the hand-over proposes a change, and nothing otherwise', () => {
-    expect(resolveDeliveryMeta({ propose_change: { request: 'Release it.', why: 'It leaks.' } })).toBe(
-      'Proposes a change'
-    );
-    expect(resolveDeliveryMeta({ answer: 'Done.' })).toBeNull();
   });
 });
 
@@ -226,5 +217,21 @@ describe('readHandOverReply', () => {
       points: [],
       next: null,
     });
+  });
+});
+
+describe('isCurrentReview', () => {
+  const blocking = { severity: 'blocking', file: 'a.ts', line: 1, message: 'Breaks.' } as const;
+  const optional = { severity: 'optional', file: 'a.ts', line: 2, message: 'Tidy.' } as const;
+
+  it('matches the findings the task holds now, in order', () => {
+    expect(isCurrentReview([blocking, optional], [blocking, optional])).toBe(true);
+  });
+
+  it('tells an earlier review apart by its count, its order or any finding', () => {
+    expect(isCurrentReview([blocking], [blocking, optional])).toBe(false);
+    expect(isCurrentReview([optional, blocking], [blocking, optional])).toBe(false);
+    expect(isCurrentReview([{ ...blocking, message: 'Other.' }], [blocking])).toBe(false);
+    expect(isCurrentReview([], [])).toBe(false);
   });
 });

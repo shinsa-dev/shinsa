@@ -58,7 +58,7 @@ describe('RunSection', () => {
     );
     const worked = await view.findByText(/Worked for/);
     const reply = view.getByText(REPLY);
-    const card = view.getByText('Handed over the fix');
+    const card = view.getByText('Finished the fix');
     expect(worked.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(reply.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(view.queryByText('Checking the suggestions.')).toBeNull();
@@ -96,14 +96,15 @@ describe('RunSection', () => {
     );
     const worked = await view.findByText(/Worked for/);
     const reply = view.getByText(answer);
-    const card = view.getByText('Handed over the fix');
+    const card = view.getByText('Finished the fix');
     expect(worked.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(reply.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(view.queryByText('No response requested.')).toBeNull();
   });
 
-  it('lets the run’s header wrap on a phone, while its one-line rows stay one line', async () => {
-    pushState(createShinsaState({ tasks: [task], runs: [run] }));
+  it('shows no header on the Agent’s own run, and one that wraps on a phone once the run failed', async () => {
+    const failed = createRun({ ...run, outcome: 'failed' });
+    pushState(createShinsaState({ tasks: [task], runs: [failed] }));
     pushTranscript('run-fix', [
       createEntry(
         { type: 'tool_call', callId: 'r1', tool: { kind: 'read', path: 'a.ts', range: null } },
@@ -112,12 +113,21 @@ describe('RunSection', () => {
       ),
       createEntry({ type: 'agent', phase: 'final', text: REPLY }, 'a2', STARTED + 2000),
     ]);
+    const quiet = render(
+      <TooltipProvider>
+        <RunSection run={run} task={task} messages={[]} waiting={false} rerun />
+      </TooltipProvider>
+    );
+    await quiet.findByText(/Worked for/);
+    expect(quiet.queryByText('Agent')).toBeNull();
+    quiet.unmount();
     const view = render(
       <TooltipProvider>
-        <RunSection run={run} task={task} messages={[]} waiting={false} />
+        <RunSection run={failed} task={task} messages={[]} waiting={false} />
       </TooltipProvider>
     );
     const worked = (await view.findByText(/Worked for/)).closest('[data-chat-line]');
+    expect(view.getByText(/Failed/)).toBeTruthy();
     const header = view.getByText('Agent').closest('[data-chat-line]');
     expect(header?.className.split(' ')).toContain('max-sm:h-auto');
     expect(worked?.className.split(' ')).not.toContain('max-sm:h-auto');
@@ -170,7 +180,7 @@ describe('RunSection', () => {
     ).toBe(true);
   });
 
-  it('keeps what a live run loaded in view above its live card', async () => {
+  it('keeps what a live run loaded out of view, under its live card', async () => {
     const live = createRun({ id: 'run-live', taskId: 'task-1', startedAt: STARTED });
     pushState(createShinsaState({ tasks: [task], runs: [live] }));
     pushTranscript('run-live', [
@@ -198,7 +208,8 @@ describe('RunSection', () => {
         <RunSection run={live} task={task} messages={[]} waiting={false} />
       </TooltipProvider>
     );
-    expect(await view.findByRole('button', { name: /^Loaded 1 MCP/ })).toBeTruthy();
+    expect((await view.findAllByText('Reading a.ts')).length).toBeGreaterThan(0);
+    expect(view.queryByRole('button', { name: /^Loaded 1 MCP/ })).toBeNull();
     expect(view.queryByRole('button', { name: /^Worked for/ })).toBeNull();
   });
 
@@ -227,5 +238,11 @@ describe('RunSection', () => {
     expect(view.getByText('Reviewer').closest('[data-speaker-rail]')).toBeNull();
     expect((await view.findByText(REPLY)).closest('[data-speaker-rail]')).toBeNull();
     expect(view.container.querySelectorAll('[data-speaker-rail]')).toHaveLength(1);
+    expect(view.queryByText('Agent')).toBeNull();
+    const header = view.getByRole('button', { name: /^Reviewer/ });
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(header);
+    expect(view.queryByText('No findings.')).toBeNull();
+    expect(header.getAttribute('aria-expanded')).toBe('false');
   });
 });

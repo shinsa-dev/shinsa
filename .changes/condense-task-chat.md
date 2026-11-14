@@ -1,4 +1,4 @@
 ---
 kind: improved
 ---
-The task chat is quieter: once a turn ends, what it loaded and other notices fold into Worked for, and hand-over and finding cards show one line until you open them. A reviewer's run now sits on its own rail, so it never reads as the agent's turn.
+The task chat is much shorter: the agent's own runs drop their header, notices fold into Worked for, and cards show one line until opened. Answers read as plain replies, and a reviewer's run folds under its own header with the findings' Fix and Dismiss.

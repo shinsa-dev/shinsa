@@ -96,7 +96,7 @@ export type QuietNoticeKind =
   | 'background_wait'
   | 'extensions';
 
-type NoticeKind = QuietNoticeKind | 'delegation';
+type NoticeKind = 'delegation';
 
 export type WorkItem = TimelineItemOf<'instructions' | 'agent' | 'tools' | QuietNoticeKind>;
 
@@ -467,16 +467,13 @@ function isQuietNotice(item: TimelineItem): item is TimelineItemOf<QuietNoticeKi
   );
 }
 
-function isNotice(item: TimelineItem, live: boolean): item is TimelineItemOf<NoticeKind> {
-  return item.kind === 'delegation' || (live && isQuietNotice(item));
+function isNotice(item: TimelineItem): item is TimelineItemOf<NoticeKind> {
+  return item.kind === 'delegation';
 }
 
-function isWork(item: TimelineItem, live: boolean): item is WorkItem {
+function isWork(item: TimelineItem): item is WorkItem {
   return (
-    item.kind === 'instructions' ||
-    item.kind === 'agent' ||
-    item.kind === 'tools' ||
-    (!live && isQuietNotice(item))
+    item.kind === 'instructions' || item.kind === 'agent' || item.kind === 'tools' || isQuietNotice(item)
   );
 }
 
@@ -584,8 +581,8 @@ function closeTurn(
   return {
     key,
     human,
-    notices: body.filter((item): item is TimelineItemOf<NoticeKind> => isNotice(item, live)),
-    work: body.filter((item): item is WorkItem => item !== reply && isWork(item, live)),
+    notices: body.filter(isNotice),
+    work: body.filter((item): item is WorkItem => item !== reply && isWork(item)),
     outcomes: body.filter((item): item is TimelineItemOf<'handover'> => item.kind === 'handover'),
     reply,
     errors,

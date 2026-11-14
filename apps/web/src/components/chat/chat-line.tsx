@@ -189,6 +189,28 @@ export function FoldLine({
   );
 }
 
+export function ToggleLine({
+  open,
+  onToggle,
+  ...parts
+}: LineParts & {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type='button'
+      data-chat-line
+      aria-expanded={open}
+      onClick={onToggle}
+      className={cn(LINE_BUTTON, parts.wraps && LINE_WRAPS)}
+    >
+      <LineBody {...parts} />
+      <RowChevron open={open} className={open ? undefined : 'opacity-0 group-hover/row:opacity-100'} />
+    </button>
+  );
+}
+
 export function ExpandRow({
   persistId,
   children,

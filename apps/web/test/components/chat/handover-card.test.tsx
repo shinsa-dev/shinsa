@@ -4,12 +4,13 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, cleanup, fireEvent, type RenderResult, render } from '@testing-library/react';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { ReadOnlyProvider } from '@/components/task/read-only.tsx';
+import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createWatchSuggestion } from '../../support/schedules.ts';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function call(
   name: Extract<ChatTool, { kind: 'shinsa' }>['name'],
@@ -307,7 +308,7 @@ describe('HandoverCard for the process tools', () => {
     expect(suggested.getByText('It is slow.')).toBeTruthy();
     suggested.unmount();
     const answered = renderCard(call('answer', { answer: 'It retries **three** times.' }));
-    expect(answered.getByText('Handed over the answer')).toBeTruthy();
+    expect(answered.container.querySelector('h3')).toBeNull();
     expect(answered.getByText('three')).toBeTruthy();
     answered.unmount();
     const waited = renderCard(call('wait_for', { notes: 'The deploy.' }, 'Shinsa will wake a fresh agent.'));
@@ -342,13 +343,13 @@ describe('HandoverCard for the process tools', () => {
     expect(phase.getByText('Other callers still use it.')).toBeTruthy();
     phase.unmount();
     const diagnosed = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs **dry**.' }));
-    expect(diagnosed.getByText('Reported the diagnosis')).toBeTruthy();
+    expect(diagnosed.container.querySelector('h3')).toBeNull();
     expect(diagnosed.getByText('dry')).toBeTruthy();
   });
 
-  it('shows a lead’s report as where the initiative stands', () => {
+  it('shows a lead’s report as a reply, with no card around it', () => {
     const view = renderCard(call('report_initiative', { narrative: 'The dock is in review.' }));
-    expect(view.getByText('Where it stands')).toBeTruthy();
+    expect(view.container.querySelector('h3')).toBeNull();
     expect(view.getByText('The dock is in review.')).toBeTruthy();
   });
 
@@ -420,12 +421,6 @@ describe('HandoverCard folded to its header', () => {
       'The last one',
     ],
     [
-      'an answer that proposes a change',
-      call('answer', { answer: 'It retries.', propose_change: { request: 'Cap it.', why: 'It loops.' } }),
-      'Proposes a change',
-      'It loops.',
-    ],
-    [
       'composed steps',
       call('reshape_task', { steps: ['answer', 'your_ok'], reason: 'Ask first.' }),
       '2 steps',
@@ -489,6 +484,24 @@ describe('HandoverCard folded to its header', () => {
       expect(view.queryByText(body)).toBeNull();
       view.unmount();
     }
+  });
+
+  it('shows an answer that proposes a change as a reply, with the change below it and nothing to open', () => {
+    const view = renderClosed(
+      call('answer', { answer: 'It retries.', propose_change: { request: 'Cap it.', why: 'It loops.' } })
+    );
+    expect(view.getByText('It retries.')).toBeTruthy();
+    expect(view.getByText('Proposed a change')).toBeTruthy();
+    expect(view.getByText('It loops.')).toBeTruthy();
+    expect(view.queryByRole('button')).toBeNull();
+  });
+
+  it('names a finished phase without a plan, and a fix without a focus, plainly', () => {
+    const phase = renderClosed(call('complete_phase', { summary: 'Done.' }));
+    expect(phase.getByText('Finished the phase')).toBeTruthy();
+    phase.unmount();
+    const fix = renderClosed(call('complete_fix', { summary: 'Fixed.' }));
+    expect(fix.getByText('Finished the fix')).toBeTruthy();
   });
 
   it('keeps a question that waits for you open', () => {
@@ -575,5 +588,55 @@ describe('HandoverCard for a watch an agent suggests', () => {
     const view = renderCard(call('set_schedule', args), task);
     expect(view.getByText('No longer open')).toBeTruthy();
     expect(view.getByText('slack')).toBeTruthy();
+  });
+});
+
+describe('HandoverCard for the review that waits for your verdicts', () => {
+  const findings = [
+    { severity: 'blocking', file: 'a.ts', line: 1, message: 'Leaks a socket.' },
+    { severity: 'optional', file: 'b.ts', line: 2, message: 'Tidy the name.' },
+  ] as const;
+  const task = createTask({ id: 't', findings: [...findings] });
+
+  afterEach(() => {
+    stopFakeServer();
+  });
+
+  function renderReview(reported: readonly (typeof findings)[number][]) {
+    return render(
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey='chat-review'>
+          <HandoverCard
+            call={call('report_review', { findings: reported })}
+            run={createRun({ id: 'r', taskId: 't', role: 'reviewer' })}
+            live={false}
+            task={task}
+          />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+  }
+
+  it('opens the latest findings with Fix and Dismiss while your review is open', () => {
+    startFakeServer();
+    pushState(
+      createShinsaState({ tasks: [task], gates: [createGate({ id: 'g', taskId: 't', type: 'review' })] })
+    );
+    const view = renderReview(findings);
+    expect(view.getByText('Leaks a socket.')).toBeTruthy();
+    expect(view.getAllByRole('tab', { name: 'Fix' })).toHaveLength(2);
+    expect(view.getAllByRole('tab', { name: 'Dismiss' })).toHaveLength(2);
+  });
+
+  it('keeps an earlier review folded, with no verdicts to choose', () => {
+    startFakeServer();
+    pushState(
+      createShinsaState({ tasks: [task], gates: [createGate({ id: 'g', taskId: 't', type: 'review' })] })
+    );
+    const view = renderReview([findings[0]]);
+    expect(view.queryByText('Leaks a socket.')).toBeNull();
+    fireEvent.click(view.getByRole('button', { expanded: false }));
+    expect(view.getByText('Leaks a socket.')).toBeTruthy();
+    expect(view.queryByRole('tab', { name: 'Fix' })).toBeNull();
   });
 });

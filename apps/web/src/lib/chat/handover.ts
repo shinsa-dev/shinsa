@@ -6,6 +6,7 @@ import {
   REPLY_OUTCOMES,
   type ReplyOutcome,
   readAnsweredReply,
+  type ReviewFinding,
   splitMessageAttachments,
 } from '@shinsa/core';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
@@ -35,10 +36,6 @@ export function resolveSummaryMeta(args: ChatToolArgs) {
     calls > 0 ? describeCount(calls, 'judgement call', 'judgement calls') : null,
   ].filter((part) => part !== null);
   return parts.length > 0 ? parts.join(' · ') : null;
-}
-
-export function resolveDeliveryMeta(args: ChatToolArgs) {
-  return readProposedChange(args) ? 'Proposes a change' : null;
 }
 
 function readLine(args: ChatToolArgs, key: string) {
@@ -106,4 +103,24 @@ export function readPlanParameters(args: ChatToolArgs): PlanParameters {
     verification: readPlanChecks(args),
     approval: args.approval === true,
   };
+}
+
+function isSameFinding(left: ReviewFinding, right: ReviewFinding) {
+  return (
+    left.severity === right.severity &&
+    left.file === right.file &&
+    left.line === right.line &&
+    left.message === right.message
+  );
+}
+
+export function isCurrentReview(reported: ReviewFinding[], current: ReviewFinding[]) {
+  return (
+    reported.length > 0 &&
+    reported.length === current.length &&
+    reported.every((finding, index) => {
+      const other = current[index];
+      return other !== undefined && isSameFinding(finding, other);
+    })
+  );
 }

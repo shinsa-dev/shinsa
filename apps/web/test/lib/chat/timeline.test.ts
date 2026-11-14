@@ -647,7 +647,7 @@ describe('resolveTurns', () => {
     expect(turn?.reply?.text).toBe('Done');
   });
 
-  it('keeps quiet notices outside the work while the turn is live', () => {
+  it('folds quiet notices into the work while the turn is live too', () => {
     const items = resolveTimeline(
       [
         createNoticeEntry({ kind: 'extensions', servers: [], skills: [], plugins: [] }, 1, 'loaded'),
@@ -658,8 +658,8 @@ describe('resolveTurns', () => {
     );
     const [turn] = resolveTurns(items, running, 500);
     expect(turn?.live).toBe(true);
-    expect(turn?.notices.map((item) => item.kind)).toEqual(['extensions', 'background_wait']);
-    expect(turn?.work.map((item) => item.kind)).toEqual(['tools']);
+    expect(turn?.notices).toEqual([]);
+    expect(turn?.work.map((item) => item.kind)).toEqual(['extensions', 'tools', 'background_wait']);
   });
 
   it('folds a hand-over into the work of an ended turn and leaves the other run notices in the transcript', () => {
