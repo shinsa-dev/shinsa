@@ -41,8 +41,8 @@ export function useExplorerWidth(floor = 0, side: ExplorerSide = 'left') {
   return usePaneWidth('shinsa.code-explorer-width', EXPLORER_WIDTH, floor, side === 'left' ? 1 : -1);
 }
 
-export function useUnifiedDiff() {
-  return useStoredToggle('shinsa.code-unified', false);
+export function useUnifiedDiff(compact = false) {
+  return useStoredToggle('shinsa.code-unified', compact);
 }
 
 export function useHideViewed() {
@@ -79,4 +79,8 @@ export function useViewedFiles(taskId: string, head: string | null) {
     head ? (localStorage.getItem(resolveViewedKey(taskId, head)) ?? '') : ''
   );
   return new Set(serialized && head ? readViewedFiles(taskId, head) : []);
+}
+
+export function useMarkdownPreview(diffing: boolean) {
+  return useStoredToggle(diffing ? 'shinsa.code-preview-diff' : 'shinsa.code-preview-file', !diffing);
 }

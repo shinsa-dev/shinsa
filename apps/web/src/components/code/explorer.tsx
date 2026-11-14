@@ -25,10 +25,14 @@ export interface ExplorerProps {
   modes: ExplorerMode[];
   location: CodeLocation;
   diff: Loaded<TaskDiff>;
+  reveal: number;
+  quickOpenKey: string;
+  searchKey: string;
   commentCounts: ReadonlyMap<string, number>;
   viewed: ReadonlySet<string>;
   searchInput: React.Ref<HTMLInputElement>;
   onMode: (mode: CodeMode) => void;
+  onQuickOpen: () => void;
   onRef: (ref: string) => void;
   onChange: (path: string) => void;
   onFile: (path: string) => void;
@@ -70,6 +74,7 @@ function ExplorerBody(props: ExplorerProps) {
         task={props.task}
         gitRef={props.gitRef}
         activePath={activePath}
+        reveal={props.reveal}
         changes={diff.status === 'ready' ? diff.value.files : []}
         onOpen={props.onFile}
         onPrefetch={(path) => props.onPrefetch({ kind: 'file', path })}
@@ -144,7 +149,16 @@ export function Explorer(props: ExplorerProps) {
               </span>
             </span>
           )}
-          <Hint label='Search in files' shortcut='⇧⌘F'>
+          <Hint label='Go to file' shortcut={props.quickOpenKey}>
+            <Button
+              variant='secondary'
+              size='icon-sm'
+              icon='IconPageSearch'
+              aria-label='Go to file'
+              onClick={props.onQuickOpen}
+            />
+          </Hint>
+          <Hint label='Search in files' shortcut={props.searchKey}>
             <Button
               variant='secondary'
               size='icon-sm'

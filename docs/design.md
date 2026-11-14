@@ -2262,11 +2262,15 @@ Only these, and they win over anything below:
       measures the mode tabs and the search button at their natural width and that, with the row's padding, is the
       least the handle allows, so the search button never covers a tab, whatever the modes or the font; below `md` it is a sheet opened from the toolbar's
       Show the files, closed by picking a file, Escape or a click outside) and the editor on the right: the 36px
-      `Toolbar` (the file's icon, its path and diff counts, "Saving…" while an edit is on its way, and on a diff the
-      layout toggle), then the code. The toolbar has no Open in editor: Shinsa is where you read and edit the code
-      (the task's ⌘K and its menu still open the checkout in your editor). There are no editor
+      `Toolbar` (the file's icon, its path and diff counts, the edit state, on a Markdown file the Preview / Source
+      toggle, on a diff the layout toggle, then File options, the `OptionsTrigger` menu with Copy path and Show in
+      Files, which switches to Files and reveals the file in the tree, opening its folders and scrolling to it, and,
+      when the task has a checkout and the file exists there, Open in editor, which opens that file at the line in view
+      in your editor (`openWorktree`, the engine's `--goto`); ⌘K has all three), then the code. There are no editor
       tabs: one file is open at a time, and you switch from the file list, the review, a search result or ⌘P. The
       column's header is the mode `Choice` (Changes, Files; one mode shows as its plain label), the
+      Go to file button (`IconPageSearch`, ⌘P in its hint; in every mode, so any file of the project
+      opens without finding Files first, and in the narrow toolbar too; the empty editor only names ⌘P), the
       search button (`icon-sm`, pressed while Search is open) and the ref picker under them: a `SelectField`
       (`sm`, full width) with Head of the branch (or the default branch's name), Working copy (while the worktree
       exists; its hint says whether there are uncommitted edits), Base, and every earlier commit by its subject, each
@@ -2317,7 +2321,11 @@ Only these, and they win over anything below:
       opened for you; changed files carry their status letter at the right. **Search** (the button or ⇧⌘F) is a
       field with the three search toggles inside it, a Files to include pattern, a one-line summary ("12 results in
       4 files." and whether it stopped early) and the matches grouped under a collapsible row per file, the match
-      marked in `amber-a2`; a result opens its file at its line.
+      marked in `amber-a2`; a result opens its file at its line. Before you type it says what it does ("Search every
+      file"), and when nothing matches it says what to loosen: the Files to include pattern first, then whichever
+      toggle is on, otherwise the spelling (`describeSearchEmpty`, `lib/code/search.ts`). It searches 150ms after
+      you stop typing, streams matches in as they come, and a newer query cancels the one still running
+      (`useRepoSearch` interrupts its fiber, which aborts the request), so only the latest search is ever read.
     - **Tree rows are compact, like VS Code** (`components/code/tree-row.tsx`, `TREE_LIST`): 22px, `text-2xs`,
       indented 8px a level, then a 14px chevron slot (empty for a file, so a level's icons share one column), the
       14px file or folder icon and the name, 6px after it. Hover is `bg-bg-a2`, the open file `primary-a1` with
@@ -2349,7 +2357,18 @@ Only these, and they win over anything below:
       blue, tests green, docs azure, `scripts`/`bin` gold, assets purple, `.git`/`.github`/`.husky` coral.
     - ⌘P (Go to file) opens any file of the repository by name: Buzzkit's command dialog over every path at the
       ref, ranked by `rankPaths` (a name that contains what you typed first, then word starts and consecutive
-      letters), the matched letters in `primary-text`, the folder as the hint, the open file first with no query.
+      letters), the matched letters in `primary-text`, the folder as the hint. It stays quick on a large repository:
+      the paths are lowercased once per list, only the best 50 are kept as it scores (never a sort of every match),
+      and the ranking follows the query through `useDeferredValue`, so typing never waits for it. With no query it lists the files you
+      opened in this task, newest first (up to 10, `shinsa.code-recent.<task id>`, `lib/code/recent.ts`), under
+      Recently opened, then the rest; the open file is left out of it.
+    - **Markdown opens rendered** (`components/code/markdown-preview.tsx`, `lib/code/markdown.ts`). A `.md`, `.mdx` or
+      `.markdown` file shows its preview, like GitHub: the app's `Markdown` with raw HTML (`rehype-raw`), sanitized by
+      GitHub's schema (`rehype-sanitize`, so no script, style or event handler survives), headings given ids
+      (`rehype-slug`) for `#` links. A relative image loads from the project at the ref (`resolveRawUrl`), and a
+      relative link to another file opens it in the Code tab, at its line for `#L12`; an outside link opens in a new
+      tab. The toolbar's Preview / Source toggle (⌘K too) switches to the editor, remembered per user: a file opens
+      in preview by default (`shinsa.code-preview-file`), a diff in source (`shinsa.code-preview-diff`).
     - **Search toggles** (`components/code/search-field.tsx`, `SEARCH_OPTIONS`): Match case (`IconTitleCase`),
       Match whole word (`IconWholeWord`) and Use a regular expression (`IconRegex`), the last two our own marks,
       `icon-xs` buttons with 14px glyphs inside the right end of the field. Off they are the field's quiet ink, on
@@ -2395,8 +2414,9 @@ Only these, and they win over anything below:
       side, so they move with the text in the same frame, vertically and sideways, and never widen what the side
       scrolls over: a side scrolls as far as its code and no further. A file added or deleted whole has one side only, so side by side shows
       that side at the full width (the unified view, no empty half) and the layout toggle is hidden for it
-      (`hasOneSide`). Below `md` (a phone or a narrow window) every diff is unified and the toggle is hidden, since two
-      columns of code do not fit. A binary file shows nothing as text, and an image before and after on a checkerboard; a file
+      (`hasOneSide`). Below `lg` (1024px) a diff opens unified unless you chose side by side, since two columns of
+      about 280px cut most lines; below `md` (a phone or a narrow window) every diff is unified and the toggle is
+      hidden, since two columns of code do not fit. A binary file shows nothing as text, and an image before and after on a checkerboard; a file
       over 2 MB says its size and that it is too large to show as text. A file over 1 MB, or with a line over 10,000
       characters (a minified bundle), stops before the editor with "Opening this file may slow the page", the reason
       ("‹path› has a line of 900,000 characters, too long to show as text.") and Open anyway (`resolveTextGuard`).
@@ -2404,7 +2424,9 @@ Only these, and they win over anything below:
       edits, there is no mode to turn on and nothing to confirm, and ⌘Z undoes (every VS Code editing key, below). In a diff the new side is the editable
       one (the right side side by side, the whole editor unified) and the diff follows each keystroke. Each pause
       (600ms) saves the file to the task's working copy (`lib/code/edits.ts`, `FileSaver`; `hooks/use-file-saver.ts`;
-      `POST /api/tasks/<id>/file`, `docs/engine.md` → Your edits), "Saving…" shows in the toolbar meanwhile, and a file
+      `POST /api/tasks/<id>/file`, `docs/engine.md` → Your edits), "Edited" shows in the toolbar
+      while a change waits, "Saving…" while it is on its way and "Saved" once it landed, until you type again (a file
+      typed back to what is on disk sends nothing and shows nothing; a refused save never shows Saved), and a file
       you leave or close is saved at once, as is the file when you press ⌘S. A save never rebuilds the editor: when
       the first save makes the file one you edited and its read moves to the working copy, the pane keeps the text on
       screen until the new read lands (`holdPaneContent`), so the cursor, focus and undo history stay where they were. A save names the text it expects on disk; when the file changed there (an
